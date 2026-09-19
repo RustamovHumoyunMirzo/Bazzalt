@@ -16,6 +16,8 @@ public:
     constexpr UUID() = default;
     constexpr UUID(std::uint64_t high, std::uint64_t low) : m_high(high), m_low(low) {}
 
+    [[nodiscard]] static constexpr UUID Root() { return {}; }
+
     [[nodiscard]] static UUID Generate() {
         static thread_local std::mt19937_64 generator{std::random_device{}()};
         std::uint64_t high = generator();
@@ -58,6 +60,7 @@ public:
     [[nodiscard]] constexpr std::uint64_t GetHigh() const { return m_high; }
     [[nodiscard]] constexpr std::uint64_t GetLow() const { return m_low; }
     [[nodiscard]] constexpr bool IsValid() const { return m_high != 0 || m_low != 0; }
+    [[nodiscard]] constexpr bool IsRoot() const { return m_high == 0 && m_low == 0; }
     [[nodiscard]] explicit constexpr operator bool() const { return IsValid(); }
 
     friend constexpr bool operator==(UUID left, UUID right) {

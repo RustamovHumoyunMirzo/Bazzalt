@@ -1,8 +1,15 @@
 #include "Runtime/Engine.h"
 #include <iostream>
 #include <chrono>
+#include <stdexcept>
 
-Engine::Engine() = default;
+namespace Bazzalt::Runtime {
+
+Engine::Engine()
+    : m_scene(std::make_unique<Scene>())
+{
+    SceneManager::Bind(this);
+}
 
 Engine::~Engine()
 {
@@ -10,6 +17,7 @@ Engine::~Engine()
     {
         Shutdown();
     }
+    SceneManager::Unbind(this);
 }
 
 bool Engine::Init()
@@ -40,12 +48,15 @@ void Engine::Update()
         return;
     }
 
+    ProcessPendingSceneLoad();
+
     static auto lastTime = std::chrono::high_resolution_clock::now();
     auto currentTime = std::chrono::high_resolution_clock::now();
     m_deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
     lastTime = currentTime;
 
     m_frameCount++;
+    m_scene->Update(m_deltaTime);
 }
 
 void Engine::Shutdown()
@@ -72,3 +83,90 @@ void Engine::RequestClose()
 {
     m_shouldClose = true;
 }
+
+Scene& Engine::CreateScene()
+{
+    m_scene = std::make_unique<Scene>();
+    return *m_scene;
+}
+
+void Engine::SetScene(std::unique_ptr<Scene> scene)
+{
+    if (!scene) throw std::invalid_argument("Engine scene cannot be null");
+    m_scene = std::move(scene);
+}
+
+bool Engine::SaveScene(const std::filesystem::path& path)
+{
+    m_lastError.clear();
+    if (m_sceneSerializer.Save(*m_scene, path)) return true;
+    m_lastError = m_sceneSerializer.GetLastError();
+    return false;
+}
+
+bool Engine::LoadScene(const std::filesystem::path& path)
+{
+    m_lastError.clear();
+    auto scene = std::make_unique<Scene>();
+    if (!m_sceneSerializer.Load(*scene, path))
+    {
+        m_lastError = m_sceneSerializer.GetLastError();
+        return false;
+    }
+    m_scene = std::move(scene);
+    return true;
+}
+
+bool Engine::RequestSceneLoad(const std::filesystem::path& path)
+{
+    m_lastError.clear();
+    if (path.empty())
+    {
+        m_lastError = "Scene path cannot be empty";
+        return false;
+    }
+    m_pendingScenePath = path;
+    return true;
+}
+
+void Engine::ProcessPendingSceneLoad()
+{
+    if (!m_pendingScenePath) return;
+    const std::filesystem::path path = std::move(*m_pendingScenePath);
+    m_pendingScenePath.reset();
+    LoadScene(path);
+}
+
+bool Engine::SaveProject(const std::filesystem::path& path)
+{
+    m_lastError.clear();
+    ProjectSerializer serializer;
+    if (!serializer.Save(m_project, path))
+    {
+        m_lastError = serializer.GetLastError();
+        return false;
+    }
+    m_projectPath = path;
+    return true;
+}
+
+bool Engine::LoadProject(const std::filesystem::path& path, bool loadStartupScene)
+{
+    m_lastError.clear();
+    ProjectMetadata project;
+    ProjectSerializer serializer;
+    if (!serializer.Load(project, path))
+    {
+        m_lastError = serializer.GetLastError();
+        return false;
+    }
+    if (loadStartupScene && !project.StartupScene.empty())
+    {
+        if (!LoadScene(path.parent_path() / project.StartupScene)) return false;
+    }
+    m_project = std::move(project);
+    m_projectPath = path;
+    return true;
+}
+
+} // namespace Bazzalt::Runtime

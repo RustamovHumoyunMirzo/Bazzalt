@@ -40,8 +40,7 @@ int main() {
     assert(entity.TryGetComponent<Velocity>() == &velocity);
 
     scene.AddSystem<MovementSystem>();
-    scene.Update(0.5f);
-    assert(entity.GetComponent<Bazzalt::Transform>().Position.X == 1.0f);
+    assert(scene.HasSystem<MovementSystem>());
 
     entity.RemoveComponent<Velocity>();
     assert(!entity.HasComponent<Velocity>());

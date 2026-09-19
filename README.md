@@ -14,8 +14,9 @@ On Linux or macOS, run `./scripts/get_entt.sh` instead.
 
 ## ECS API
 
-Public engine headers live under `include/Bazzalt`; `include/Runtime` is reserved
-for private runtime/editor integration. Entities created by a scene receive a
+Public engine headers live under `include/Bazzalt`; private runtime/editor
+orchestration lives under `src/Runtime` and is not exported to game code.
+Entities created by a scene receive a
 `Name` and `Transform` component automatically.
 
 ```cpp
@@ -42,7 +43,6 @@ Bazzalt::Scene scene;
 auto player = scene.CreateEntity("Player");
 player.AddComponent<Velocity>();
 scene.AddSystem<MovementSystem>();
-scene.Update(deltaTime);
 ```
 
 Every entity has a stable 128-bit UUID and a hierarchy component. Numeric entity
@@ -59,6 +59,60 @@ Mat4 childWorldTransform = child.GetWorldMatrix();
 
 scene.DestroyEntity(parent);         // Recursively destroys its descendants.
 ```
+
+UUID zero is the permanent scene root. New entities are parented to it by
+default; it cannot be destroyed or reparented.
+
+## Scene and project serialization
+
+`SceneSerializer` stores exact UUIDs, hierarchy, names, transforms, and any
+registered game components in a versioned `.bscene` file. Custom component
+formats have independent versions so they can migrate without changing the
+whole scene format.
+
+```cpp
+SceneSerializer serializer;
+serializer.GetComponents().Register<Health>("Game.Health", 1,
+    [](const Health& health, PropertyMap& output) {
+        output["Value"] = std::to_string(health.Value);
+    },
+    [](Health& health, const PropertyMap& input, std::uint32_t version) {
+        if (version != 1) return false;
+        health.Value = std::stof(input.at("Value"));
+        return true;
+    });
+
+serializer.Save(scene, "Scenes/Main.bscene");
+serializer.Load(scene, "Scenes/Main.bscene");
+```
+
+Unknown component records are retained in `UnresolvedComponents` and written
+back unchanged. This lets the editor round-trip scenes containing components
+from unavailable game modules or newer engine versions.
+
+`ProjectMetadata` provides a stable project UUID, asset directory, startup
+scene, and namespaced extension properties reserved for systems such as the
+asset database.
+
+The editor/runtime host owns the engine, active scene, initialization, loading,
+and application loop. `Engine` is intentionally absent from the public include
+tree. Game modules provide components and systems; the runtime invokes their
+`OnCreate`, `OnUpdate`, and `OnDestroy` lifecycle hooks. This prevents game code
+from constructing another engine or driving internal frames independently.
+
+Game code may request a scene transition through the narrow public facade:
+
+```cpp
+#include <Bazzalt/SceneManager.h>
+
+Bazzalt::SceneManager::LoadScene("Scenes/Level02.bscene");
+```
+
+The request is applied by the runtime at the next safe frame boundary. This is
+safe to call from `OnUpdate`; the current scene is never destroyed while its
+systems are being iterated. `GetActiveScene`, `IsLoadPending`, and
+`GetLastError` are available for queries. Scene/project saving and project
+loading remain private editor/runtime operations.
 
 ## Math API
 

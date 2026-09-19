@@ -1,4 +1,3 @@
-#include "Runtime/Engine.h"
 #include "Bazzalt/Scene.h"
 
 namespace Bazzalt
@@ -17,30 +16,13 @@ namespace Bazzalt
     };
 }
 
-int main(int argc, char **argv)
+int main()
 {
-    Engine engine;
-
-    // Initialize core subsystems
-    if (!engine.Init())
-    {
-        return -1;
-    }
-
+    // The runtime/editor owns the engine loop. This standalone example only
+    // demonstrates the public ECS extension API used by game modules.
     Bazzalt::Scene scene;
     auto player = scene.CreateEntity("Player");
     player.GetComponent<Bazzalt::Transform>().Position.X = 1.0f;
     scene.AddSystem<Bazzalt::MovementSystem>();
-
-    // Main engine execution loop driven externally
-    while (!engine.ShouldClose())
-    {
-        engine.Update();
-        scene.Update(engine.GetDeltaTime());
-    }
-
-    // Explicit shutdown on exit
-    engine.Shutdown();
-
     return 0;
 }

@@ -35,6 +35,8 @@ target_include_directories(Bazzalt
     PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
+    PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
 
 target_link_libraries(Bazzalt PUBLIC EnTT::EnTT)
@@ -63,4 +65,11 @@ if(BUILD_TESTING)
     )
     target_link_libraries(BazzaltEcsTests PRIVATE Bazzalt)
     add_test(NAME BazzaltEcsTests COMMAND BazzaltEcsTests)
+
+    add_executable(BazzaltSerializationTests
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/SerializationTests.cpp"
+    )
+    target_link_libraries(BazzaltSerializationTests PRIVATE Bazzalt)
+    target_include_directories(BazzaltSerializationTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    add_test(NAME BazzaltSerializationTests COMMAND BazzaltSerializationTests)
 endif()

@@ -20,9 +20,11 @@
 
 namespace Bazzalt {
 
+namespace Runtime { class Engine; }
+
 class Scene final {
 public:
-    Scene() = default;
+    Scene();
     ~Scene();
 
     Scene(const Scene&) = delete;
@@ -38,6 +40,8 @@ public:
     [[nodiscard]] Entity FindEntityByName(const std::string& name);
     [[nodiscard]] Entity GetEntity(Entity::Id id);
     [[nodiscard]] Entity GetEntity(UUID uuid);
+    [[nodiscard]] Entity GetRootEntity();
+    [[nodiscard]] UUID GetUUID() const { return m_uuid; }
     [[nodiscard]] std::size_t GetEntityCount() const;
 
     bool SetParent(Entity child, Entity parent);
@@ -46,8 +50,6 @@ public:
     [[nodiscard]] std::vector<Entity> GetChildren(Entity parent);
     [[nodiscard]] bool IsAncestor(Entity ancestor, Entity descendant) const;
     [[nodiscard]] Mat4 GetWorldMatrix(Entity entity) const;
-
-    void Update(float deltaTime);
 
     template<typename SystemType, typename... Args>
     SystemType& AddSystem(Args&&... args) {
@@ -104,11 +106,18 @@ public:
     [[nodiscard]] const entt::registry& GetRegistry() const { return m_registry; }
 
 private:
+    friend class SceneSerializer;
+    friend class Runtime::Engine;
+
+    void Update(float deltaTime);
+    Entity CreateRootEntity();
     void DestroySystems();
     void DestroyEntityRecursive(Entity entity);
+    void DetachFromParent(Entity entity);
     [[nodiscard]] bool Owns(Entity entity) const;
 
     entt::registry m_registry;
+    UUID m_uuid = UUID::Generate();
     std::unordered_map<UUID, entt::entity> m_uuidLookup;
     std::vector<std::unique_ptr<System>> m_systems;
     std::unordered_map<std::type_index, System*> m_systemLookup;
