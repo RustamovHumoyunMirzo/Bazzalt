@@ -51,9 +51,9 @@ from PySide6.QtWidgets import (
 # Register the compiled SVG resources for both supported import modes:
 # ``import docking`` from src and ``import src.docking`` from the project root.
 try:
-    from . import docking_resources_rc as _docking_resources_rc  # type: ignore[import-not-found]
+    from ...gui import docking_resources_rc as _docking_resources_rc  # type: ignore[import-not-found]
 except ImportError:
-    import docking_resources_rc as _docking_resources_rc  # type: ignore[no-redef]
+    import edtr.gui.docking_resources_rc as _docking_resources_rc  # type: ignore[no-redef]
 
 DockArea = Literal["left", "right", "top", "bottom", "center"]
 VALID_AREAS = {"left", "right", "top", "bottom", "center"}

@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QMainWindow
-from . import docking
+from ...gui import docking
 
 
 class Editor(QMainWindow):

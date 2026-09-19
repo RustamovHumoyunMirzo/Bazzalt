@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QApplication
-from gui.Editor import Editor
+from edtr.gui.Editor import Editor
 import sys
 
 

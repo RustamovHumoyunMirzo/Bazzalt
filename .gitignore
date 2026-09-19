@@ -2,3 +2,5 @@ __pycache__
 .vs
 .vscode
 .idea
+build
+deps
