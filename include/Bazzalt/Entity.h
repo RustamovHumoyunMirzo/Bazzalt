@@ -3,11 +3,14 @@
 #include <cstdint>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include <entt/entity/entity.hpp>
 #include <entt/entity/registry.hpp>
 
 #include "Bazzalt/Component.h"
+#include "Bazzalt/Math.h"
+#include "Bazzalt/UUID.h"
 
 namespace Bazzalt {
 
@@ -69,7 +72,17 @@ public:
 
     [[nodiscard]] explicit operator bool() const { return IsValid(); }
     [[nodiscard]] Id GetId() const { return static_cast<Id>(m_handle); }
+    [[nodiscard]] UUID GetUUID() const;
     [[nodiscard]] Scene* GetScene() const { return m_scene; }
+
+    [[nodiscard]] Entity GetParent() const;
+    [[nodiscard]] bool HasParent() const;
+    [[nodiscard]] std::vector<Entity> GetChildren() const;
+    [[nodiscard]] bool IsAncestorOf(Entity entity) const;
+    [[nodiscard]] Mat4 GetWorldMatrix() const;
+    bool SetParent(Entity parent) const;
+    bool AddChild(Entity child) const;
+    bool RemoveParent() const;
 
     friend bool operator==(Entity left, Entity right) {
         return left.m_handle == right.m_handle && left.m_registry == right.m_registry;

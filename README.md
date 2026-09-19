@@ -45,6 +45,21 @@ scene.AddSystem<MovementSystem>();
 scene.Update(deltaTime);
 ```
 
+Every entity has a stable 128-bit UUID and a hierarchy component. Numeric entity
+IDs are transient and should not be serialized; use `GetUUID()` instead.
+
+```cpp
+auto parent = scene.CreateEntity("Parent");
+auto child = scene.CreateEntity("Child");
+
+child.SetParent(parent);             // Rejects cross-scene links and cycles.
+auto children = parent.GetChildren();
+auto sameChild = scene.GetEntity(child.GetUUID());
+Mat4 childWorldTransform = child.GetWorldMatrix();
+
+scene.DestroyEntity(parent);         // Recursively destroys its descendants.
+```
+
 ## Math API
 
 Include `<Bazzalt/Math.h>` for `Vec2`, `Vec3`, `Vec4`, `Mat3`, `Mat4`, and

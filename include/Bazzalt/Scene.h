@@ -12,6 +12,8 @@
 #include <entt/entity/registry.hpp>
 
 #include "Bazzalt/Components/Name.h"
+#include "Bazzalt/Components/Hierarchy.h"
+#include "Bazzalt/Components/Identity.h"
 #include "Bazzalt/Components/Transform.h"
 #include "Bazzalt/Entity.h"
 #include "Bazzalt/System.h"
@@ -29,12 +31,21 @@ public:
     Scene& operator=(Scene&&) = delete;
 
     Entity CreateEntity(std::string name = {});
+    Entity CreateEntity(UUID uuid, std::string name = {});
     void DestroyEntity(Entity entity);
     void Clear();
 
     [[nodiscard]] Entity FindEntityByName(const std::string& name);
     [[nodiscard]] Entity GetEntity(Entity::Id id);
+    [[nodiscard]] Entity GetEntity(UUID uuid);
     [[nodiscard]] std::size_t GetEntityCount() const;
+
+    bool SetParent(Entity child, Entity parent);
+    bool RemoveParent(Entity child);
+    [[nodiscard]] Entity GetParent(Entity child);
+    [[nodiscard]] std::vector<Entity> GetChildren(Entity parent);
+    [[nodiscard]] bool IsAncestor(Entity ancestor, Entity descendant) const;
+    [[nodiscard]] Mat4 GetWorldMatrix(Entity entity) const;
 
     void Update(float deltaTime);
 
@@ -94,8 +105,11 @@ public:
 
 private:
     void DestroySystems();
+    void DestroyEntityRecursive(Entity entity);
+    [[nodiscard]] bool Owns(Entity entity) const;
 
     entt::registry m_registry;
+    std::unordered_map<UUID, entt::entity> m_uuidLookup;
     std::vector<std::unique_ptr<System>> m_systems;
     std::unordered_map<std::type_index, System*> m_systemLookup;
 };
