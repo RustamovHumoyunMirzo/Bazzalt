@@ -56,8 +56,12 @@ int main() {
     ProjectMetadata& project = sourceEngine.GetProject();
     project.Name = "Serialization Test";
     project.AssetDirectory = "Content";
-    project.StartupScene = "Scenes/Main.bscene";
+    project.StartupScene = "Content/Scenes/Main.bscene";
     project.Properties["assets.databaseVersion"] = "1";
+    const auto assetScenePath = directory / "Content" / "Scenes" / "Main.bscene";
+    std::filesystem::create_directories(assetScenePath.parent_path());
+    std::filesystem::copy_file(preservedScenePath, assetScenePath,
+                               std::filesystem::copy_options::overwrite_existing);
     assert(sourceEngine.SaveProject(projectPath));
     Runtime::Engine projectEngine;
     assert(projectEngine.LoadProject(projectPath, false));
@@ -65,13 +69,26 @@ int main() {
     assert(projectEngine.GetProject().AssetDirectory == project.AssetDirectory);
     assert(projectEngine.GetProject().Properties == project.Properties);
 
+    const auto sceneAsset = AssetManager::GetAsset(assetScenePath);
+    assert(sceneAsset);
+    assert(sceneAsset->Id);
+    assert(sceneAsset->State == AssetState::Ready);
+    assert(std::filesystem::exists(sceneAsset->MetaPath));
+    assert(std::filesystem::exists(sceneAsset->CachePath));
+
     assert(projectEngine.Init());
-    assert(SceneManager::LoadScene(preservedScenePath));
+    assert(SceneManager::LoadScene(sceneAsset->Id));
     assert(SceneManager::IsLoadPending());
     projectEngine.Update();
     assert(!SceneManager::IsLoadPending());
     assert(SceneManager::GetActiveScene()->GetEntity(UUID{2, 2}));
     projectEngine.Shutdown();
+
+    // A second scan consumes the existing YAML .meta and keeps its UUID.
+    Runtime::Engine secondScan;
+    assert(secondScan.LoadProject(projectPath, false));
+    const auto rescannedAsset = AssetManager::GetAsset(assetScenePath);
+    assert(rescannedAsset && rescannedAsset->Id == sceneAsset->Id);
 
     std::filesystem::remove_all(directory);
     return 0;

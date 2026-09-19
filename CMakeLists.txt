@@ -17,6 +17,19 @@ endif()
 
 add_subdirectory("${BAZZALT_ENTT_DIR}" EXCLUDE_FROM_ALL)
 
+set(BAZZALT_RYML_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/rapidyaml" CACHE PATH
+    "Path to a rapidyaml source tree")
+if(NOT EXISTS "${BAZZALT_RYML_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR
+        "rapidyaml was not found at '${BAZZALT_RYML_DIR}'. "
+        "Run scripts/get_rapidyaml.ps1 on Windows or scripts/get_rapidyaml.sh on POSIX.")
+endif()
+set(RYML_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(RYML_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
+set(RYML_INSTALL OFF CACHE BOOL "" FORCE)
+set(RYML_DEFAULT_CALLBACK_USES_EXCEPTIONS ON CACHE BOOL "" FORCE)
+add_subdirectory("${BAZZALT_RYML_DIR}" EXCLUDE_FROM_ALL)
+
 file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
@@ -39,7 +52,7 @@ target_include_directories(Bazzalt
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
 
-target_link_libraries(Bazzalt PUBLIC EnTT::EnTT)
+target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE ryml::ryml)
 
 target_compile_features(Bazzalt PUBLIC cxx_std_17)
 

@@ -1,4 +1,5 @@
 #include "Runtime/Engine.h"
+#include "Runtime/AssetDatabase.h"
 #include <iostream>
 #include <chrono>
 #include <stdexcept>
@@ -6,9 +7,10 @@
 namespace Bazzalt::Runtime {
 
 Engine::Engine()
-    : m_scene(std::make_unique<Scene>())
+    : m_scene(std::make_unique<Scene>()), m_assetDatabase(std::make_unique<AssetDatabase>())
 {
     SceneManager::Bind(this);
+    AssetManager::Bind(this);
 }
 
 Engine::~Engine()
@@ -18,6 +20,7 @@ Engine::~Engine()
         Shutdown();
     }
     SceneManager::Unbind(this);
+    AssetManager::Unbind(this);
 }
 
 bool Engine::Init()
@@ -129,6 +132,32 @@ bool Engine::RequestSceneLoad(const std::filesystem::path& path)
     return true;
 }
 
+bool Engine::RequestSceneLoad(UUID assetId)
+{
+    const auto asset = FindAsset(assetId);
+    if (!asset || asset->State != AssetState::Ready)
+    {
+        m_lastError = "Scene asset is not present or ready";
+        return false;
+    }
+    if (asset->SourcePath.extension() != ".bscene")
+    {
+        m_lastError = "Requested asset is not a .bscene";
+        return false;
+    }
+    return RequestSceneLoad(asset->CachePath);
+}
+
+std::optional<AssetInfo> Engine::FindAsset(UUID id) const
+{
+    return m_assetDatabase ? m_assetDatabase->Find(id) : std::nullopt;
+}
+
+std::optional<AssetInfo> Engine::FindAsset(const std::filesystem::path& path) const
+{
+    return m_assetDatabase ? m_assetDatabase->Find(path) : std::nullopt;
+}
+
 void Engine::ProcessPendingSceneLoad()
 {
     if (!m_pendingScenePath) return;
@@ -158,6 +187,11 @@ bool Engine::LoadProject(const std::filesystem::path& path, bool loadStartupScen
     if (!serializer.Load(project, path))
     {
         m_lastError = serializer.GetLastError();
+        return false;
+    }
+    if (!m_assetDatabase->Open(path.parent_path(), project.AssetDirectory))
+    {
+        m_lastError = m_assetDatabase->GetLastError();
         return false;
     }
     if (loadStartupScene && !project.StartupScene.empty())

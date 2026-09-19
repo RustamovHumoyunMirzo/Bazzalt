@@ -3,6 +3,8 @@
 #include <filesystem>
 #include <string>
 
+#include "Bazzalt/UUID.h"
+
 namespace Bazzalt {
 
 class Scene;
@@ -14,6 +16,7 @@ public:
     SceneManager() = delete;
 
     static bool LoadScene(const std::filesystem::path& path);
+    static bool LoadScene(UUID assetId);
     [[nodiscard]] static Scene* GetActiveScene();
     [[nodiscard]] static bool IsLoadPending();
     [[nodiscard]] static std::string GetLastError();

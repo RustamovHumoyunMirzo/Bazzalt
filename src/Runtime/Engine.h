@@ -7,11 +7,14 @@
 #include <string>
 
 #include "Bazzalt/Project.h"
+#include "Bazzalt/AssetManager.h"
 #include "Bazzalt/Scene.h"
 #include "Bazzalt/SceneManager.h"
 #include "Bazzalt/Serialization.h"
 
 namespace Bazzalt::Runtime {
+
+class AssetDatabase;
 
 // Runtime-owned orchestration. Kept outside the public include tree so only
 // the editor/runtime host can control initialization and frame flow.
@@ -48,8 +51,12 @@ public:
 
 private:
     friend class Bazzalt::SceneManager;
+    friend class Bazzalt::AssetManager;
 
     bool RequestSceneLoad(const std::filesystem::path& path);
+    bool RequestSceneLoad(UUID assetId);
+    [[nodiscard]] std::optional<AssetInfo> FindAsset(UUID id) const;
+    [[nodiscard]] std::optional<AssetInfo> FindAsset(const std::filesystem::path& path) const;
     [[nodiscard]] bool IsSceneLoadPending() const { return m_pendingScenePath.has_value(); }
     void ProcessPendingSceneLoad();
 
@@ -63,6 +70,7 @@ private:
     std::filesystem::path m_projectPath;
     std::string m_lastError;
     std::optional<std::filesystem::path> m_pendingScenePath;
+    std::unique_ptr<AssetDatabase> m_assetDatabase;
 };
 
 } // namespace Bazzalt::Runtime

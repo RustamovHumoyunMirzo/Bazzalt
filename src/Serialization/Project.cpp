@@ -1,58 +1,12 @@
 #include "Bazzalt/Project.h"
-
+#include <charconv>
 #include <fstream>
-#include <iomanip>
-
-namespace Bazzalt {
-
-bool ProjectSerializer::Save(const ProjectMetadata& project, const std::filesystem::path& path) {
-    m_lastError.clear();
-    std::ofstream stream(path, std::ios::binary | std::ios::trunc);
-    if (!stream) { m_lastError = "Could not open project file for writing: " + path.string(); return false; }
-    stream << "BAZZALT_PROJECT " << ProjectMetadata::CurrentFormatVersion << '\n'
-           << "UUID " << std::quoted(project.ProjectUUID.ToString()) << '\n'
-           << "NAME " << std::quoted(project.Name) << '\n'
-           << "ASSET_DIRECTORY " << std::quoted(project.AssetDirectory.generic_string()) << '\n'
-           << "STARTUP_SCENE " << std::quoted(project.StartupScene.generic_string()) << '\n'
-           << "PROPERTY_COUNT " << project.Properties.size() << '\n';
-    for (const auto& [key, value] : project.Properties)
-        stream << "PROPERTY " << std::quoted(key) << ' ' << std::quoted(value) << '\n';
-    stream << "END_PROJECT\n";
-    if (!stream) { m_lastError = "Failed while writing project file: " + path.string(); return false; }
-    return true;
-}
-
-bool ProjectSerializer::Load(ProjectMetadata& project, const std::filesystem::path& path) {
-    m_lastError.clear();
-    std::ifstream stream(path, std::ios::binary);
-    if (!stream) { m_lastError = "Could not open project file: " + path.string(); return false; }
-    std::string token, uuidText, name, assets, startup;
-    std::uint32_t version = 0;
-    std::size_t propertyCount = 0;
-    UUID uuid;
-    if (!(stream >> token >> version) || token != "BAZZALT_PROJECT" || version == 0 || version > ProjectMetadata::CurrentFormatVersion ||
-        !(stream >> token >> std::quoted(uuidText)) || token != "UUID" || !UUID::TryParse(uuidText, uuid) || uuid.IsRoot() ||
-        !(stream >> token >> std::quoted(name)) || token != "NAME" ||
-        !(stream >> token >> std::quoted(assets)) || token != "ASSET_DIRECTORY" ||
-        !(stream >> token >> std::quoted(startup)) || token != "STARTUP_SCENE" ||
-        !(stream >> token >> propertyCount) || token != "PROPERTY_COUNT") {
-        m_lastError = "Invalid or unsupported project file"; return false;
-    }
-    std::map<std::string, std::string> properties;
-    for (std::size_t index = 0; index < propertyCount; ++index) {
-        std::string key, value;
-        if (!(stream >> token >> std::quoted(key) >> std::quoted(value)) || token != "PROPERTY") {
-            m_lastError = "Invalid project property"; return false;
-        }
-        properties[std::move(key)] = std::move(value);
-    }
-    if (!(stream >> token) || token != "END_PROJECT") { m_lastError = "Missing END_PROJECT"; return false; }
-    project.ProjectUUID = uuid;
-    project.Name = std::move(name);
-    project.AssetDirectory = std::filesystem::path(assets);
-    project.StartupScene = std::filesystem::path(startup);
-    project.Properties = std::move(properties);
-    return true;
-}
-
+#include <sstream>
+#include <ryml.hpp>
+namespace Bazzalt { namespace {
+std::string Text(ryml::ConstNodeRef n){auto v=n.val();return{v.str,v.len};}std::string Key(ryml::ConstNodeRef n){auto v=n.key();return{v.str,v.len};}
+std::string Quote(const std::string&s){std::ostringstream o;o<<'"';for(unsigned char c:s){if(c=='\\')o<<"\\\\";else if(c=='"')o<<"\\\"";else if(c=='\n')o<<"\\n";else o<<static_cast<char>(c);}o<<'"';return o.str();}
+bool UInt(ryml::ConstNodeRef n,std::uint32_t&v){auto s=Text(n);auto r=std::from_chars(s.data(),s.data()+s.size(),v);return r.ec==std::errc{}&&r.ptr==s.data()+s.size();}}
+bool ProjectSerializer::Save(const ProjectMetadata&p,const std::filesystem::path&path){m_lastError.clear();std::ofstream s(path,std::ios::binary|std::ios::trunc);if(!s){m_lastError="Could not open project for writing: "+path.string();return false;}s<<"FormatVersion: "<<ProjectMetadata::CurrentFormatVersion<<"\nProjectUUID: "<<Quote(p.ProjectUUID.ToString())<<"\nName: "<<Quote(p.Name)<<"\nAssetDirectory: "<<Quote(p.AssetDirectory.generic_string())<<"\nStartupScene: "<<Quote(p.StartupScene.generic_string())<<"\nProperties:\n";for(const auto&[k,v]:p.Properties)s<<"  "<<Quote(k)<<": "<<Quote(v)<<'\n';return static_cast<bool>(s);}
+bool ProjectSerializer::Load(ProjectMetadata&p,const std::filesystem::path&path){m_lastError.clear();std::ifstream f(path,std::ios::binary);std::string y((std::istreambuf_iterator<char>(f)),{});if(y.empty()){m_lastError="Could not read project: "+path.string();return false;}try{auto t=ryml::parse_in_arena(ryml::csubstr(y.data(),y.size()));auto r=t.rootref();std::uint32_t v=0;UUID id;if(!r.has_child("FormatVersion")||!UInt(r["FormatVersion"],v)||v==0||v>ProjectMetadata::CurrentFormatVersion||!r.has_child("ProjectUUID")||!UUID::TryParse(Text(r["ProjectUUID"]),id)||id.IsRoot()||!r.has_child("Name")||!r.has_child("AssetDirectory")||!r.has_child("StartupScene")){m_lastError="Invalid or unsupported project YAML";return false;}ProjectMetadata q;q.ProjectUUID=id;q.Name=Text(r["Name"]);q.AssetDirectory=Text(r["AssetDirectory"]);q.StartupScene=Text(r["StartupScene"]);if(r.has_child("Properties"))for(auto n:r["Properties"].children())q.Properties[Key(n)]=Text(n);p=std::move(q);return true;}catch(const std::exception&e){m_lastError="Could not parse project YAML: "+std::string(e.what());return false;}}
 } // namespace Bazzalt

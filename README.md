@@ -114,6 +114,39 @@ systems are being iterated. `GetActiveScene`, `IsLoadPending`, and
 `GetLastError` are available for queries. Scene/project saving and project
 loading remain private editor/runtime operations.
 
+## Asset database
+
+Opening a project scans its configured asset directory. Every source asset gets
+a YAML `.meta` sidecar containing its stable UUID, importer identity/version,
+source hash, cache path, and importer settings. Commit `.meta` files to source
+control; the generated `.bazzalt/Cache` directory is disposable and ignored.
+
+```yaml
+FormatVersion: 1
+UUID: "d83ccda4-9d20-46b5-91d8-198a445c59ef"
+Importer: "Bazzalt.Raw"
+ImporterVersion: 1
+SourceHash: "07dfd64c6cc7e164"
+CachePath: ".bazzalt/Cache/d83ccda4-9d20-46b5-91d8-198a445c59ef/07dfd64c6cc7e164.bscene"
+Settings:
+```
+
+The database indexes both UUID and normalized source path. A changed source
+hash, importer version, or missing cache artifact triggers reimport. Runtime
+game code receives read-only lookup access:
+
+```cpp
+#include <Bazzalt/AssetManager.h>
+
+auto asset = Bazzalt::AssetManager::GetAsset(sceneAssetUuid);
+if (asset && asset->State == Bazzalt::AssetState::Ready) {
+    Bazzalt::SceneManager::LoadScene(asset->Id);
+}
+```
+
+`.bscene`, `.bproject`, and `.meta` retain their engine-specific extensions but
+their contents are versioned YAML parsed with rapidyaml.
+
 ## Math API
 
 Include `<Bazzalt/Math.h>` for `Vec2`, `Vec3`, `Vec4`, `Mat3`, `Mat4`, and

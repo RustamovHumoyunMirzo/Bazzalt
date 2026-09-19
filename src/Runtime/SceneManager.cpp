@@ -11,6 +11,10 @@ bool SceneManager::LoadScene(const std::filesystem::path& path) {
     return ActiveEngine != nullptr && ActiveEngine->RequestSceneLoad(path);
 }
 
+bool SceneManager::LoadScene(UUID assetId) {
+    return ActiveEngine != nullptr && ActiveEngine->RequestSceneLoad(assetId);
+}
+
 Scene* SceneManager::GetActiveScene() {
     return ActiveEngine != nullptr ? &ActiveEngine->GetScene() : nullptr;
 }
