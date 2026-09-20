@@ -1,0 +1,60 @@
+#pragma once
+
+#include <unordered_map>
+
+#include <utils/Entity.h>
+
+#include "Bazzalt/Components/Camera.h"
+#include "Bazzalt/Components/Light.h"
+#include "Bazzalt/Components/Mesh.h"
+#include "Bazzalt/Components/Transform.h"
+#include "Bazzalt/System.h"
+#include "Bazzalt/UUID.h"
+
+namespace filament { class Camera; class View; }
+namespace Bazzalt::Runtime {
+
+class RenderBackend;
+
+class CameraSystem final : public ComponentSystem<Transform, Camera> {
+public:
+    explicit CameraSystem(RenderBackend& backend) : m_backend(backend) {}
+protected:
+    void OnCreate(Scene& scene) override;
+    void OnUpdate(Scene& scene, float deltaTime) override;
+    void OnDestroy(Scene& scene) override;
+private:
+    struct Resource { utils::Entity Entity; filament::Camera* Camera = nullptr; filament::View* View = nullptr; };
+    void Destroy(UUID id);
+    RenderBackend& m_backend;
+    std::unordered_map<UUID, Resource> m_resources;
+};
+
+class LightSystem final : public ComponentSystem<Transform, Light> {
+public:
+    explicit LightSystem(RenderBackend& backend) : m_backend(backend) {}
+protected:
+    void OnCreate(Scene& scene) override;
+    void OnUpdate(Scene& scene, float deltaTime) override;
+    void OnDestroy(Scene& scene) override;
+private:
+    struct Resource { utils::Entity Entity; LightType Type = LightType::Point; };
+    void Destroy(UUID id);
+    RenderBackend& m_backend;
+    std::unordered_map<UUID, Resource> m_resources;
+};
+
+class MeshSystem final : public ComponentSystem<Transform, Mesh> {
+public:
+    explicit MeshSystem(RenderBackend& backend) : m_backend(backend) {}
+protected:
+    void OnCreate(Scene& scene) override;
+    void OnUpdate(Scene& scene, float deltaTime) override;
+    void OnDestroy(Scene& scene) override;
+private:
+    void Destroy(UUID id);
+    RenderBackend& m_backend;
+    std::unordered_map<UUID, utils::Entity> m_resources;
+};
+
+} // namespace Bazzalt::Runtime

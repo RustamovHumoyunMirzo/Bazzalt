@@ -15,6 +15,7 @@
 namespace Bazzalt::Runtime {
 
 class AssetDatabase;
+class RenderBackend;
 
 // Runtime-owned orchestration. Kept outside the public include tree so only
 // the editor/runtime host can control initialization and frame flow.
@@ -59,6 +60,8 @@ private:
     [[nodiscard]] std::optional<AssetInfo> FindAsset(const std::filesystem::path& path) const;
     [[nodiscard]] bool IsSceneLoadPending() const { return m_pendingScenePath.has_value(); }
     void ProcessPendingSceneLoad();
+    void AttachRenderSystems();
+    void DetachRenderSystems();
 
     bool m_isInitialized = false;
     bool m_shouldClose = false;
@@ -71,6 +74,7 @@ private:
     std::string m_lastError;
     std::optional<std::filesystem::path> m_pendingScenePath;
     std::unique_ptr<AssetDatabase> m_assetDatabase;
+    std::unique_ptr<RenderBackend> m_renderBackend;
 };
 
 } // namespace Bazzalt::Runtime

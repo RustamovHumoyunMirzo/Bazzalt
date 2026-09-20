@@ -6,11 +6,39 @@ BAZZALT uses EnTT for its ECS. Fetch the pinned dependency before configuring:
 
 ```powershell
 ./scripts/get_entt.ps1
+./scripts/get_rapidyaml.ps1
+./scripts/get_filament.ps1
 cmake -S . -B build
 cmake --build build --config Debug
 ```
 
-On Linux or macOS, run `./scripts/get_entt.sh` instead.
+On Linux or macOS, use the corresponding `.sh` scripts instead.
+
+## Rendering API
+
+Filament is a private runtime backend. No Filament headers, handles, render
+loops, GPU buffers, views, or resource-destruction calls are exposed to game
+code. Rendering is described through ECS components:
+
+```cpp
+#include <Bazzalt/Components/Camera.h>
+#include <Bazzalt/Components/Light.h>
+#include <Bazzalt/Components/Mesh.h>
+
+auto camera = scene.CreateEntity("Main Camera");
+camera.AddComponent<Bazzalt::Camera>().PostProcessing.Bloom = true;
+
+auto sun = scene.CreateEntity("Sun");
+sun.AddComponent<Bazzalt::Light>().Type = Bazzalt::LightType::Sun;
+
+auto model = scene.CreateEntity("Model");
+model.AddComponent<Bazzalt::Mesh>().MeshAsset = meshAssetUuid;
+```
+
+Private `CameraSystem`, `LightSystem`, and `MeshSystem` instances synchronize
+these components with Filament during runtime-owned lifecycle events. Camera
+post-processing settings are part of the camera component so scenes remain
+renderer-independent and serializable.
 
 ## ECS API
 

@@ -65,7 +65,7 @@ public:
         auto* result = system.get();
         m_systemLookup.emplace(type, result);
         m_systems.emplace_back(std::move(system));
-        result->OnCreate(*this);
+        static_cast<System*>(result)->OnCreate(*this);
         return *result;
     }
 

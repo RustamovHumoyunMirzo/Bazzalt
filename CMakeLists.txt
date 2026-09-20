@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 project(BAZZALT VERSION 1.0.0 LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -30,6 +30,11 @@ set(RYML_INSTALL OFF CACHE BOOL "" FORCE)
 set(RYML_DEFAULT_CALLBACK_USES_EXCEPTIONS ON CACHE BOOL "" FORCE)
 add_subdirectory("${BAZZALT_RYML_DIR}" EXCLUDE_FROM_ALL)
 
+set(BAZZALT_FILAMENT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/filament" CACHE PATH
+    "Path to the extracted Filament SDK")
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/Filament.cmake")
+bazzalt_configure_filament("${BAZZALT_FILAMENT_DIR}")
+
 file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
@@ -52,9 +57,9 @@ target_include_directories(Bazzalt
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
 
-target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE ryml::ryml)
+target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE ryml::ryml Filament::Filament)
 
-target_compile_features(Bazzalt PUBLIC cxx_std_17)
+target_compile_features(Bazzalt PUBLIC cxx_std_20)
 
 add_executable(BazzaltExample
     "${CMAKE_CURRENT_SOURCE_DIR}/examples/main.cpp"
@@ -85,4 +90,11 @@ if(BUILD_TESTING)
     target_link_libraries(BazzaltSerializationTests PRIVATE Bazzalt)
     target_include_directories(BazzaltSerializationTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     add_test(NAME BazzaltSerializationTests COMMAND BazzaltSerializationTests)
+
+    add_executable(BazzaltRenderingTests
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/RenderingTests.cpp"
+    )
+    target_link_libraries(BazzaltRenderingTests PRIVATE Bazzalt)
+    target_include_directories(BazzaltRenderingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    add_test(NAME BazzaltRenderingTests COMMAND BazzaltRenderingTests)
 endif()

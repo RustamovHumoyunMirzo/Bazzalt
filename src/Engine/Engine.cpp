@@ -1,5 +1,7 @@
 #include "Runtime/Engine.h"
 #include "Runtime/AssetDatabase.h"
+#include "Rendering/RenderBackend.h"
+#include "Rendering/RenderSystems.h"
 #include <iostream>
 #include <chrono>
 #include <stdexcept>
@@ -7,7 +9,8 @@
 namespace Bazzalt::Runtime {
 
 Engine::Engine()
-    : m_scene(std::make_unique<Scene>()), m_assetDatabase(std::make_unique<AssetDatabase>())
+    : m_scene(std::make_unique<Scene>()), m_assetDatabase(std::make_unique<AssetDatabase>()),
+      m_renderBackend(std::make_unique<RenderBackend>())
 {
     SceneManager::Bind(this);
     AssetManager::Bind(this);
@@ -33,7 +36,13 @@ bool Engine::Init()
 
     std::cout << "[Engine] Initializing Core Subsystems...\n";
 
-    // TODO: Initialize Filament, EnTT Registry, Audio, Windowing/Input here
+    if (!m_renderBackend->Initialize())
+    {
+        m_lastError = "Could not initialize the Filament rendering backend";
+        std::cerr << "[Engine] " << m_lastError << "\n";
+        return false;
+    }
+    AttachRenderSystems();
 
     m_isInitialized = true;
     m_shouldClose = false;
@@ -71,7 +80,8 @@ void Engine::Shutdown()
 
     std::cout << "[Engine] Shutting down core subsystems...\n";
 
-    // TODO: Release Filament resources, Audio device, and window context here
+    DetachRenderSystems();
+    m_renderBackend->Shutdown();
 
     m_isInitialized = false;
     std::cout << "[Engine] Shutdown complete.\n";
@@ -90,6 +100,7 @@ void Engine::RequestClose()
 Scene& Engine::CreateScene()
 {
     m_scene = std::make_unique<Scene>();
+    AttachRenderSystems();
     return *m_scene;
 }
 
@@ -97,6 +108,7 @@ void Engine::SetScene(std::unique_ptr<Scene> scene)
 {
     if (!scene) throw std::invalid_argument("Engine scene cannot be null");
     m_scene = std::move(scene);
+    AttachRenderSystems();
 }
 
 bool Engine::SaveScene(const std::filesystem::path& path)
@@ -117,7 +129,24 @@ bool Engine::LoadScene(const std::filesystem::path& path)
         return false;
     }
     m_scene = std::move(scene);
+    AttachRenderSystems();
     return true;
+}
+
+void Engine::AttachRenderSystems()
+{
+    if (!m_renderBackend->IsInitialized()) return;
+    m_scene->AddSystem<CameraSystem>(*m_renderBackend);
+    m_scene->AddSystem<LightSystem>(*m_renderBackend);
+    m_scene->AddSystem<MeshSystem>(*m_renderBackend);
+}
+
+void Engine::DetachRenderSystems()
+{
+    if (!m_scene || !m_renderBackend->IsInitialized()) return;
+    m_scene->RemoveSystem<MeshSystem>();
+    m_scene->RemoveSystem<LightSystem>();
+    m_scene->RemoveSystem<CameraSystem>();
 }
 
 bool Engine::RequestSceneLoad(const std::filesystem::path& path)

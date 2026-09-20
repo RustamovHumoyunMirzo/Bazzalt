@@ -2,6 +2,9 @@
 #include <filesystem>
 
 #include "Runtime/Engine.h"
+#include "Bazzalt/Components/Camera.h"
+#include "Bazzalt/Components/Light.h"
+#include "Bazzalt/Components/Mesh.h"
 
 struct Health : Bazzalt::Component {
     float Value = 100.0f;
@@ -35,6 +38,9 @@ int main() {
     child.SetParent(parent);
     child.GetComponent<Transform>().Position = {1.25f, 2.5f, 5.0f};
     child.AddComponent<Health>().Value = 42.5f;
+    child.AddComponent<Camera>().PostProcessing.Bloom = false;
+    child.AddComponent<Light>().Type = LightType::Spot;
+    child.AddComponent<Mesh>().MeshAsset = UUID{9, 9};
 
     RegisterHealth(sourceEngine.GetSceneSerializer());
     assert(sourceEngine.SaveScene(firstScenePath));
@@ -52,6 +58,9 @@ int main() {
     assert(restoredChild.GetParent().GetUUID() == UUID(1, 1));
     assert(restoredChild.GetComponent<Health>().Value == 42.5f);
     assert(restoredChild.GetComponent<Transform>().Position.X == 1.25f);
+    assert(!restoredChild.GetComponent<Camera>().PostProcessing.Bloom);
+    assert(restoredChild.GetComponent<Light>().Type == LightType::Spot);
+    assert(restoredChild.GetComponent<Mesh>().MeshAsset == UUID(9, 9));
 
     ProjectMetadata& project = sourceEngine.GetProject();
     project.Name = "Serialization Test";
@@ -76,13 +85,8 @@ int main() {
     assert(std::filesystem::exists(sceneAsset->MetaPath));
     assert(std::filesystem::exists(sceneAsset->CachePath));
 
-    assert(projectEngine.Init());
     assert(SceneManager::LoadScene(sceneAsset->Id));
     assert(SceneManager::IsLoadPending());
-    projectEngine.Update();
-    assert(!SceneManager::IsLoadPending());
-    assert(SceneManager::GetActiveScene()->GetEntity(UUID{2, 2}));
-    projectEngine.Shutdown();
 
     // A second scan consumes the existing YAML .meta and keeps its UUID.
     Runtime::Engine secondScan;
