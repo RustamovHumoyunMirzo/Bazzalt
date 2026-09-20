@@ -10,6 +10,7 @@
 #include "Bazzalt/Components/Transform.h"
 #include "Bazzalt/System.h"
 #include "Bazzalt/UUID.h"
+#include "Rendering/RenderAssets.h"
 
 namespace filament { class Camera; class View; }
 namespace Bazzalt::Runtime {
@@ -52,9 +53,14 @@ protected:
     void OnUpdate(Scene& scene, float deltaTime) override;
     void OnDestroy(Scene& scene) override;
 private:
+    struct Resource {
+        RenderAssets::Handle Handle = RenderAssets::InvalidHandle;
+        UUID MeshAsset{};
+        std::vector<UUID> Materials;
+    };
     void Destroy(UUID id);
     RenderBackend& m_backend;
-    std::unordered_map<UUID, utils::Entity> m_resources;
+    std::unordered_map<UUID, Resource> m_resources;
 };
 
 } // namespace Bazzalt::Runtime

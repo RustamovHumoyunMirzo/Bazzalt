@@ -26,7 +26,9 @@ function(bazzalt_configure_filament ROOT)
     endif()
 
     set(_filament_libraries
-        filament backend bluegl bluevk filabridge filaflat utils smol-v
+        gltfio gltfio_core filameshio filamat shaders matp uberarchive uberzlib
+        dracodec meshoptimizer mikktspace basis_transcoder stb image imageio-lite
+        ktxreader filament backend bluegl bluevk filabridge filaflat utils smol-v
         geometry ibl-lite zstd
     )
     set(_filament_targets)

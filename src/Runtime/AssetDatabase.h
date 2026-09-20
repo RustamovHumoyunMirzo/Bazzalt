@@ -24,6 +24,10 @@ public:
     [[nodiscard]] virtual std::string GetName() const = 0;
     [[nodiscard]] virtual std::uint32_t GetVersion() const = 0;
     [[nodiscard]] virtual bool Supports(const std::filesystem::path& source) const = 0;
+    [[nodiscard]] virtual std::string GetCacheExtension(
+        const std::filesystem::path& source) const { return source.extension().string(); }
+    [[nodiscard]] virtual std::string ComputeSourceHash(
+        const std::filesystem::path& source) const;
     virtual bool Import(const AssetImportContext& context, std::string& error) = 0;
 };
 

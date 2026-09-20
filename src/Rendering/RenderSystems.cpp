@@ -191,23 +191,24 @@ void LightSystem::Destroy(UUID id) {
 
 void MeshSystem::OnCreate(Scene&) {}
 void MeshSystem::OnUpdate(Scene& scene, float) {
-    auto& engine = m_backend.GetEngine();
-    auto& transforms = engine.getTransformManager();
+    auto& assets = m_backend.GetAssets();
+    assets.Update();
     std::unordered_set<UUID> alive;
     auto view = GetView(scene.GetRegistry());
     for (const auto handle : view) {
         Entity entity = scene.GetEntity(static_cast<Entity::Id>(handle));
         const UUID id = entity.GetUUID(); alive.insert(id);
+        const auto& mesh = view.get<Mesh>(handle);
         auto found = m_resources.find(id);
-        if (found == m_resources.end()) {
-            const utils::Entity resource = engine.getEntityManager().create();
-            transforms.create(resource);
-            found = m_resources.emplace(id, resource).first;
+        if (found != m_resources.end() &&
+            (found->second.MeshAsset != mesh.MeshAsset || found->second.Materials != mesh.Materials)) {
+            Destroy(id); found = m_resources.end();
         }
-        transforms.setTransform(transforms.getInstance(found->second),
-                                ToFilament(entity.GetWorldMatrix()));
-        // Geometry and material attachment occurs when the mesh importer starts
-        // producing Filament-ready cache artifacts.
+        if (found == m_resources.end()) {
+            const auto resource = assets.CreateMesh(mesh);
+            found = m_resources.emplace(id, Resource{resource, mesh.MeshAsset, mesh.Materials}).first;
+        }
+        assets.UpdateMesh(found->second.Handle, entity.GetWorldMatrix(), mesh);
     }
     for (auto iterator=m_resources.begin();iterator!=m_resources.end();) {
         if (!alive.count(iterator->first)) { const UUID id=iterator->first; ++iterator; Destroy(id); }
@@ -217,8 +218,7 @@ void MeshSystem::OnUpdate(Scene& scene, float) {
 void MeshSystem::OnDestroy(Scene&) { while(!m_resources.empty()) Destroy(m_resources.begin()->first); }
 void MeshSystem::Destroy(UUID id) {
     auto found=m_resources.find(id);if(found==m_resources.end())return;
-    auto& engine=m_backend.GetEngine();engine.destroy(found->second);
-    engine.getEntityManager().destroy(found->second);m_resources.erase(found);
+    m_backend.GetAssets().DestroyMesh(found->second.Handle);m_resources.erase(found);
 }
 
 } // namespace Bazzalt::Runtime

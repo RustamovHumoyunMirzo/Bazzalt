@@ -175,6 +175,37 @@ if (asset && asset->State == Bazzalt::AssetState::Ready) {
 `.bscene`, `.bproject`, and `.meta` retain their engine-specific extensions but
 their contents are versioned YAML parsed with rapidyaml.
 
+### Render asset pipeline
+
+The asset database selects renderer importers without exposing Filament through
+public headers:
+
+- `.gltf` and `.glb` are loaded by `gltfio`. Relative `.gltf` buffers and images
+  are copied beside the cached model, and their content participates in the
+  source fingerprint so sidecar changes trigger reimport.
+- `.png`, `.jpg`, and `.jpeg` are texture assets. Runtime decoding uses
+  Filament's stb_image-backed texture provider.
+- `.mat` sources are compiled to cached `.filamat` packages with `matc`;
+  precompiled `.filamat` packages are accepted directly.
+- `.obj` and `.fbx` sources are compiled to `.filamesh` with Filament's
+  `filamesh` tool; precompiled `.filamesh` assets are accepted directly.
+
+Game components only store UUID references. The private `MeshSystem` resolves
+those UUIDs, creates glTF or filamesh instances, applies transforms, layer and
+shadow settings, and owns all GPU destruction:
+
+```cpp
+auto model = scene.CreateEntity("Environment");
+auto& mesh = model.AddComponent<Bazzalt::Mesh>();
+mesh.MeshAsset = modelAssetUuid;       // .gltf/.glb/.filamesh UUID
+mesh.Materials = { stoneMaterialUuid }; // compiled .filamat UUIDs
+```
+
+`matc` and `filamesh` are taken from the pinned Filament SDK downloaded by the
+existing setup scripts. Material and renderer handles remain private runtime
+details, leaving room for editor-authored material-instance assets without an
+ABI dependency on Filament.
+
 ## Math API
 
 Include `<Bazzalt/Math.h>` for `Vec2`, `Vec3`, `Vec4`, `Mat3`, `Mat4`, and

@@ -35,6 +35,16 @@ set(BAZZALT_FILAMENT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/filament" CACHE PATH
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/Filament.cmake")
 bazzalt_configure_filament("${BAZZALT_FILAMENT_DIR}")
 
+if(WIN32)
+    set(_bazzalt_tool_suffix ".exe")
+else()
+    set(_bazzalt_tool_suffix "")
+endif()
+set(BAZZALT_MATC_EXECUTABLE "${BAZZALT_FILAMENT_DIR}/bin/matc${_bazzalt_tool_suffix}" CACHE FILEPATH
+    "Filament material compiler")
+set(BAZZALT_FILAMESH_EXECUTABLE "${BAZZALT_FILAMENT_DIR}/bin/filamesh${_bazzalt_tool_suffix}" CACHE FILEPATH
+    "Filament mesh compiler")
+
 file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
@@ -60,6 +70,10 @@ target_include_directories(Bazzalt
 target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE ryml::ryml Filament::Filament)
 
 target_compile_features(Bazzalt PUBLIC cxx_std_20)
+target_compile_definitions(Bazzalt PRIVATE
+    BAZZALT_MATC_EXECUTABLE="${BAZZALT_MATC_EXECUTABLE}"
+    BAZZALT_FILAMESH_EXECUTABLE="${BAZZALT_FILAMESH_EXECUTABLE}"
+)
 
 add_executable(BazzaltExample
     "${CMAKE_CURRENT_SOURCE_DIR}/examples/main.cpp"
@@ -97,4 +111,11 @@ if(BUILD_TESTING)
     target_link_libraries(BazzaltRenderingTests PRIVATE Bazzalt)
     target_include_directories(BazzaltRenderingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     add_test(NAME BazzaltRenderingTests COMMAND BazzaltRenderingTests)
+
+    add_executable(BazzaltAssetPipelineTests
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/AssetPipelineTests.cpp"
+    )
+    target_link_libraries(BazzaltAssetPipelineTests PRIVATE Bazzalt)
+    target_include_directories(BazzaltAssetPipelineTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    add_test(NAME BazzaltAssetPipelineTests COMMAND BazzaltAssetPipelineTests)
 endif()
