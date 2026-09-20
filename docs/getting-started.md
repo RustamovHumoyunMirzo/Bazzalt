@@ -1,0 +1,90 @@
+# Getting started
+
+## Requirements
+
+- CMake 3.15 or newer
+- A C++20 compiler
+- Git, `curl`, and an archive tool used by the dependency scripts
+- A graphics driver supported by the selected Filament backend
+
+BAZZALT pins EnTT, rapidyaml, and the Filament SDK through scripts in
+`scripts/`. Dependencies are placed under `deps/` and do not expand the public
+include surface.
+
+## Fetch dependencies
+
+Windows PowerShell:
+
+```powershell
+./scripts/get_entt.ps1
+./scripts/get_rapidyaml.ps1
+./scripts/get_filament.ps1
+```
+
+Linux or macOS:
+
+```bash
+./scripts/get_entt.sh
+./scripts/get_rapidyaml.sh
+./scripts/get_filament.sh
+```
+
+The Filament SDK provides runtime libraries plus `matc` and `filamesh`. Override
+their locations with `BAZZALT_FILAMENT_DIR`, `BAZZALT_MATC_EXECUTABLE`, and
+`BAZZALT_FILAMESH_EXECUTABLE` when configuring CMake.
+
+## Configure, build, and test
+
+```powershell
+cmake -S . -B build -DBUILD_TESTING=ON
+cmake --build build --config Debug
+ctest --test-dir build -C Debug --output-on-failure
+```
+
+The repository builds a static `Bazzalt` target, a public API example, and test
+executables. A CMake consumer can link it directly:
+
+```cmake
+add_subdirectory(path/to/BAZZALT)
+target_link_libraries(MyGame PRIVATE Bazzalt)
+```
+
+## First component and system
+
+```cpp
+#include <Bazzalt/Scene.h>
+
+struct Velocity final : Bazzalt::Component {
+    Bazzalt::Vec3 Value{};
+};
+
+class MovementSystem final
+    : public Bazzalt::ComponentSystem<Bazzalt::Transform, Velocity> {
+protected:
+    void OnUpdate(Bazzalt::Scene& scene, float deltaTime) override {
+        auto view = GetView(scene.GetRegistry());
+        for (auto handle : view) {
+            auto& transform = view.get<Bazzalt::Transform>(handle);
+            const auto& velocity = view.get<Velocity>(handle);
+            transform.Position += velocity.Value * deltaTime;
+        }
+    }
+};
+
+int main() {
+    Bazzalt::Scene scene;
+    auto player = scene.CreateEntity("Player");
+    auto& velocity = player.AddComponent<Velocity>();
+    velocity.Value = {1.0f, 0.0f, 0.0f};
+    scene.AddSystem<MovementSystem>();
+}
+```
+
+This demonstrates extension types only. In an editor/game build, the runtime
+host owns initialization and dispatches updates. User code does not instantiate
+the private engine or call its frame methods.
+
+## Naming convention
+
+Public methods use PascalCase: `AddComponent`, `HasComponent`, `LoadScene`, and
+`GetWorldMatrix`. Lifecycle hooks are `OnCreate`, `OnUpdate`, and `OnDestroy`.
