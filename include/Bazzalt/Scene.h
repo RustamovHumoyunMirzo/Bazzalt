@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <memory>
+#include <exception>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <typeindex>
@@ -55,6 +57,8 @@ public:
     SystemType& AddSystem(Args&&... args) {
         static_assert(std::is_base_of_v<System, SystemType>,
                       "SystemType must derive from Bazzalt::System");
+        if (m_isUpdating)
+            throw std::logic_error("Systems cannot be added during Scene::Update");
         const std::type_index type = typeid(SystemType);
         auto existing = m_systemLookup.find(type);
         if (existing != m_systemLookup.end()) {
@@ -65,7 +69,13 @@ public:
         auto* result = system.get();
         m_systemLookup.emplace(type, result);
         m_systems.emplace_back(std::move(system));
-        static_cast<System*>(result)->OnCreate(*this);
+        try {
+            static_cast<System*>(result)->OnCreate(*this);
+        } catch (...) {
+            m_systemLookup.erase(type);
+            m_systems.pop_back();
+            throw;
+        }
         return *result;
     }
 
@@ -86,6 +96,8 @@ public:
 
     template<typename SystemType>
     bool RemoveSystem() {
+        if (m_isUpdating)
+            throw std::logic_error("Systems cannot be removed during Scene::Update");
         const std::type_index type = typeid(SystemType);
         auto found = m_systemLookup.find(type);
         if (found == m_systemLookup.end()) {
@@ -93,12 +105,12 @@ public:
         }
 
         System* target = found->second;
-        target->OnDestroy(*this);
         m_systemLookup.erase(found);
-        m_systems.erase(std::remove_if(m_systems.begin(), m_systems.end(),
-            [target](const std::unique_ptr<System>& system) {
-                return system.get() == target;
-            }), m_systems.end());
+        auto iterator = std::find_if(m_systems.begin(), m_systems.end(),
+            [target](const std::unique_ptr<System>& system) { return system.get() == target; });
+        std::unique_ptr<System> system = std::move(*iterator);
+        m_systems.erase(iterator);
+        system->OnDestroy(*this);
         return true;
     }
 
@@ -121,6 +133,7 @@ private:
     std::unordered_map<UUID, entt::entity> m_uuidLookup;
     std::vector<std::unique_ptr<System>> m_systems;
     std::unordered_map<std::type_index, System*> m_systemLookup;
+    bool m_isUpdating = false;
 };
 
 } // namespace Bazzalt

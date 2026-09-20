@@ -8,6 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication, QLabel
 
 from Editor.gui.application import Editor
+from Editor.gui.widgets import EditorMenu
 from Editor.theme import Theme, ThemeManager
 
 
@@ -26,9 +27,16 @@ class EditorShellTests(unittest.TestCase):
     def test_shared_theme_updates_docking(self) -> None:
         self.Themes.SetTheme(Theme.light())
         self.assertEqual(self.Window.Docking.theme.background, Theme.light().background)
-        self.assertEqual(
-            self.Themes._style.MutedColor.name(), Theme.light().text_muted
-        )
+
+    def test_shortcuts_use_custom_menu_rendering(self) -> None:
+        self.assertIsInstance(self.Window.MenuBar.FileMenu, EditorMenu)
+        save = next(action for action in self.Window.MenuBar.FileMenu.actions()
+                    if action.text() == "Save Project")
+        self.assertFalse(save.isShortcutVisibleInContextMenu())
+        self.assertFalse(save.shortcut().isEmpty())
+
+    def test_layout_restore_rejects_oversized_input(self) -> None:
+        self.assertFalse(self.Window.Docking.restore_layout(b" " * (2 * 1024 * 1024 + 1)))
 
     def test_window_menu_lists_shared_dock_panels(self) -> None:
         self.Window.Docking.add_panel(

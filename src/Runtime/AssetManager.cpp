@@ -1,18 +1,24 @@
 #include "Bazzalt/AssetManager.h"
 
+#include <algorithm>
+#include <vector>
+
 #include "Runtime/Engine.h"
 
 namespace Bazzalt {
 namespace {
-Runtime::Engine* ActiveEngine = nullptr;
+std::vector<Runtime::Engine*> Engines;
+Runtime::Engine* ActiveEngine() { return Engines.empty() ? nullptr : Engines.back(); }
 }
 
 std::optional<AssetInfo> AssetManager::GetAsset(UUID id) {
-    return ActiveEngine != nullptr ? ActiveEngine->FindAsset(id) : std::nullopt;
+    auto* engine = ActiveEngine();
+    return engine != nullptr ? engine->FindAsset(id) : std::nullopt;
 }
 
 std::optional<AssetInfo> AssetManager::GetAsset(const std::filesystem::path& path) {
-    return ActiveEngine != nullptr ? ActiveEngine->FindAsset(path) : std::nullopt;
+    auto* engine = ActiveEngine();
+    return engine != nullptr ? engine->FindAsset(path) : std::nullopt;
 }
 
 bool AssetManager::IsAssetReady(UUID id) {
@@ -20,9 +26,12 @@ bool AssetManager::IsAssetReady(UUID id) {
     return asset && asset->State == AssetState::Ready;
 }
 
-void AssetManager::Bind(Runtime::Engine* engine) { ActiveEngine = engine; }
+void AssetManager::Bind(Runtime::Engine* engine) {
+    if (engine && std::find(Engines.begin(), Engines.end(), engine) == Engines.end())
+        Engines.push_back(engine);
+}
 void AssetManager::Unbind(Runtime::Engine* engine) {
-    if (ActiveEngine == engine) ActiveEngine = nullptr;
+    Engines.erase(std::remove(Engines.begin(), Engines.end(), engine), Engines.end());
 }
 
 } // namespace Bazzalt

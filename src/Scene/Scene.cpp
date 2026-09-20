@@ -142,16 +142,23 @@ Mat4 Scene::GetWorldMatrix(Entity entity) const {
 }
 
 void Scene::Update(float deltaTime) {
+    struct UpdateGuard {
+        bool& Flag;
+        explicit UpdateGuard(bool& flag) : Flag(flag) { Flag = true; }
+        ~UpdateGuard() { Flag = false; }
+    } guard(m_isUpdating);
     for (const auto& system : m_systems) {
-        if (system->IsEnabled()) {
-            system->OnUpdate(*this, deltaTime);
-        }
+        if (system->IsEnabled()) system->OnUpdate(*this, deltaTime);
     }
 }
 
 void Scene::DestroySystems() {
     for (auto it = m_systems.rbegin(); it != m_systems.rend(); ++it) {
-        (*it)->OnDestroy(*this);
+        try {
+            (*it)->OnDestroy(*this);
+        } catch (...) {
+            // Destructors must not allow user system callbacks to terminate the host.
+        }
     }
     m_systemLookup.clear();
     m_systems.clear();

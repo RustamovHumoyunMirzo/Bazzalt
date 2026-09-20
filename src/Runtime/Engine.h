@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -67,6 +68,7 @@ private:
     bool m_shouldClose = false;
     float m_deltaTime = 0.016f;
     std::uint64_t m_frameCount = 0;
+    std::chrono::steady_clock::time_point m_lastFrameTime{};
     std::unique_ptr<Scene> m_scene;
     SceneSerializer m_sceneSerializer;
     ProjectMetadata m_project;

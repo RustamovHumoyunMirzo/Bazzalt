@@ -1,5 +1,7 @@
 #include "Rendering/RenderSystems.h"
 
+#include <algorithm>
+#include <cmath>
 #include <limits>
 #include <unordered_set>
 
@@ -21,6 +23,30 @@ namespace Bazzalt::Runtime {
 namespace {
 
 filament::math::float3 ToFilament(Vec3 value) { return {value.X, value.Y, value.Z}; }
+
+float FiniteOr(float value, float fallback) {
+    return std::isfinite(value) ? value : fallback;
+}
+
+Vec3 SafeVector(Vec3 value, Vec3 fallback = {}) {
+    return std::isfinite(value.X) && std::isfinite(value.Y) && std::isfinite(value.Z)
+        ? value : fallback;
+}
+
+Vec3 SafeDirection(Vec3 value, Vec3 fallback) {
+    value = SafeVector(value, fallback);
+    return value.LengthSquared() > Epsilon ? value.Normalized() : fallback;
+}
+
+LightType SafeLightType(LightType type) {
+    switch (type) {
+    case LightType::Directional:
+    case LightType::Sun:
+    case LightType::Point:
+    case LightType::Spot: return type;
+    default: return LightType::Point;
+    }
+}
 
 filament::math::mat4f ToFilament(const Mat4& value) {
     return {filament::math::float4{value(0,0), value(1,0), value(2,0), value(3,0)},
@@ -68,18 +94,25 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
         const auto& camera = view.get<Camera>(handle);
         auto& resource = found->second;
         const Mat4 world = entity.GetWorldMatrix();
-        const Vec3 position = world.TransformPoint({});
-        const Vec3 forward = world.TransformDirection({0.0f, 0.0f, -1.0f}).Normalized();
-        const Vec3 up = world.TransformDirection({0.0f, 1.0f, 0.0f}).Normalized();
+        const Vec3 position = SafeVector(world.TransformPoint({}));
+        const Vec3 forward = SafeDirection(world.TransformDirection({0.0f, 0.0f, -1.0f}), {0,0,-1});
+        Vec3 up = SafeDirection(world.TransformDirection({0.0f, 1.0f, 0.0f}), {0,1,0});
+        if (std::fabs(Vec3::Dot(forward, up)) > 0.999f) up = {0,1,0};
         resource.Camera->lookAt(ToFilament(position), ToFilament(position + forward), ToFilament(up));
-        if (camera.Projection == CameraProjection::Perspective) {
-            resource.Camera->setProjection(ToDegrees(camera.VerticalFieldOfView), camera.AspectRatio,
-                camera.NearPlane, camera.FarPlane, filament::Camera::Fov::VERTICAL);
+        const double nearPlane = std::max(0.001, static_cast<double>(FiniteOr(camera.NearPlane, 0.1f)));
+        const double farPlane = std::max(nearPlane + 0.001, static_cast<double>(FiniteOr(camera.FarPlane, 1000.0f)));
+        const double aspect = std::max(0.001, static_cast<double>(FiniteOr(camera.AspectRatio, 16.0f / 9.0f)));
+        if (camera.Projection != CameraProjection::Orthographic) {
+            const double fov = std::clamp(static_cast<double>(ToDegrees(FiniteOr(
+                camera.VerticalFieldOfView, ToRadians(60.0f)))), 1.0, 179.0);
+            resource.Camera->setProjection(fov, aspect, nearPlane, farPlane,
+                filament::Camera::Fov::VERTICAL);
         } else {
-            const double halfHeight = camera.OrthographicSize * 0.5;
-            const double halfWidth = halfHeight * camera.AspectRatio;
+            const double halfHeight = std::max(0.001, static_cast<double>(FiniteOr(
+                camera.OrthographicSize, 10.0f)) * 0.5);
+            const double halfWidth = halfHeight * aspect;
             resource.Camera->setProjection(filament::Camera::Projection::ORTHO,
-                -halfWidth, halfWidth, -halfHeight, halfHeight, camera.NearPlane, camera.FarPlane);
+                -halfWidth, halfWidth, -halfHeight, halfHeight, nearPlane, farPlane);
         }
         resource.View->setPostProcessingEnabled(camera.PostProcessing.Enabled);
         resource.View->setAntiAliasing(camera.PostProcessing.AntiAliasingMode == AntiAliasing::None
@@ -133,46 +166,53 @@ void LightSystem::OnUpdate(Scene& scene, float) {
         Entity entity = scene.GetEntity(static_cast<Entity::Id>(handle));
         const UUID id = entity.GetUUID(); alive.insert(id);
         const auto& light = view.get<Light>(handle);
+        const LightType type = SafeLightType(light.Type);
+        const Vec3 color = SafeVector(light.Color, {1,1,1});
+        const float intensity = std::max(0.0f, FiniteOr(light.Intensity, 0.0f));
+        const float range = std::max(0.001f, FiniteOr(light.Range, 10.0f));
+        const float outerCone = std::clamp(FiniteOr(light.OuterConeAngle, ToRadians(30.0f)),
+                                           0.001f, Pi * 0.5f);
+        const float innerCone = std::clamp(FiniteOr(light.InnerConeAngle, ToRadians(20.0f)),
+                                           0.0f, outerCone);
         auto found = m_resources.find(id);
-        if (found != m_resources.end() && found->second.Type != light.Type) {
+        if (found != m_resources.end() && found->second.Type != type) {
             Destroy(id);
             found = m_resources.end();
         }
         if (found == m_resources.end()) {
             utils::Entity resource = engine.getEntityManager().create();
-            filament::LightManager::Builder builder(ToFilament(light.Type));
-            builder.color(ToFilament(light.Color))
-                   .intensity(light.Enabled ? light.Intensity : 0.0f)
+            filament::LightManager::Builder builder(ToFilament(type));
+            builder.color(ToFilament(color))
+                   .intensity(light.Enabled ? intensity : 0.0f)
                    .castShadows(light.CastShadows);
             const Mat4 initialWorld = entity.GetWorldMatrix();
-            if (light.Type == LightType::Point || light.Type == LightType::Spot)
-                builder.position(ToFilament(initialWorld.TransformPoint({}))).falloff(light.Range);
-            if (light.Type != LightType::Point)
-                builder.direction(ToFilament(initialWorld.TransformDirection(
-                    {0.0f, 0.0f, -1.0f}).Normalized()));
-            if (light.Type == LightType::Spot)
-                builder.spotLightCone(light.InnerConeAngle, light.OuterConeAngle);
-            if (light.Type == LightType::Sun)
-                builder.sunAngularRadius(ToDegrees(light.SunAngularRadius))
-                       .sunHaloSize(light.SunHaloSize).sunHaloFalloff(light.SunHaloFalloff);
+            if (type == LightType::Point || type == LightType::Spot)
+                builder.position(ToFilament(SafeVector(initialWorld.TransformPoint({})))).falloff(range);
+            if (type != LightType::Point)
+                builder.direction(ToFilament(SafeDirection(initialWorld.TransformDirection(
+                    {0.0f, 0.0f, -1.0f}), {0,0,-1})));
+            if (type == LightType::Spot) builder.spotLightCone(innerCone, outerCone);
+            if (type == LightType::Sun)
+                builder.sunAngularRadius(std::clamp(ToDegrees(FiniteOr(light.SunAngularRadius, 0.00935f)), 0.1f, 20.0f))
+                       .sunHaloSize(std::max(0.0f, FiniteOr(light.SunHaloSize, 10.0f)))
+                       .sunHaloFalloff(std::max(0.0f, FiniteOr(light.SunHaloFalloff, 80.0f)));
             builder.build(engine, resource);
             m_backend.GetScene().addEntity(resource);
-            found = m_resources.emplace(id, Resource{resource, light.Type}).first;
+            found = m_resources.emplace(id, Resource{resource, type}).first;
         }
         const auto instance = manager.getInstance(found->second.Entity);
-        manager.setColor(instance, ToFilament(light.Color));
-        manager.setIntensity(instance, light.Enabled ? light.Intensity : 0.0f);
+        manager.setColor(instance, ToFilament(color));
+        manager.setIntensity(instance, light.Enabled ? intensity : 0.0f);
         const Mat4 world = entity.GetWorldMatrix();
-        if (light.Type == LightType::Point || light.Type == LightType::Spot) {
-            manager.setFalloff(instance, light.Range);
-            manager.setPosition(instance, ToFilament(world.TransformPoint({})));
+        if (type == LightType::Point || type == LightType::Spot) {
+            manager.setFalloff(instance, range);
+            manager.setPosition(instance, ToFilament(SafeVector(world.TransformPoint({}))));
         }
-        if (light.Type != LightType::Point) {
-            manager.setDirection(instance, ToFilament(
-                world.TransformDirection({0.0f, 0.0f, -1.0f}).Normalized()));
+        if (type != LightType::Point) {
+            manager.setDirection(instance, ToFilament(SafeDirection(
+                world.TransformDirection({0.0f, 0.0f, -1.0f}), {0,0,-1})));
         }
-        if (light.Type == LightType::Spot)
-            manager.setSpotLightCone(instance, light.InnerConeAngle, light.OuterConeAngle);
+        if (type == LightType::Spot) manager.setSpotLightCone(instance, innerCone, outerCone);
         manager.setShadowCaster(instance, light.CastShadows);
     }
     for (auto iterator = m_resources.begin(); iterator != m_resources.end();) {

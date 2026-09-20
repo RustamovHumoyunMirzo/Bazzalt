@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <stdexcept>
+#include <string>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -15,6 +17,10 @@
 namespace Bazzalt {
 
 class Scene;
+struct Hierarchy;
+struct Identity;
+struct Name;
+struct Transform;
 
 class Entity final {
 public:
@@ -26,6 +32,9 @@ public:
     Component& AddComponent(Args&&... args) const {
         static_assert(std::is_base_of_v<Bazzalt::Component, Component>,
                       "Component must derive from Bazzalt::Component");
+        RequireValid("AddComponent");
+        if (m_registry->template all_of<Component>(m_handle))
+            throw std::logic_error("Entity already has the requested component");
         return m_registry->template emplace<Component>(
             m_handle, std::forward<Args>(args)...);
     }
@@ -34,6 +43,10 @@ public:
     Component& AddOrReplaceComponent(Args&&... args) const {
         static_assert(std::is_base_of_v<Bazzalt::Component, Component>,
                       "Component must derive from Bazzalt::Component");
+        static_assert(!std::is_same_v<Component, Identity> &&
+                      !std::is_same_v<Component, Hierarchy>,
+                      "Identity and Hierarchy are managed by Scene");
+        RequireValid("AddOrReplaceComponent");
         return m_registry->template emplace_or_replace<Component>(
             m_handle, std::forward<Args>(args)...);
     }
@@ -49,6 +62,9 @@ public:
     Component& GetComponent() const {
         static_assert(std::is_base_of_v<Bazzalt::Component, Component>,
                       "Component must derive from Bazzalt::Component");
+        RequireValid("GetComponent");
+        if (!m_registry->template all_of<Component>(m_handle))
+            throw std::logic_error("Entity does not have the requested component");
         return m_registry->template get<Component>(m_handle);
     }
 
@@ -63,6 +79,12 @@ public:
     void RemoveComponent() const {
         static_assert(std::is_base_of_v<Bazzalt::Component, Component>,
                       "Component must derive from Bazzalt::Component");
+        static_assert(!std::is_same_v<Component, Identity> &&
+                      !std::is_same_v<Component, Hierarchy> &&
+                      !std::is_same_v<Component, Name> &&
+                      !std::is_same_v<Component, Transform>,
+                      "Core entity components cannot be removed");
+        RequireValid("RemoveComponent");
         m_registry->template remove<Component>(m_handle);
     }
 
@@ -95,6 +117,11 @@ private:
 
     Entity(entt::entity handle, entt::registry& registry, Scene& scene)
         : m_handle(handle), m_registry(&registry), m_scene(&scene) {}
+
+    void RequireValid(const char* operation) const {
+        if (!IsValid())
+            throw std::logic_error(std::string(operation) + " called on an invalid entity");
+    }
 
     entt::entity m_handle{entt::null};
     entt::registry* m_registry = nullptr;

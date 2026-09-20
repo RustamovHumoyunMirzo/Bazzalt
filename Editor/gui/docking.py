@@ -54,10 +54,7 @@ try:
 except ImportError:
     import docking_resources_rc as _docking_resources_rc  # type: ignore[no-redef]
 
-try:
-    from ..theme import ApplyWidgetTheme, BuildPalette, BuildStyleSheet, Theme
-except ImportError:
-    from theme import ApplyWidgetTheme, BuildPalette, BuildStyleSheet, Theme  # type: ignore[no-redef]
+from ..theme import ApplyWidgetTheme, BuildPalette, BuildStyleSheet, Theme
 
 DockArea = Literal["left", "right", "top", "bottom", "center"]
 VALID_AREAS = {"left", "right", "top", "bottom", "center"}
@@ -118,16 +115,18 @@ LayoutNode: TypeAlias = TabNode | SplitNode
 
 
 def node_from_dict(
-    data: dict[str, Any], valid_ids: set[str] | None = None
+    data: dict[str, Any], valid_ids: set[str] | None = None, _depth: int = 0
 ) -> LayoutNode | None:
     """Create and sanitize a tree node from JSON-compatible data."""
-    if not isinstance(data, dict):
+    if not isinstance(data, dict) or _depth > 64:
         return None
     if data.get("type") == "tabs":
         raw = data.get("panels", [])
+        if not isinstance(raw, list):
+            return None
         panels = [
             value
-            for value in raw
+            for value in raw[:4096]
             if isinstance(value, str) and (valid_ids is None or value in valid_ids)
         ]
         panels = list(dict.fromkeys(panels))
@@ -139,8 +138,12 @@ def node_from_dict(
         "horizontal",
         "vertical",
     }:
+        raw_children = data.get("children", [])
+        if not isinstance(raw_children, list):
+            return None
         children = [
-            node_from_dict(item, valid_ids) for item in data.get("children", [])
+            node_from_dict(item, valid_ids, _depth + 1)
+            for item in raw_children[:256]
         ]
         clean = [child for child in children if child is not None]
         if not clean:
@@ -849,6 +852,8 @@ class DockingSystem(QWidget):
             if isinstance(state, QByteArray):
                 state = bytes(state)
             if isinstance(state, bytes):
+                if len(state) > 2 * 1024 * 1024:
+                    return False
                 state = json.loads(state.decode("utf-8"))
             if not isinstance(state, dict) or int(state.get("version", 1)) != 1:
                 return False
@@ -864,7 +869,10 @@ class DockingSystem(QWidget):
             root = deduplicate_tree(node_from_dict(state.get("root"), valid))
             used = set(iter_panel_ids(root))
             floats: list[_FloatingState] = []
-            for item in state.get("floating", []):
+            floating_data = state.get("floating", [])
+            if not isinstance(floating_data, list):
+                return False
+            for item in floating_data[:128]:
                 if not isinstance(item, dict):
                     continue
                 tree = deduplicate_tree(node_from_dict(item.get("root"), valid - used))
@@ -874,7 +882,12 @@ class DockingSystem(QWidget):
                 geometry = item.get("geometry", [100, 100, 480, 320])
                 if not (isinstance(geometry, list) and len(geometry) == 4):
                     geometry = [100, 100, 480, 320]
-                floats.append(_FloatingState(tree, geometry=[int(v) for v in geometry]))
+                values = [int(v) for v in geometry]
+                values[0] = max(-1_000_000, min(1_000_000, values[0]))
+                values[1] = max(-1_000_000, min(1_000_000, values[1]))
+                values[2] = max(180, min(16_384, values[2]))
+                values[3] = max(120, min(16_384, values[3]))
+                floats.append(_FloatingState(tree, geometry=values))
             self._dispose_floating_windows()
             if pinned_data is not None:
                 for panel in self._panels.values():
@@ -883,7 +896,8 @@ class DockingSystem(QWidget):
             self._rebuild_views()
             self.layout_changed.emit()
             return True
-        except (TypeError, ValueError, KeyError, UnicodeDecodeError):
+        except (TypeError, ValueError, KeyError, UnicodeDecodeError,
+                OverflowError, RecursionError):
             return False
 
     def set_theme(self, theme: Theme) -> None:

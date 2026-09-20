@@ -2,12 +2,61 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
-from PySide6.QtGui import QAction, QActionGroup, QKeySequence
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QPainter, QPaintEvent
 from PySide6.QtWidgets import QApplication, QMenu, QMenuBar, QWidget
 
 from ...theme import Theme, ThemeManager
 from ..docking import DockingSystem
+
+
+class EditorMenu(QMenu):
+    """Menu with a dedicated passive-colored shortcut column."""
+
+    def __init__(self, title: str, themes: ThemeManager, parent: QWidget | None = None) -> None:
+        super().__init__(title, parent)
+        self._themes = themes
+        themes.ThemeChanged.connect(self._ThemeChanged)
+
+    def _ThemeChanged(self, _: Theme) -> None:
+        self.updateGeometry()
+        self.update()
+
+    def addAction(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        result = super().addAction(*args, **kwargs)
+        action = result or (args[0] if args and isinstance(args[0], QAction) else None)
+        if action is not None:
+            action.setShortcutVisibleInContextMenu(False)
+        return result or action
+
+    def AddSubMenu(self, title: str) -> "EditorMenu":
+        menu = EditorMenu(title, self._themes, self)
+        super().addMenu(menu)
+        return menu
+
+    def sizeHint(self):  # type: ignore[no-untyped-def]
+        size = super().sizeHint()
+        widest = max((self.fontMetrics().horizontalAdvance(
+            action.shortcut().toString(QKeySequence.SequenceFormat.NativeText))
+            for action in self.actions() if not action.shortcut().isEmpty()), default=0)
+        if widest:
+            size.setWidth(size.width() + widest + self._themes.GetTheme().spacing * 4)
+        return size
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        super().paintEvent(event)
+        theme = self._themes.GetTheme()
+        painter = QPainter(self)
+        painter.setPen(QColor(theme.text_muted))
+        for action in self.actions():
+            if not action.isVisible() or action.isSeparator() or action.menu() is not None:
+                continue
+            shortcut = action.shortcut().toString(QKeySequence.SequenceFormat.NativeText)
+            if shortcut:
+                rect = self.actionGeometry(action).adjusted(0, 0, -theme.spacing * 3, 0)
+                painter.drawText(rect, Qt.AlignmentFlag.AlignRight |
+                    Qt.AlignmentFlag.AlignVCenter, shortcut)
+        painter.end()
 
 
 class EditorMenuBar(QMenuBar):
@@ -32,11 +81,11 @@ class EditorMenuBar(QMenuBar):
         self._theme_manager = theme_manager
         self._docking: DockingSystem | None = None
 
-        self.FileMenu = self.addMenu("&File")
-        self.EditMenu = self.addMenu("&Edit")
-        self.ViewMenu = self.addMenu("&View")
-        self.WindowMenu = self.addMenu("&Window")
-        self.HelpMenu = self.addMenu("&Help")
+        self.FileMenu = self._AddTopLevelMenu("&File")
+        self.EditMenu = self._AddTopLevelMenu("&Edit")
+        self.ViewMenu = self._AddTopLevelMenu("&View")
+        self.WindowMenu = self._AddTopLevelMenu("&Window")
+        self.HelpMenu = self._AddTopLevelMenu("&Help")
 
         self._BuildFileMenu()
         self._BuildEditMenu()
@@ -50,7 +99,12 @@ class EditorMenuBar(QMenuBar):
 
     def AddMenu(self, title: str) -> QMenu:
         """Create an additional consistently styled top-level menu."""
-        return self.addMenu(title)
+        return self._AddTopLevelMenu(title)
+
+    def _AddTopLevelMenu(self, title: str) -> EditorMenu:
+        menu = EditorMenu(title, self._theme_manager, self)
+        self.addMenu(menu)
+        return menu
 
     def _BuildFileMenu(self) -> None:
         action = self.FileMenu.addAction("New Project")
@@ -85,7 +139,7 @@ class EditorMenuBar(QMenuBar):
         action.triggered.connect(self.RedoRequested)
 
     def _BuildViewMenu(self) -> None:
-        theme_menu = self.ViewMenu.addMenu("Theme")
+        theme_menu = self.ViewMenu.AddSubMenu("Theme")
         group = QActionGroup(self)
         group.setExclusive(True)
 
@@ -149,4 +203,4 @@ class EditorMenuBar(QMenuBar):
             application.quit()
 
 
-__all__ = ["EditorMenuBar"]
+__all__ = ["EditorMenu", "EditorMenuBar"]

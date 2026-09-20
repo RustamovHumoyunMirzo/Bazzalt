@@ -2,6 +2,8 @@
 #include "Runtime/AssetDatabase.h"
 #include "Rendering/RenderBackend.h"
 #include "Rendering/RenderSystems.h"
+#include <algorithm>
+#include <cctype>
 #include <iostream>
 #include <chrono>
 #include <stdexcept>
@@ -47,6 +49,8 @@ bool Engine::Init()
     m_isInitialized = true;
     m_shouldClose = false;
     m_frameCount = 0;
+    m_deltaTime = 0.016f;
+    m_lastFrameTime = std::chrono::steady_clock::now();
 
     std::cout << "[Engine] Initialization complete.\n";
     return true;
@@ -62,10 +66,9 @@ void Engine::Update()
 
     ProcessPendingSceneLoad();
 
-    static auto lastTime = std::chrono::high_resolution_clock::now();
-    auto currentTime = std::chrono::high_resolution_clock::now();
-    m_deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
-    lastTime = currentTime;
+    const auto currentTime = std::chrono::steady_clock::now();
+    m_deltaTime = std::chrono::duration<float>(currentTime - m_lastFrameTime).count();
+    m_lastFrameTime = currentTime;
 
     m_frameCount++;
     m_scene->Update(m_deltaTime);
@@ -155,6 +158,14 @@ bool Engine::RequestSceneLoad(const std::filesystem::path& path)
     if (path.empty())
     {
         m_lastError = "Scene path cannot be empty";
+        return false;
+    }
+    std::string extension = path.extension().string();
+    std::transform(extension.begin(), extension.end(), extension.begin(),
+        [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+    if (extension != ".bscene")
+    {
+        m_lastError = "Scene path must use the .bscene extension";
         return false;
     }
     m_pendingScenePath = path;

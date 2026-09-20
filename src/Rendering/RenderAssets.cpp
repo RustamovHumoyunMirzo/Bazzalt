@@ -1,6 +1,7 @@
 #include "Rendering/RenderAssets.h"
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <limits>
@@ -50,6 +51,8 @@ std::string LowerExtension(const std::filesystem::path& path) {
 }
 
 filament::math::mat4f ToFilamentMatrix(const Mat4& value) {
+    for (const float element : value.Values)
+        if (!std::isfinite(element)) return filament::math::mat4f{};
     return {filament::math::float4{value(0,0), value(1,0), value(2,0), value(3,0)},
             filament::math::float4{value(0,1), value(1,1), value(2,1), value(3,1)},
             filament::math::float4{value(0,2), value(1,2), value(2,2), value(3,2)},

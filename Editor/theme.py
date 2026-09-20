@@ -5,68 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, Signal
-from PySide6.QtGui import QColor, QPainter, QPalette
-from PySide6.QtWidgets import (
-    QApplication,
-    QProxyStyle,
-    QStyle,
-    QStyleFactory,
-    QStyleOption,
-    QStyleOptionMenuItem,
-    QWidget,
-)
+from PySide6.QtGui import QColor, QPalette
+from PySide6.QtWidgets import QApplication, QWidget
 
 CHECK_ICON_PATH = ":/docking/check.svg"
-
-
-class _EditorStyle(QProxyStyle):
-    """Draw menu shortcut columns with the theme's passive text color."""
-
-    def __init__(self, base_style_name: str, muted_color: str, spacing: int) -> None:
-        super().__init__(QStyleFactory.create(base_style_name))
-        self.MutedColor = QColor(muted_color)
-        self.Spacing = spacing
-
-    def SetTheme(self, theme: "Theme") -> None:
-        self.MutedColor = QColor(theme.text_muted)
-        self.Spacing = theme.spacing
-
-    def drawControl(
-        self,
-        element: QStyle.ControlElement,
-        option: QStyleOption,
-        painter: QPainter,
-        widget: QWidget | None = None,
-    ) -> None:
-        if (
-            element != QStyle.ControlElement.CE_MenuItem
-            or not isinstance(option, QStyleOptionMenuItem)
-            or "\t" not in option.text
-            or not (option.state & QStyle.StateFlag.State_Enabled)
-        ):
-            super().drawControl(element, option, painter, widget)
-            return
-
-        _, shortcut = option.text.rsplit("\t", 1)
-        passive = QStyleOptionMenuItem(option)
-        passive.palette = QPalette(option.palette)
-        for group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive):
-            passive.palette.setColor(group, QPalette.ColorRole.Text, self.MutedColor)
-            passive.palette.setColor(
-                group, QPalette.ColorRole.WindowText, self.MutedColor
-            )
-
-        # Paint the complete row passively, then repaint the label/icon/check
-        # area with the original palette. Qt keeps ownership of menu metrics.
-        super().drawControl(element, passive, painter, widget)
-        shortcut_width = option.fontMetrics.horizontalAdvance(shortcut)
-        label_right = option.rect.right() - shortcut_width - self.Spacing * 3
-        painter.save()
-        painter.setClipRect(
-            option.rect.adjusted(0, 0, label_right - option.rect.right(), 0)
-        )
-        super().drawControl(element, option, painter, widget)
-        painter.restore()
 
 
 @dataclass(slots=True)
@@ -188,11 +130,6 @@ class ThemeManager(QObject):
         super().__init__(application)
         self._application = application
         self._theme = theme or Theme.dark()
-        base_style_name = application.style().objectName() or "Fusion"
-        self._style = _EditorStyle(
-            base_style_name, self._theme.text_muted, self._theme.spacing
-        )
-        self._application.setStyle(self._style)
         self.SetTheme(self._theme)
 
     def GetTheme(self) -> Theme:
@@ -202,7 +139,6 @@ class ThemeManager(QObject):
         if not isinstance(theme, Theme):
             raise TypeError("theme must be a Theme instance")
         self._theme = theme
-        self._style.SetTheme(theme)
         self._application.setPalette(BuildPalette(theme))
         self._application.setStyleSheet(BuildStyleSheet(theme))
         self.ThemeChanged.emit(theme)

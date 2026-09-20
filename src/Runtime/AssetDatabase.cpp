@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <fstream>
 #include <iomanip>
 #include <functional>
@@ -72,6 +73,19 @@ std::string LowerExtension(const std::filesystem::path& path) {
     return extension;
 }
 
+bool IsPathWithin(const std::filesystem::path& root,
+                  const std::filesystem::path& candidate) {
+    std::error_code rootError;
+    std::error_code candidateError;
+    const auto canonicalRoot = std::filesystem::weakly_canonical(root, rootError);
+    const auto canonicalCandidate = std::filesystem::weakly_canonical(candidate, candidateError);
+    if (rootError || candidateError) return false;
+    const auto relative = canonicalCandidate.lexically_relative(canonicalRoot);
+    if (relative.empty() || relative.is_absolute()) return false;
+    const auto first = relative.begin();
+    return first == relative.end() || *first != "..";
+}
+
 bool CopyAsset(const AssetImportContext& context, std::string& error) {
     std::error_code code;
     std::filesystem::create_directories(context.OutputPath.parent_path(), code);
@@ -85,6 +99,12 @@ bool CopyAsset(const AssetImportContext& context, std::string& error) {
 bool CollectGltfUris(const std::filesystem::path& source,
                      std::vector<std::filesystem::path>& uris, std::string& error) {
     if (LowerExtension(source) != ".gltf") return true;
+    std::error_code sizeError;
+    constexpr std::uintmax_t MaxGltfJsonBytes = 64u * 1024u * 1024u;
+    if (std::filesystem::file_size(source, sizeError) > MaxGltfJsonBytes || sizeError) {
+        error = sizeError ? "Could not inspect glTF JSON size" : "glTF JSON exceeds the 64 MiB limit";
+        return false;
+    }
     std::ifstream stream(source, std::ios::binary);
     std::string json((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
     if (!stream && json.empty()) { error = "Could not read glTF JSON"; return false; }
@@ -100,8 +120,15 @@ bool CollectGltfUris(const std::filesystem::path& source,
                         error = "glTF contains a non-local resource URI: " + uri; return false;
                     }
                     const auto normalized = relative.lexically_normal();
-                    if (*normalized.begin() == "..") {
+                    if (normalized.empty() || *normalized.begin() == ".." ||
+                        uri.find("://") != std::string::npos ||
+                        uri.find('?') != std::string::npos || uri.find('#') != std::string::npos) {
                         error = "glTF resource escapes its asset directory: " + uri; return false;
+                    }
+                    const auto resolved = source.parent_path() / normalized;
+                    if (!IsPathWithin(source.parent_path(), resolved)) {
+                        error = "glTF resource resolves outside its asset directory: " + uri;
+                        return false;
                     }
                     uris.push_back(normalized);
                 }
@@ -192,6 +219,11 @@ public:
             }
             std::error_code code;
             const auto destination = context.OutputPath.parent_path() / uri;
+            if (!IsPathWithin(context.OutputPath.parent_path(), destination) ||
+                std::filesystem::absolute(destination).lexically_normal() ==
+                    std::filesystem::absolute(context.OutputPath).lexically_normal()) {
+                error = "Unsafe glTF cache destination: " + uri.string(); return false;
+            }
             std::filesystem::create_directories(destination.parent_path(), code);
             if (!code) std::filesystem::copy_file(source, destination,
                 std::filesystem::copy_options::overwrite_existing, code);
@@ -261,11 +293,11 @@ public:
 
 bool ReadUnsigned(ryml::ConstNodeRef node, std::uint32_t& value) {
     const std::string text = Text(node);
-    try {
-        const unsigned long parsed = std::stoul(text);
-        value = static_cast<std::uint32_t>(parsed);
-        return parsed <= std::numeric_limits<std::uint32_t>::max();
-    } catch (...) { return false; }
+    std::uint32_t parsed = 0;
+    const auto result = std::from_chars(text.data(), text.data() + text.size(), parsed);
+    if (result.ec != std::errc{} || result.ptr != text.data() + text.size()) return false;
+    value = parsed;
+    return true;
 }
 
 } // namespace
@@ -292,33 +324,63 @@ void AssetDatabase::RegisterImporter(std::unique_ptr<AssetImporter> importer) {
 }
 
 bool AssetDatabase::Open(std::filesystem::path projectDirectory, std::filesystem::path assetDirectory) {
-    m_projectDirectory = std::filesystem::absolute(std::move(projectDirectory)).lexically_normal();
-    m_assetDirectory = assetDirectory.is_absolute()
-        ? std::move(assetDirectory) : m_projectDirectory / assetDirectory;
-    m_assetDirectory = m_assetDirectory.lexically_normal();
+    m_lastError.clear();
+    std::error_code code;
+    m_projectDirectory = std::filesystem::weakly_canonical(
+        std::filesystem::absolute(std::move(projectDirectory)), code);
+    if (code) { m_lastError = "Could not resolve project directory: " + code.message(); return false; }
+    m_assetDirectory = assetDirectory.is_absolute() ? std::move(assetDirectory)
+                                                     : m_projectDirectory / assetDirectory;
+    m_assetDirectory = std::filesystem::absolute(m_assetDirectory).lexically_normal();
+    if (!IsPathWithin(m_projectDirectory, m_assetDirectory)) {
+        m_lastError = "Asset directory must stay within the project directory";
+        return false;
+    }
     m_cacheDirectory = m_projectDirectory / ".bazzalt" / "Cache";
     return Refresh();
 }
 
 bool AssetDatabase::Refresh() {
     m_lastError.clear();
-    m_byId.clear();
-    m_byPath.clear();
+    auto previousById = std::move(m_byId);
+    auto previousByPath = std::move(m_byPath);
+    m_byId.clear(); m_byPath.clear();
+    const auto fail = [this, &previousById, &previousByPath](std::string message) {
+        m_lastError = std::move(message);
+        m_byId = std::move(previousById); m_byPath = std::move(previousByPath);
+        return false;
+    };
     std::error_code code;
     std::filesystem::create_directories(m_assetDirectory, code);
-    if (code) { m_lastError = "Could not create asset directory: " + code.message(); return false; }
+    if (code) return fail("Could not create asset directory: " + code.message());
     for (std::filesystem::recursive_directory_iterator iterator(m_assetDirectory, code), end;
          iterator != end && !code; iterator.increment(code)) {
-        if (!iterator->is_regular_file()) continue;
-        if (iterator->path().extension() == ".meta") continue;
-        if (!RegisterSource(iterator->path())) return false;
+        std::error_code entryError;
+        const bool isDirectory = iterator->is_directory(entryError);
+        if (entryError) return fail("Could not inspect asset: " + entryError.message());
+        if (isDirectory && IsPathWithin(m_cacheDirectory, iterator->path())) {
+            iterator.disable_recursion_pending();
+            continue;
+        }
+        const bool isFile = iterator->is_regular_file(entryError);
+        if (entryError) return fail("Could not inspect asset: " + entryError.message());
+        if (!isFile) continue;
+        if (LowerExtension(iterator->path()) == ".meta") continue;
+        if (!RegisterSource(iterator->path())) {
+            const std::string error = m_lastError;
+            return fail(error);
+        }
     }
-    if (code) { m_lastError = "Could not scan assets: " + code.message(); return false; }
+    if (code) return fail("Could not scan assets: " + code.message());
     return true;
 }
 
 bool AssetDatabase::RegisterSource(const std::filesystem::path& source) {
     const std::filesystem::path normalized = NormalizeSource(source);
+    if (!IsPathWithin(m_assetDirectory, normalized)) {
+        m_lastError = "Asset resolves outside the configured asset directory: " + source.string();
+        return false;
+    }
     const std::filesystem::path metaPath = std::filesystem::path(normalized.string() + ".meta");
     Metadata metadata;
     const bool hadMeta = std::filesystem::exists(metaPath);
@@ -349,8 +411,12 @@ bool AssetDatabase::RegisterSource(const std::filesystem::path& source) {
     record.State = AssetState::NeedsImport;
     if (metadata.SourceHash == sourceHash && metadata.Importer == importer->GetName() &&
         metadata.ImporterVersion == importer->GetVersion() && !metadata.CachePath.empty()) {
-        record.CachePath = m_projectDirectory / metadata.CachePath;
-        if (std::filesystem::exists(record.CachePath)) record.State = AssetState::Ready;
+        const auto candidate = (m_projectDirectory / metadata.CachePath).lexically_normal();
+        if (IsPathWithin(m_cacheDirectory, candidate) &&
+            std::filesystem::is_regular_file(candidate)) {
+            record.CachePath = candidate;
+            record.State = AssetState::Ready;
+        }
     }
     if (record.State != AssetState::Ready) {
         if (!ImportAsset(record, metadata, *importer, sourceHash)) return false;
@@ -363,6 +429,13 @@ bool AssetDatabase::RegisterSource(const std::filesystem::path& source) {
 }
 
 bool AssetDatabase::LoadMetadata(const std::filesystem::path& path, Metadata& metadata) {
+    std::error_code sizeError;
+    constexpr std::uintmax_t MaxMetadataBytes = 4u * 1024u * 1024u;
+    if (std::filesystem::file_size(path, sizeError) > MaxMetadataBytes || sizeError) {
+        m_lastError = sizeError ? "Could not inspect meta file: " + path.string()
+                                : "Asset metadata exceeds the 4 MiB limit: " + path.string();
+        return false;
+    }
     std::ifstream stream(path, std::ios::binary);
     std::string yaml((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
     if (!stream && yaml.empty()) { m_lastError = "Could not read meta file: " + path.string(); return false; }
@@ -378,7 +451,10 @@ bool AssetDatabase::LoadMetadata(const std::filesystem::path& path, Metadata& me
             m_lastError = "Invalid asset metadata: " + path.string(); return false;
         }
         metadata.Importer = Text(root["Importer"]);
-        if (!ReadUnsigned(root["ImporterVersion"], metadata.ImporterVersion)) return false;
+        if (!ReadUnsigned(root["ImporterVersion"], metadata.ImporterVersion)) {
+            m_lastError = "Invalid importer version in asset metadata: " + path.string();
+            return false;
+        }
         if (root.has_child("SourceHash")) metadata.SourceHash = Text(root["SourceHash"]);
         if (root.has_child("CachePath")) metadata.CachePath = Text(root["CachePath"]);
         if (root.has_child("Settings")) {
@@ -408,8 +484,14 @@ bool AssetDatabase::SaveMetadata(const std::filesystem::path& path, const Metada
 
 bool AssetDatabase::ImportAsset(AssetInfo& record, Metadata& metadata, AssetImporter& importer,
                                 const std::string& sourceHash) {
+    const std::string extension = importer.GetCacheExtension(record.SourcePath);
+    if (extension.empty() || extension.front() != '.' ||
+        extension.find_first_of("/\\") != std::string::npos) {
+        m_lastError = "Importer returned an unsafe cache extension";
+        return false;
+    }
     const std::filesystem::path relativeCache = std::filesystem::path(".bazzalt") / "Cache" /
-        record.Id.ToString() / (sourceHash + importer.GetCacheExtension(record.SourcePath));
+        record.Id.ToString() / (sourceHash + extension);
     record.CachePath = m_projectDirectory / relativeCache;
     std::string error;
     if (!importer.Import({record.SourcePath, record.CachePath, metadata.Settings}, error)) {
