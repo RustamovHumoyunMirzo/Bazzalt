@@ -32,7 +32,6 @@ from PySide6.QtGui import (
     QMouseEvent,
     QPainter,
     QPainterPath,
-    QPalette,
     QPen,
     QPixmap,
 )
@@ -48,12 +47,17 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-# Register the compiled SVG resources for both supported import modes:
-# ``import docking`` from src and ``import src.docking`` from the project root.
+# Register the compiled SVG resources. Package imports are canonical; the
+# fallback keeps this reusable module runnable directly during widget work.
 try:
-    from ...gui import docking_resources_rc as _docking_resources_rc  # type: ignore[import-not-found]
+    from . import docking_resources_rc as _docking_resources_rc
 except ImportError:
-    import edtr.gui.docking_resources_rc as _docking_resources_rc  # type: ignore[no-redef]
+    import docking_resources_rc as _docking_resources_rc  # type: ignore[no-redef]
+
+try:
+    from ..theme import ApplyWidgetTheme, BuildPalette, BuildStyleSheet, Theme
+except ImportError:
+    from theme import ApplyWidgetTheme, BuildPalette, BuildStyleSheet, Theme  # type: ignore[no-redef]
 
 DockArea = Literal["left", "right", "top", "bottom", "center"]
 VALID_AREAS = {"left", "right", "top", "bottom", "center"}
@@ -80,46 +84,6 @@ def _small_lock_icon() -> QIcon:
         canvas.setDevicePixelRatio(scale)
         result.addPixmap(canvas)
     return result
-
-
-@dataclass(slots=True)
-class Theme:
-    """Named color and spacing tokens used by a :class:`DockingSystem`."""
-
-    background: str = "#151515"
-    surface: str = "#222222"
-    surface_alt: str = "#1d1d1d"
-    border: str = "#383838"
-    accent: str = "#3d738a"
-    text: str = "#e6e6e6"
-    text_muted: str = "#8f8f8f"
-    tab_active: str = "#2b2b2b"
-    tab_inactive: str = "#181818"
-    overlay_opacity: int = 204
-    radius: int = 4
-    spacing: int = 6
-    splitter_width: int = 3
-    minimum_panel_size: int = 120
-
-    @classmethod
-    def dark(cls) -> "Theme":
-        """Return the built-in restrained graphite theme."""
-        return cls()
-
-    @classmethod
-    def light(cls) -> "Theme":
-        """Return a neutral light theme suitable for native desktop apps."""
-        return cls(
-            background="#e7e9ec",
-            surface="#f4f5f6",
-            surface_alt="#dfe2e5",
-            border="#b9bec4",
-            accent="#527da5",
-            text="#292c30",
-            text_muted="#626971",
-            tab_active="#ffffff",
-            tab_inactive="#e4e7ea",
-        )
 
 
 @dataclass
@@ -1272,70 +1236,20 @@ class DockingSystem(QWidget):
 
     @staticmethod
     def _style_sheet(t: Theme) -> str:
-        return f"""
-        #DockingSystem, _FloatingWindow {{ background: {t.background}; color: {t.text}; }}
-        #DockPanel, #DockGroup {{ background: {t.surface}; border: 0; }}
-        #DockPanel QAbstractItemView, #DockPanel QLineEdit, #DockPanel QTextEdit,
-        #DockPanel QPlainTextEdit {{ background: {t.surface}; color: {t.text};
-                                   border: 1px solid {t.border}; selection-background-color: {t.accent}; }}
-        #DockPanel QLineEdit {{ padding: {t.spacing}px; border-radius: {t.radius}px; }}
-        #DockPanel QLabel {{ color: {t.text}; }}
-        #DockEmpty {{ background: {t.background}; border: 1px dashed {t.border}; }}
-        #DockEmptyLabel {{ color: {t.text_muted}; font-size: 13px; }}
-        QTabWidget::pane {{ border: 1px solid {t.border}; background: {t.surface}; top: -1px; }}
-        QTabBar::tab {{ background: {t.tab_inactive}; color: {t.text_muted}; border: 1px solid {t.border};
-                       border-top-left-radius: {t.radius}px; border-top-right-radius: {t.radius}px;
-                       padding: {t.spacing + 2}px {t.spacing * 2 + 2}px; min-width: 55px; margin-right: 1px; }}
-        QTabBar::tab:selected {{ background: {t.tab_active}; color: {t.text}; border-bottom-color: {t.tab_active}; }}
-        QTabBar::tab:hover:!selected {{ background: {t.surface_alt}; color: {t.text}; }}
-        QSplitter::handle {{ background: {t.background}; }}
-        QSplitter::handle:hover {{ background: {t.accent}; }}
-        QMenu {{ background: {t.surface}; color: {t.text}; border: 1px solid {t.border};
-                 padding: {t.spacing}px 0px; }}
-        QMenu::item {{ padding: 3px {t.spacing * 4 + 12}px
-                                3px {t.spacing * 4 + 8}px; }}
-        QMenu::item:selected {{ background: {t.accent}; color: {t.text}; }}
-        QMenu::item:disabled {{ background: transparent; color: {t.text_muted}; }}
-        QMenu::item:selected:disabled {{ background: {t.surface_alt}; color: {t.text_muted}; }}
-        QMenu::indicator {{ width: 14px; height: 14px; left: {t.spacing * 2}px; color: {t.text} }}
-        QMenu::indicator:checked {{ image: url({CHECK_ICON_PATH}); }}
-        QMenu::separator {{ height: 1px; background: {t.border}; margin: 2px {t.spacing}px; }}
-        QScrollBar {{ background: {t.background}; }}
-        """
+        return BuildStyleSheet(t)
 
     @staticmethod
-    def _qt_palette(t: Theme) -> QPalette:
-        """Build a local palette so non-QSS-aware child controls switch too."""
-        palette = QPalette()
-        palette.setColor(QPalette.ColorRole.Window, QColor(t.background))
-        palette.setColor(QPalette.ColorRole.WindowText, QColor(t.text))
-        palette.setColor(QPalette.ColorRole.Base, QColor(t.surface))
-        palette.setColor(QPalette.ColorRole.AlternateBase, QColor(t.surface_alt))
-        palette.setColor(QPalette.ColorRole.Text, QColor(t.text))
-        palette.setColor(QPalette.ColorRole.Button, QColor(t.surface_alt))
-        palette.setColor(QPalette.ColorRole.ButtonText, QColor(t.text))
-        palette.setColor(QPalette.ColorRole.Highlight, QColor(t.accent))
-        palette.setColor(QPalette.ColorRole.HighlightedText, QColor(t.text))
-        palette.setColor(
-            QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor(t.text_muted)
-        )
-        palette.setColor(
-            QPalette.ColorGroup.Disabled,
-            QPalette.ColorRole.ButtonText,
-            QColor(t.text_muted),
-        )
-        return palette
+    def _qt_palette(t: Theme):
+        return BuildPalette(t)
 
     @staticmethod
-    def _apply_theme(widget: QWidget, qss: str, palette: QPalette) -> None:
-        """Force Qt to invalidate cached style state after a live theme change."""
-        widget.setPalette(palette)
-        widget.setStyleSheet("")
-        widget.setStyleSheet(qss)
-        style = widget.style()
-        style.unpolish(widget)
-        style.polish(widget)
-        widget.update()
+    def _apply_theme(widget: QWidget, qss: str, palette) -> None:
+        # Keep this adapter for existing docking call sites; all actual theme
+        # construction and application lives in the shared theme module.
+        del qss, palette
+        system = widget if isinstance(widget, DockingSystem) else getattr(widget, "system", None)
+        theme = system.theme if system is not None else Theme.dark()
+        ApplyWidgetTheme(widget, theme)
 
 
 __all__ = ["DockingSystem", "DockPanel", "Theme"]

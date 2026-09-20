@@ -1,15 +1,28 @@
-from PySide6.QtWidgets import QApplication
-from edtr.gui.Editor import Editor
 import sys
+from pathlib import Path
+
+from PySide6.QtWidgets import QApplication
+
+if __package__ in {None, ""}:
+    # Support `python editor/main.py` without relying on the current directory.
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from Editor.gui.application import Editor
+    from Editor.theme import ThemeManager
+else:
+    from .gui.application import Editor
+    from .theme import ThemeManager
 
 
-def main():
+def main() -> int:
     app = QApplication(sys.argv)
-    editorWin = Editor()
-    editorWin.showMaximized()
+    app.setApplicationName("BAZZALT Editor")
+    app.setOrganizationName("BAZZALT")
+    theme_manager = ThemeManager(app)
+    editor_window = Editor(theme_manager)
+    editor_window.showMaximized()
 
-    sys.exit(app.exec())
+    return app.exec()
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
