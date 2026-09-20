@@ -28,23 +28,6 @@ class EditorMenu(QMenu):
         super().addMenu(menu)
         return menu
 
-    def sizeHint(self):  # type: ignore[no-untyped-def]
-        """Use one label and one shortcut column instead of Qt's oversized hint."""
-        size = super().sizeHint()
-        metrics = self.fontMetrics()
-        actions = [action for action in self.actions() if action.isVisible()]
-        label_width = max((metrics.horizontalAdvance(action.text().replace("&", ""))
-                           for action in actions), default=0)
-        shortcut_width = max((metrics.horizontalAdvance(action.shortcut().toString(
-            QKeySequence.SequenceFormat.NativeText)) for action in actions
-            if not action.shortcut().isEmpty()), default=0)
-        spacing = self._themes.GetTheme().spacing
-        column_gap = spacing * 2 if shortcut_width else 0
-        # Covers the check/icon gutter, both outer margins, and submenu arrow.
-        chrome = spacing * 4 + 16
-        size.setWidth(max(120, label_width + shortcut_width + column_gap + chrome))
-        return size
-
     def paintEvent(self, event: QPaintEvent) -> None:
         # Preserve native/QSS menu layout, selection, indicators, separators,
         # submenu arrows, disabled states, and platform behavior.
@@ -60,7 +43,9 @@ class EditorMenu(QMenu):
         shortcut_width = max(self.fontMetrics().horizontalAdvance(value)
                              for value in shortcuts)
         spacing = theme.spacing
-        column_left = max(0, self.width() - shortcut_width - spacing * 5)
+        # Qt's native shortcut field begins before its right-aligned text. Cover
+        # the complete field, including its leading tab gap, before repainting.
+        column_left = max(0, self.width() - shortcut_width - spacing * 9)
         painter = QPainter(self)
         for action in self.actions():
             if (not action.isVisible() or action.isSeparator() or

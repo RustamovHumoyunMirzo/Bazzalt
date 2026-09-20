@@ -39,7 +39,20 @@ class EditorShellTests(unittest.TestCase):
         # paint pass strips that text and draws exactly one muted shortcut.
         self.assertTrue(save.isShortcutVisibleInContextMenu())
         self.assertFalse(save.shortcut().isEmpty())
-        self.assertLess(self.Window.MenuBar.FileMenu.sizeHint().width(), 400)
+        menu = self.Window.MenuBar.FileMenu
+        menu.resize(menu.sizeHint())
+        self.assertLess(menu.sizeHint().width(), 500)
+        self.assertTrue(all(menu.actionGeometry(action).right() <= menu.width()
+                            for action in menu.actions()))
+
+    def test_nested_menus_fit_their_native_action_rows(self) -> None:
+        view = self.Window.MenuBar.ViewMenu
+        theme = view.actions()[0].menu()
+        self.assertIsNotNone(theme)
+        for menu in (view, theme):
+            menu.resize(menu.sizeHint())
+            self.assertTrue(all(menu.actionGeometry(action).right() <= menu.width()
+                                for action in menu.actions()))
 
     def test_resources_and_localization_are_shared_services(self) -> None:
         self.assertIsInstance(self.Window.Resources, ResourceManager)

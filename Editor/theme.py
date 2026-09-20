@@ -100,12 +100,13 @@ def BuildStyleSheet(theme: Theme) -> str:
     QMenuBar#EditorMenuBar::item:selected, QMenuBar#EditorMenuBar::item:pressed {{
         background: {t.surface}; color: {t.text}; }}
     QMenu {{ background: {t.surface}; color: {t.text}; border: 1px solid {t.border};
-             padding: {t.spacing / 2}px 0; }}
-    QMenu::item {{ padding: 4px {t.spacing * 5}px 4px {t.spacing * 4 + 8}px; }}
+             padding: {t.spacing / 2}px 0; border-radius: 2px; }}
+    QMenu::item {{ padding: 4px {t.spacing * 6 + 8}px 4px {t.spacing * 4 + 8}px; }}
     QMenu::item:selected {{ background: {t.accent}; color: {t.text}; }}
     QMenu::item:disabled {{ color: {t.text_muted}; }}
     QMenu::indicator {{ width: 14px; height: 14px; left: {t.spacing * 2}px; }}
     QMenu::indicator:checked {{ image: url({CHECK_ICON_PATH}); }}
+    QMenu::right-arrow {{ subcontrol-position: right center; right: {t.spacing * 2}px; }}
     QMenu::separator {{ height: 1px; background: {t.border}; margin: 3px {t.spacing}px; }}
     QToolTip {{ background: {t.surface}; color: {t.text}; border: 1px solid {t.border}; }}
     QScrollBar {{ background: {t.background}; }}
