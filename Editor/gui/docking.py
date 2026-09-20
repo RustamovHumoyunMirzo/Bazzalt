@@ -55,6 +55,8 @@ except ImportError:
     import docking_resources_rc as _docking_resources_rc  # type: ignore[no-redef]
 
 from ..theme import ApplyWidgetTheme, BuildPalette, BuildStyleSheet, Theme
+from ..localization import LocalizationManager
+from ..resources import ResourceManager
 
 DockArea = Literal["left", "right", "top", "bottom", "center"]
 VALID_AREAS = {"left", "right", "top", "bottom", "center"}
@@ -396,10 +398,11 @@ class _DockTabBar(QTabBar):
         system = self.group.system
         menu = QMenu(self)
         panel = system.panel(panel_id)
-        close = menu.addAction("Close")
+        tr = system.localization.Translate
+        close = menu.addAction(tr("dock.close"))
         close.setEnabled(panel.closable and not panel.pinned)
         close.triggered.connect(lambda: system.close_panel(panel_id))
-        close_others = menu.addAction("Close Others")
+        close_others = menu.addAction(tr("dock.close_others"))
         close_others.setEnabled(
             any(
                 system.panel(value).closable and not system.panel(value).pinned
@@ -410,7 +413,7 @@ class _DockTabBar(QTabBar):
         close_others.triggered.connect(
             lambda: system._close_group(panel_id, others=True)
         )
-        close_all = menu.addAction("Close All")
+        close_all = menu.addAction(tr("dock.close_all"))
         close_all.setEnabled(
             any(
                 system.panel(value).closable and not system.panel(value).pinned
@@ -419,18 +422,18 @@ class _DockTabBar(QTabBar):
         )
         close_all.triggered.connect(lambda: system._close_group(panel_id, others=False))
         menu.addSeparator()
-        pin = menu.addAction("Pin")
+        pin = menu.addAction(tr("dock.pin"))
         pin.setCheckable(True)
         pin.setChecked(panel.pinned)
         pin.triggered.connect(lambda checked: system.pin_panel(panel_id, checked))
-        float_action = menu.addAction("Float")
+        float_action = menu.addAction(tr("dock.float"))
         float_action.setEnabled(not panel.pinned)
         float_action.triggered.connect(lambda: system.float_panel(panel_id))
-        split_menu = menu.addMenu("Split")
+        split_menu = menu.addMenu(tr("dock.split"))
         split_menu.setEnabled(not panel.pinned)
         split_menu.menuAction().setEnabled(not panel.pinned)
         for area in ("left", "right", "top", "bottom"):
-            action = split_menu.addAction(area.title())
+            action = split_menu.addAction(tr(f"dock.{area}"))
             action.triggered.connect(
                 lambda checked=False, a=area: system.dock(
                     panel_id, a, system._neighbor_panel(panel_id)
@@ -454,9 +457,9 @@ class _DockGroup(QTabWidget):
             panel = system.panel(panel_id)
             tab_icon = _small_lock_icon() if panel.pinned else panel.icon
             index = self.addTab(panel, tab_icon, panel.title)
-            self.setTabToolTip(
-                index, f"{panel.title} (pinned)" if panel.pinned else panel.title
-            )
+            self.setTabToolTip(index,
+                system.localization.Translate("dock.pinned_tooltip", title=panel.title)
+                if panel.pinned else panel.title)
             can_close = panel.closable and not panel.pinned
             self.tabBar().setTabButton(
                 index,
@@ -504,11 +507,11 @@ class _DockGroup(QTabWidget):
 
 
 class _EmptyState(QFrame):
-    def __init__(self) -> None:
+    def __init__(self, localization: LocalizationManager) -> None:
         super().__init__()
         self.setObjectName("DockEmpty")
         layout = QVBoxLayout(self)
-        label = QLabel("Drop panels here")
+        label = QLabel(localization.Translate("dock.empty"))
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         label.setObjectName("DockEmptyLabel")
         layout.addWidget(label)
@@ -628,7 +631,7 @@ class _FloatingWindow(QWidget):
             system.destroyed.connect(self.close)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setAcceptDrops(True)
-        self.setWindowTitle("Floating panels")
+        self.setWindowTitle(system.localization.Translate("dock.floating"))
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._overlay = _DropOverlay(self, system.theme)
@@ -681,12 +684,15 @@ class DockingSystem(QWidget):
         double_click_float: bool = True,
         floating_taskbar: bool = False,
         floating_always_on_top: bool = False,
+        localization: LocalizationManager | None = None,
     ) -> None:
         super().__init__(parent)
         self.theme = theme or Theme.dark()
         self.double_click_float = double_click_float
         self.floating_taskbar = floating_taskbar
         self.floating_always_on_top = floating_always_on_top
+        self.localization = localization or LocalizationManager(ResourceManager())
+        self.localization.LocaleChanged.connect(lambda _: self._rebuild_views())
         self._panels: dict[str, DockPanel] = {}
         self._root: LayoutNode | None = None
         self._floating: list[_FloatingState] = []
@@ -1168,7 +1174,8 @@ class DockingSystem(QWidget):
         self._groups.clear()
         self._clear_layout(self._layout)
         self._layout.addWidget(
-            self._build_widget(self._root, self) if self._root else _EmptyState()
+            self._build_widget(self._root, self)
+            if self._root else _EmptyState(self.localization)
         )
         existing = {id(state): state.window for state in self._floating if state.window}
         for state in self._floating:
@@ -1177,7 +1184,9 @@ class DockingSystem(QWidget):
             self._clear_layout(window._layout)
             window._layout.addWidget(self._build_widget(state.root, window))
             titles = [self.panel(value).title for value in iter_panel_ids(state.root)]
-            window.setWindowTitle(" - ".join(titles[:3]) or "Floating panels")
+            window.setWindowTitle(
+                " - ".join(titles[:3]) or self.localization.Translate("dock.floating")
+            )
             x, y, w, h = state.geometry
             window.setGeometry(x, y, max(180, w), max(120, h))
             self._apply_theme(

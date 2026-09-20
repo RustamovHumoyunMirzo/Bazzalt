@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -9,6 +10,8 @@ from PySide6.QtWidgets import QApplication, QLabel
 
 from Editor.gui.application import Editor
 from Editor.gui.widgets import EditorMenu
+from Editor.localization import LocalizationManager
+from Editor.resources import ResourceManager
 from Editor.theme import Theme, ThemeManager
 
 
@@ -32,8 +35,19 @@ class EditorShellTests(unittest.TestCase):
         self.assertIsInstance(self.Window.MenuBar.FileMenu, EditorMenu)
         save = next(action for action in self.Window.MenuBar.FileMenu.actions()
                     if action.text() == "Save Project")
-        self.assertFalse(save.isShortcutVisibleInContextMenu())
+        # Native shortcut layout stays enabled for correct sizing; EditorMenu's
+        # paint pass strips that text and draws exactly one muted shortcut.
+        self.assertTrue(save.isShortcutVisibleInContextMenu())
         self.assertFalse(save.shortcut().isEmpty())
+        self.assertLess(self.Window.MenuBar.FileMenu.sizeHint().width(), 400)
+
+    def test_resources_and_localization_are_shared_services(self) -> None:
+        self.assertIsInstance(self.Window.Resources, ResourceManager)
+        self.assertIsInstance(self.Window.Localization, LocalizationManager)
+        self.assertEqual(self.Window.Localization.Translate("action.save_project"), "Save Project")
+        self.assertTrue(self.Window.Resources.Resolve("locales/en.json").is_file())
+        with self.assertRaises(ValueError):
+            self.Window.Resources.Resolve(Path("..") / "outside.svg")
 
     def test_layout_restore_rejects_oversized_input(self) -> None:
         self.assertFalse(self.Window.Docking.restore_layout(b" " * (2 * 1024 * 1024 + 1)))
