@@ -141,6 +141,16 @@ Fields: `Type`, `Color`, `Intensity`, `Range`, `InnerConeAngle`,
 Fields: `Shape`, local `Center`, box `Extents`, sphere `Radius`, `LayerMask`,
 and `Enabled`. These bounds drive scene queries, not physics simulation.
 
+### `Components/GaussianBlur.h`
+
+Camera post-effect component with `Enabled` and pixel-radius multiplier `Size`.
+Attach it to the same entity as `Camera`.
+
+### `Components/Vignette.h`
+
+Camera post-effect component with `Enabled`, `Color`, `Intensity`, `Smoothness`,
+and `Roundness`. Attach it to the same entity as `Camera`.
+
 ## `Bazzalt/SceneQuery.h`
 
 Defines `SceneRay`, `SceneQueryOptions`, and `SceneQueryHit`. `Scene` exposes

@@ -4,6 +4,8 @@
 #include "Runtime/Engine.h"
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Components/SceneQueryBounds.h"
+#include "Bazzalt/Components/GaussianBlur.h"
+#include "Bazzalt/Components/Vignette.h"
 #include "Bazzalt/Components/Light.h"
 #include "Bazzalt/Components/Mesh.h"
 
@@ -52,6 +54,8 @@ int main() {
     queryBounds.Shape = SceneQueryShape::Sphere;
     queryBounds.Radius = 2.5f;
     queryBounds.LayerMask = 0x10;
+    child.AddComponent<GaussianBlur>().Size = 3.0f;
+    child.AddComponent<Vignette>().Roundness = 0.6f;
     child.AddComponent<Light>().Type = LightType::Spot;
     child.AddComponent<Mesh>().MeshAsset = UUID{9, 9};
 
@@ -82,6 +86,8 @@ int main() {
     assert(restoredChild.GetComponent<SceneQueryBounds>().Shape == SceneQueryShape::Sphere);
     assert(restoredChild.GetComponent<SceneQueryBounds>().Radius == 2.5f);
     assert(restoredChild.GetComponent<SceneQueryBounds>().LayerMask == 0x10);
+    assert(restoredChild.GetComponent<GaussianBlur>().Size == 3.0f);
+    assert(restoredChild.GetComponent<Vignette>().Roundness == 0.6f);
     assert(restoredChild.GetComponent<Light>().Type == LightType::Spot);
     assert(restoredChild.GetComponent<Mesh>().MeshAsset == UUID(9, 9));
 

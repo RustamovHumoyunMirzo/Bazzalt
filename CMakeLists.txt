@@ -45,6 +45,28 @@ set(BAZZALT_MATC_EXECUTABLE "${BAZZALT_FILAMENT_DIR}/bin/matc${_bazzalt_tool_suf
 set(BAZZALT_FILAMESH_EXECUTABLE "${BAZZALT_FILAMENT_DIR}/bin/filamesh${_bazzalt_tool_suffix}" CACHE FILEPATH
     "Filament mesh compiler")
 
+set(_bazzalt_generated_dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
+function(bazzalt_embed_post_process name symbol)
+    set(_source "${CMAKE_CURRENT_SOURCE_DIR}/runtime/resources/shaders/${name}.mat")
+    set(_binary "${_bazzalt_generated_dir}/${name}.filamat")
+    set(_header "${_bazzalt_generated_dir}/${name}_filamat.h")
+    add_custom_command(
+        OUTPUT "${_header}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${_bazzalt_generated_dir}"
+        COMMAND "${BAZZALT_MATC_EXECUTABLE}" --platform desktop --api all
+                --output "${_binary}" "${_source}"
+        COMMAND "${CMAKE_COMMAND}" -DINPUT=${_binary} -DOUTPUT=${_header}
+                -DSYMBOL=${symbol} -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedBinary.cmake"
+        DEPENDS "${_source}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedBinary.cmake"
+        VERBATIM
+        COMMENT "Compiling and embedding ${name}.mat"
+    )
+    set(BAZZALT_EMBEDDED_HEADERS ${BAZZALT_EMBEDDED_HEADERS} "${_header}" PARENT_SCOPE)
+endfunction()
+
+bazzalt_embed_post_process(gaussian_blur GaussianBlurFilamat)
+bazzalt_embed_post_process(vignette VignetteFilamat)
+
 file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
@@ -57,6 +79,7 @@ file(GLOB_RECURSE LIB_HEADERS CONFIGURE_DEPENDS
 add_library(Bazzalt STATIC
     ${LIB_SOURCES}
     ${LIB_HEADERS}
+    ${BAZZALT_EMBEDDED_HEADERS}
 )
 
 target_include_directories(Bazzalt
@@ -65,6 +88,7 @@ target_include_directories(Bazzalt
     $<INSTALL_INTERFACE:include>
     PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${_bazzalt_generated_dir}"
 )
 
 target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE ryml::ryml Filament::Filament)

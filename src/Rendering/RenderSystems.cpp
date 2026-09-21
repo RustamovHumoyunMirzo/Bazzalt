@@ -18,6 +18,9 @@
 #include <utils/EntityManager.h>
 
 #include "Bazzalt/Scene.h"
+#include "Bazzalt/Components/GaussianBlur.h"
+#include "Bazzalt/Components/Vignette.h"
+#include "Rendering/BuiltinPostProcess.h"
 #include "Rendering/RenderBackend.h"
 
 namespace Bazzalt::Runtime {
@@ -179,14 +182,39 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
             .fastGatherRingCount = ringCount
         });
         std::vector<CustomPostProcessEffect> customEffects;
+        const auto* blur = entity.TryGetComponent<GaussianBlur>();
+        if (camera.PostProcessing.Enabled && blur && blur->Enabled && pixelWidth > 0 && pixelHeight > 0 &&
+            FiniteOr(blur->Size, 0.0f) > 0.0f) {
+            CustomPostProcessEffect effect{GaussianBlurShaderId, "Gaussian Blur", true, -200};
+            effect.SetParameter(PostProcessParameter::Float(
+                "blurSize", std::clamp(blur->Size, 0.0f, 64.0f)));
+            effect.SetParameter(PostProcessParameter::Float2("texelSize", {
+                1.0f / static_cast<float>(pixelWidth), 1.0f / static_cast<float>(pixelHeight)}));
+            customEffects.push_back(std::move(effect));
+        }
+        const auto* vignette = entity.TryGetComponent<Vignette>();
+        if (camera.PostProcessing.Enabled && vignette && vignette->Enabled) {
+            CustomPostProcessEffect effect{VignetteShaderId, "Vignette", true, -100};
+            effect.SetParameter(PostProcessParameter::Float4("color", vignette->Color));
+            effect.SetParameter(PostProcessParameter::Float(
+                "intensity", std::clamp(FiniteOr(vignette->Intensity, 0.35f), 0.0f, 1.0f)));
+            effect.SetParameter(PostProcessParameter::Float(
+                "smoothness", std::clamp(FiniteOr(vignette->Smoothness, 0.35f), 0.001f, 1.0f)));
+            effect.SetParameter(PostProcessParameter::Float(
+                "roundness", std::clamp(FiniteOr(vignette->Roundness, 1.0f), 0.0f, 1.0f)));
+            customEffects.push_back(std::move(effect));
+        }
         for (const auto& effect : camera.PostProcessing.CustomEffects.GetEffects())
-            if (effect.Enabled && effect.ShaderAsset &&
-                m_backend.GetAssets().PreparePostProcessEffect(effect))
+            if (effect.Enabled && effect.ShaderAsset)
                 customEffects.push_back(effect);
         std::stable_sort(customEffects.begin(), customEffects.end(),
             [](const CustomPostProcessEffect& left, const CustomPostProcessEffect& right) {
                 return left.Order < right.Order;
             });
+        customEffects.erase(std::remove_if(customEffects.begin(), customEffects.end(),
+            [this](const CustomPostProcessEffect& effect) {
+                return !m_backend.GetAssets().PreparePostProcessEffect(effect);
+            }), customEffects.end());
         m_backend.SetPostProcessEffects(resource.View, std::move(customEffects));
         if (camera.Active && pixelWidth > 0 && pixelHeight > 0)
             submissions.push_back({camera.Priority, id, resource.View});

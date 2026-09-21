@@ -3,6 +3,8 @@
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Components/Light.h"
 #include "Bazzalt/Components/Mesh.h"
+#include "Bazzalt/Components/GaussianBlur.h"
+#include "Bazzalt/Components/Vignette.h"
 #include "Runtime/Engine.h"
 
 int main() {
@@ -35,6 +37,8 @@ int main() {
     cameraComponent.PostProcessing.DepthOfField.Enabled = true;
     cameraComponent.PostProcessing.DepthOfField.FocusDistance = 5.0f;
     cameraComponent.PostProcessing.CustomEffects = std::move(customStack);
+    camera.AddComponent<Bazzalt::GaussianBlur>().Size = 2.0f;
+    camera.AddComponent<Bazzalt::Vignette>().Intensity = 0.5f;
 
     auto secondCamera = scene.CreateEntity("Second Camera");
     auto& second = secondCamera.AddComponent<Bazzalt::Camera>();

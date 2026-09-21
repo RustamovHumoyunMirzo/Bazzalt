@@ -30,6 +30,7 @@
 #include <utils/Path.h>
 
 #include "Bazzalt/AssetManager.h"
+#include "Rendering/BuiltinPostProcess.h"
 
 namespace Bazzalt::Runtime {
 namespace {
@@ -95,11 +96,18 @@ struct RenderAssets::Impl {
     filament::Material* LoadMaterial(UUID id) {
         if (!id) return nullptr;
         if (const auto found = Materials.find(id); found != Materials.end()) return found->second;
-        const auto asset = AssetManager::GetAsset(id);
-        if (!asset || asset->State != AssetState::Ready) return nullptr;
-        const auto bytes = ReadBytes(asset->CachePath);
-        if (bytes.empty()) return nullptr;
-        auto* material = filament::Material::Builder().package(bytes.data(), bytes.size()).build(Engine);
+        std::vector<std::uint8_t> ownedBytes;
+        const auto embedded = GetEmbeddedPostProcessShader(id);
+        const std::uint8_t* data = embedded.Data;
+        std::size_t size = embedded.Size;
+        if (data == nullptr) {
+            const auto asset = AssetManager::GetAsset(id);
+            if (!asset || asset->State != AssetState::Ready) return nullptr;
+            ownedBytes = ReadBytes(asset->CachePath);
+            data = ownedBytes.data(); size = ownedBytes.size();
+        }
+        if (data == nullptr || size == 0) return nullptr;
+        auto* material = filament::Material::Builder().package(data, size).build(Engine);
         if (material) Materials.emplace(id, material);
         return material;
     }
