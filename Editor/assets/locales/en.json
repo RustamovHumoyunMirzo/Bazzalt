@@ -30,5 +30,20 @@
   "dock.bottom": "Bottom",
   "dock.empty": "Drop panels here",
   "dock.floating": "Floating panels",
-  "dock.pinned_tooltip": "{title} (pinned)"
+  "dock.pinned_tooltip": "{title} (pinned)",
+  "panel.console": "Console",
+  "panel.output": "Output",
+  "panel.scene": "Scene",
+  "panel.hierarchy": "Hierarchy",
+  "panel.properties": "Properties",
+  "panel.asset_browser": "Asset Browser",
+  "viewport.output_placeholder": "Game output",
+  "viewport.scene_placeholder": "Scene viewport",
+  "console.clear": "Clear",
+  "hierarchy.create": "Create",
+  "hierarchy.delete": "Delete",
+  "properties.add_component": "Add Component",
+  "properties.expand_all": "Expand All",
+  "properties.collapse_all": "Collapse All",
+  "assets.refresh": "Refresh"
 }

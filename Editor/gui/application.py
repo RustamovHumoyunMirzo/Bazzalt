@@ -8,6 +8,13 @@ from ..localization import LocalizationManager
 from ..resources import ResourceManager
 from ..theme import ThemeManager
 from .docking import DockingSystem
+from .panels import (
+    AssetBrowserPanel,
+    ConsolePanel,
+    HierarchyPanel,
+    PropertiesPanel,
+    ViewportPlaceholder,
+)
 from .widgets import EditorMenuBar
 
 
@@ -37,14 +44,77 @@ class Editor(QMainWindow):
         )
         self.MenuBar = EditorMenuBar(self.ThemeManager, self.Localization, self)
         self.MenuBar.SetDockingSystem(self.Docking)
-        self.MenuBar.ResetWorkspaceRequested.connect(self.Docking.reset)
         self.ThemeManager.ThemeChanged.connect(self.Docking.set_theme)
+
+        self.Console = ConsolePanel(self.Localization)
+        self.Output = ViewportPlaceholder(self.Localization, "viewport.output_placeholder")
+        self.Scene = ViewportPlaceholder(self.Localization, "viewport.scene_placeholder")
+        self.Hierarchy = HierarchyPanel(self.Localization)
+        self.Properties = PropertiesPanel(self.Localization)
+        self.AssetBrowser = AssetBrowserPanel(self.Localization)
+        self._PanelWidgets = {
+            "console": self.Console,
+            "output": self.Output,
+            "scene": self.Scene,
+            "hierarchy": self.Hierarchy,
+            "properties": self.Properties,
+            "asset_browser": self.AssetBrowser,
+        }
+        self._RegisterPanels()
+        self._default_layout = self.Docking.save_layout()
+        self.MenuBar.ResetWorkspaceRequested.connect(self._ResetWorkspace)
+        self.ThemeManager.ThemeChanged.connect(lambda _: self._UpdatePanelPresentation())
+        self.Localization.LocaleChanged.connect(lambda _: self._UpdatePanelPresentation())
 
         self.setMenuBar(self.MenuBar)
         self.setCentralWidget(self.Docking)
 
         # Lower-case aliases preserve the original prototype's attributes.
         self.docking = self.Docking
+
+    def _PanelIcon(self, panel_id: str):
+        theme_name = (
+            "light" if self.ThemeManager.GetTheme().background == "#d4d4d4" else "dark"
+        )
+        filename = "assetbrowser" if panel_id == "asset_browser" else panel_id
+        return self.Resources.Icon(f"icons/{theme_name}/tab_{filename}.svg")
+
+    def _RegisterPanels(self) -> None:
+        tr = self.Localization.Translate
+        scene = self.Docking.add_panel(
+            self.Scene, tr("panel.scene"), self._PanelIcon("scene"), panel_id="scene"
+        )
+        self.Docking.add_panel(
+            self.Output, tr("panel.output"), self._PanelIcon("output"),
+            relative_to=scene, panel_id="output"
+        )
+        self.Docking.add_panel(
+            self.Hierarchy, tr("panel.hierarchy"), self._PanelIcon("hierarchy"),
+            area="left", relative_to=scene, panel_id="hierarchy"
+        )
+        self.Docking.add_panel(
+            self.Properties, tr("panel.properties"), self._PanelIcon("properties"),
+            area="right", relative_to=scene, panel_id="properties"
+        )
+        assets = self.Docking.add_panel(
+            self.AssetBrowser, tr("panel.asset_browser"), self._PanelIcon("asset_browser"),
+            area="bottom", relative_to=scene, panel_id="asset_browser"
+        )
+        self.Docking.add_panel(
+            self.Console, tr("panel.console"), self._PanelIcon("console"),
+            relative_to=assets, panel_id="console"
+        )
+
+    def _UpdatePanelPresentation(self) -> None:
+        for panel_id in self._PanelWidgets:
+            self.Docking.set_panel_presentation(
+                panel_id,
+                title=self.Localization.Translate(f"panel.{panel_id}"),
+                icon=self._PanelIcon(panel_id),
+            )
+
+    def _ResetWorkspace(self) -> None:
+        self.Docking.restore_layout(self._default_layout)
 
 
 __all__ = ["Editor"]

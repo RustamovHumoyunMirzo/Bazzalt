@@ -83,10 +83,21 @@ def BuildStyleSheet(theme: Theme) -> str:
                                border: 1px solid {t.border}; selection-background-color: {t.accent}; }}
     QLineEdit {{ padding: {t.spacing}px; border: 1px solid {t.border}; border-radius: {t.radius}px; }}
     QLabel {{ color: {t.text}; }}
+    #ViewportPlaceholderLabel {{ color: {t.text_muted}; }}
+    #ComponentSection {{ background: {t.surface_alt}; border: 1px solid {t.border};
+                         border-radius: {t.radius}px; }}
+    #ComponentSection QToolButton {{ background: transparent; border: 0;
+                                     padding: {t.spacing}px; text-align: left; }}
+    QPushButton {{ background: {t.surface_alt}; color: {t.text};
+                   border: 1px solid {t.border}; border-radius: {t.radius}px;
+                   padding: {t.spacing}px {t.spacing * 2}px; }}
+    QPushButton:hover {{ border-color: {t.accent}; }}
     #DockEmpty {{ background: {t.background}; border: 1px dashed {t.border}; }}
     #DockEmptyLabel {{ color: {t.text_muted}; font-size: 13px; }}
     QTabWidget::pane {{ border: 1px solid {t.border}; background: {t.surface}; top: -1px; }}
+    QTabBar {{ background: {t.background}; border: 0; }}
     QTabBar::tab {{ background: {t.tab_inactive}; color: {t.text_muted}; border: 1px solid {t.border};
+                   border-top: 0;
                    border-top-left-radius: {t.radius}px; border-top-right-radius: {t.radius}px;
                    padding: {t.spacing + 2}px {t.spacing * 2 + 2}px; min-width: 55px; margin-right: 1px; }}
     QTabBar::tab:selected {{ background: {t.tab_active}; color: {t.text}; border-bottom-color: {t.tab_active}; }}
@@ -104,6 +115,7 @@ def BuildStyleSheet(theme: Theme) -> str:
     QMenu::item {{ padding: 4px {t.spacing * 6 + 8}px 4px {t.spacing * 4 + 8}px; }}
     QMenu::item:selected {{ background: {t.accent}; color: {t.text}; }}
     QMenu::item:disabled {{ color: {t.text_muted}; }}
+    QMenu::icon {{ left: {t.spacing * 2}px; }}
     QMenu::indicator {{ width: 14px; height: 14px; left: {t.spacing * 2}px; }}
     QMenu::indicator:checked {{ image: url({CHECK_ICON_PATH}); }}
     QMenu::right-arrow {{ subcontrol-position: right center; right: {t.spacing * 2}px; }}

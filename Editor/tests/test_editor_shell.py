@@ -9,10 +9,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication, QLabel
 
 from Editor.gui.application import Editor
+from Editor.gui.panels import ConsoleLevel
 from Editor.gui.widgets import EditorMenu
 from Editor.localization import LocalizationManager
 from Editor.resources import ResourceManager
-from Editor.theme import Theme, ThemeManager
+from Editor.theme import BuildStyleSheet, Theme, ThemeManager
 
 
 class EditorShellTests(unittest.TestCase):
@@ -76,6 +77,50 @@ class EditorShellTests(unittest.TestCase):
     def test_editor_uses_custom_menu_bar(self) -> None:
         self.assertIs(self.Window.menuBar(), self.Window.MenuBar)
         self.assertFalse(self.Window.MenuBar.isNativeMenuBar())
+
+    def test_menu_icons_and_dock_tabs_have_clean_edge_spacing(self) -> None:
+        style = BuildStyleSheet(Theme.dark())
+        self.assertIn("QMenu::icon { left: 12px; }", style)
+        self.assertIn("border-top: 0;", style)
+
+    def test_default_workspace_registers_all_builtin_panels(self) -> None:
+        self.assertEqual(
+            {panel.panel_id for panel in self.Window.Docking.panels()},
+            {"console", "output", "scene", "hierarchy", "properties", "asset_browser"},
+        )
+        self.assertTrue(all(not panel.icon.isNull() for panel in self.Window.Docking.panels()))
+
+    def test_console_api_filters_and_clears_messages(self) -> None:
+        self.Window.Console.AddMessage("built", ConsoleLevel.Info)
+        self.Window.Console.AddMessage("failed", ConsoleLevel.Error)
+        self.Window.Console.SetLevelVisible(ConsoleLevel.Info, False)
+        self.assertNotIn("built", self.Window.Console.View.toPlainText())
+        self.assertIn("failed", self.Window.Console.View.toPlainText())
+        self.Window.Console.Clear()
+        self.assertEqual(self.Window.Console.GetMessages(), ())
+
+    def test_properties_sections_and_sticky_add_button(self) -> None:
+        section = self.Window.Properties.AddComponentSection("transform", "Transform")
+        section.SetExpanded(False)
+        self.assertFalse(section.Body.isVisible())
+        self.assertEqual(self.Window.Properties.layout().itemAt(
+            self.Window.Properties.layout().count() - 1
+        ).widget(), self.Window.Properties.AddComponentButton)
+
+    def test_asset_browser_hides_sidecar_metadata(self) -> None:
+        root = Path(__file__).parent / "fixtures" / "assets"
+        self.Window.AssetBrowser.SetProjectRoot(root)
+        names = [self.Window.AssetBrowser.Browser.item(i).text()
+                 for i in range(self.Window.AssetBrowser.Browser.count())]
+        self.assertIn("Textures", names)
+        self.assertIn("player.png", names)
+        self.assertNotIn("player.png.meta", names)
+
+    def test_reset_workspace_restores_closed_panel(self) -> None:
+        self.Window.Docking.close_panel("console")
+        self.Window._ResetWorkspace()
+        placed = str(self.Window.Docking.save_layout())
+        self.assertIn("console", placed)
 
 
 if __name__ == "__main__":

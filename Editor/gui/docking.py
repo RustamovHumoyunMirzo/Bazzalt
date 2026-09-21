@@ -747,6 +747,18 @@ class DockingSystem(QWidget):
         """Return all registered panels in registration order."""
         return tuple(self._panels.values())
 
+    def set_panel_presentation(
+        self, panel: DockPanel | str, *, title: str | None = None,
+        icon: QIcon | None = None
+    ) -> None:
+        """Update a panel's translated title or themed icon in every dock view."""
+        item = self.panel(panel)
+        if title is not None:
+            item.title = title
+        if icon is not None:
+            item.icon = icon
+        self._rebuild_views()
+
     def dock(
         self,
         panel: DockPanel | str,
