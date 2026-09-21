@@ -10,6 +10,15 @@ from PySide6.QtWidgets import QApplication, QLabel
 
 from Editor.gui.application import Editor
 from Editor.gui.panels import ConsoleLevel
+from Editor.gui.widgets import (
+    AssetPickerInput,
+    EnumInput,
+    FieldState,
+    FloatInput,
+    MultiSelectInput,
+    RangeInput,
+    Vec3Input,
+)
 from Editor.gui.widgets import EditorMenu
 from Editor.localization import LocalizationManager
 from Editor.resources import ResourceManager
@@ -73,6 +82,50 @@ class EditorShellTests(unittest.TestCase):
         self.Window.MenuBar.WindowMenu.aboutToShow.emit()
         labels = [action.text() for action in self.Window.MenuBar.WindowMenu.actions()]
         self.assertIn("Inspector", labels)
+
+    def test_window_menu_checks_every_open_tab_not_only_active_tab(self) -> None:
+        self.Window.MenuBar.WindowMenu.aboutToShow.emit()
+        actions = {action.text(): action for action in self.Window.MenuBar.WindowMenu.actions()}
+        self.assertTrue(actions["Scene"].isChecked())
+        self.assertTrue(actions["Output"].isChecked())
+        self.assertTrue(actions["Scene"].icon().isNull())
+        self.Window.Docking.close_panel("output")
+        self.Window.MenuBar.WindowMenu.aboutToShow.emit()
+        actions = {action.text(): action for action in self.Window.MenuBar.WindowMenu.actions()}
+        self.assertFalse(actions["Output"].isChecked())
+
+    def test_typed_component_field_widgets(self) -> None:
+        number = FloatInput(value=2.5)
+        number.SetFieldState(FieldState.Modified)
+        self.assertEqual(number.GetValue(), 2.5)
+        self.assertEqual(number.GetFieldState(), FieldState.Modified)
+
+        vector = Vec3Input((1.0, 2.0, 3.0))
+        self.assertEqual(vector.GetValue(), (1.0, 2.0, 3.0))
+        vector.SetValue((4.0, 5.0, 6.0))
+        self.assertEqual(vector.GetValue(), (4.0, 5.0, 6.0))
+
+        ranged = RangeInput(-1.0, 1.0, 0.25)
+        ranged.SetValue(9.0)
+        self.assertEqual(ranged.GetValue(), 1.0)
+
+    def test_enum_multiselect_and_picker_widgets(self) -> None:
+        enum = EnumInput()
+        enum.SetOptions((("Perspective", "perspective"), ("Orthographic", "ortho")))
+        self.assertTrue(enum.SetValue("ortho"))
+        self.assertEqual(enum.GetValue(), "ortho")
+
+        choices = MultiSelectInput()
+        choices.SetOptions((("Static", 1), ("Visible", 2), ("Locked", 3)))
+        choices.SetValues((1, 3))
+        self.assertEqual(choices.GetValues(), (1, 3))
+
+        picker = AssetPickerInput("Select asset")
+        picker.SetValue("asset-uuid", "Player Mesh")
+        self.assertEqual(picker.GetValue(), "asset-uuid")
+        self.assertTrue(picker.ClearButton.isEnabled())
+        picker.Clear()
+        self.assertIsNone(picker.GetValue())
 
     def test_editor_uses_custom_menu_bar(self) -> None:
         self.assertIs(self.Window.menuBar(), self.Window.MenuBar)

@@ -18,10 +18,24 @@ class Theme:
     background: str = "#181818"
     surface: str = "#282828"
     surface_alt: str = "#212121"
+    surface_hover: str = "#333333"
+    surface_pressed: str = "#1b1b1b"
+    input_background: str = "#202020"
     border: str = "#181818"
+    border_focus: str = "#6f9bc7"
     accent: str = "#476b8f"
+    selection: str = "#476b8f"
     text: str = "#dbdbdb"
     text_muted: str = "#8c8c8c"
+    text_disabled: str = "#5f5f5f"
+    success: str = "#62b47a"
+    warning: str = "#d7a84b"
+    error: str = "#d96565"
+    modified: str = "#5c91c7"
+    axis_x: str = "#d45b5b"
+    axis_y: str = "#68a85c"
+    axis_z: str = "#5686cf"
+    axis_w: str = "#b176c2"
     tab_active: str = "#282828"
     tab_inactive: str = "#1e1e1e"
     overlay_opacity: int = 204
@@ -40,10 +54,24 @@ class Theme:
             background="#d4d4d4",
             surface="#ffffff",
             surface_alt="#e5e5e5",
+            surface_hover="#eeeeee",
+            surface_pressed="#d8d8d8",
+            input_background="#ffffff",
             border="#cccccc",
+            border_focus="#397ebd",
             accent="#7bb5f0",
+            selection="#9bc9f5",
             text="#1f1f1f",
             text_muted="#6e6e6e",
+            text_disabled="#a0a0a0",
+            success="#2f7d43",
+            warning="#9a6812",
+            error="#b63f3f",
+            modified="#3479ba",
+            axis_x="#b84242",
+            axis_y="#438237",
+            axis_z="#386db8",
+            axis_w="#8a50a0",
             tab_active="#ffffff",
             tab_inactive="#dbdbdb",
         )
@@ -58,15 +86,15 @@ def BuildPalette(theme: Theme) -> QPalette:
     palette.setColor(QPalette.ColorRole.Text, QColor(theme.text))
     palette.setColor(QPalette.ColorRole.Button, QColor(theme.surface_alt))
     palette.setColor(QPalette.ColorRole.ButtonText, QColor(theme.text))
-    palette.setColor(QPalette.ColorRole.Highlight, QColor(theme.accent))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor(theme.selection))
     palette.setColor(QPalette.ColorRole.HighlightedText, QColor(theme.text))
     palette.setColor(
-        QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor(theme.text_muted)
+        QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor(theme.text_disabled)
     )
     palette.setColor(
         QPalette.ColorGroup.Disabled,
         QPalette.ColorRole.ButtonText,
-        QColor(theme.text_muted),
+        QColor(theme.text_disabled),
     )
     return palette
 
@@ -75,13 +103,23 @@ def BuildStyleSheet(theme: Theme) -> str:
     """Return the single style sheet used by the application and floating UI."""
     t = theme
     return f"""
-    QWidget {{ color: {t.text}; selection-background-color: {t.accent}; }}
+    QWidget {{ color: {t.text}; selection-background-color: {t.selection}; }}
+    QWidget:disabled {{ color: {t.text_disabled}; }}
     QMainWindow, #DockingSystem, _FloatingWindow {{ background: {t.background}; color: {t.text}; }}
     #DockPanel, #DockGroup {{ background: {t.surface}; border: 0; }}
     #DockPanel QAbstractItemView, #DockPanel QLineEdit, #DockPanel QTextEdit,
     #DockPanel QPlainTextEdit {{ background: {t.surface}; color: {t.text};
                                border: 1px solid {t.border}; selection-background-color: {t.accent}; }}
-    QLineEdit {{ padding: {t.spacing}px; border: 1px solid {t.border}; border-radius: {t.radius}px; }}
+    QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{ background: {t.input_background};
+        color: {t.text}; padding: {t.spacing}px; border: 1px solid {t.border};
+        border-radius: {t.radius}px; }}
+    QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{
+        border-color: {t.border_focus}; }}
+    QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled,
+    QComboBox:disabled {{ background: {t.surface_alt}; color: {t.text_disabled}; }}
+    QWidget[fieldState="modified"] {{ border-color: {t.modified}; }}
+    QWidget[fieldState="warning"] {{ border-color: {t.warning}; }}
+    QWidget[fieldState="error"] {{ border-color: {t.error}; }}
     QLabel {{ color: {t.text}; }}
     #ViewportPlaceholderLabel {{ color: {t.text_muted}; }}
     #ComponentSection {{ background: {t.surface_alt}; border: 1px solid {t.border};
@@ -91,7 +129,12 @@ def BuildStyleSheet(theme: Theme) -> str:
     QPushButton {{ background: {t.surface_alt}; color: {t.text};
                    border: 1px solid {t.border}; border-radius: {t.radius}px;
                    padding: {t.spacing}px {t.spacing * 2}px; }}
-    QPushButton:hover {{ border-color: {t.accent}; }}
+    QPushButton:hover, QToolButton:hover {{ background: {t.surface_hover}; }}
+    QPushButton:pressed, QToolButton:pressed {{ background: {t.surface_pressed}; }}
+    #VectorAxisX {{ color: {t.axis_x}; font-weight: 600; }}
+    #VectorAxisY {{ color: {t.axis_y}; font-weight: 600; }}
+    #VectorAxisZ {{ color: {t.axis_z}; font-weight: 600; }}
+    #VectorAxisW {{ color: {t.axis_w}; font-weight: 600; }}
     #DockEmpty {{ background: {t.background}; border: 1px dashed {t.border}; }}
     #DockEmptyLabel {{ color: {t.text_muted}; font-size: 13px; }}
     QTabWidget::pane {{ border: 1px solid {t.border}; background: {t.surface}; top: -1px; }}
@@ -113,8 +156,8 @@ def BuildStyleSheet(theme: Theme) -> str:
     QMenu {{ background: {t.surface}; color: {t.text}; border: 1px solid {t.border};
              padding: {t.spacing / 2}px 0; border-radius: 2px; }}
     QMenu::item {{ padding: 4px {t.spacing * 6 + 8}px 4px {t.spacing * 4 + 8}px; }}
-    QMenu::item:selected {{ background: {t.accent}; color: {t.text}; }}
-    QMenu::item:disabled {{ color: {t.text_muted}; }}
+    QMenu::item:selected {{ background: {t.selection}; color: {t.text}; }}
+    QMenu::item:disabled {{ color: {t.text_disabled}; }}
     QMenu::icon {{ left: {t.spacing * 2}px; }}
     QMenu::indicator {{ width: 14px; height: 14px; left: {t.spacing * 2}px; }}
     QMenu::indicator:checked {{ image: url({CHECK_ICON_PATH}); }}

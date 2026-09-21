@@ -187,10 +187,13 @@ class EditorMenuBar(QMenuBar):
 
         self.WindowMenu.addSeparator()
         for panel in self._docking.panels():
-            action = QAction(panel.icon, panel.title, self.WindowMenu)
+            # QMenu uses one leading native slot for either an action icon or
+            # its checked indicator. Keep this menu dedicated to visibility.
+            action = QAction(panel.title, self.WindowMenu)
             action.setCheckable(True)
-            action.setChecked(panel.isVisible())
-            action.setEnabled(panel.isVisible() or panel.closable)
+            is_open = self._docking.is_panel_open(panel)
+            action.setChecked(is_open)
+            action.setEnabled(is_open or panel.closable)
             action.triggered.connect(
                 lambda checked, panel_id=panel.panel_id: self._SetPanelVisible(panel_id, checked)
             )

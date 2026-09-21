@@ -747,6 +747,10 @@ class DockingSystem(QWidget):
         """Return all registered panels in registration order."""
         return tuple(self._panels.values())
 
+    def is_panel_open(self, panel: DockPanel | str) -> bool:
+        """Return whether a panel exists in a docked or floating layout."""
+        return self._is_placed(self.panel(panel).panel_id)
+
     def set_panel_presentation(
         self, panel: DockPanel | str, *, title: str | None = None,
         icon: QIcon | None = None

@@ -40,15 +40,23 @@ class Editor(QMainWindow):
             lambda _: self.setWindowTitle(self.Localization.Translate("app.title"))
         )
         self.Docking = DockingSystem(
-            self.ThemeManager.GetTheme(), self, localization=self.Localization
+            theme=self.ThemeManager.GetTheme(),
+            parent=self,
+            localization=self.Localization,
+            floating_always_on_top=True,
+            double_click_float=False,
         )
         self.MenuBar = EditorMenuBar(self.ThemeManager, self.Localization, self)
         self.MenuBar.SetDockingSystem(self.Docking)
         self.ThemeManager.ThemeChanged.connect(self.Docking.set_theme)
 
         self.Console = ConsolePanel(self.Localization)
-        self.Output = ViewportPlaceholder(self.Localization, "viewport.output_placeholder")
-        self.Scene = ViewportPlaceholder(self.Localization, "viewport.scene_placeholder")
+        self.Output = ViewportPlaceholder(
+            self.Localization, "viewport.output_placeholder"
+        )
+        self.Scene = ViewportPlaceholder(
+            self.Localization, "viewport.scene_placeholder"
+        )
         self.Hierarchy = HierarchyPanel(self.Localization)
         self.Properties = PropertiesPanel(self.Localization)
         self.AssetBrowser = AssetBrowserPanel(self.Localization)
@@ -63,8 +71,12 @@ class Editor(QMainWindow):
         self._RegisterPanels()
         self._default_layout = self.Docking.save_layout()
         self.MenuBar.ResetWorkspaceRequested.connect(self._ResetWorkspace)
-        self.ThemeManager.ThemeChanged.connect(lambda _: self._UpdatePanelPresentation())
-        self.Localization.LocaleChanged.connect(lambda _: self._UpdatePanelPresentation())
+        self.ThemeManager.ThemeChanged.connect(
+            lambda _: self._UpdatePanelPresentation()
+        )
+        self.Localization.LocaleChanged.connect(
+            lambda _: self._UpdatePanelPresentation()
+        )
 
         self.setMenuBar(self.MenuBar)
         self.setCentralWidget(self.Docking)
@@ -85,24 +97,42 @@ class Editor(QMainWindow):
             self.Scene, tr("panel.scene"), self._PanelIcon("scene"), panel_id="scene"
         )
         self.Docking.add_panel(
-            self.Output, tr("panel.output"), self._PanelIcon("output"),
-            relative_to=scene, panel_id="output"
+            self.Output,
+            tr("panel.output"),
+            self._PanelIcon("output"),
+            relative_to=scene,
+            panel_id="output",
         )
         self.Docking.add_panel(
-            self.Hierarchy, tr("panel.hierarchy"), self._PanelIcon("hierarchy"),
-            area="left", relative_to=scene, panel_id="hierarchy"
+            self.Hierarchy,
+            tr("panel.hierarchy"),
+            self._PanelIcon("hierarchy"),
+            area="left",
+            relative_to=scene,
+            panel_id="hierarchy",
         )
         self.Docking.add_panel(
-            self.Properties, tr("panel.properties"), self._PanelIcon("properties"),
-            area="right", relative_to=scene, panel_id="properties"
+            self.Properties,
+            tr("panel.properties"),
+            self._PanelIcon("properties"),
+            area="right",
+            relative_to=scene,
+            panel_id="properties",
         )
         assets = self.Docking.add_panel(
-            self.AssetBrowser, tr("panel.asset_browser"), self._PanelIcon("asset_browser"),
-            area="bottom", relative_to=scene, panel_id="asset_browser"
+            self.AssetBrowser,
+            tr("panel.asset_browser"),
+            self._PanelIcon("asset_browser"),
+            area="bottom",
+            relative_to=scene,
+            panel_id="asset_browser",
         )
         self.Docking.add_panel(
-            self.Console, tr("panel.console"), self._PanelIcon("console"),
-            relative_to=assets, panel_id="console"
+            self.Console,
+            tr("panel.console"),
+            self._PanelIcon("console"),
+            relative_to=assets,
+            panel_id="console",
         )
 
     def _UpdatePanelPresentation(self) -> None:
