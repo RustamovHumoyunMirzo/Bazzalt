@@ -134,6 +134,19 @@ Fields: `Type`, `Color`, `Intensity`, `Range`, `InnerConeAngle`,
 `OuterConeAngle`, `SunAngularRadius`, `SunHaloSize`, `SunHaloFalloff`,
 `CastShadows`, `Enabled`.
 
+### `Components/SceneQueryBounds.h`
+
+`SceneQueryShape`: `Box`, `Sphere`.
+
+Fields: `Shape`, local `Center`, box `Extents`, sphere `Radius`, `LayerMask`,
+and `Enabled`. These bounds drive scene queries, not physics simulation.
+
+## `Bazzalt/SceneQuery.h`
+
+Defines `SceneRay`, `SceneQueryOptions`, and `SceneQueryHit`. `Scene` exposes
+`ScreenPointToRay`, `Pick`, `PickAll`, `Raycast`, `RaycastAll`, `OverlapSphere`,
+and `OverlapBox`.
+
 ### `Components/Mesh.h`
 
 Fields: `MeshAsset`, `Materials`, `LayerMask`, `Visible`, `CastShadows`,

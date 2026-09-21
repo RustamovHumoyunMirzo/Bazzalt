@@ -3,6 +3,8 @@
 #include "Bazzalt/Component.h"
 #include "Bazzalt/Scene.h"
 #include "Bazzalt/System.h"
+#include "Bazzalt/Components/Camera.h"
+#include "Bazzalt/Components/SceneQueryBounds.h"
 
 struct Velocity : Bazzalt::Component {
     Bazzalt::Vec3 Value{};
@@ -62,6 +64,23 @@ int main() {
     child.GetComponent<Bazzalt::Transform>().Position = {2.0f, 0.0f, 0.0f};
     grandchild.GetComponent<Bazzalt::Transform>().Position = {1.0f, 0.0f, 0.0f};
     assert(grandchild.GetWorldMatrix().TransformPoint({}).X == 13.0f);
+
+    auto camera = scene.CreateEntity("Query Camera");
+    camera.GetComponent<Bazzalt::Transform>().Position = {0, 0, 5};
+    camera.AddComponent<Bazzalt::Camera>();
+    auto target = scene.CreateEntity("Query Target");
+    target.AddComponent<Bazzalt::SceneQueryBounds>().LayerMask = 0x1;
+    const auto ray = scene.ScreenPointToRay(camera, {400, 300}, {800, 600});
+    const auto hit = scene.Raycast(ray);
+    assert(hit && hit.Target == target);
+    assert(hit.Distance > 4.0f && hit.Distance < 5.0f);
+    assert(scene.Pick(camera, {400, 300}, {800, 600}).Target == target);
+    assert(scene.RaycastAll(ray).size() == 1);
+    assert(scene.OverlapSphere({}, 1.0f).size() == 1);
+    assert(scene.OverlapBox({}, {1, 1, 1}).size() == 1);
+    Bazzalt::SceneQueryOptions hiddenLayer;
+    hiddenLayer.LayerMask = 0x2;
+    assert(!scene.Raycast(ray, hiddenLayer));
 
     scene.DestroyEntity(parent);
     assert(!scene.GetEntity(parentUuid));

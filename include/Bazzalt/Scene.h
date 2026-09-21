@@ -18,6 +18,7 @@
 #include "Bazzalt/Components/Identity.h"
 #include "Bazzalt/Components/Transform.h"
 #include "Bazzalt/Entity.h"
+#include "Bazzalt/SceneQuery.h"
 #include "Bazzalt/System.h"
 
 namespace Bazzalt {
@@ -52,6 +53,23 @@ public:
     [[nodiscard]] std::vector<Entity> GetChildren(Entity parent);
     [[nodiscard]] bool IsAncestor(Entity ancestor, Entity descendant) const;
     [[nodiscard]] Mat4 GetWorldMatrix(Entity entity) const;
+
+    [[nodiscard]] SceneRay ScreenPointToRay(Entity camera, Vec2 screenPoint,
+                                            Vec2 presentationSize) const;
+    [[nodiscard]] SceneQueryHit Pick(Entity camera, Vec2 screenPoint,
+                                     Vec2 presentationSize,
+                                     const SceneQueryOptions& options = {});
+    [[nodiscard]] std::vector<SceneQueryHit> PickAll(
+        Entity camera, Vec2 screenPoint, Vec2 presentationSize,
+        const SceneQueryOptions& options = {});
+    [[nodiscard]] SceneQueryHit Raycast(const SceneRay& ray,
+                                        const SceneQueryOptions& options = {});
+    [[nodiscard]] std::vector<SceneQueryHit> RaycastAll(
+        const SceneRay& ray, const SceneQueryOptions& options = {});
+    [[nodiscard]] std::vector<Entity> OverlapSphere(
+        Vec3 center, float radius, const SceneQueryOptions& options = {});
+    [[nodiscard]] std::vector<Entity> OverlapBox(
+        Vec3 center, Vec3 extents, const SceneQueryOptions& options = {});
 
     template<typename SystemType, typename... Args>
     SystemType& AddSystem(Args&&... args) {

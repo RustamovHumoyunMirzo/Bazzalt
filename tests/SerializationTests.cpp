@@ -3,6 +3,7 @@
 
 #include "Runtime/Engine.h"
 #include "Bazzalt/Components/Camera.h"
+#include "Bazzalt/Components/SceneQueryBounds.h"
 #include "Bazzalt/Components/Light.h"
 #include "Bazzalt/Components/Mesh.h"
 
@@ -47,6 +48,10 @@ int main() {
     auto& effect = sourceCamera.PostProcessing.CustomEffects.AddEffect(UUID::Generate(), "Test effect");
     effect.Order = 7;
     effect.SetParameter(PostProcessParameter::Float("amount", 0.75f));
+    auto& queryBounds = child.AddComponent<SceneQueryBounds>();
+    queryBounds.Shape = SceneQueryShape::Sphere;
+    queryBounds.Radius = 2.5f;
+    queryBounds.LayerMask = 0x10;
     child.AddComponent<Light>().Type = LightType::Spot;
     child.AddComponent<Mesh>().MeshAsset = UUID{9, 9};
 
@@ -74,6 +79,9 @@ int main() {
     const auto& effects = restoredChild.GetComponent<Camera>().PostProcessing.CustomEffects.GetEffects();
     assert(effects.size() == 1 && effects[0].Order == 7);
     assert(effects[0].Parameters.size() == 1);
+    assert(restoredChild.GetComponent<SceneQueryBounds>().Shape == SceneQueryShape::Sphere);
+    assert(restoredChild.GetComponent<SceneQueryBounds>().Radius == 2.5f);
+    assert(restoredChild.GetComponent<SceneQueryBounds>().LayerMask == 0x10);
     assert(restoredChild.GetComponent<Light>().Type == LightType::Spot);
     assert(restoredChild.GetComponent<Mesh>().MeshAsset == UUID(9, 9));
 

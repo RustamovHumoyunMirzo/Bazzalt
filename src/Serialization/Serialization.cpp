@@ -13,6 +13,7 @@
 #include "Bazzalt/Components/Light.h"
 #include "Bazzalt/Components/Mesh.h"
 #include "Bazzalt/Components/Name.h"
+#include "Bazzalt/Components/SceneQueryBounds.h"
 #include "Bazzalt/Components/Transform.h"
 #include "Bazzalt/Scene.h"
 
@@ -46,6 +47,10 @@ m_components.Register<Light>("Bazzalt.Light",1,[](const Light&v,PropertyMap&o){o
 
 m_components.Register<Mesh>("Bazzalt.Mesh",1,[](const Mesh&v,PropertyMap&o){o["MeshAsset"]=v.MeshAsset.ToString();o["LayerMask"]=std::to_string(v.LayerMask);o["Visible"]=v.Visible?"true":"false";o["CastShadows"]=v.CastShadows?"true":"false";o["ReceiveShadows"]=v.ReceiveShadows?"true":"false";std::string materials;for(const UUID id:v.Materials){if(!materials.empty())materials+=',';materials+=id.ToString();}o["Materials"]=materials;},
 [](Mesh&v,const PropertyMap&i,std::uint32_t n){const auto*mesh=Property(i,"MeshAsset");const auto*materials=Property(i,"Materials");if(n!=1||!mesh||!materials||!UUID::TryParse(*mesh,v.MeshAsset)||!EnumRange(i,"LayerMask",v.LayerMask,0,255)||!Bool(i,"Visible",v.Visible)||!Bool(i,"CastShadows",v.CastShadows)||!Bool(i,"ReceiveShadows",v.ReceiveShadows))return false;for(std::size_t b=0;b<materials->size();){const auto e=materials->find(',',b);UUID id;if(!UUID::TryParse(std::string_view(*materials).substr(b,e==std::string::npos?materials->size()-b:e-b),id))return false;v.Materials.push_back(id);if(e==std::string::npos)break;b=e+1;}return true;});
+
+m_components.Register<SceneQueryBounds>("Bazzalt.SceneQueryBounds",1,
+[](const SceneQueryBounds&v,PropertyMap&o){o["Shape"]=std::to_string(static_cast<int>(v.Shape));o["Center.X"]=Float(v.Center.X);o["Center.Y"]=Float(v.Center.Y);o["Center.Z"]=Float(v.Center.Z);o["Extents.X"]=Float(v.Extents.X);o["Extents.Y"]=Float(v.Extents.Y);o["Extents.Z"]=Float(v.Extents.Z);o["Radius"]=Float(v.Radius);o["LayerMask"]=std::to_string(v.LayerMask);o["Enabled"]=v.Enabled?"true":"false";},
+[](SceneQueryBounds&v,const PropertyMap&i,std::uint32_t n){return n==1&&EnumRange(i,"Shape",v.Shape,0,1)&&Float(i,"Center.X",v.Center.X)&&Float(i,"Center.Y",v.Center.Y)&&Float(i,"Center.Z",v.Center.Z)&&Float(i,"Extents.X",v.Extents.X)&&Float(i,"Extents.Y",v.Extents.Y)&&Float(i,"Extents.Z",v.Extents.Z)&&Float(i,"Radius",v.Radius)&&Enum(i,"LayerMask",v.LayerMask)&&Bool(i,"Enabled",v.Enabled)&&v.Radius>=0.0f;});
 }
 
 bool SceneSerializer::Save(const Scene& scene,const std::filesystem::path& path){m_lastError.clear();std::ofstream s(path,std::ios::binary|std::ios::trunc);if(!s){m_lastError="Could not open scene for writing: "+path.string();return false;}try{s<<"FormatVersion: "<<CurrentFormatVersion<<"\nSceneUUID: "<<Quote(scene.GetUUID().ToString())<<"\nEntities:\n";auto view=scene.GetRegistry().view<Identity,Name,Hierarchy>();for(auto h:view){Entity e=const_cast<Scene&>(scene).GetEntity(static_cast<Entity::Id>(h));if(e.GetUUID().IsRoot())continue;std::vector<SerializedComponent> cs;for(const auto& d:m_components.GetDescriptors()){SerializedComponent c{d.Type,d.Version,{}};if(d.Serialize(e,c.Properties))cs.push_back(std::move(c));}if(auto* u=e.TryGetComponent<UnresolvedComponents>())for(const auto& c:u->Values)if(!m_components.Find(c.Type))cs.push_back(c);s<<"  - UUID: "<<Quote(e.GetUUID().ToString())<<"\n    Parent: "<<Quote(e.GetComponent<Hierarchy>().Parent.ToString())<<"\n    Name: "<<Quote(e.GetComponent<Name>().Value)<<"\n    Components:\n";for(const auto& c:cs){s<<"      - Type: "<<Quote(c.Type)<<"\n        Version: "<<c.Version<<"\n        Properties:\n";for(const auto& [k,v]:c.Properties)s<<"          "<<Quote(k)<<": "<<Quote(v)<<'\n';}}}catch(const std::exception&e){m_lastError="Component serialization failed: "+std::string(e.what());return false;}if(!s){m_lastError="Failed writing scene: "+path.string();return false;}return true;}
