@@ -1,6 +1,9 @@
 #pragma once
 
 #include <memory>
+#include <cstdint>
+#include <utility>
+#include <vector>
 
 namespace filament {
 class Engine;
@@ -29,14 +32,22 @@ public:
     [[nodiscard]] filament::Renderer& GetRenderer() const { return *m_renderer; }
     [[nodiscard]] filament::Scene& GetScene() const { return *m_scene; }
     [[nodiscard]] RenderAssets& GetAssets() const { return *m_assets; }
-    void SetActiveView(filament::View* view) { m_activeView = view; }
-    [[nodiscard]] filament::View* GetActiveView() const { return m_activeView; }
+    void SetActiveViews(std::vector<filament::View*> views) { m_activeViews = std::move(views); }
+    [[nodiscard]] const std::vector<filament::View*>& GetActiveViews() const { return m_activeViews; }
+    void SetPresentationSize(std::uint32_t width, std::uint32_t height) {
+        m_presentationWidth = width > 0 ? width : 1;
+        m_presentationHeight = height > 0 ? height : 1;
+    }
+    [[nodiscard]] std::uint32_t GetPresentationWidth() const { return m_presentationWidth; }
+    [[nodiscard]] std::uint32_t GetPresentationHeight() const { return m_presentationHeight; }
 
 private:
     filament::Engine* m_engine = nullptr;
     filament::Renderer* m_renderer = nullptr;
     filament::Scene* m_scene = nullptr;
-    filament::View* m_activeView = nullptr;
+    std::vector<filament::View*> m_activeViews;
+    std::uint32_t m_presentationWidth = 1280;
+    std::uint32_t m_presentationHeight = 720;
     std::unique_ptr<RenderAssets> m_assets;
 };
 

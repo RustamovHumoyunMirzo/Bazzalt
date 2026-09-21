@@ -6,13 +6,28 @@
 #include "Runtime/Engine.h"
 
 int main() {
+    using Bazzalt::CameraViewport;
+    constexpr auto left = CameraViewport::LeftHalf();
+    constexpr auto right = CameraViewport::RightHalf();
+    constexpr auto topRight = CameraViewport::Grid(1, 1, 2, 2);
+    constexpr auto invalid = CameraViewport::Grid(2, 0, 2, 2);
+    static_assert(left.X == 0.0f && left.Width == 0.5f);
+    static_assert(right.X == 0.5f && right.Width == 0.5f);
+    static_assert(topRight.X == 0.5f && topRight.Y == 0.5f);
+    static_assert(invalid.Width == 0.0f && invalid.Height == 0.0f);
+
     Bazzalt::Runtime::Engine engine;
     assert(engine.Init());
 
     auto& scene = engine.GetScene();
     auto camera = scene.CreateEntity("Camera");
     camera.GetComponent<Bazzalt::Transform>().Position = {0.0f, 0.0f, 5.0f};
-    camera.AddComponent<Bazzalt::Camera>();
+    camera.AddComponent<Bazzalt::Camera>().Viewport = left;
+
+    auto secondCamera = scene.CreateEntity("Second Camera");
+    auto& second = secondCamera.AddComponent<Bazzalt::Camera>();
+    second.Viewport = right;
+    second.Priority = 1;
 
     auto light = scene.CreateEntity("Sun");
     auto& lightComponent = light.AddComponent<Bazzalt::Light>();

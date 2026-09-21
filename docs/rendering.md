@@ -21,11 +21,29 @@ camera.Priority = 10;
 camera.PostProcessing.Bloom = true;
 ```
 
-The highest-priority active camera becomes active. Cameras support perspective
-or orthographic projection, aspect ratio, clear color, and renderer-neutral
-post-processing settings. Current synchronization applies projection, FXAA/TAA,
-bloom, ambient occlusion, and enablement. Clear color, tone mapping, and
-exposure await full presentation integration.
+Every active camera with a non-empty viewport is submitted. Lower priorities
+render first and UUID provides deterministic ordering when priorities match.
+Cameras support perspective or orthographic projection, clear color, and
+renderer-neutral post-processing settings. Current synchronization applies
+projection, FXAA/TAA, bloom, ambient occlusion, and enablement. Clear color,
+tone mapping, and exposure await full presentation integration.
+
+Viewports use normalized bottom-left coordinates. Automatic aspect ratio is
+derived from the camera's pixel viewport, so split screens do not stretch:
+
+```cpp
+auto& playerOne = firstEntity.AddComponent<Bazzalt::Camera>();
+playerOne.Viewport = Bazzalt::CameraViewport::LeftHalf();
+
+auto& playerTwo = secondEntity.AddComponent<Bazzalt::Camera>();
+playerTwo.Viewport = Bazzalt::CameraViewport::RightHalf();
+
+// Four-player layout, top-right cell:
+playerTwo.Viewport = Bazzalt::CameraViewport::Grid(1, 1, 2, 2);
+```
+
+Set `AspectMode` to `CameraAspectMode::Fixed` to use `AspectRatio` instead.
+Overlapping viewports are supported; priority controls their render order.
 
 The entity transform defines position/orientation. Negative Z is forward and
 positive Y is up.

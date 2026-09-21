@@ -11,6 +11,7 @@
 #include <filament/Scene.h>
 #include <filament/TransformManager.h>
 #include <filament/View.h>
+#include <filament/Viewport.h>
 #include <math/mat4.h>
 #include <math/vec3.h>
 #include <math/vec4.h>
@@ -72,8 +73,8 @@ void CameraSystem::OnCreate(Scene&) {}
 void CameraSystem::OnUpdate(Scene& scene, float) {
     auto& engine = m_backend.GetEngine();
     std::unordered_set<UUID> alive;
-    filament::View* activeView = nullptr;
-    int activePriority = std::numeric_limits<int>::min();
+    struct Submission { int Priority; UUID Id; filament::View* View; };
+    std::vector<Submission> submissions;
 
     auto view = GetView(scene.GetRegistry());
     for (const auto handle : view) {
@@ -101,7 +102,27 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
         resource.Camera->lookAt(ToFilament(position), ToFilament(position + forward), ToFilament(up));
         const double nearPlane = std::max(0.001, static_cast<double>(FiniteOr(camera.NearPlane, 0.1f)));
         const double farPlane = std::max(nearPlane + 0.001, static_cast<double>(FiniteOr(camera.FarPlane, 1000.0f)));
-        const double aspect = std::max(0.001, static_cast<double>(FiniteOr(camera.AspectRatio, 16.0f / 9.0f)));
+        const float viewportX = std::clamp(FiniteOr(camera.Viewport.X, 0.0f), 0.0f, 1.0f);
+        const float viewportY = std::clamp(FiniteOr(camera.Viewport.Y, 0.0f), 0.0f, 1.0f);
+        const float viewportWidth = std::clamp(FiniteOr(camera.Viewport.Width, 1.0f),
+                                               0.0f, 1.0f - viewportX);
+        const float viewportHeight = std::clamp(FiniteOr(camera.Viewport.Height, 1.0f),
+                                                0.0f, 1.0f - viewportY);
+        const auto targetWidth = m_backend.GetPresentationWidth();
+        const auto targetHeight = m_backend.GetPresentationHeight();
+        const auto left = static_cast<std::int32_t>(std::lround(viewportX * targetWidth));
+        const auto bottom = static_cast<std::int32_t>(std::lround(viewportY * targetHeight));
+        const auto right = static_cast<std::int32_t>(std::lround(
+            (viewportX + viewportWidth) * targetWidth));
+        const auto top = static_cast<std::int32_t>(std::lround(
+            (viewportY + viewportHeight) * targetHeight));
+        const auto pixelWidth = static_cast<std::uint32_t>(std::max(0, right - left));
+        const auto pixelHeight = static_cast<std::uint32_t>(std::max(0, top - bottom));
+        resource.View->setViewport(filament::Viewport(left, bottom, pixelWidth, pixelHeight));
+        const bool automaticAspect = camera.AspectMode != CameraAspectMode::Fixed;
+        const double aspect = automaticAspect && pixelHeight > 0
+            ? static_cast<double>(pixelWidth) / static_cast<double>(pixelHeight)
+            : std::max(0.001, static_cast<double>(FiniteOr(camera.AspectRatio, 16.0f / 9.0f)));
         if (camera.Projection != CameraProjection::Orthographic) {
             const double fov = std::clamp(static_cast<double>(ToDegrees(FiniteOr(
                 camera.VerticalFieldOfView, ToRadians(60.0f)))), 1.0, 179.0);
@@ -128,22 +149,28 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
         resource.View->setBloomOptions({
             .enabled = camera.PostProcessing.Enabled && camera.PostProcessing.Bloom
         });
-        if (camera.Active && camera.Priority >= activePriority) {
-            activePriority = camera.Priority;
-            activeView = resource.View;
-        }
+        if (camera.Active && pixelWidth > 0 && pixelHeight > 0)
+            submissions.push_back({camera.Priority, id, resource.View});
     }
     for (auto iterator = m_resources.begin(); iterator != m_resources.end();) {
         if (alive.find(iterator->first) == alive.end()) {
             const UUID id = iterator->first; ++iterator; Destroy(id);
         } else ++iterator;
     }
-    m_backend.SetActiveView(activeView);
+    std::sort(submissions.begin(), submissions.end(), [](const Submission& left,
+                                                         const Submission& right) {
+        return left.Priority != right.Priority ? left.Priority < right.Priority
+                                               : left.Id < right.Id;
+    });
+    std::vector<filament::View*> activeViews;
+    activeViews.reserve(submissions.size());
+    for (const auto& submission : submissions) activeViews.push_back(submission.View);
+    m_backend.SetActiveViews(std::move(activeViews));
 }
 
 void CameraSystem::OnDestroy(Scene&) {
     while (!m_resources.empty()) Destroy(m_resources.begin()->first);
-    m_backend.SetActiveView(nullptr);
+    m_backend.SetActiveViews({});
 }
 
 void CameraSystem::Destroy(UUID id) {

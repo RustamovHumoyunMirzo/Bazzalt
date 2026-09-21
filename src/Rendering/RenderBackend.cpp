@@ -22,7 +22,7 @@ bool RenderBackend::Initialize() {
 
 void RenderBackend::Shutdown() {
     if (m_engine == nullptr) return;
-    m_activeView = nullptr;
+    m_activeViews.clear();
     m_assets.reset();
     if (m_scene != nullptr) m_engine->destroy(m_scene);
     if (m_renderer != nullptr) m_engine->destroy(m_renderer);

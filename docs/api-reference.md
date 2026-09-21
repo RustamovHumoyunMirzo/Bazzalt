@@ -102,13 +102,17 @@ Fields: `Position`, `Rotation`, `Scale`. Methods: `GetMatrix`, `GetForward`,
 
 ### `Components/Camera.h`
 
-Enums: `CameraProjection`, `AntiAliasing`, `ToneMapping`.
+Enums: `CameraProjection`, `CameraAspectMode`, `AntiAliasing`, `ToneMapping`.
+
+`CameraViewport` stores normalized bottom-left `X`, `Y`, `Width`, and `Height`.
+Factory methods provide `FullScreen`, half-screen, and arbitrary `Grid` cells.
 
 `CameraPostProcessing`: `Enabled`, `Bloom`, `AmbientOcclusion`,
 `AntiAliasingMode`, `ToneMappingMode`, `Exposure`.
 
 `Camera`: `Projection`, `VerticalFieldOfView`, `OrthographicSize`, `NearPlane`,
-`FarPlane`, `AspectRatio`, `Priority`, `Active`, `ClearColor`, `PostProcessing`.
+`FarPlane`, `AspectRatio`, `AspectMode`, `Viewport`, `Priority`, `Active`,
+`ClearColor`, `PostProcessing`.
 
 ### `Components/Light.h`
 

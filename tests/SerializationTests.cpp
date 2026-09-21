@@ -38,7 +38,10 @@ int main() {
     child.SetParent(parent);
     child.GetComponent<Transform>().Position = {1.25f, 2.5f, 5.0f};
     child.AddComponent<Health>().Value = 42.5f;
-    child.AddComponent<Camera>().PostProcessing.Bloom = false;
+    auto& sourceCamera = child.AddComponent<Camera>();
+    sourceCamera.PostProcessing.Bloom = false;
+    sourceCamera.Viewport = CameraViewport::RightHalf();
+    sourceCamera.AspectMode = CameraAspectMode::Automatic;
     child.AddComponent<Light>().Type = LightType::Spot;
     child.AddComponent<Mesh>().MeshAsset = UUID{9, 9};
 
@@ -59,6 +62,8 @@ int main() {
     assert(restoredChild.GetComponent<Health>().Value == 42.5f);
     assert(restoredChild.GetComponent<Transform>().Position.X == 1.25f);
     assert(!restoredChild.GetComponent<Camera>().PostProcessing.Bloom);
+    assert(restoredChild.GetComponent<Camera>().Viewport.X == 0.5f);
+    assert(restoredChild.GetComponent<Camera>().Viewport.Width == 0.5f);
     assert(restoredChild.GetComponent<Light>().Type == LightType::Spot);
     assert(restoredChild.GetComponent<Mesh>().MeshAsset == UUID(9, 9));
 
