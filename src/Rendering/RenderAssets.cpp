@@ -13,6 +13,7 @@
 #include <filament/Engine.h>
 #include <filament/Material.h>
 #include <filament/MaterialInstance.h>
+#include <filament/MaterialEnums.h>
 #include <filament/RenderableManager.h>
 #include <filament/Scene.h>
 #include <filament/Texture.h>
@@ -139,6 +140,20 @@ struct RenderAssets::Impl {
 RenderAssets::RenderAssets(filament::Engine& engine, filament::Scene& scene)
     : m_impl(std::make_unique<Impl>(engine, scene)) {}
 RenderAssets::~RenderAssets() { Shutdown(); }
+
+bool RenderAssets::PreparePostProcessEffect(const CustomPostProcessEffect& effect) {
+    if (!m_impl || !effect.ShaderAsset) return false;
+    auto* material = m_impl->LoadMaterial(effect.ShaderAsset);
+    if (!material || material->getMaterialDomain() != filament::MaterialDomain::POST_PROCESS)
+        return false;
+    for (const auto& parameter : effect.Parameters) {
+        if (parameter.Name.empty() || !material->hasParameter(parameter.Name)) return false;
+        if (parameter.Type == PostProcessParameterType::Texture &&
+            (!parameter.TextureAsset || !m_impl->LoadTexture(parameter.TextureAsset, false)))
+            return false;
+    }
+    return true;
+}
 
 RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component) {
     if (!m_impl || !component.MeshAsset) return InvalidHandle;

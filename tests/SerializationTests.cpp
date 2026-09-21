@@ -42,6 +42,11 @@ int main() {
     sourceCamera.PostProcessing.Bloom = false;
     sourceCamera.Viewport = CameraViewport::RightHalf();
     sourceCamera.AspectMode = CameraAspectMode::Automatic;
+    sourceCamera.PostProcessing.DepthOfField.Enabled = true;
+    sourceCamera.PostProcessing.DepthOfField.FocusDistance = 4.5f;
+    auto& effect = sourceCamera.PostProcessing.CustomEffects.AddEffect(UUID::Generate(), "Test effect");
+    effect.Order = 7;
+    effect.SetParameter(PostProcessParameter::Float("amount", 0.75f));
     child.AddComponent<Light>().Type = LightType::Spot;
     child.AddComponent<Mesh>().MeshAsset = UUID{9, 9};
 
@@ -64,6 +69,11 @@ int main() {
     assert(!restoredChild.GetComponent<Camera>().PostProcessing.Bloom);
     assert(restoredChild.GetComponent<Camera>().Viewport.X == 0.5f);
     assert(restoredChild.GetComponent<Camera>().Viewport.Width == 0.5f);
+    assert(restoredChild.GetComponent<Camera>().PostProcessing.DepthOfField.Enabled);
+    assert(restoredChild.GetComponent<Camera>().PostProcessing.DepthOfField.FocusDistance == 4.5f);
+    const auto& effects = restoredChild.GetComponent<Camera>().PostProcessing.CustomEffects.GetEffects();
+    assert(effects.size() == 1 && effects[0].Order == 7);
+    assert(effects[0].Parameters.size() == 1);
     assert(restoredChild.GetComponent<Light>().Type == LightType::Spot);
     assert(restoredChild.GetComponent<Mesh>().MeshAsset == UUID(9, 9));
 

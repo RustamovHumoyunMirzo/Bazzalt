@@ -4,6 +4,7 @@
 #include <memory>
 
 #include "Bazzalt/Components/Mesh.h"
+#include "Bazzalt/PostProcessing.h"
 #include "Bazzalt/Math.h"
 
 namespace filament { class Engine; class Scene; }
@@ -24,6 +25,7 @@ public:
     [[nodiscard]] Handle CreateMesh(const Mesh& component);
     void UpdateMesh(Handle handle, const Mat4& transform, const Mesh& component);
     void DestroyMesh(Handle handle);
+    [[nodiscard]] bool PreparePostProcessEffect(const CustomPostProcessEffect& effect);
     void Update();
     void Shutdown();
 

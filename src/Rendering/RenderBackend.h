@@ -4,6 +4,9 @@
 #include <cstdint>
 #include <utility>
 #include <vector>
+#include <unordered_map>
+
+#include "Bazzalt/PostProcessing.h"
 
 namespace filament {
 class Engine;
@@ -40,6 +43,16 @@ public:
     }
     [[nodiscard]] std::uint32_t GetPresentationWidth() const { return m_presentationWidth; }
     [[nodiscard]] std::uint32_t GetPresentationHeight() const { return m_presentationHeight; }
+    void ClearPostProcessEffects() { m_postProcessEffects.clear(); }
+    void SetPostProcessEffects(filament::View* view,
+                               std::vector<CustomPostProcessEffect> effects) {
+        m_postProcessEffects[view] = std::move(effects);
+    }
+    [[nodiscard]] const std::vector<CustomPostProcessEffect>* GetPostProcessEffects(
+        filament::View* view) const {
+        const auto found = m_postProcessEffects.find(view);
+        return found == m_postProcessEffects.end() ? nullptr : &found->second;
+    }
 
 private:
     filament::Engine* m_engine = nullptr;
@@ -48,6 +61,7 @@ private:
     std::vector<filament::View*> m_activeViews;
     std::uint32_t m_presentationWidth = 1280;
     std::uint32_t m_presentationHeight = 720;
+    std::unordered_map<filament::View*, std::vector<CustomPostProcessEffect>> m_postProcessEffects;
     std::unique_ptr<RenderAssets> m_assets;
 };
 

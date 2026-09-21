@@ -4,6 +4,7 @@
 
 #include "Bazzalt/Component.h"
 #include "Bazzalt/Math.h"
+#include "Bazzalt/PostProcessing.h"
 
 namespace Bazzalt {
 
@@ -11,6 +12,7 @@ enum class CameraProjection { Perspective, Orthographic };
 enum class CameraAspectMode { Automatic, Fixed };
 enum class AntiAliasing { None, FXAA, TAA };
 enum class ToneMapping { Linear, Filmic, ACES };
+enum class DepthOfFieldQuality { Low, Medium, High };
 
 // Normalized target coordinates. X/Y use a bottom-left origin to match the
 // renderer while Width/Height are fractions of the presentation surface.
@@ -46,6 +48,19 @@ struct CameraPostProcessing {
     ToneMapping ToneMappingMode = ToneMapping::ACES;
     // Exposure compensation in EV stops (0 is neutral).
     float Exposure = 0.0f;
+    struct DepthOfFieldSettings {
+        bool Enabled = false;
+        float FocusDistance = 10.0f;
+        float Aperture = 16.0f;
+        float ShutterSpeed = 1.0f / 125.0f;
+        float Sensitivity = 100.0f;
+        float CocScale = 1.0f;
+        float CocAspectRatio = 1.0f;
+        float MaxApertureDiameter = 0.01f;
+        DepthOfFieldQuality Quality = DepthOfFieldQuality::Medium;
+        bool NativeResolution = false;
+    } DepthOfField{};
+    PostProcessingStack CustomEffects{};
 };
 
 struct Camera : Component {

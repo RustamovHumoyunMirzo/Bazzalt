@@ -102,13 +102,25 @@ Fields: `Position`, `Rotation`, `Scale`. Methods: `GetMatrix`, `GetForward`,
 
 ### `Components/Camera.h`
 
-Enums: `CameraProjection`, `CameraAspectMode`, `AntiAliasing`, `ToneMapping`.
+Enums: `CameraProjection`, `CameraAspectMode`, `AntiAliasing`, `ToneMapping`,
+`DepthOfFieldQuality`.
 
 `CameraViewport` stores normalized bottom-left `X`, `Y`, `Width`, and `Height`.
 Factory methods provide `FullScreen`, half-screen, and arbitrary `Grid` cells.
 
 `CameraPostProcessing`: `Enabled`, `Bloom`, `AmbientOcclusion`,
-`AntiAliasingMode`, `ToneMappingMode`, `Exposure`.
+`AntiAliasingMode`, `ToneMappingMode`, `Exposure`, `DepthOfField`,
+`CustomEffects`.
+
+## `Bazzalt/PostProcessing.h`
+
+`PostProcessingStack` is an ordered, renderer-neutral collection of
+`CustomPostProcessEffect` values. `AddEffect` accepts a compiled material asset
+UUID. Each effect has `Name`, `Enabled`, `Order`, and typed `Parameters`.
+
+`PostProcessParameter` factory methods support `Float`, `Float2`, `Float3`,
+`Float4`, `Integer`, `Boolean`, and `Texture`. `SetParameter` replaces a named
+parameter, preventing duplicate shader bindings.
 
 `Camera`: `Projection`, `VerticalFieldOfView`, `OrthographicSize`, `NearPlane`,
 `FarPlane`, `AspectRatio`, `AspectMode`, `Viewport`, `Priority`, `Active`,

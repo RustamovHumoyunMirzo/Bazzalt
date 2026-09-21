@@ -72,6 +72,7 @@ void CameraSystem::OnCreate(Scene&) {}
 
 void CameraSystem::OnUpdate(Scene& scene, float) {
     auto& engine = m_backend.GetEngine();
+    m_backend.ClearPostProcessEffects();
     std::unordered_set<UUID> alive;
     struct Submission { int Priority; UUID Id; filament::View* View; };
     std::vector<Submission> submissions;
@@ -149,6 +150,44 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
         resource.View->setBloomOptions({
             .enabled = camera.PostProcessing.Enabled && camera.PostProcessing.Bloom
         });
+        const auto& depthOfField = camera.PostProcessing.DepthOfField;
+        const float focusDistance = std::max(0.001f,
+            FiniteOr(depthOfField.FocusDistance, 10.0f));
+        const float aperture = std::clamp(FiniteOr(depthOfField.Aperture, 16.0f), 0.5f, 64.0f);
+        const float shutterSpeed = std::max(0.000001f,
+            FiniteOr(depthOfField.ShutterSpeed, 1.0f / 125.0f));
+        const float exposureCompensation = std::clamp(
+            FiniteOr(camera.PostProcessing.Exposure, 0.0f), -16.0f, 16.0f);
+        const float sensitivity = std::clamp(
+            FiniteOr(depthOfField.Sensitivity, 100.0f) * std::exp2(exposureCompensation),
+            10.0f, 204800.0f);
+        resource.Camera->setFocusDistance(focusDistance);
+        resource.Camera->setExposure(aperture, shutterSpeed, sensitivity);
+        std::uint8_t ringCount = 5;
+        if (depthOfField.Quality == DepthOfFieldQuality::Low) ringCount = 3;
+        else if (depthOfField.Quality == DepthOfFieldQuality::High) ringCount = 7;
+        resource.View->setDepthOfFieldOptions({
+            .cocScale = std::max(0.0f, FiniteOr(depthOfField.CocScale, 1.0f)),
+            .cocAspectRatio = std::max(0.01f, FiniteOr(depthOfField.CocAspectRatio, 1.0f)),
+            .maxApertureDiameter = std::max(0.0f,
+                FiniteOr(depthOfField.MaxApertureDiameter, 0.01f)),
+            .enabled = camera.PostProcessing.Enabled && depthOfField.Enabled,
+            .filter = filament::View::DepthOfFieldOptions::Filter::MEDIAN,
+            .nativeResolution = depthOfField.NativeResolution,
+            .foregroundRingCount = ringCount,
+            .backgroundRingCount = ringCount,
+            .fastGatherRingCount = ringCount
+        });
+        std::vector<CustomPostProcessEffect> customEffects;
+        for (const auto& effect : camera.PostProcessing.CustomEffects.GetEffects())
+            if (effect.Enabled && effect.ShaderAsset &&
+                m_backend.GetAssets().PreparePostProcessEffect(effect))
+                customEffects.push_back(effect);
+        std::stable_sort(customEffects.begin(), customEffects.end(),
+            [](const CustomPostProcessEffect& left, const CustomPostProcessEffect& right) {
+                return left.Order < right.Order;
+            });
+        m_backend.SetPostProcessEffects(resource.View, std::move(customEffects));
         if (camera.Active && pixelWidth > 0 && pixelHeight > 0)
             submissions.push_back({camera.Priority, id, resource.View});
     }
@@ -171,6 +210,7 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
 void CameraSystem::OnDestroy(Scene&) {
     while (!m_resources.empty()) Destroy(m_resources.begin()->first);
     m_backend.SetActiveViews({});
+    m_backend.ClearPostProcessEffects();
 }
 
 void CameraSystem::Destroy(UUID id) {

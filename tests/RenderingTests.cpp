@@ -16,6 +16,14 @@ int main() {
     static_assert(topRight.X == 0.5f && topRight.Y == 0.5f);
     static_assert(invalid.Width == 0.0f && invalid.Height == 0.0f);
 
+    Bazzalt::PostProcessingStack customStack;
+    auto& customEffect = customStack.AddEffect(Bazzalt::UUID::Generate(), "Color curve");
+    customEffect.SetParameter(Bazzalt::PostProcessParameter::Float("strength", 0.75f));
+    customEffect.SetParameter(Bazzalt::PostProcessParameter::Float3(
+        "tint", {1.0f, 0.8f, 0.7f}));
+    assert(customStack.GetEffects().size() == 1);
+    assert(customEffect.Parameters.size() == 2);
+
     Bazzalt::Runtime::Engine engine;
     assert(engine.Init());
 
@@ -23,6 +31,10 @@ int main() {
     auto camera = scene.CreateEntity("Camera");
     camera.GetComponent<Bazzalt::Transform>().Position = {0.0f, 0.0f, 5.0f};
     camera.AddComponent<Bazzalt::Camera>().Viewport = left;
+    auto& cameraComponent = camera.GetComponent<Bazzalt::Camera>();
+    cameraComponent.PostProcessing.DepthOfField.Enabled = true;
+    cameraComponent.PostProcessing.DepthOfField.FocusDistance = 5.0f;
+    cameraComponent.PostProcessing.CustomEffects = std::move(customStack);
 
     auto secondCamera = scene.CreateEntity("Second Camera");
     auto& second = secondCamera.AddComponent<Bazzalt::Camera>();
