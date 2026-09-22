@@ -1,0 +1,1 @@
+"""BAZZALT Hub application."""

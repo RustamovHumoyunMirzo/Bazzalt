@@ -46,16 +46,6 @@ class RuntimeService(QObject):
             self.ErrorOccurred.emit(self.LastError()); return False
         self.ProjectChanged.emit(str(path)); self.SceneChanged.emit(); return True
 
-    def CreateProject(self, path: str | Path) -> bool:
-        if self._host is None or not self._host.create_project(str(path)):
-            self.ErrorOccurred.emit(self.LastError()); return False
-        self.ProjectChanged.emit(str(path)); self.SceneChanged.emit(); return True
-
-    def SaveProject(self, path: str | Path | None = None) -> bool:
-        if self._host is None or not self._host.save_project(str(path or "")):
-            self.ErrorOccurred.emit(self.LastError()); return False
-        return True
-
     def LoadScene(self, path: str | Path) -> bool:
         if self._host is None or not self._host.load_scene(str(path)):
             self.ErrorOccurred.emit(self.LastError()); return False

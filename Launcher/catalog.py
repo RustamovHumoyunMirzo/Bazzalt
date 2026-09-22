@@ -1,0 +1,75 @@
+from __future__ import annotations
+
+import sys
+import uuid
+from pathlib import Path
+
+from bazzalt.settings import DataPaths, ReadProjectMetadata, SettingsStore, Version
+
+HUB_SCHEMA_VERSION = 2
+CURRENT_EDITOR_VERSION = "1.0.0"
+CURRENT_PROJECT_FORMAT = 1
+
+
+def _Defaults() -> dict:
+    return {"schema_version": HUB_SCHEMA_VERSION, "projects": [], "editors": [], "preferences": {}}
+
+
+def _MigrateZero(value: dict) -> dict:
+    return {"projects": value.get("projects", []), "editors": [], "preferences": {}}
+
+
+def _MigrateOne(value: dict) -> dict:
+    value.setdefault("preferences", {}); return value
+
+
+class HubCatalog:
+    def __init__(self) -> None:
+        self.Store = SettingsStore("hub", HUB_SCHEMA_VERSION, _Defaults,
+                                   {0: _MigrateZero, 1: _MigrateOne})
+        self.Data = self.Store.Load()
+
+    def Save(self) -> None: self.Store.Save(self.Data)
+
+    def RegisterDevelopmentEditor(self, root: Path) -> None:
+        if any(item.get("version") == CURRENT_EDITOR_VERSION for item in self.Data["editors"]): return
+        self.Data["editors"].append({"version": CURRENT_EDITOR_VERSION, "root": str(root.resolve()),
+                                      "command": sys.executable, "project_format_max": CURRENT_PROJECT_FORMAT,
+                                      "development": True})
+        self.Save()
+
+    def AddProject(self, path: str | Path) -> dict:
+        metadata = ReadProjectMetadata(path)
+        normalized = metadata["path"]
+        existing = next((item for item in self.Data["projects"] if item["path"] == normalized), None)
+        record = {"id": existing["id"] if existing else str(uuid.uuid4()),
+                  "name": metadata["name"], "path": normalized,
+                  "format_version": metadata["format_version"],
+                  "last_editor": existing.get("last_editor", "") if existing else ""}
+        if existing: existing.update(record)
+        else: self.Data["projects"].append(record)
+        self.Save(); return record
+
+    def CreateProject(self, directory: str | Path, name: str,
+                      editor_version: str = CURRENT_EDITOR_VERSION) -> dict:
+        if (not name.strip() or name.strip() in {".", ".."} or
+                any(character in name for character in ("/", "\\", ":", "\0"))):
+            raise ValueError("project name contains invalid path characters")
+        root = Path(directory).resolve() / name.strip()
+        root.mkdir(parents=True, exist_ok=False)
+        (root / "Assets").mkdir()
+        project = root / f"{name.strip()}.bproject"
+        project.write_text(
+            f'FormatVersion: {CURRENT_PROJECT_FORMAT}\nProjectUUID: "{uuid.uuid4()}"\n'
+            f'Name: "{name.strip()}"\nAssetDirectory: "Assets"\nStartupScene: ""\n'
+            f'Properties:\n  "engine.version": "{editor_version}"\n', encoding="utf-8")
+        return self.AddProject(project)
+
+    def CompatibleEditors(self, project: dict) -> list[dict]:
+        required = int(project.get("format_version", 0))
+        values = [item for item in self.Data["editors"]
+                  if required <= int(item.get("project_format_max", 0))]
+        return sorted(values, key=lambda item: Version.Parse(item["version"]), reverse=True)
+
+
+__all__ = ["CURRENT_EDITOR_VERSION", "HubCatalog"]

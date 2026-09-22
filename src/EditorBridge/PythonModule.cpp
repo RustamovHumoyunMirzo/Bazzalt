@@ -59,27 +59,6 @@ public:
         if (result) m_projectPath = std::filesystem::u8path(path);
         return result;
     }
-    bool CreateProject(const std::string& path) {
-        Stop();
-        const auto projectPath = std::filesystem::u8path(path);
-        std::error_code error;
-        std::filesystem::create_directories(projectPath.parent_path() / "Assets", error);
-        if (error) return false;
-        auto& project = m_engine->GetProject();
-        project.ProjectUUID = UUID::Generate();
-        project.Name = projectPath.stem().string();
-        project.AssetDirectory = "Assets";
-        project.StartupScene.clear();
-        if (!m_engine->SaveProject(projectPath)) return false;
-        m_projectPath = projectPath;
-        return m_engine->LoadProject(projectPath, false);
-    }
-    bool SaveProject(const std::string& path) {
-        const auto destination = path.empty() ? m_projectPath : std::filesystem::u8path(path);
-        if (destination.empty()) return false;
-        if (!m_engine->SaveProject(destination)) return false;
-        m_projectPath = destination; return true;
-    }
     bool LoadScene(const std::string& path) { Stop(); return m_engine->LoadScene(std::filesystem::u8path(path)); }
     bool SaveScene(const std::string& path) { return m_engine->SaveScene(std::filesystem::u8path(path)); }
     void NewScene() { Stop(); m_engine->CreateScene(); }
@@ -190,9 +169,6 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
     module.doc() = "Private BAZZALT editor-to-runtime bridge";
     py::class_<Bazzalt::EditorBridge::EditorHost>(module, "EditorHost")
         .def(py::init<>()).def("load_project", &Bazzalt::EditorBridge::EditorHost::LoadProject)
-        .def("create_project", &Bazzalt::EditorBridge::EditorHost::CreateProject)
-        .def("save_project", &Bazzalt::EditorBridge::EditorHost::SaveProject,
-             py::arg("path") = "")
         .def("load_scene", &Bazzalt::EditorBridge::EditorHost::LoadScene)
         .def("save_scene", &Bazzalt::EditorBridge::EditorHost::SaveScene)
         .def("new_scene", &Bazzalt::EditorBridge::EditorHost::NewScene)

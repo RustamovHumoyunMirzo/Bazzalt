@@ -46,7 +46,7 @@ class EditorShellTests(unittest.TestCase):
     def test_shortcuts_use_custom_menu_rendering(self) -> None:
         self.assertIsInstance(self.Window.MenuBar.FileMenu, EditorMenu)
         save = next(action for action in self.Window.MenuBar.FileMenu.actions()
-                    if action.text() == "Save Project")
+                    if action.text() == "Save Scene")
         # Native shortcut layout stays enabled for correct sizing; EditorMenu's
         # paint pass strips that text and draws exactly one muted shortcut.
         self.assertTrue(save.isShortcutVisibleInContextMenu())

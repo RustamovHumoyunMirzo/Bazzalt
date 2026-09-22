@@ -66,13 +66,9 @@ class EditorMenu(QMenu):
 class EditorMenuBar(QMenuBar):
     """Editor commands, workspace controls, and global theme selection."""
 
-    NewProjectRequested = Signal()
-    OpenProjectRequested = Signal()
     OpenSceneRequested = Signal()
     SaveSceneRequested = Signal()
     SaveSceneAsRequested = Signal()
-    SaveProjectRequested = Signal()
-    SaveProjectAsRequested = Signal()
     UndoRequested = Signal()
     RedoRequested = Signal()
     ResetWorkspaceRequested = Signal()
@@ -118,29 +114,16 @@ class EditorMenuBar(QMenuBar):
         return menu
 
     def _BuildFileMenu(self) -> None:
-        self.NewProjectAction = action = self.FileMenu.addAction("")
-        action.setShortcut(QKeySequence.StandardKey.New)
-        action.triggered.connect(self.NewProjectRequested)
-
-        self.OpenProjectAction = action = self.FileMenu.addAction("")
-        action.setShortcut(QKeySequence.StandardKey.Open)
-        action.triggered.connect(self.OpenProjectRequested)
-
         self.OpenSceneAction = action = self.FileMenu.addAction("")
+        action.setShortcut(QKeySequence.StandardKey.Open)
         action.triggered.connect(self.OpenSceneRequested)
 
         self.FileMenu.addSeparator()
-        self.SaveProjectAction = action = self.FileMenu.addAction("")
-        action.setShortcut(QKeySequence.StandardKey.Save)
-        action.triggered.connect(self.SaveProjectRequested)
-
-        self.SaveProjectAsAction = action = self.FileMenu.addAction("")
-        action.setShortcut(QKeySequence.StandardKey.SaveAs)
-        action.triggered.connect(self.SaveProjectAsRequested)
-
         self.SaveSceneAction = action = self.FileMenu.addAction("")
+        action.setShortcut(QKeySequence.StandardKey.Save)
         action.triggered.connect(self.SaveSceneRequested)
         self.SaveSceneAsAction = action = self.FileMenu.addAction("")
+        action.setShortcut(QKeySequence.StandardKey.SaveAs)
         action.triggered.connect(self.SaveSceneAsRequested)
 
         self.FileMenu.addSeparator()
@@ -217,11 +200,7 @@ class EditorMenuBar(QMenuBar):
         self.ViewMenu.setTitle(tr("menu.view"))
         self.WindowMenu.setTitle(tr("menu.window"))
         self.HelpMenu.setTitle(tr("menu.help"))
-        self.NewProjectAction.setText(tr("action.new_project"))
-        self.OpenProjectAction.setText(tr("action.open_project"))
         self.OpenSceneAction.setText(tr("action.open_scene"))
-        self.SaveProjectAction.setText(tr("action.save_project"))
-        self.SaveProjectAsAction.setText(tr("action.save_project_as"))
         self.SaveSceneAction.setText(tr("action.save_scene"))
         self.SaveSceneAsAction.setText(tr("action.save_scene_as"))
         self.ExitAction.setText(tr("action.exit"))

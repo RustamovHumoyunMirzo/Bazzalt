@@ -24,10 +24,6 @@ class EditorController(QObject):
         self.Timer.setInterval(16)
         self.Timer.timeout.connect(runtime.Tick)
 
-        window.MenuBar.OpenProjectRequested.connect(self.OpenProjectDialog)
-        window.MenuBar.NewProjectRequested.connect(self.NewProjectDialog)
-        window.MenuBar.SaveProjectRequested.connect(lambda: runtime.SaveProject())
-        window.MenuBar.SaveProjectAsRequested.connect(self.SaveProjectAsDialog)
         window.MenuBar.OpenSceneRequested.connect(self.OpenSceneDialog)
         window.MenuBar.SaveSceneRequested.connect(self.SaveScene)
         window.MenuBar.SaveSceneAsRequested.connect(self.SaveSceneAsDialog)
@@ -43,25 +39,6 @@ class EditorController(QObject):
         runtime.ErrorOccurred.connect(lambda text: window.Console.AddMessage(text, ConsoleLevel.Error))
         if not runtime.IsAvailable():
             window.Console.AddMessage(runtime.LastError(), ConsoleLevel.Warning)
-
-    def OpenProjectDialog(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self.Window, self.Window.Localization.Translate("dialog.open_project"),
-            "", self.Window.Localization.Translate("dialog.project_filter")
-        )
-        if path: self.Runtime.LoadProject(path)
-
-    def NewProjectDialog(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(
-            self.Window, self.Window.Localization.Translate("dialog.new_project"),
-            "", self.Window.Localization.Translate("dialog.project_filter"))
-        if path: self.Runtime.CreateProject(path)
-
-    def SaveProjectAsDialog(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(
-            self.Window, self.Window.Localization.Translate("dialog.save_project"),
-            "", self.Window.Localization.Translate("dialog.project_filter"))
-        if path: self.Runtime.SaveProject(path)
 
     def OpenSceneDialog(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
