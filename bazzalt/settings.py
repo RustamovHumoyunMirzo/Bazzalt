@@ -6,12 +6,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from PySide6.QtCore import QIODevice, QSaveFile, QStandardPaths
+from PySide6.QtCore import QCoreApplication, QIODevice, QSaveFile, QStandardPaths
 
 
 class DataPaths:
     @staticmethod
     def Root() -> Path:
+        base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.GenericDataLocation)
+        return Path(base) / "BAZZALT" / "data"
+
+    @staticmethod
+    def LegacyRoot() -> Path:
         base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.GenericDataLocation)
         return Path(base) / "BAZZALT"
 
@@ -21,6 +26,16 @@ class DataPaths:
     def Editors(cls) -> Path: return cls.Root() / "Editors"
     @classmethod
     def Logs(cls) -> Path: return cls.Root() / "Logs"
+    @staticmethod
+    def Projects() -> Path:
+        base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation)
+        return Path(base) / "BazzaltProjects"
+    @staticmethod
+    def Program() -> Path:
+        instance = QCoreApplication.instance()
+        return Path(instance.applicationDirPath()) if instance is not None else Path.cwd()
+    @classmethod
+    def Versions(cls) -> Path: return cls.Program() / "versions"
 
 
 class SettingsStore:
@@ -38,10 +53,14 @@ class SettingsStore:
         self._migrations = migrations or {}
 
     def Load(self) -> dict:
-        if not self.Path.exists(): return self._defaults()
+        source = self.Path
+        if not self.Path.exists():
+            legacy = DataPaths.LegacyRoot() / "Config" / self.Path.name
+            if legacy != self.Path and legacy.is_file(): source = legacy
+            else: return self._defaults()
         try:
-            if self.Path.stat().st_size > self.MaxBytes: raise ValueError("settings file is too large")
-            value = json.loads(self.Path.read_text(encoding="utf-8"))
+            if source.stat().st_size > self.MaxBytes: raise ValueError("settings file is too large")
+            value = json.loads(source.read_text(encoding="utf-8"))
             if not isinstance(value, dict): raise ValueError("settings root must be an object")
             version = int(value.get("schema_version", 0))
             if version > self.Version: raise ValueError("settings were written by a newer application")
@@ -49,6 +68,7 @@ class SettingsStore:
                 migration = self._migrations.get(version)
                 if migration is None: raise ValueError(f"missing settings migration {version}")
                 value = migration(value); version += 1; value["schema_version"] = version
+            if source != self.Path: self.Save(value)
             return value
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             return self._defaults()

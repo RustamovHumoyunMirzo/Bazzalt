@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import sys
+import json
+import os
 import uuid
 from pathlib import Path
 
@@ -37,6 +39,30 @@ class HubCatalog:
                                       "command": sys.executable, "project_format_max": CURRENT_PROJECT_FORMAT,
                                       "development": True})
         self.Save()
+
+    def DiscoverEditors(self, versions: Path | None = None) -> None:
+        versions = versions or DataPaths.Versions()
+        discovered: list[dict] = []
+        if versions.is_dir():
+            for root in versions.glob("bazzalt_*_*_*"):
+                try:
+                    value = json.loads((root / "editor.json").read_text(encoding="utf-8"))
+                    version = str(value["version"]); Version.Parse(version)
+                    executable = str(value.get("executable", "Bazzalt.exe" if os.name == "nt" else "Bazzalt"))
+                    if not (root / executable).is_file(): continue
+                    discovered.append({"version": version, "root": str(root.resolve()), "command": executable,
+                                       "project_format_max": int(value.get("project_format_max", 1)),
+                                       "development": False})
+                except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError): continue
+        self.Data["editors"] = [item for item in self.Data["editors"] if item.get("development")] + discovered
+        self.Save()
+
+    def RemoveProject(self, project_id: str) -> bool:
+        old = len(self.Data["projects"])
+        self.Data["projects"] = [item for item in self.Data["projects"] if item.get("id") != project_id]
+        changed = len(self.Data["projects"]) != old
+        if changed: self.Save()
+        return changed
 
     def AddProject(self, path: str | Path) -> dict:
         metadata = ReadProjectMetadata(path)

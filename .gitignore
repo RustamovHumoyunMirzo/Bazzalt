@@ -3,5 +3,7 @@ __pycache__
 .vscode
 .idea
 build
+dist
+nuitka-crash-report.xml
 deps
 .bazzalt

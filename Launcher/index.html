@@ -775,42 +775,10 @@
         <span id="toastMessage">Launching project...</span>
     </div>
 
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
     <script>
-        // Mock default projects data
-        const DEFAULT_PROJECTS = [
-            {
-                id: '1',
-                name: 'Aetheria Chronicles',
-                path: 'C:/Users/Developer/Projects/Aetheria',
-                size: '4.2 GB',
-                lastOpened: '2026-09-22T14:30:00',
-                version: '2026.1.0f1'
-            },
-            {
-                id: '2',
-                name: 'Urban Drift 3D',
-                path: 'C:/Users/Developer/Projects/UrbanDrift',
-                size: '1.8 GB',
-                lastOpened: '2026-09-20T09:15:00',
-                version: '2026.1.0f1'
-            },
-            {
-                id: '3',
-                name: 'Neon Rogue Prototype',
-                path: 'C:/Users/Developer/Projects/NeonRogue',
-                size: '750 MB',
-                lastOpened: '2026-09-15T18:45:00',
-                version: '2025.3.12f1'
-            },
-            {
-                id: '4',
-                name: 'Procedural Terrain Lab',
-                path: 'D:/EngineWorkspaces/ProceduralTerrain',
-                size: '12.4 GB',
-                lastOpened: '2026-08-30T11:20:00',
-                version: '2024.2.0f1'
-            }
-        ];
+        let hub = null;
+        let hubState = { projects: [], editors: [], projectsRoot: '', currentVersion: '1.0.0' };
 
         // App State
         let projects = [];
@@ -849,29 +817,26 @@
         // Initialize App
         function init() {
             loadTheme();
-            loadProjects();
             setupEventListeners();
-            renderProjects();
+            loadProjects();
         }
 
         // Load & Save State
         function loadProjects() {
-            const saved = localStorage.getItem('engine_hub_projects');
-            if (saved) {
-                try {
-                    projects = JSON.parse(saved);
-                } catch (e) {
-                    projects = [...DEFAULT_PROJECTS];
-                }
-            } else {
-                projects = [...DEFAULT_PROJECTS];
-                saveProjects();
-            }
+            hub.GetState((payload) => {
+                hubState = JSON.parse(payload);
+                projects = hubState.projects;
+                document.querySelector('.version-tag').textContent = `Version ${hubState.currentVersion}`;
+                const versions = hubState.editors.map(editor => editor.version);
+                const selector = document.getElementById('projVersionSelect');
+                selector.innerHTML = versions.length
+                    ? versions.map(version => `<option value="${escapeHtml(version)}">${escapeHtml(version)}</option>`).join('')
+                    : `<option value="${hubState.currentVersion}">${hubState.currentVersion} (not installed)</option>`;
+                renderProjects();
+            });
         }
 
-        function saveProjects() {
-            localStorage.setItem('engine_hub_projects', JSON.stringify(projects));
-        }
+        function saveProjects() {}
 
         function loadTheme() {
             const savedTheme = localStorage.getItem('engine_hub_theme');
@@ -899,7 +864,9 @@
 
         // Date Formatter
         function formatDate(dateString) {
+            if (!dateString) return 'Never';
             const date = new Date(dateString);
+            if (Number.isNaN(date.getTime())) return 'Never';
             const now = new Date();
             const diffHours = (now - date) / (1000 * 60 * 60);
 
@@ -937,7 +904,7 @@
             filtered.forEach(proj => {
                 const tr = document.createElement('tr');
                 tr.className = 'project-row';
-                tr.onclick = () => launchProject(proj.name, proj.id);
+                tr.onclick = () => launchProject(proj.id);
 
                 const firstChar = proj.name.charAt(0).toUpperCase();
 
@@ -961,8 +928,8 @@
                     </td>
                     <td>
                         <div class="project-actions">
-                            <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="event.stopPropagation(); launchProject('${escapeHtml(proj.name)}', '${proj.id}')">Open</button>
-                            <button class="action-icon-btn" title="Remove from list" onclick="event.stopPropagation(); promptDeleteProject('${proj.id}', '${escapeHtml(proj.name)}')">
+                            <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="event.stopPropagation(); launchProject('${proj.id}')">Open</button>
+                            <button class="action-icon-btn" title="Remove from list" onclick="event.stopPropagation(); promptDeleteProject('${proj.id}')">
                                 <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                             </button>
                         </div>
@@ -1013,46 +980,25 @@
                 }
             });
 
-            // Auto update path recommendation based on project name
             projNameInput.addEventListener('input', (e) => {
-                const sanitized = e.target.value.replace(/[^a-zA-Z0-9_-]/g, '');
-                projPathInput.value = `C:/Users/Developer/Projects/${sanitized || 'NewProject'}`;
+                hub.SuggestedProjectPath(e.target.value, path => { projPathInput.value = path; });
             });
 
-            // Simulated Browse button
             browsePathBtn.addEventListener('click', () => {
-                showToast('Browsing file system simulated', false);
+                hub.BrowseProjectLocation(path => {
+                    if (path) projPathInput.value = `${path}/${projNameInput.value || 'NewProject'}`;
+                });
             });
 
             addExistingBtn.addEventListener('click', () => {
-                // Simulate adding a folder
-                const sampleNames = ['SpaceExplorer', 'ShaderLab', 'PhysicsSandbox', 'AudioEngineTest'];
-                const randomName = sampleNames[Math.floor(Math.random() * sampleNames.length)];
-                const randomPath = `D:/ImportedProjects/${randomName}`;
-                
-                // Add if not existing
-                if (!projects.some(p => p.name === randomName)) {
-                    projects.push({
-                        id: Date.now().toString(),
-                        name: randomName,
-                        path: randomPath,
-                        size: '512 MB',
-                        lastOpened: new Date().toISOString(),
-                        version: '2026.1.0f1'
-                    });
-                    saveProjects();
-                    renderProjects();
-                    showToast(`Added existing project "${randomName}"`, false);
-                } else {
-                    showToast(`Project "${randomName}" is already in the hub`, false);
-                }
+                hub.AddExistingProject(added => { if (added) showToast('Project added', false); });
             });
         }
 
         // Modal Logic
         function openNewProjectModal() {
             projNameInput.value = '';
-            projPathInput.value = 'C:/Users/Developer/Projects/MyNewGame';
+            projPathInput.value = `${hubState.projectsRoot}/MyNewGame`;
             newProjectModal.classList.add('active');
             projNameInput.focus();
         }
@@ -1062,25 +1008,16 @@
         }
 
         function createNewProject(name, path, version) {
-            const newProj = {
-                id: Date.now().toString(),
-                name: name,
-                path: path,
-                size: '150 MB',
-                lastOpened: new Date().toISOString(),
-                version: version
-            };
-
-            projects.unshift(newProj);
-            saveProjects();
-            renderProjects();
-            showToast(`Project "${name}" created successfully`, false);
+            hub.CreateProject(name, path, version, created => {
+                if (created) showToast(`Project "${name}" created successfully`, false);
+            });
         }
 
         // Delete Logic
-        function promptDeleteProject(id, name) {
+        function promptDeleteProject(id) {
             projectToDeleteId = id;
-            deleteProjName.textContent = name;
+            const project = projects.find(value => value.id === id);
+            deleteProjName.textContent = project ? project.name : '';
             deleteModal.classList.add('active');
         }
 
@@ -1091,29 +1028,20 @@
 
         function executeDeleteProject() {
             if (projectToDeleteId) {
-                projects = projects.filter(p => p.id !== projectToDeleteId);
-                saveProjects();
-                renderProjects();
+                hub.RemoveProject(projectToDeleteId);
                 closeDeleteModal();
                 showToast('Project removed from list', false);
             }
         }
 
-        // Project Launching Simulation
-        function launchProject(name, id) {
-            // Update last opened timestamp
+        function launchProject(id) {
             const proj = projects.find(p => p.id === id);
-            if (proj) {
-                proj.lastOpened = new Date().toISOString();
-                saveProjects();
-                renderProjects();
-            }
-
-            showToast(`Launching ${name} in Engine Editor...`, true);
-
-            setTimeout(() => {
+            if (!proj) return;
+            showToast(`Launching ${proj.name} in Engine Editor...`, true);
+            hub.LaunchProject(id, proj ? proj.version : '', launched => {
                 hideToast();
-            }, 2500);
+                if (!launched) showToast('Could not launch a compatible editor', false);
+            });
         }
 
         // Toast Helper
@@ -1142,8 +1070,14 @@
             toastBanner.classList.remove('show');
         }
 
-        // Start App
-        window.addEventListener('DOMContentLoaded', init);
+        window.addEventListener('DOMContentLoaded', () => {
+            new QWebChannel(qt.webChannelTransport, channel => {
+                hub = channel.objects.hub;
+                hub.StateChanged.connect(loadProjects);
+                hub.OperationFailed.connect(message => showToast(message, false));
+                init();
+            });
+        });
     </script>
 </body>
 </html>

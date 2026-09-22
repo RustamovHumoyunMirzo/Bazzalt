@@ -1,0 +1,4 @@
+Nuitka>=2.7
+ordered-set>=4.1
+zstandard>=0.23
+setuptools>=75
