@@ -1,6 +1,12 @@
 #include "Bazzalt/Scene.h"
 
+#include <functional>
 #include <stdexcept>
+
+#include "Bazzalt/AssetManager.h"
+#include "Bazzalt/Components/Mesh.h"
+#include "Bazzalt/Components/ModelInstance.h"
+#include "Bazzalt/Components/ModelNode.h"
 
 namespace Bazzalt {
 
@@ -139,6 +145,77 @@ Mat4 Scene::GetWorldMatrix(Entity entity) const {
         current = parent;
     }
     return world;
+}
+
+Entity Scene::InstantiateModel(const ModelAsset& model, Entity parent, std::string name) {
+    if (!model.Id || model.Nodes.empty() || model.Roots.empty())
+        throw std::invalid_argument("Model asset must have an id, nodes, and roots");
+    if (parent && !Owns(parent))
+        throw std::invalid_argument("Model parent must belong to this scene");
+    if (!parent) parent = GetRootEntity();
+
+    std::vector<std::uint32_t> parentCount(model.Nodes.size(), 0);
+    for (const auto& node : model.Nodes) for (const auto child : node.Children) {
+        if (child >= model.Nodes.size() || ++parentCount[child] > 1)
+            throw std::invalid_argument("Model hierarchy contains an invalid or shared child");
+    }
+    std::vector<bool> visiting(model.Nodes.size()), visited(model.Nodes.size());
+    std::function<void(std::uint32_t)> validate = [&](std::uint32_t index) {
+        if (index >= model.Nodes.size() || visiting[index])
+            throw std::invalid_argument("Model hierarchy contains a cycle or invalid root");
+        if (visited[index]) return;
+        visiting[index] = true;
+        for (const auto child : model.Nodes[index].Children) validate(child);
+        visiting[index] = false; visited[index] = true;
+    };
+    for (const auto root : model.Roots) validate(root);
+    if (std::find(visited.begin(), visited.end(), false) != visited.end())
+        throw std::invalid_argument("Every model node must be reachable from a model root");
+
+    Entity instance = CreateEntity(name.empty() ? model.Name : std::move(name));
+    instance.AddComponent<ModelInstance>().ModelAsset = model.Id;
+    instance.SetParent(parent);
+    std::vector<Entity> entities;
+    entities.reserve(model.Nodes.size());
+    try {
+        for (const auto& node : model.Nodes) {
+            Entity entity = CreateEntity(node.Name);
+            auto& metadata = entity.AddComponent<ModelNode>();
+            metadata.ModelAsset = model.Id;
+            metadata.SourceIndex = node.SourceIndex;
+            metadata.MeshIndex = node.MeshIndex;
+            metadata.StablePath = node.StablePath;
+            metadata.HasMesh = node.HasMesh();
+            auto& transform = entity.GetComponent<Transform>();
+            transform.Position = node.Position;
+            transform.Rotation = node.Rotation;
+            transform.Scale = node.Scale;
+            if (node.HasMesh()) {
+                auto& mesh = entity.AddComponent<Mesh>();
+                mesh.MeshAsset = model.Id;
+                mesh.ModelNodeIndex = node.SourceIndex;
+            }
+            entities.push_back(entity);
+        }
+        for (std::size_t index = 0; index < model.Nodes.size(); ++index)
+            for (const auto child : model.Nodes[index].Children)
+                if (!entities[child].SetParent(entities[index]))
+                    throw std::logic_error("Could not construct model hierarchy");
+        for (const auto root : model.Roots)
+            if (!entities[root].SetParent(instance))
+                throw std::logic_error("Could not attach model root node");
+        return instance;
+    } catch (...) {
+        DestroyEntity(instance);
+        for (const Entity entity : entities) if (entity) DestroyEntity(entity);
+        throw;
+    }
+}
+
+Entity Scene::InstantiateModel(UUID modelAsset, Entity parent, std::string name) {
+    const auto model = AssetManager::LoadModel(modelAsset);
+    if (!model) throw std::runtime_error("Model asset is missing, not ready, or invalid");
+    return InstantiateModel(*model, parent, std::move(name));
 }
 
 void Scene::Update(float deltaTime) {

@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <string_view>
+#include <vector>
 
 #include "Bazzalt/AssetManager.h"
 #include "Bazzalt/Components/Mesh.h"
@@ -45,6 +46,10 @@ int main() {
         "Name: \"Pipeline\"\nAssetDirectory: \"Assets\"\nStartupScene: \"\"\nProperties:\n");
     WriteText(assets / "empty.gltf",
         R"({"asset":{"version":"2.0"},"buffers":[{"uri":"payload.bin","byteLength":1}],"scenes":[{}],"scene":0})");
+    WriteText(assets / "human.gltf",
+        R"({"asset":{"version":"2.0"},"nodes":[{"name":"Arm","children":[1]},)"
+        R"({"name":"Hand","mesh":0,"translation":[0,2,0]},{"name":"Head"}],)"
+        R"("scenes":[{"nodes":[0,2]}],"scene":0})");
     WriteText(assets / "payload.bin", "x");
     WritePng(assets / "white.png");
     WriteText(assets / "unlit.mat", R"(material {
@@ -70,12 +75,21 @@ fragment {
     const auto texture = AssetManager::GetAsset(assets / "white.png");
     const auto material = AssetManager::GetAsset(assets / "unlit.mat");
     const auto mesh = AssetManager::GetAsset(assets / "fixture.filamesh");
+    const auto human = AssetManager::GetAsset(assets / "human.gltf");
     assert(gltf && gltf->Importer == "Bazzalt.glTF" && gltf->CachePath.extension() == ".gltf");
     assert(std::filesystem::exists(gltf->CachePath.parent_path() / "payload.bin"));
     assert(texture && texture->Importer == "Bazzalt.Texture" && texture->CachePath.extension() == ".png");
     assert(material && material->Importer == "Bazzalt.FilamentMaterial" &&
            material->CachePath.extension() == ".filamat");
     assert(mesh && mesh->Importer == "Bazzalt.Filamesh" && mesh->CachePath.extension() == ".filamesh");
+    assert(human && human->Importer == "Bazzalt.glTF");
+    const auto modelAsset = AssetManager::LoadModel(human->Id);
+    assert(modelAsset && modelAsset->Nodes.size() == 3 && modelAsset->Roots.size() == 2);
+    assert(modelAsset->Nodes[0].Children == std::vector<std::uint32_t>{1});
+    assert(modelAsset->Nodes[1].Name == "Hand" && modelAsset->Nodes[1].HasMesh());
+    assert(modelAsset->Nodes[1].StablePath == "Arm/Hand");
+    const auto instance = engine.GetScene().InstantiateModel(human->Id);
+    assert(instance.GetChildren().size() == 2);
     assert(std::filesystem::file_size(material->CachePath) > 0);
     assert(std::filesystem::file_size(mesh->CachePath) > 0);
 

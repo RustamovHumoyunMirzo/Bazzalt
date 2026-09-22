@@ -18,6 +18,7 @@
 #include "Bazzalt/Components/Identity.h"
 #include "Bazzalt/Components/Transform.h"
 #include "Bazzalt/Entity.h"
+#include "Bazzalt/ModelAsset.h"
 #include "Bazzalt/SceneQuery.h"
 #include "Bazzalt/System.h"
 
@@ -53,6 +54,28 @@ public:
     [[nodiscard]] std::vector<Entity> GetChildren(Entity parent);
     [[nodiscard]] bool IsAncestor(Entity ancestor, Entity descendant) const;
     [[nodiscard]] Mat4 GetWorldMatrix(Entity entity) const;
+    Entity InstantiateModel(const ModelAsset& model, Entity parent = {},
+                            std::string name = {});
+    Entity InstantiateModel(UUID modelAsset, Entity parent = {}, std::string name = {});
+
+    template<typename ComponentType>
+    [[nodiscard]] const ComponentType* TryGetInheritedComponent(Entity entity) const {
+        static_assert(std::is_base_of_v<Component, ComponentType>,
+                      "ComponentType must derive from Bazzalt::Component");
+        if (!Owns(entity)) return nullptr;
+        if (const auto* local = entity.TryGetComponent<ComponentType>()) return local;
+        if constexpr (ComponentInheritance<ComponentType>::Mode !=
+                      ComponentInheritanceMode::NearestAncestor) return nullptr;
+        Entity current = entity;
+        while (current && !current.GetUUID().IsRoot()) {
+            const auto found = m_uuidLookup.find(current.GetComponent<Hierarchy>().Parent);
+            if (found == m_uuidLookup.end() || !m_registry.valid(found->second)) return nullptr;
+            current = Entity(found->second, const_cast<entt::registry&>(m_registry),
+                             const_cast<Scene&>(*this));
+            if (const auto* inherited = current.TryGetComponent<ComponentType>()) return inherited;
+        }
+        return nullptr;
+    }
 
     [[nodiscard]] SceneRay ScreenPointToRay(Entity camera, Vec2 screenPoint,
                                             Vec2 presentationSize) const;

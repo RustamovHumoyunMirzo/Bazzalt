@@ -24,4 +24,9 @@ struct Transform : Component {
     }
 };
 
+template<>
+struct ComponentInheritance<Transform> {
+    static constexpr ComponentInheritanceMode Mode = ComponentInheritanceMode::Composed;
+};
+
 } // namespace Bazzalt

@@ -5,6 +5,9 @@
 #include "Bazzalt/System.h"
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Components/SceneQueryBounds.h"
+#include "Bazzalt/Components/Mesh.h"
+#include "Bazzalt/Components/ModelInstance.h"
+#include "Bazzalt/Components/ModelNode.h"
 
 struct Velocity : Bazzalt::Component {
     Bazzalt::Vec3 Value{};
@@ -12,6 +15,16 @@ struct Velocity : Bazzalt::Component {
     Velocity() = default;
     explicit Velocity(Bazzalt::Vec3 value) : Value(value) {}
 };
+
+struct InheritedSettings : Bazzalt::Component {
+    int Value = 0;
+};
+
+namespace Bazzalt {
+template<> struct ComponentInheritance<::InheritedSettings> {
+    static constexpr ComponentInheritanceMode Mode = ComponentInheritanceMode::NearestAncestor;
+};
+}
 
 class MovementSystem final
     : public Bazzalt::ComponentSystem<Bazzalt::Transform, Velocity> {
@@ -64,6 +77,39 @@ int main() {
     child.GetComponent<Bazzalt::Transform>().Position = {2.0f, 0.0f, 0.0f};
     grandchild.GetComponent<Bazzalt::Transform>().Position = {1.0f, 0.0f, 0.0f};
     assert(grandchild.GetWorldMatrix().TransformPoint({}).X == 13.0f);
+    parent.AddComponent<InheritedSettings>().Value = 42;
+    assert(!child.HasComponent<InheritedSettings>());
+    assert(scene.TryGetInheritedComponent<InheritedSettings>(grandchild)->Value == 42);
+    assert(scene.TryGetInheritedComponent<Velocity>(grandchild) == nullptr);
+
+    Bazzalt::ModelAsset human;
+    human.Id = Bazzalt::UUID{10, 20};
+    human.Name = "Human";
+    human.Nodes.resize(3);
+    human.Nodes[0].Name = "Arm";
+    human.Nodes[0].StablePath = "0";
+    human.Nodes[0].SourceIndex = 0;
+    human.Nodes[0].Children = {1};
+    human.Nodes[1].Name = "Hand";
+    human.Nodes[1].StablePath = "0/1";
+    human.Nodes[1].SourceIndex = 1;
+    human.Nodes[1].MeshIndex = 4;
+    human.Nodes[1].Position = {0.0f, 2.0f, 0.0f};
+    human.Nodes[2].Name = "Head";
+    human.Nodes[2].StablePath = "2";
+    human.Nodes[2].SourceIndex = 2;
+    human.Roots = {0, 2};
+    const auto humanEntity = scene.InstantiateModel(human);
+    assert(humanEntity.HasComponent<Bazzalt::ModelInstance>());
+    assert(humanEntity.GetChildren().size() == 2);
+    const auto arm = humanEntity.GetChildren()[0];
+    const auto hand = arm.GetChildren()[0];
+    assert(hand.GetComponent<Bazzalt::Name>().Value == "Hand");
+    assert(hand.HasComponent<Bazzalt::ModelNode>());
+    assert(hand.HasComponent<Bazzalt::Mesh>());
+    assert(hand.GetComponent<Bazzalt::Mesh>().ModelNodeIndex == 1);
+    assert(hand.GetWorldMatrix().TransformPoint({}).Y == 2.0f);
+    assert(!hand.HasComponent<InheritedSettings>());
 
     auto camera = scene.CreateEntity("Query Camera");
     camera.GetComponent<Bazzalt::Transform>().Position = {0, 0, 5};

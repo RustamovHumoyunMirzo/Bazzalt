@@ -4,6 +4,7 @@
 #include <optional>
 
 #include "Bazzalt/Asset.h"
+#include "Bazzalt/ModelAsset.h"
 
 namespace Bazzalt {
 
@@ -17,6 +18,7 @@ public:
     [[nodiscard]] static std::optional<AssetInfo> GetAsset(UUID id);
     [[nodiscard]] static std::optional<AssetInfo> GetAsset(const std::filesystem::path& sourcePath);
     [[nodiscard]] static bool IsAssetReady(UUID id);
+    [[nodiscard]] static std::optional<ModelAsset> LoadModel(UUID id);
 
 private:
     friend class Runtime::Engine;

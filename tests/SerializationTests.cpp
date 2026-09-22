@@ -8,6 +8,8 @@
 #include "Bazzalt/Components/Vignette.h"
 #include "Bazzalt/Components/Light.h"
 #include "Bazzalt/Components/Mesh.h"
+#include "Bazzalt/Components/ModelInstance.h"
+#include "Bazzalt/Components/ModelNode.h"
 
 struct Health : Bazzalt::Component {
     float Value = 100.0f;
@@ -39,6 +41,13 @@ int main() {
     Entity parent = source.CreateEntity(UUID{1, 1}, "Parent entity");
     Entity child = source.CreateEntity(UUID{2, 2}, "Child entity");
     child.SetParent(parent);
+    parent.AddComponent<ModelInstance>().ModelAsset = UUID{8, 8};
+    auto& modelNode = child.AddComponent<ModelNode>();
+    modelNode.ModelAsset = UUID{8, 8};
+    modelNode.SourceIndex = 3;
+    modelNode.MeshIndex = 2;
+    modelNode.StablePath = "0/3";
+    modelNode.HasMesh = true;
     child.GetComponent<Transform>().Position = {1.25f, 2.5f, 5.0f};
     child.AddComponent<Health>().Value = 42.5f;
     auto& sourceCamera = child.AddComponent<Camera>();
@@ -75,6 +84,9 @@ int main() {
     assert(restoredChild.GetParent().GetUUID() == UUID(1, 1));
     assert(restoredChild.GetComponent<Health>().Value == 42.5f);
     assert(restoredChild.GetComponent<Transform>().Position.X == 1.25f);
+    assert(restoredChild.GetParent().GetComponent<ModelInstance>().ModelAsset == UUID(8, 8));
+    assert(restoredChild.GetComponent<ModelNode>().StablePath == "0/3");
+    assert(restoredChild.GetComponent<ModelNode>().SourceIndex == 3);
     assert(!restoredChild.GetComponent<Camera>().PostProcessing.Bloom);
     assert(restoredChild.GetComponent<Camera>().Viewport.X == 0.5f);
     assert(restoredChild.GetComponent<Camera>().Viewport.Width == 0.5f);

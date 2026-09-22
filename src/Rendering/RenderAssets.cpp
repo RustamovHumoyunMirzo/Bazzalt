@@ -70,6 +70,7 @@ struct RenderAssets::Impl {
         UUID Asset{};
         std::vector<UUID> Materials;
         filament::gltfio::FilamentAsset* Gltf = nullptr;
+        utils::Entity SelectedGltfEntity{};
         filamesh::MeshReader::Mesh Filamesh{};
         std::vector<filament::MaterialInstance*> MaterialInstances;
         bool AddedToScene = false;
@@ -186,9 +187,22 @@ RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component) {
             m_impl->GltfLoader->destroyAsset(instance.Gltf); return InvalidHandle;
         }
         instance.Gltf->releaseSourceData();
-        m_impl->Scene.addEntities(instance.Gltf->getEntities(), instance.Gltf->getEntityCount());
+        if (component.ModelNodeIndex != Mesh::EntireAsset) {
+            if (component.ModelNodeIndex >= instance.Gltf->getEntityCount()) {
+                m_impl->GltfLoader->destroyAsset(instance.Gltf); return InvalidHandle;
+            }
+            instance.SelectedGltfEntity = instance.Gltf->getEntities()[component.ModelNodeIndex];
+            auto& transforms = m_impl->Engine.getTransformManager();
+            const auto selectedTransform = transforms.getInstance(instance.SelectedGltfEntity);
+            if (selectedTransform) transforms.setParent(selectedTransform, {});
+            m_impl->Scene.addEntity(instance.SelectedGltfEntity);
+        } else {
+            m_impl->Scene.addEntities(instance.Gltf->getEntities(), instance.Gltf->getEntityCount());
+        }
         instance.AddedToScene = true;
-        for (std::size_t index = 0; index < instance.Gltf->getEntityCount(); ++index)
+        if (component.ModelNodeIndex != Mesh::EntireAsset)
+            m_impl->ApplyRenderable(instance.SelectedGltfEntity, component);
+        else for (std::size_t index = 0; index < instance.Gltf->getEntityCount(); ++index)
             m_impl->ApplyRenderable(instance.Gltf->getEntities()[index], component);
     } else if (extension == ".filamesh" || extension == ".obj" || extension == ".fbx") {
         instance.Type = Impl::Kind::Filamesh;
@@ -221,21 +235,28 @@ void RenderAssets::UpdateMesh(Handle handle, const Mat4& transform, const Mesh& 
     const auto found = m_impl->Instances.find(handle); if (found == m_impl->Instances.end()) return;
     auto& instance = found->second;
     const utils::Entity root = instance.Type == Impl::Kind::Gltf
-        ? instance.Gltf->getRoot() : instance.Filamesh.renderable;
+        ? (instance.SelectedGltfEntity ? instance.SelectedGltfEntity : instance.Gltf->getRoot())
+        : instance.Filamesh.renderable;
     auto& transforms = m_impl->Engine.getTransformManager();
     const auto transformInstance = transforms.getInstance(root);
     if (transformInstance) transforms.setTransform(transformInstance, ToFilamentMatrix(transform));
     if (component.Visible != instance.AddedToScene) {
         if (instance.Type == Impl::Kind::Gltf) {
-            if (component.Visible) m_impl->Scene.addEntities(instance.Gltf->getEntities(), instance.Gltf->getEntityCount());
-            else m_impl->Scene.removeEntities(instance.Gltf->getEntities(), instance.Gltf->getEntityCount());
+            if (instance.SelectedGltfEntity) {
+                if (component.Visible) m_impl->Scene.addEntity(instance.SelectedGltfEntity);
+                else m_impl->Scene.remove(instance.SelectedGltfEntity);
+            } else {
+                if (component.Visible) m_impl->Scene.addEntities(instance.Gltf->getEntities(), instance.Gltf->getEntityCount());
+                else m_impl->Scene.removeEntities(instance.Gltf->getEntities(), instance.Gltf->getEntityCount());
+            }
         } else {
             if (component.Visible) m_impl->Scene.addEntity(root); else m_impl->Scene.remove(root);
         }
         instance.AddedToScene = component.Visible;
     }
     if (instance.Type == Impl::Kind::Gltf) {
-        for (std::size_t index = 0; index < instance.Gltf->getEntityCount(); ++index)
+        if (instance.SelectedGltfEntity) m_impl->ApplyRenderable(instance.SelectedGltfEntity, component);
+        else for (std::size_t index = 0; index < instance.Gltf->getEntityCount(); ++index)
             m_impl->ApplyRenderable(instance.Gltf->getEntities()[index], component);
     } else m_impl->ApplyRenderable(root, component);
 }
@@ -245,8 +266,10 @@ void RenderAssets::DestroyMesh(Handle handle) {
     const auto found = m_impl->Instances.find(handle); if (found == m_impl->Instances.end()) return;
     auto& instance = found->second;
     if (instance.Type == Impl::Kind::Gltf) {
-        if (instance.AddedToScene)
-            m_impl->Scene.removeEntities(instance.Gltf->getEntities(), instance.Gltf->getEntityCount());
+        if (instance.AddedToScene) {
+            if (instance.SelectedGltfEntity) m_impl->Scene.remove(instance.SelectedGltfEntity);
+            else m_impl->Scene.removeEntities(instance.Gltf->getEntities(), instance.Gltf->getEntityCount());
+        }
         m_impl->GltfLoader->destroyAsset(instance.Gltf);
     } else {
         if (instance.AddedToScene) m_impl->Scene.remove(instance.Filamesh.renderable);

@@ -13,6 +13,8 @@
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Components/Light.h"
 #include "Bazzalt/Components/Mesh.h"
+#include "Bazzalt/Components/ModelInstance.h"
+#include "Bazzalt/Components/ModelNode.h"
 #include "Bazzalt/Components/Name.h"
 #include "Bazzalt/Components/SceneQueryBounds.h"
 #include "Bazzalt/Components/Transform.h"
@@ -28,6 +30,7 @@ bool UInt(ryml::ConstNodeRef n, std::uint32_t& v) { auto s=Text(n); auto r=std::
 std::string Float(float v){std::ostringstream s;s<<std::setprecision(std::numeric_limits<float>::max_digits10)<<v;return s.str();}
 bool Float(const PropertyMap& p,const char* k,float& v){auto i=p.find(k);if(i==p.end())return false;auto b=i->second.data(),e=b+i->second.size();auto r=std::from_chars(b,e,v);return r.ec==std::errc{}&&r.ptr==e&&std::isfinite(v);}
 bool Bool(const PropertyMap&p,const char*k,bool&v){auto i=p.find(k);if(i==p.end())return false;if(i->second=="true"){v=true;return true;}if(i->second=="false"){v=false;return true;}return false;}
+bool Unsigned(const PropertyMap&p,const char*k,std::uint32_t&v){auto i=p.find(k);if(i==p.end())return false;auto b=i->second.data(),e=b+i->second.size();auto r=std::from_chars(b,e,v);return r.ec==std::errc{}&&r.ptr==e;}
 template<typename T> bool Enum(const PropertyMap&p,const char*k,T&v){auto i=p.find(k);if(i==p.end())return false;int n=0;auto b=i->second.data(),e=b+i->second.size();auto r=std::from_chars(b,e,n);if(r.ec!=std::errc{}||r.ptr!=e)return false;v=static_cast<T>(n);return true;}
 template<typename T> bool EnumRange(const PropertyMap&p,const char*k,T&v,int minimum,int maximum){int n=0;auto i=p.find(k);if(i==p.end())return false;auto b=i->second.data(),e=b+i->second.size();auto r=std::from_chars(b,e,n);if(r.ec!=std::errc{}||r.ptr!=e||n<minimum||n>maximum)return false;v=static_cast<T>(n);return true;}
 const std::string* Property(const PropertyMap& properties,const char* key){const auto found=properties.find(key);return found==properties.end()?nullptr:&found->second;}
@@ -47,8 +50,16 @@ o["Projection"]=std::to_string(static_cast<int>(v.Projection));o["FieldOfView"]=
 m_components.Register<Light>("Bazzalt.Light",1,[](const Light&v,PropertyMap&o){o["Type"]=std::to_string(static_cast<int>(v.Type));o["Color.R"]=Float(v.Color.X);o["Color.G"]=Float(v.Color.Y);o["Color.B"]=Float(v.Color.Z);o["Intensity"]=Float(v.Intensity);o["Range"]=Float(v.Range);o["InnerCone"]=Float(v.InnerConeAngle);o["OuterCone"]=Float(v.OuterConeAngle);o["SunAngularRadius"]=Float(v.SunAngularRadius);o["SunHaloSize"]=Float(v.SunHaloSize);o["SunHaloFalloff"]=Float(v.SunHaloFalloff);o["CastShadows"]=v.CastShadows?"true":"false";o["Enabled"]=v.Enabled?"true":"false";},
 [](Light&v,const PropertyMap&i,std::uint32_t n){return n==1&&EnumRange(i,"Type",v.Type,0,3)&&Float(i,"Color.R",v.Color.X)&&Float(i,"Color.G",v.Color.Y)&&Float(i,"Color.B",v.Color.Z)&&Float(i,"Intensity",v.Intensity)&&Float(i,"Range",v.Range)&&Float(i,"InnerCone",v.InnerConeAngle)&&Float(i,"OuterCone",v.OuterConeAngle)&&Float(i,"SunAngularRadius",v.SunAngularRadius)&&Float(i,"SunHaloSize",v.SunHaloSize)&&Float(i,"SunHaloFalloff",v.SunHaloFalloff)&&Bool(i,"CastShadows",v.CastShadows)&&Bool(i,"Enabled",v.Enabled)&&v.Intensity>=0.0f&&v.Range>=0.0f&&v.InnerConeAngle>=0.0f&&v.OuterConeAngle>=v.InnerConeAngle;});
 
-m_components.Register<Mesh>("Bazzalt.Mesh",1,[](const Mesh&v,PropertyMap&o){o["MeshAsset"]=v.MeshAsset.ToString();o["LayerMask"]=std::to_string(v.LayerMask);o["Visible"]=v.Visible?"true":"false";o["CastShadows"]=v.CastShadows?"true":"false";o["ReceiveShadows"]=v.ReceiveShadows?"true":"false";std::string materials;for(const UUID id:v.Materials){if(!materials.empty())materials+=',';materials+=id.ToString();}o["Materials"]=materials;},
-[](Mesh&v,const PropertyMap&i,std::uint32_t n){const auto*mesh=Property(i,"MeshAsset");const auto*materials=Property(i,"Materials");if(n!=1||!mesh||!materials||!UUID::TryParse(*mesh,v.MeshAsset)||!EnumRange(i,"LayerMask",v.LayerMask,0,255)||!Bool(i,"Visible",v.Visible)||!Bool(i,"CastShadows",v.CastShadows)||!Bool(i,"ReceiveShadows",v.ReceiveShadows))return false;for(std::size_t b=0;b<materials->size();){const auto e=materials->find(',',b);UUID id;if(!UUID::TryParse(std::string_view(*materials).substr(b,e==std::string::npos?materials->size()-b:e-b),id))return false;v.Materials.push_back(id);if(e==std::string::npos)break;b=e+1;}return true;});
+m_components.Register<Mesh>("Bazzalt.Mesh",2,[](const Mesh&v,PropertyMap&o){o["MeshAsset"]=v.MeshAsset.ToString();o["ModelNodeIndex"]=std::to_string(v.ModelNodeIndex);o["LayerMask"]=std::to_string(v.LayerMask);o["Visible"]=v.Visible?"true":"false";o["CastShadows"]=v.CastShadows?"true":"false";o["ReceiveShadows"]=v.ReceiveShadows?"true":"false";std::string materials;for(const UUID id:v.Materials){if(!materials.empty())materials+=',';materials+=id.ToString();}o["Materials"]=materials;},
+[](Mesh&v,const PropertyMap&i,std::uint32_t n){const auto*mesh=Property(i,"MeshAsset");const auto*materials=Property(i,"Materials");if((n!=1&&n!=2)||!mesh||!materials||!UUID::TryParse(*mesh,v.MeshAsset)||(n==2&&!Unsigned(i,"ModelNodeIndex",v.ModelNodeIndex))||!EnumRange(i,"LayerMask",v.LayerMask,0,255)||!Bool(i,"Visible",v.Visible)||!Bool(i,"CastShadows",v.CastShadows)||!Bool(i,"ReceiveShadows",v.ReceiveShadows))return false;if(!materials->empty())for(std::size_t b=0;b<materials->size();){const auto e=materials->find(',',b);UUID id;if(!UUID::TryParse(std::string_view(*materials).substr(b,e==std::string::npos?materials->size()-b:e-b),id))return false;v.Materials.push_back(id);if(e==std::string::npos)break;b=e+1;}return true;});
+
+m_components.Register<ModelInstance>("Bazzalt.ModelInstance",1,
+[](const ModelInstance&v,PropertyMap&o){o["ModelAsset"]=v.ModelAsset.ToString();},
+[](ModelInstance&v,const PropertyMap&i,std::uint32_t n){const auto*asset=Property(i,"ModelAsset");return n==1&&asset&&UUID::TryParse(*asset,v.ModelAsset)&&!v.ModelAsset.IsRoot();});
+
+m_components.Register<ModelNode>("Bazzalt.ModelNode",1,
+[](const ModelNode&v,PropertyMap&o){o["ModelAsset"]=v.ModelAsset.ToString();o["SourceIndex"]=std::to_string(v.SourceIndex);o["MeshIndex"]=std::to_string(v.MeshIndex);o["StablePath"]=v.StablePath;o["HasMesh"]=v.HasMesh?"true":"false";},
+[](ModelNode&v,const PropertyMap&i,std::uint32_t n){const auto*asset=Property(i,"ModelAsset");const auto*path=Property(i,"StablePath");return n==1&&asset&&path&&UUID::TryParse(*asset,v.ModelAsset)&&!v.ModelAsset.IsRoot()&&Unsigned(i,"SourceIndex",v.SourceIndex)&&Unsigned(i,"MeshIndex",v.MeshIndex)&&Bool(i,"HasMesh",v.HasMesh)&&(v.StablePath=*path,true);});
 
 m_components.Register<SceneQueryBounds>("Bazzalt.SceneQueryBounds",1,
 [](const SceneQueryBounds&v,PropertyMap&o){o["Shape"]=std::to_string(static_cast<int>(v.Shape));o["Center.X"]=Float(v.Center.X);o["Center.Y"]=Float(v.Center.Y);o["Center.Z"]=Float(v.Center.Z);o["Extents.X"]=Float(v.Extents.X);o["Extents.Y"]=Float(v.Extents.Y);o["Extents.Z"]=Float(v.Extents.Z);o["Radius"]=Float(v.Radius);o["LayerMask"]=std::to_string(v.LayerMask);o["Enabled"]=v.Enabled?"true":"false";},
