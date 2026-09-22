@@ -18,7 +18,9 @@ from Editor.gui.widgets import (
     MultiSelectInput,
     RangeInput,
     Vec3Input,
+    PlayState,
 )
+from Editor.gui.gizmos import GizmoMode
 from Editor.gui.widgets import EditorMenu
 from Editor.localization import LocalizationManager
 from Editor.resources import ResourceManager
@@ -130,6 +132,37 @@ class EditorShellTests(unittest.TestCase):
     def test_editor_uses_custom_menu_bar(self) -> None:
         self.assertIs(self.Window.menuBar(), self.Window.MenuBar)
         self.assertFalse(self.Window.MenuBar.isNativeMenuBar())
+
+    def test_editor_toolbar_transport_and_modes(self) -> None:
+        toolbar = self.Window.Toolbar
+        self.assertFalse(toolbar.isMovable())
+        self.assertEqual(toolbar.GetPlayState(), PlayState.Stopped)
+        self.assertFalse(toolbar.StopAction.isEnabled())
+        toolbar.PlayAction.trigger()
+        self.assertEqual(toolbar.GetPlayState(), PlayState.Playing)
+        self.assertTrue(toolbar.StopAction.isEnabled())
+        toolbar.PauseAction.trigger()
+        self.assertEqual(toolbar.GetPlayState(), PlayState.Paused)
+        toolbar.SetGizmoMode(GizmoMode.Rotate)
+        self.assertEqual(toolbar.GetGizmoMode(), GizmoMode.Rotate)
+        self.assertTrue(all(not action.icon().isNull()
+                            for action in toolbar.ModeActions.values()))
+        self.assertEqual(toolbar.toggleViewAction().text(), "Editor Toolbar")
+        self.assertIsInstance(toolbar.ModeMenu, EditorMenu)
+        toolbar.ModeSelector.resize(toolbar.ModeSelector.sizeHint())
+        icon_rect = toolbar.ModeSelector._IconRect()
+        text_rect = toolbar.ModeSelector._TextRect()
+        arrow_rect = toolbar.ModeSelector._ArrowRect()
+        self.assertGreaterEqual(text_rect.left() - icon_rect.right() - 1, 7)
+        self.assertGreaterEqual(arrow_rect.left() - text_rect.right(), 8)
+        self.assertGreaterEqual(toolbar.ModeSelector.width() - arrow_rect.right() - 1, 9)
+        self.assertEqual(arrow_rect.center().y(), toolbar.ModeSelector.rect().center().y())
+
+    def test_toolbar_icons_refresh_for_theme(self) -> None:
+        before = self.Window.Toolbar.PlayAction.icon().cacheKey()
+        self.Themes.SetTheme(Theme.light())
+        after = self.Window.Toolbar.PlayAction.icon().cacheKey()
+        self.assertNotEqual(before, after)
 
     def test_menu_icons_and_dock_tabs_have_clean_edge_spacing(self) -> None:
         style = BuildStyleSheet(Theme.dark())

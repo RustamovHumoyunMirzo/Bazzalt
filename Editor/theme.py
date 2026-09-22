@@ -153,6 +153,18 @@ def BuildStyleSheet(theme: Theme) -> str:
                                     border-radius: {t.radius}px; }}
     QMenuBar#EditorMenuBar::item:selected, QMenuBar#EditorMenuBar::item:pressed {{
         background: {t.surface}; color: {t.text}; }}
+    QToolBar#EditorToolbar {{ background: {t.surface_alt}; border: 0;
+                              border-bottom: 1px solid {t.border}; padding: 2px {t.spacing}px;
+                              spacing: 3px; }}
+    QToolBar#EditorToolbar QToolButton {{ background: transparent; border: 0;
+                                         border-radius: {t.radius}px; padding: 4px; }}
+    QToolBar#EditorToolbar QToolButton:hover {{ background: {t.surface_hover}; }}
+    QToolBar#EditorToolbar QToolButton:pressed,
+    QToolBar#EditorToolbar QToolButton:checked {{ background: {t.selection}; }}
+    QToolBar#EditorToolbar::separator {{ background: {t.border}; width: 1px;
+                                        margin: 4px {t.spacing}px; }}
+    #GizmoModeSelector {{ min-width: 125px; border: 0; padding: 0; }}
+    #GizmoModeSelector::menu-indicator {{ image: none; width: 0; height: 0; }}
     QMenu {{ background: {t.surface}; color: {t.text}; border: 1px solid {t.border};
              padding: {t.spacing / 2}px 0; border-radius: 2px; }}
     QMenu::item {{ padding: 4px {t.spacing * 6 + 8}px 4px {t.spacing * 4 + 8}px; }}

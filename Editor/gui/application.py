@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QMainWindow
 
 from ..localization import LocalizationManager
@@ -15,7 +16,7 @@ from .panels import (
     PropertiesPanel,
     ViewportPlaceholder,
 )
-from .widgets import EditorMenuBar
+from .widgets import EditorMenuBar, EditorToolbar
 
 
 class Editor(QMainWindow):
@@ -47,6 +48,7 @@ class Editor(QMainWindow):
             double_click_float=False,
         )
         self.MenuBar = EditorMenuBar(self.ThemeManager, self.Localization, self)
+        self.Toolbar = EditorToolbar(self.Localization, self.ThemeManager, self)
         self.MenuBar.SetDockingSystem(self.Docking)
         self.ThemeManager.ThemeChanged.connect(self.Docking.set_theme)
 
@@ -79,6 +81,7 @@ class Editor(QMainWindow):
         )
 
         self.setMenuBar(self.MenuBar)
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.Toolbar)
         self.setCentralWidget(self.Docking)
 
         # Lower-case aliases preserve the original prototype's attributes.

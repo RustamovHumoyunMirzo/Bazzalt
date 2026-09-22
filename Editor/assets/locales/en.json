@@ -45,5 +45,15 @@
   "properties.add_component": "Add Component",
   "properties.expand_all": "Expand All",
   "properties.collapse_all": "Collapse All",
-  "assets.refresh": "Refresh"
+  "assets.refresh": "Refresh",
+  "toolbar.title": "Editor Toolbar",
+  "toolbar.play": "Play",
+  "toolbar.stop": "Stop",
+  "toolbar.pause": "Pause",
+  "toolbar.step": "Next Step",
+  "gizmo.mode": "Selection mode",
+  "gizmo.select": "Select",
+  "gizmo.translate": "Translate",
+  "gizmo.rotate": "Rotate",
+  "gizmo.scale": "Scale"
 }
