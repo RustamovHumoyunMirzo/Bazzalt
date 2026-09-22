@@ -59,3 +59,30 @@ The Hub build is a self-contained directory-mode distribution. This is preferabl
 for Qt WebEngine production deployment because its helper process and resources
 remain installed once instead of being unpacked on every launch. The editor is a
 managed version directory rather than an independently installed application.
+
+## Windows installer
+
+Inno Setup 6 turns the complete Nuitka distribution—including the locally bundled
+editor and engine bridge—into one offline `BazzaltHub-Setup.exe`:
+
+```powershell
+winget install JRSoftware.InnoSetup
+./scripts/build_installer.ps1 -Version 1.0.0
+```
+
+To compile the applications and installer in one operation, use:
+
+```powershell
+./scripts/build_production.ps1 -Version 1.0.0 -CreateInstaller
+```
+
+The default installation is `{autopf}\BAZZALT Hub`. Editor versions remain under
+`{app}\versions\bazzalt_1_0_0`, matching runtime discovery. An upgrade cleans and
+replaces only the editor version included by that installer; other installed
+versions remain available. Uninstall removes program files and shortcuts but
+deliberately preserves projects and user data.
+
+The build wrapper supports `-InnoCompiler` for CI agents with a nonstandard Inno
+Setup location. Code signing is intentionally not faked: production releases must
+sign the finished installer with an organization-owned certificate in the release
+pipeline.

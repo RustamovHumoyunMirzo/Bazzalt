@@ -1,7 +1,8 @@
 param(
     [string]$Version = "1.0.0",
     [string]$BuildDirectory = "build",
-    [string]$OutputDirectory = "dist/production"
+    [string]$OutputDirectory = "dist/production",
+    [switch]$CreateInstaller
 )
 $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -39,3 +40,7 @@ Copy-Item -LiteralPath $Native.FullName -Destination (Join-Path $EditorTarget "E
 $Manifest = @{ version=$Version; executable="Bazzalt.exe"; project_format_max=1 } | ConvertTo-Json
 Set-Content -LiteralPath (Join-Path $EditorTarget "editor.json") -Value $Manifest -Encoding utf8
 Write-Host "Production bundle: $Hub"
+if ($CreateInstaller) {
+    & (Join-Path $PSScriptRoot "build_installer.ps1") -Version $Version `
+        -BundleDirectory ([System.IO.Path]::GetRelativePath($Root, $Hub))
+}
