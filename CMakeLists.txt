@@ -70,6 +70,7 @@ bazzalt_embed_post_process(vignette VignetteFilamat)
 file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
+list(FILTER LIB_SOURCES EXCLUDE REGEX "/EditorBridge/")
 
 file(GLOB_RECURSE LIB_HEADERS CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp"
@@ -81,6 +82,7 @@ add_library(Bazzalt STATIC
     ${LIB_HEADERS}
     ${BAZZALT_EMBEDDED_HEADERS}
 )
+set_target_properties(Bazzalt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_include_directories(Bazzalt
     PUBLIC
@@ -98,6 +100,34 @@ target_compile_definitions(Bazzalt PRIVATE
     BAZZALT_MATC_EXECUTABLE="${BAZZALT_MATC_EXECUTABLE}"
     BAZZALT_FILAMESH_EXECUTABLE="${BAZZALT_FILAMESH_EXECUTABLE}"
 )
+
+option(BAZZALT_BUILD_EDITOR_BRIDGE "Build the private Python editor runtime bridge" ON)
+if(BAZZALT_BUILD_EDITOR_BRIDGE)
+    find_package(Python COMPONENTS Interpreter Development.Module REQUIRED)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/deps/pybind11/CMakeLists.txt")
+        add_subdirectory(deps/pybind11 EXCLUDE_FROM_ALL)
+        set(pybind11_FOUND TRUE)
+    else()
+        find_package(pybind11 CONFIG QUIET)
+    endif()
+    if(NOT pybind11_FOUND)
+        execute_process(COMMAND "${Python_EXECUTABLE}" -m pybind11 --cmakedir
+            OUTPUT_VARIABLE _bazzalt_pybind11_dir OUTPUT_STRIP_TRAILING_WHITESPACE
+            RESULT_VARIABLE _bazzalt_pybind11_result)
+        if(_bazzalt_pybind11_result EQUAL 0)
+            list(APPEND CMAKE_PREFIX_PATH "${_bazzalt_pybind11_dir}")
+            find_package(pybind11 CONFIG REQUIRED)
+        else()
+            message(FATAL_ERROR "pybind11 is required for BAZZALT_BUILD_EDITOR_BRIDGE")
+        endif()
+    endif()
+    pybind11_add_module(_bazzalt_runtime MODULE src/EditorBridge/PythonModule.cpp)
+    target_link_libraries(_bazzalt_runtime PRIVATE Bazzalt)
+    target_include_directories(_bazzalt_runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    set_target_properties(_bazzalt_runtime PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor")
+endif()
 
 add_executable(BazzaltExample
     "${CMAKE_CURRENT_SOURCE_DIR}/examples/main.cpp"

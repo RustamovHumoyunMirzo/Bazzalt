@@ -68,6 +68,9 @@ class EditorMenuBar(QMenuBar):
 
     NewProjectRequested = Signal()
     OpenProjectRequested = Signal()
+    OpenSceneRequested = Signal()
+    SaveSceneRequested = Signal()
+    SaveSceneAsRequested = Signal()
     SaveProjectRequested = Signal()
     SaveProjectAsRequested = Signal()
     UndoRequested = Signal()
@@ -123,6 +126,9 @@ class EditorMenuBar(QMenuBar):
         action.setShortcut(QKeySequence.StandardKey.Open)
         action.triggered.connect(self.OpenProjectRequested)
 
+        self.OpenSceneAction = action = self.FileMenu.addAction("")
+        action.triggered.connect(self.OpenSceneRequested)
+
         self.FileMenu.addSeparator()
         self.SaveProjectAction = action = self.FileMenu.addAction("")
         action.setShortcut(QKeySequence.StandardKey.Save)
@@ -131,6 +137,11 @@ class EditorMenuBar(QMenuBar):
         self.SaveProjectAsAction = action = self.FileMenu.addAction("")
         action.setShortcut(QKeySequence.StandardKey.SaveAs)
         action.triggered.connect(self.SaveProjectAsRequested)
+
+        self.SaveSceneAction = action = self.FileMenu.addAction("")
+        action.triggered.connect(self.SaveSceneRequested)
+        self.SaveSceneAsAction = action = self.FileMenu.addAction("")
+        action.triggered.connect(self.SaveSceneAsRequested)
 
         self.FileMenu.addSeparator()
         self.ExitAction = action = self.FileMenu.addAction("")
@@ -208,8 +219,11 @@ class EditorMenuBar(QMenuBar):
         self.HelpMenu.setTitle(tr("menu.help"))
         self.NewProjectAction.setText(tr("action.new_project"))
         self.OpenProjectAction.setText(tr("action.open_project"))
+        self.OpenSceneAction.setText(tr("action.open_scene"))
         self.SaveProjectAction.setText(tr("action.save_project"))
         self.SaveProjectAsAction.setText(tr("action.save_project_as"))
+        self.SaveSceneAction.setText(tr("action.save_scene"))
+        self.SaveSceneAsAction.setText(tr("action.save_scene_as"))
         self.ExitAction.setText(tr("action.exit"))
         self.UndoAction.setText(tr("action.undo"))
         self.RedoAction.setText(tr("action.redo"))

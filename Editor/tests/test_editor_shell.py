@@ -133,6 +133,19 @@ class EditorShellTests(unittest.TestCase):
         self.assertIs(self.Window.menuBar(), self.Window.MenuBar)
         self.assertFalse(self.Window.MenuBar.isNativeMenuBar())
 
+    def test_native_runtime_populates_hierarchy_and_inspector(self) -> None:
+        if not self.Window.Runtime.IsAvailable():
+            self.skipTest("native editor bridge is not built")
+        entity_id = self.Window.Runtime.CreateEntity("Bridge Entity")
+        self.assertEqual(self.Window.Hierarchy.Tree.topLevelItemCount(), 1)
+        self.Window.Controller.SelectEntity(entity_id)
+        self.assertIn("transform", self.Window.Properties._sections)
+        details = self.Window.Runtime.EntityDetails(entity_id)
+        self.assertEqual(details["name"], "Bridge Entity")
+        self.assertTrue(self.Window.Runtime.SetTransform(
+            entity_id, (3.0, 2.0, 1.0), (0.0, 0.0, 0.0, 1.0), (1.0, 1.0, 1.0)))
+        self.assertEqual(self.Window.Runtime.EntityDetails(entity_id)["position"], (3.0, 2.0, 1.0))
+
     def test_editor_toolbar_transport_and_modes(self) -> None:
         toolbar = self.Window.Toolbar
         self.assertFalse(toolbar.isMovable())

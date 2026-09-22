@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QApplication, QMainWindow
 
 from ..localization import LocalizationManager
 from ..resources import ResourceManager
+from ..runtime import RuntimeService
 from ..theme import ThemeManager
 from .docking import DockingSystem
 from .panels import (
@@ -17,6 +18,7 @@ from .panels import (
     ViewportPlaceholder,
 )
 from .widgets import EditorMenuBar, EditorToolbar
+from .controller import EditorController
 
 
 class Editor(QMainWindow):
@@ -25,6 +27,7 @@ class Editor(QMainWindow):
         theme_manager: ThemeManager | None = None,
         resources: ResourceManager | None = None,
         localization: LocalizationManager | None = None,
+        runtime: RuntimeService | None = None,
     ) -> None:
         super().__init__()
         self.setObjectName("BazzaltEditor")
@@ -36,6 +39,7 @@ class Editor(QMainWindow):
         self.ThemeManager = theme_manager or ThemeManager(application)
         self.Resources = resources or ResourceManager()
         self.Localization = localization or LocalizationManager(self.Resources)
+        self.Runtime = runtime or RuntimeService(self)
         self.setWindowTitle(self.Localization.Translate("app.title"))
         self.Localization.LocaleChanged.connect(
             lambda _: self.setWindowTitle(self.Localization.Translate("app.title"))
@@ -54,10 +58,10 @@ class Editor(QMainWindow):
 
         self.Console = ConsolePanel(self.Localization)
         self.Output = ViewportPlaceholder(
-            self.Localization, "viewport.output_placeholder"
+            self.Localization, "viewport.game_connected"
         )
         self.Scene = ViewportPlaceholder(
-            self.Localization, "viewport.scene_placeholder"
+            self.Localization, "viewport.scene_connected"
         )
         self.Hierarchy = HierarchyPanel(self.Localization)
         self.Properties = PropertiesPanel(self.Localization)
@@ -83,6 +87,7 @@ class Editor(QMainWindow):
         self.setMenuBar(self.MenuBar)
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.Toolbar)
         self.setCentralWidget(self.Docking)
+        self.Controller = EditorController(self, self.Runtime)
 
         # Lower-case aliases preserve the original prototype's attributes.
         self.docking = self.Docking
@@ -148,6 +153,10 @@ class Editor(QMainWindow):
 
     def _ResetWorkspace(self) -> None:
         self.Docking.restore_layout(self._default_layout)
+
+    def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        self.Controller.Stop()
+        super().closeEvent(event)
 
 
 __all__ = ["Editor"]

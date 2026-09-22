@@ -86,7 +86,12 @@ bool Scene::SetParent(Entity child, Entity parent) {
     const UUID childUuid = child.GetUUID();
     const UUID parentUuid = parent.GetUUID();
     auto& childHierarchy = child.GetComponent<Hierarchy>();
-    if (childHierarchy.Parent == parentUuid) return true;
+    if (childHierarchy.Parent == parentUuid) {
+        auto& existingChildren = parent.GetComponent<Hierarchy>().Children;
+        if (std::find(existingChildren.begin(), existingChildren.end(), childUuid) ==
+            existingChildren.end()) existingChildren.push_back(childUuid);
+        return true;
+    }
 
     DetachFromParent(child);
     childHierarchy.Parent = parentUuid;
