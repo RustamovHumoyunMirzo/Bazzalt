@@ -110,6 +110,38 @@ class RuntimeService(QObject):
     def AssetDirectory(self) -> str:
         return self._host.asset_directory() if self._host is not None else ""
 
+    def SceneInfo(self) -> dict:
+        if self._host is not None and hasattr(self._host, "scene_info"):
+            return dict(self._host.scene_info())
+        return {"uuid": "0", "name": "Untitled"}
+
+    def ComponentTypes(self) -> list[str]:
+        return list(self._host.component_types()) if self._host is not None and hasattr(self._host, "component_types") else []
+
+    def AddComponent(self, entity_id: str, component_type: str) -> bool:
+        result = bool(self._host and hasattr(self._host, "add_component") and self._host.add_component(entity_id, component_type))
+        if result: self.SceneChanged.emit()
+        return result
+
+    def SetParent(self, entity_id: str, parent_id: str = "") -> bool:
+        result = bool(self._host and self._host.set_parent(entity_id, parent_id))
+        if result: self.SceneChanged.emit()
+        return result
+
+    def CreateViewport(self, viewport_id: int, handle: int, scene: bool,
+                       width: int, height: int) -> bool:
+        return bool(self._host and hasattr(self._host, "create_viewport") and self._host.create_viewport(
+            viewport_id, handle, scene, width, height))
+
+    def ResizeViewport(self, viewport_id: int, width: int, height: int) -> None:
+        if self._host is not None and hasattr(self._host, "resize_viewport"): self._host.resize_viewport(viewport_id, width, height)
+
+    def DestroyViewport(self, viewport_id: int) -> None:
+        if self._host is not None and hasattr(self._host, "destroy_viewport"): self._host.destroy_viewport(viewport_id)
+
+    def SetSceneCamera(self, viewport_id: int, eye, target) -> None:
+        if self._host is not None and hasattr(self._host, "set_scene_camera"): self._host.set_scene_camera(viewport_id, eye, target)
+
     def Play(self) -> bool:
         return bool(self._host and self._host.play())
 

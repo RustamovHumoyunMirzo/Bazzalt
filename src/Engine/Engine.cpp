@@ -72,6 +72,39 @@ void Engine::Update()
 
     m_frameCount++;
     m_scene->Update(m_deltaTime);
+    m_renderBackend->Render();
+}
+
+void Engine::RenderEditorFrame()
+{
+    if (!m_isInitialized) return;
+    ProcessPendingSceneLoad();
+    m_scene->UpdateSystem<CameraSystem>();
+    m_scene->UpdateSystem<LightSystem>();
+    m_scene->UpdateSystem<MeshSystem>();
+    m_renderBackend->Render();
+}
+
+bool Engine::CreateEditorViewport(std::uint64_t id, std::uintptr_t nativeWindow, bool scene,
+                                  std::uint32_t width, std::uint32_t height) {
+    if (!m_isInitialized && !Init()) return false;
+    return m_renderBackend->CreateViewport(id, nativeWindow,
+        scene ? RenderBackend::ViewportKind::Scene : RenderBackend::ViewportKind::Game,
+        width, height);
+}
+
+void Engine::ResizeEditorViewport(std::uint64_t id, std::uint32_t width, std::uint32_t height) {
+    if (m_isInitialized) m_renderBackend->ResizeViewport(id, width, height);
+}
+
+void Engine::DestroyEditorViewport(std::uint64_t id) {
+    if (m_isInitialized) m_renderBackend->DestroyViewport(id);
+}
+
+void Engine::SetEditorCamera(std::uint64_t id, float eyeX, float eyeY, float eyeZ,
+                             float targetX, float targetY, float targetZ) {
+    if (m_isInitialized) m_renderBackend->SetSceneCamera(id, eyeX, eyeY, eyeZ,
+                                                         targetX, targetY, targetZ);
 }
 
 void Engine::Shutdown()
@@ -234,12 +267,37 @@ bool Engine::LoadProject(const std::filesystem::path& path, bool loadStartupScen
         m_lastError = m_assetDatabase->GetLastError();
         return false;
     }
-    if (loadStartupScene && !project.StartupScene.empty())
-    {
-        if (!LoadScene(path.parent_path() / project.StartupScene)) return false;
-    }
     m_project = std::move(project);
     m_projectPath = path;
+    if (loadStartupScene && !m_project.StartupScene.empty())
+    {
+        if (!LoadScene(path.parent_path() / m_project.StartupScene)) return false;
+    }
+    else if (loadStartupScene && m_project.StartupScene.empty())
+    {
+        CreateScene();
+        Entity camera = m_scene->CreateEntity("Main Camera");
+        camera.AddComponent<Camera>();
+        auto& cameraTransform = camera.GetComponent<Transform>();
+        cameraTransform.Position = {0.0f, 2.0f, 6.0f};
+        cameraTransform.Rotation = Quaternion::FromEuler({ToRadians(-12.0f), 0.0f, 0.0f});
+
+        Entity sun = m_scene->CreateEntity("Sun");
+        auto& light = sun.AddComponent<Light>();
+        light.Type = LightType::Sun;
+        light.Intensity = 100000.0f;
+        sun.GetComponent<Transform>().Rotation = Quaternion::FromEuler(
+            {ToRadians(-45.0f), ToRadians(-30.0f), 0.0f});
+
+        m_project.StartupScene = m_project.AssetDirectory / "Scenes" / "Starter.bscene";
+        const auto starterPath = path.parent_path() / m_project.StartupScene;
+        std::error_code directoryError;
+        std::filesystem::create_directories(starterPath.parent_path(), directoryError);
+        if (directoryError || !SaveScene(starterPath) || !SaveProject(path)) {
+            if (m_lastError.empty()) m_lastError = "Could not create the starter scene";
+            return false;
+        }
+    }
     return true;
 }
 

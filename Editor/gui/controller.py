@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QTimer
-from PySide6.QtWidgets import QFileDialog
+from PySide6.QtWidgets import QFileDialog, QMenu
 
 from ..runtime import RuntimeService
 from .panels import ConsoleLevel
@@ -33,17 +33,22 @@ class EditorController(QObject):
         window.Toolbar.StepRequested.connect(runtime.Step)
         window.Hierarchy.SelectionChanged.connect(self.SelectEntity)
         window.Hierarchy.CreateRequested.connect(self.CreateEntity)
+        window.Hierarchy.CreateTypedRequested.connect(self.CreateTypedEntity)
+        window.Hierarchy.ReparentRequested.connect(runtime.SetParent)
         window.Hierarchy.DeleteRequested.connect(self.DeleteEntity)
+        window.Properties.AddComponentRequested.connect(self.ShowAddComponentMenu)
         runtime.SceneChanged.connect(self.RefreshHierarchy)
         runtime.ProjectChanged.connect(self._ProjectLoaded)
         runtime.ErrorOccurred.connect(lambda text: window.Console.AddMessage(text, ConsoleLevel.Error))
         if not runtime.IsAvailable():
             window.Console.AddMessage(runtime.LastError(), ConsoleLevel.Warning)
+        else:
+            QTimer.singleShot(100, self.Timer.start)
 
     def OpenSceneDialog(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self.Window, self.Window.Localization.Translate("dialog.open_scene"),
-            self.Runtime.AssetDirectory(), self.Window.Localization.Translate("dialog.scene_filter"))
+        dialog=QFileDialog(self.Window,self.Window.Localization.Translate("dialog.open_scene"),self.Runtime.AssetDirectory(),self.Window.Localization.Translate("dialog.scene_filter"))
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog);dialog.setFileMode(QFileDialog.FileMode.ExistingFile);dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptOpen)
+        path=dialog.selectedFiles()[0] if dialog.exec() and dialog.selectedFiles() else ""
         if path and self.Runtime.LoadScene(path): self.ScenePath = path
 
     def SaveScene(self) -> None:
@@ -51,9 +56,9 @@ class EditorController(QObject):
         else: self.SaveSceneAsDialog()
 
     def SaveSceneAsDialog(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(
-            self.Window, self.Window.Localization.Translate("dialog.save_scene"),
-            self.Runtime.AssetDirectory(), self.Window.Localization.Translate("dialog.scene_filter"))
+        dialog=QFileDialog(self.Window,self.Window.Localization.Translate("dialog.save_scene"),self.Runtime.AssetDirectory(),self.Window.Localization.Translate("dialog.scene_filter"))
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog);dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
+        path=dialog.selectedFiles()[0] if dialog.exec() and dialog.selectedFiles() else ""
         if path and self.Runtime.SaveScene(path): self.ScenePath = path
 
     def _ProjectLoaded(self, path: str) -> None:
@@ -68,10 +73,17 @@ class EditorController(QObject):
         self.Window.Hierarchy.Clear()
         items = {}
         entities = self.Runtime.Entities()
+        scene_info = self.Runtime.SceneInfo()
+        theme = "light" if self.Window.ThemeManager.GetTheme().background == "#d4d4d4" else "dark"
+        scene_root = self.Window.Hierarchy.AddItem(
+            str(scene_info.get("name", "Untitled")), str(scene_info.get("uuid", "")),
+            icon=self.Window.Resources.Icon(f"icons/{theme}/scene.svg"), kind="scene")
+        scene_root.setExpanded(True)
         for entity in entities:
-            parent = items.get(entity["parent"])
+            parent = items.get(entity["parent"], scene_root)
             items[entity["uuid"]] = self.Window.Hierarchy.AddItem(
-                entity["name"], entity["uuid"], parent
+                entity["name"], entity["uuid"], parent,
+                self.Window.Resources.Icon(f"icons/{theme}/obj.svg"), "entity"
             )
         if selected in items:
             self.Window.Hierarchy.Tree.setCurrentItem(items[selected])
@@ -109,15 +121,33 @@ class EditorController(QObject):
     def CreateEntity(self, parent) -> None:  # type: ignore[no-untyped-def]
         self.Runtime.CreateEntity(self.Window.Localization.Translate("entity.new"), str(parent or ""))
 
+    def CreateTypedEntity(self, component_type: str, parent) -> None:  # type: ignore[no-untyped-def]
+        entity_id = self.Runtime.CreateEntity(component_type if component_type != "Entity" else self.Window.Localization.Translate("entity.new"), str(parent or ""))
+        if entity_id and component_type != "Entity": self.Runtime.AddComponent(entity_id, component_type)
+
+    def ShowAddComponentMenu(self) -> None:
+        if not self.SelectedEntity: return
+        menu = QMenu(self.Window.Properties)
+        existing = set(self.Runtime.EntityDetails(self.SelectedEntity).get("components", ()))
+        for component_type in self.Runtime.ComponentTypes():
+            action = menu.addAction(component_type); action.setEnabled(component_type not in existing)
+            action.triggered.connect(lambda _=False, name=component_type: self._AddComponent(name))
+        button = self.Window.Properties.AddComponentButton
+        menu.exec(button.mapToGlobal(button.rect().topLeft()))
+
+    def _AddComponent(self, component_type: str) -> None:
+        if self.SelectedEntity and self.Runtime.AddComponent(self.SelectedEntity, component_type):
+            self.SelectEntity(self.SelectedEntity)
+
     def DeleteEntity(self, entity_id) -> None:  # type: ignore[no-untyped-def]
         if entity_id: self.Runtime.DestroyEntity(str(entity_id))
 
     def Play(self) -> None:
-        if self.Runtime.Play(): self.Timer.start()
+        if self.Runtime.Play(): pass
         else: self.Window.Toolbar.SetPlayState(PlayState.Stopped)
 
     def Stop(self) -> None:
-        self.Timer.stop(); self.Runtime.Stop()
+        self.Runtime.Stop()
 
     def ApplyGizmoTranslation(self, delta) -> bool:  # type: ignore[no-untyped-def]
         return bool(self.SelectedEntity and self.Runtime.Translate(

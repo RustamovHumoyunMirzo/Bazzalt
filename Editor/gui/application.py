@@ -15,7 +15,7 @@ from .panels import (
     ConsolePanel,
     HierarchyPanel,
     PropertiesPanel,
-    ViewportPlaceholder,
+    ViewportPanel,
 )
 from .widgets import EditorMenuBar, EditorToolbar
 from .controller import EditorController
@@ -57,12 +57,8 @@ class Editor(QMainWindow):
         self.ThemeManager.ThemeChanged.connect(self.Docking.set_theme)
 
         self.Console = ConsolePanel(self.Localization)
-        self.Output = ViewportPlaceholder(
-            self.Localization, "viewport.game_connected"
-        )
-        self.Scene = ViewportPlaceholder(
-            self.Localization, "viewport.scene_connected"
-        )
+        self.Output = ViewportPanel(self.Runtime, False, self.Localization)
+        self.Scene = ViewportPanel(self.Runtime, True, self.Localization)
         self.Hierarchy = HierarchyPanel(self.Localization)
         self.Properties = PropertiesPanel(self.Localization)
         self.AssetBrowser = AssetBrowserPanel(self.Localization)
@@ -155,6 +151,7 @@ class Editor(QMainWindow):
         self.Docking.restore_layout(self._default_layout)
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        self.Scene.Detach(); self.Output.Detach()
         self.Controller.Stop()
         super().closeEvent(event)
 

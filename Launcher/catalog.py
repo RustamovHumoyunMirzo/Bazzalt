@@ -46,7 +46,9 @@ class HubCatalog:
         if versions.is_dir():
             for root in versions.glob("bazzalt_*_*_*"):
                 try:
-                    value = json.loads((root / "editor.json").read_text(encoding="utf-8"))
+                    # Windows PowerShell 5 writes UTF-8 text with a BOM. Accept both
+                    # forms so editor discovery also survives manifests from older installers.
+                    value = json.loads((root / "editor.json").read_text(encoding="utf-8-sig"))
                     version = str(value["version"]); Version.Parse(version)
                     executable = str(value.get("executable", "Bazzalt.exe" if os.name == "nt" else "Bazzalt"))
                     if not (root / executable).is_file(): continue

@@ -162,6 +162,14 @@ private:
     friend class SceneSerializer;
     friend class Runtime::Engine;
 
+    template<typename SystemType>
+    bool UpdateSystem(float deltaTime = 0.0f) {
+        auto found = m_systemLookup.find(typeid(SystemType));
+        if (found == m_systemLookup.end() || !found->second->IsEnabled()) return false;
+        found->second->OnUpdate(*this, deltaTime);
+        return true;
+    }
+
     void Update(float deltaTime);
     Entity CreateRootEntity();
     void DestroySystems();

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QWidget
 
 CHECK_ICON_PATH = ":/docking/check.svg"
+ASSET_ROOT = Path(__file__).resolve().parent / "assets" / "icons"
 
 
 @dataclass(slots=True)
@@ -43,6 +45,8 @@ class Theme:
     spacing: int = 6
     splitter_width: int = 3
     minimum_panel_size: int = 120
+    control_height: int = 24
+    row_height: int = 24
 
     @classmethod
     def dark(cls) -> "Theme":
@@ -102,17 +106,32 @@ def BuildPalette(theme: Theme) -> QPalette:
 def BuildStyleSheet(theme: Theme) -> str:
     """Return the single style sheet used by the application and floating UI."""
     t = theme
+    icon_theme = "light" if t.background.lower() == "#d4d4d4" else "dark"
+    branch_closed = (ASSET_ROOT / icon_theme / "tree_closed.svg").as_posix()
+    branch_open = (ASSET_ROOT / icon_theme / "tree_open.svg").as_posix()
     return f"""
-    QWidget {{ color: {t.text}; selection-background-color: {t.selection}; }}
+    QWidget {{ color: {t.text}; selection-background-color: {t.selection}; font-size: 12px; }}
     QWidget:disabled {{ color: {t.text_disabled}; }}
     QMainWindow, #DockingSystem, _FloatingWindow {{ background: {t.background}; color: {t.text}; }}
     #DockPanel, #DockGroup {{ background: {t.surface}; border: 0; }}
-    #DockPanel QAbstractItemView, #DockPanel QLineEdit, #DockPanel QTextEdit,
-    #DockPanel QPlainTextEdit {{ background: {t.surface}; color: {t.text};
-                               border: 1px solid {t.border}; selection-background-color: {t.accent}; }}
+    QScrollArea, QAbstractScrollArea {{ background: {t.surface}; border: 0; }}
+    QAbstractItemView {{ background: {t.surface}; color: {t.text}; border: 0;
+        outline: 0; alternate-background-color: {t.surface_alt}; selection-background-color: {t.selection}; }}
+    QAbstractItemView::item {{ min-height: {t.row_height}px; padding: 1px 5px; border: 0; }}
+    QAbstractItemView::item:hover {{ background: {t.surface_hover}; }}
+    QAbstractItemView::item:selected {{ background: {t.selection}; color: {t.text}; }}
+    QTreeView::branch {{ background: transparent; width: 14px; }}
+    QTreeView::branch:has-children:closed {{ image: url({branch_closed}); }}
+    QTreeView::branch:has-children:open {{ image: url({branch_open}); }}
+    QTextEdit, QPlainTextEdit {{ background: {t.input_background}; color: {t.text};
+                                border: 1px solid {t.border}; border-radius: {t.radius}px; }}
     QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{ background: {t.input_background};
-        color: {t.text}; padding: {t.spacing}px; border: 1px solid {t.border};
-        border-radius: {t.radius}px; }}
+        color: {t.text}; min-height: {t.control_height}px; padding: 0 6px;
+        border: 1px solid {t.border}; border-radius: {t.radius}px; }}
+    QComboBox {{ padding-right: 22px; }}
+    QComboBox::drop-down {{ subcontrol-origin: padding; subcontrol-position: top right;
+        width: 20px; border: 0; border-left: 1px solid {t.border}; }}
+    QComboBox QAbstractItemView {{ border: 1px solid {t.border}; padding: 3px; }}
     QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{
         border-color: {t.border_focus}; }}
     QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled,
@@ -121,20 +140,29 @@ def BuildStyleSheet(theme: Theme) -> str:
     QWidget[fieldState="warning"] {{ border-color: {t.warning}; }}
     QWidget[fieldState="error"] {{ border-color: {t.error}; }}
     QLabel {{ color: {t.text}; }}
+    QCheckBox {{ spacing: 7px; min-height: {t.control_height}px; }}
+    QCheckBox::indicator {{ width: 14px; height: 14px; background: {t.input_background};
+        border: 1px solid {t.border}; border-radius: 3px; }}
+    QCheckBox::indicator:hover {{ border-color: {t.border_focus}; }}
+    QCheckBox::indicator:checked {{ background: {t.accent}; image: url({CHECK_ICON_PATH}); }}
     #ViewportPlaceholderLabel {{ color: {t.text_muted}; }}
-    #ComponentSection {{ background: {t.surface_alt}; border: 1px solid {t.border};
-                         border-radius: {t.radius}px; }}
-    #ComponentSection QToolButton {{ background: transparent; border: 0;
-                                     padding: {t.spacing}px; text-align: left; }}
+    #ComponentSection {{ background: {t.surface}; border: 1px solid {t.border}; border-radius: 2px; }}
+    #ComponentHeader {{ background: {t.surface}; border: 0; border-bottom: 1px solid {t.border};
+                        border-radius: 0; min-height: 21px; max-height: 21px;
+                        padding: 0 5px; text-align: left; font-size: 11px; font-weight: 600; }}
+    #ComponentHeader:hover {{ background: {t.surface_hover}; }}
+    #PropertiesPanel #InspectorFieldLabel {{ color: {t.text_muted}; font-size: 11px; }}
+    #PropertiesPanel QLineEdit, #PropertiesPanel QSpinBox, #PropertiesPanel QDoubleSpinBox,
+    #PropertiesPanel QComboBox, #PropertiesPanel QPushButton {{ min-height: 20px; max-height: 20px;
+        padding-top: 0; padding-bottom: 0; font-size: 11px; border-radius: 2px; }}
+    #PropertiesPanel #VectorAxisLabel {{ color: {t.text_muted}; font-size: 10px; font-weight: 400; }}
     QPushButton {{ background: {t.surface_alt}; color: {t.text};
                    border: 1px solid {t.border}; border-radius: {t.radius}px;
-                   padding: {t.spacing}px {t.spacing * 2}px; }}
+                   min-height: {t.control_height}px; padding: 0 {t.spacing * 2}px; }}
+    QPushButton:focus, QToolButton:focus {{ border: 1px solid {t.border_focus}; }}
+    QPushButton:disabled {{ background: {t.surface_alt}; color: {t.text_disabled}; }}
     QPushButton:hover, QToolButton:hover {{ background: {t.surface_hover}; }}
     QPushButton:pressed, QToolButton:pressed {{ background: {t.surface_pressed}; }}
-    #VectorAxisX {{ color: {t.axis_x}; font-weight: 600; }}
-    #VectorAxisY {{ color: {t.axis_y}; font-weight: 600; }}
-    #VectorAxisZ {{ color: {t.axis_z}; font-weight: 600; }}
-    #VectorAxisW {{ color: {t.axis_w}; font-weight: 600; }}
     #DockEmpty {{ background: {t.background}; border: 1px dashed {t.border}; }}
     #DockEmptyLabel {{ color: {t.text_muted}; font-size: 13px; }}
     QTabWidget::pane {{ border: 1px solid {t.border}; background: {t.surface}; top: -1px; }}
@@ -147,6 +175,14 @@ def BuildStyleSheet(theme: Theme) -> str:
     QTabBar::tab:hover:!selected {{ background: {t.surface_alt}; color: {t.text}; }}
     QSplitter::handle {{ background: {t.background}; }}
     QSplitter::handle:hover {{ background: {t.accent}; }}
+    QSlider::groove:horizontal {{ height: 3px; background: {t.border}; border-radius: 1px; }}
+    QSlider::sub-page:horizontal {{ background: {t.accent}; border-radius: 1px; }}
+    QSlider::handle:horizontal {{ width: 12px; margin: -5px 0; background: {t.text_muted};
+                                 border: 1px solid {t.background}; border-radius: 6px; }}
+    QSlider::handle:horizontal:hover {{ background: {t.text}; }}
+    QProgressBar {{ min-height: 5px; max-height: 5px; background: {t.input_background};
+                    border: 0; border-radius: 2px; text-align: center; color: transparent; }}
+    QProgressBar::chunk {{ background: {t.accent}; border-radius: 2px; }}
     QMenuBar#EditorMenuBar {{ background: {t.surface_alt}; color: {t.text};
                               border-bottom: 1px solid {t.border}; padding: 4px {t.spacing}px; }}
     QMenuBar#EditorMenuBar::item {{ background: transparent; padding: 3px 10px;
@@ -176,7 +212,14 @@ def BuildStyleSheet(theme: Theme) -> str:
     QMenu::right-arrow {{ subcontrol-position: right center; right: {t.spacing * 2}px; }}
     QMenu::separator {{ height: 1px; background: {t.border}; margin: 3px {t.spacing}px; }}
     QToolTip {{ background: {t.surface}; color: {t.text}; border: 1px solid {t.border}; }}
-    QScrollBar {{ background: {t.background}; }}
+    QScrollBar:vertical {{ background: {t.surface}; width: 10px; margin: 0; }}
+    QScrollBar:horizontal {{ background: {t.surface}; height: 10px; margin: 0; }}
+    QScrollBar::handle {{ background: {t.text_disabled}; border-radius: 4px; min-height: 24px; min-width: 24px; margin: 2px; }}
+    QScrollBar::handle:hover {{ background: {t.text_muted}; }}
+    QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; }}
+    QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
+    #PickerButton, #PickerClearButton {{ min-width: {t.control_height}px; max-width: {t.control_height}px; padding: 0; }}
+    #AddComponentButton {{ margin-top: 2px; }}
     """
 
 

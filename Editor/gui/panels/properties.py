@@ -5,7 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QFormLayout, QFrame, QMenu, QPushButton, QScrollArea, QToolButton, QVBoxLayout,
+    QFrame, QGridLayout, QLabel, QMenu, QPushButton, QScrollArea, QSizePolicy, QToolButton, QVBoxLayout,
     QWidget,
 )
 
@@ -15,10 +15,12 @@ from ...localization import LocalizationManager
 class ComponentSection(QFrame):
     def __init__(self, title: str, expanded: bool = True) -> None:
         super().__init__(); self.setObjectName("ComponentSection")
-        layout=QVBoxLayout(self);layout.setContentsMargins(4,4,4,4);layout.setSpacing(3)
+        layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0);layout.setSpacing(0)
         self.Toggle=QToolButton();self.Toggle.setText(title);self.Toggle.setCheckable(True);self.Toggle.setChecked(expanded)
         self.Toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.Body=QWidget();self.Form=QFormLayout(self.Body);self.Form.setContentsMargins(16,2,4,5)
+        self.Toggle.setObjectName("ComponentHeader")
+        self.Body=QWidget();self.Form=QGridLayout(self.Body);self.Form.setContentsMargins(6,2,6,5)
+        self.Form.setHorizontalSpacing(5);self.Form.setVerticalSpacing(2);self.Form.setColumnStretch(1,1)
         layout.addWidget(self.Toggle);layout.addWidget(self.Body)
         self.Toggle.toggled.connect(self.SetExpanded);self.SetExpanded(expanded)
 
@@ -26,7 +28,11 @@ class ComponentSection(QFrame):
         self.Toggle.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
         self.Body.setVisible(expanded)
 
-    def AddField(self, label: str, editor: QWidget) -> None: self.Form.addRow(label, editor)
+    def AddField(self, label: str, editor: QWidget) -> None:
+        row=self.Form.rowCount();caption=QLabel(label);caption.setObjectName("InspectorFieldLabel")
+        caption.setFixedWidth(72);caption.setAlignment(Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter)
+        editor.setMinimumWidth(0);editor.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Fixed)
+        self.Form.addWidget(caption,row,0);self.Form.addWidget(editor,row,1)
 
 
 class PropertiesPanel(QWidget):
@@ -34,9 +40,9 @@ class PropertiesPanel(QWidget):
     ContextMenuRequested = Signal(object, object)
 
     def __init__(self, localization: LocalizationManager) -> None:
-        super().__init__();self._localization=localization;self._sections:dict[str,ComponentSection]={}
-        layout=QVBoxLayout(self);layout.setContentsMargins(4,4,4,4);layout.setSpacing(4)
-        self.Scroll=QScrollArea();self.Scroll.setWidgetResizable(True);self.Scroll.setFrameShape(QFrame.Shape.NoFrame)
+        super().__init__();self.setObjectName("PropertiesPanel");self._localization=localization;self._sections:dict[str,ComponentSection]={}
+        layout=QVBoxLayout(self);layout.setContentsMargins(3,3,3,3);layout.setSpacing(3)
+        self.Scroll=QScrollArea();self.Scroll.setWidgetResizable(True);self.Scroll.setFrameShape(QFrame.Shape.NoFrame);self.Scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.Container=QWidget();self.ComponentsLayout=QVBoxLayout(self.Container);self.ComponentsLayout.setContentsMargins(0,0,0,0);self.ComponentsLayout.addStretch()
         self.Container.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.Container.customContextMenuRequested.connect(self._ShowContextMenu)

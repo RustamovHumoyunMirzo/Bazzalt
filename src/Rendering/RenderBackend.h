@@ -13,6 +13,9 @@ class Engine;
 class Renderer;
 class Scene;
 class View;
+class Texture;
+class Skybox;
+class IndirectLight;
 }
 
 namespace Bazzalt::Runtime {
@@ -22,13 +25,21 @@ class RenderAssets;
 // Owns Filament's low-level objects. No Filament type crosses the public API.
 class RenderBackend final {
 public:
-    RenderBackend() = default;
+    enum class ViewportKind { Scene, Game };
+    RenderBackend();
     ~RenderBackend();
     RenderBackend(const RenderBackend&) = delete;
     RenderBackend& operator=(const RenderBackend&) = delete;
 
     bool Initialize();
     void Shutdown();
+    bool CreateViewport(std::uint64_t id, std::uintptr_t nativeWindow,
+                        ViewportKind kind, std::uint32_t width, std::uint32_t height);
+    void ResizeViewport(std::uint64_t id, std::uint32_t width, std::uint32_t height);
+    void DestroyViewport(std::uint64_t id);
+    void SetSceneCamera(std::uint64_t id, float eyeX, float eyeY, float eyeZ,
+                        float targetX, float targetY, float targetZ);
+    void Render();
     [[nodiscard]] bool IsInitialized() const { return m_engine != nullptr; }
 
     [[nodiscard]] filament::Engine& GetEngine() const { return *m_engine; }
@@ -55,6 +66,7 @@ public:
     }
 
 private:
+    struct ViewportResource;
     filament::Engine* m_engine = nullptr;
     filament::Renderer* m_renderer = nullptr;
     filament::Scene* m_scene = nullptr;
@@ -63,6 +75,11 @@ private:
     std::uint32_t m_presentationHeight = 720;
     std::unordered_map<filament::View*, std::vector<CustomPostProcessEffect>> m_postProcessEffects;
     std::unique_ptr<RenderAssets> m_assets;
+    std::unordered_map<std::uint64_t, std::unique_ptr<ViewportResource>> m_viewports;
+    filament::Texture* m_environmentIblTexture = nullptr;
+    filament::Texture* m_environmentSkyboxTexture = nullptr;
+    filament::Skybox* m_skybox = nullptr;
+    filament::IndirectLight* m_indirectLight = nullptr;
 };
 
 } // namespace Bazzalt::Runtime

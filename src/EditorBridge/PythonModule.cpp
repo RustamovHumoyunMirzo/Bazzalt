@@ -14,6 +14,9 @@
 #include "Bazzalt/Components/Mesh.h"
 #include "Bazzalt/Components/ModelInstance.h"
 #include "Bazzalt/Components/ModelNode.h"
+#include "Bazzalt/Components/GaussianBlur.h"
+#include "Bazzalt/Components/Vignette.h"
+#include "Bazzalt/Components/SceneQueryBounds.h"
 
 namespace py = pybind11;
 
@@ -54,6 +57,9 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
     if (entity.HasComponent<Mesh>()) components.append("Mesh");
     if (entity.HasComponent<ModelInstance>()) components.append("Model Instance");
     if (entity.HasComponent<ModelNode>()) components.append("Model Node");
+    if (entity.HasComponent<GaussianBlur>()) components.append("Gaussian Blur");
+    if (entity.HasComponent<Vignette>()) components.append("Vignette");
+    if (entity.HasComponent<SceneQueryBounds>()) components.append("Scene Query Bounds");
     result["components"] = components;
     return result;
 }
@@ -61,7 +67,7 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
 class EditorHost final {
 public:
     EditorHost() : m_engine(std::make_unique<Runtime::Engine>()) {}
-    ~EditorHost() { Stop(); CleanupSnapshot(); }
+    ~EditorHost() { Stop(); m_engine->Shutdown(); CleanupSnapshot(); }
 
     bool LoadProject(const std::string& path) {
         Stop();
@@ -132,6 +138,42 @@ public:
         return entity.GetUUID().ToString();
     }
 
+    bool AddComponent(const std::string& id, const std::string& type) {
+        Entity entity = RequireEntity(id);
+        if (type == "Camera") { if (!entity.HasComponent<Camera>()) entity.AddComponent<Camera>(); }
+        else if (type == "Light") { if (!entity.HasComponent<Light>()) entity.AddComponent<Light>(); }
+        else if (type == "Mesh") { if (!entity.HasComponent<Mesh>()) entity.AddComponent<Mesh>(); }
+        else if (type == "Gaussian Blur") { if (!entity.HasComponent<GaussianBlur>()) entity.AddComponent<GaussianBlur>(); }
+        else if (type == "Vignette") { if (!entity.HasComponent<Vignette>()) entity.AddComponent<Vignette>(); }
+        else if (type == "Scene Query Bounds") { if (!entity.HasComponent<SceneQueryBounds>()) entity.AddComponent<SceneQueryBounds>(); }
+        else return false;
+        return true;
+    }
+    py::list ComponentTypes() const {
+        py::list result;
+        for (const char* name : {"Camera", "Light", "Mesh", "Scene Query Bounds", "Gaussian Blur", "Vignette"})
+            result.append(name);
+        return result;
+    }
+    py::dict SceneInfo() const {
+        py::dict result;
+        result["uuid"] = m_engine->GetScene().GetUUID().ToString();
+        result["name"] = "Untitled";
+        return result;
+    }
+    bool CreateViewport(std::uint64_t id, std::uintptr_t handle, bool scene,
+                        std::uint32_t width, std::uint32_t height) {
+        return m_engine->CreateEditorViewport(id, handle, scene, width, height);
+    }
+    void ResizeViewport(std::uint64_t id, std::uint32_t width, std::uint32_t height) {
+        m_engine->ResizeEditorViewport(id, width, height);
+    }
+    void DestroyViewport(std::uint64_t id) { m_engine->DestroyEditorViewport(id); }
+    void SetSceneCamera(std::uint64_t id, const std::array<float, 3>& eye,
+                        const std::array<float, 3>& target) {
+        m_engine->SetEditorCamera(id, eye[0], eye[1], eye[2], target[0], target[1], target[2]);
+    }
+
     bool Play() {
         if (m_playing) return true;
         CleanupSnapshot();
@@ -143,10 +185,12 @@ public:
     }
     void Pause(bool paused) { if (m_playing) m_paused = paused; }
     void Step() { if (m_playing) m_engine->Update(); }
-    void Tick() { if (m_playing && !m_paused) m_engine->Update(); }
+    void Tick() {
+        if (m_playing && !m_paused) m_engine->Update();
+        else m_engine->RenderEditorFrame();
+    }
     void Stop() {
         if (!m_playing) return;
-        m_engine->Shutdown();
         m_playing = false; m_paused = false;
         if (!m_snapshot.empty()) m_engine->LoadScene(m_snapshot);
         CleanupSnapshot();
@@ -196,6 +240,13 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("translate", &Bazzalt::EditorBridge::EditorHost::Translate)
         .def("instantiate_model", &Bazzalt::EditorBridge::EditorHost::InstantiateModel,
              py::arg("asset"), py::arg("parent") = "")
+        .def("add_component", &Bazzalt::EditorBridge::EditorHost::AddComponent)
+        .def("component_types", &Bazzalt::EditorBridge::EditorHost::ComponentTypes)
+        .def("scene_info", &Bazzalt::EditorBridge::EditorHost::SceneInfo)
+        .def("create_viewport", &Bazzalt::EditorBridge::EditorHost::CreateViewport)
+        .def("resize_viewport", &Bazzalt::EditorBridge::EditorHost::ResizeViewport)
+        .def("destroy_viewport", &Bazzalt::EditorBridge::EditorHost::DestroyViewport)
+        .def("set_scene_camera", &Bazzalt::EditorBridge::EditorHost::SetSceneCamera)
         .def("play", &Bazzalt::EditorBridge::EditorHost::Play)
         .def("pause", &Bazzalt::EditorBridge::EditorHost::Pause)
         .def("step", &Bazzalt::EditorBridge::EditorHost::Step)

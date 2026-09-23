@@ -44,6 +44,8 @@
   "viewport.scene_placeholder": "Scene viewport",
   "console.clear": "Clear",
   "hierarchy.create": "Create",
+  "hierarchy.add_new": "Add New",
+  "hierarchy.empty": "Empty Entity",
   "hierarchy.delete": "Delete",
   "properties.add_component": "Add Component",
   "properties.expand_all": "Expand All",

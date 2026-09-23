@@ -91,7 +91,7 @@ class EditorSession(QObject):
 def main(arguments:list[str]|None=None)->int:
     parser=argparse.ArgumentParser(prog="BAZZALT Editor");parser.add_argument("--project",type=Path);parser.add_argument("--editor-version",default="1.0.0");parser.add_argument("--check-runtime",action="store_true",help=argparse.SUPPRESS);options=parser.parse_args(arguments)
     if options.project is None and not options.check_runtime: parser.error("the following arguments are required: --project")
-    app=QApplication(sys.argv if arguments is None else [sys.argv[0],*arguments]);app.setApplicationName("BAZZALT Editor");app.setOrganizationName("BAZZALT");app.setQuitOnLastWindowClosed(False)
+    app=QApplication(sys.argv if arguments is None else [sys.argv[0],*arguments]);app.setStyle("Fusion");app.setApplicationName("BAZZALT Editor");app.setOrganizationName("BAZZALT");app.setQuitOnLastWindowClosed(False)
     if options.check_runtime:
         runtime=RuntimeService();return 0 if runtime.IsAvailable() else 3
     try:version=Version.Parse(options.editor_version)

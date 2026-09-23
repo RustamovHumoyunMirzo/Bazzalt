@@ -30,6 +30,7 @@ public:
 
     bool Init();
     void Update();
+    void RenderEditorFrame();
     void Shutdown();
     [[nodiscard]] bool ShouldClose() const;
     void RequestClose();
@@ -50,6 +51,12 @@ public:
     [[nodiscard]] ProjectMetadata& GetProject() { return m_project; }
     [[nodiscard]] const ProjectMetadata& GetProject() const { return m_project; }
     [[nodiscard]] const std::string& GetLastError() const { return m_lastError; }
+    bool CreateEditorViewport(std::uint64_t id, std::uintptr_t nativeWindow, bool scene,
+                              std::uint32_t width, std::uint32_t height);
+    void ResizeEditorViewport(std::uint64_t id, std::uint32_t width, std::uint32_t height);
+    void DestroyEditorViewport(std::uint64_t id);
+    void SetEditorCamera(std::uint64_t id, float eyeX, float eyeY, float eyeZ,
+                         float targetX, float targetY, float targetZ);
 
 private:
     friend class Bazzalt::SceneManager;

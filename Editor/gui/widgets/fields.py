@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from enum import Enum
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QAction, QColor
+from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtGui import QAction, QColor, QPainter, QPaintEvent
 from PySide6.QtWidgets import (
-    QCheckBox,
+    QAbstractSpinBox, QCheckBox,
     QColorDialog,
     QComboBox,
     QDoubleSpinBox,
@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QPushButton,
     QSlider,
+    QSizePolicy,
     QSpinBox,
     QToolButton,
     QWidget,
@@ -84,6 +85,7 @@ class IntInput(FieldStateSupport, QSpinBox):
         self.setRange(minimum, maximum)
         self.setValue(value)
         self.setKeyboardTracking(False)
+        self.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
 
     def GetValue(self) -> int:
         return self.value()
@@ -101,6 +103,14 @@ class FloatInput(FieldStateSupport, QDoubleSpinBox):
         self.setDecimals(decimals)
         self.setValue(value)
         self.setKeyboardTracking(False)
+        self.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.setMinimumWidth(0)
+
+    def sizeHint(self) -> QSize:
+        return QSize(52, 22)
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(24, 22)
 
     def GetValue(self) -> float:
         return self.value()
@@ -121,18 +131,20 @@ class VectorInput(FieldWidget):
         values = tuple(value or (0.0,) * dimensions)
         if len(values) != dimensions:
             raise ValueError("value size must match dimensions")
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(3)
+        self._layout = QHBoxLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setSpacing(3)
         self.Inputs: list[FloatInput] = []
+        self.Labels: list[QLabel] = []
         for axis, component in zip(self.AxisNames, values):
             label = QLabel(axis)
-            label.setObjectName(f"VectorAxis{axis}")
+            label.setObjectName("VectorAxisLabel");label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setFixedWidth(10)
             field = FloatInput(value=float(component), decimals=decimals)
+            field.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Fixed)
             field.valueChanged.connect(lambda _value: self.ValueChanged.emit(self.GetValue()))
-            layout.addWidget(label)
-            layout.addWidget(field, 1)
-            self.Inputs.append(field)
+            self.Labels.append(label);self.Inputs.append(field)
+            self._layout.addWidget(label);self._layout.addWidget(field,1)
 
     def GetValue(self) -> tuple[float, ...]:
         return tuple(field.value() for field in self.Inputs)
@@ -285,9 +297,11 @@ class PickerInput(FieldWidget):
     Cleared = Signal()
     ValueChanged = Signal(object)
 
-    def __init__(self, placeholder: str = "", parent: QWidget | None = None) -> None:
+    def __init__(self, placeholder: str = "", parent: QWidget | None = None,
+                 accepted_mime: str | None = None, validator=None) -> None:
         super().__init__(parent)
-        self._value = None
+        self._value = None; self._accepted_mime = accepted_mime; self._validator = validator
+        self.setAcceptDrops(accepted_mime is not None)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(3)
@@ -320,13 +334,25 @@ class PickerInput(FieldWidget):
         self.SetValue(None, "")
         self.Cleared.emit()
 
+    def dragEnterEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if self._accepted_mime and event.mimeData().hasFormat(self._accepted_mime): event.acceptProposedAction()
+        else: event.ignore()
+
+    def dropEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        value = bytes(event.mimeData().data(self._accepted_mime)).decode() if self._accepted_mime else ""
+        if value and (self._validator is None or self._validator(value)):
+            self.SetValue(value); event.acceptProposedAction()
+        else: event.ignore()
+
 
 class ObjectPickerInput(PickerInput):
-    pass
+    def __init__(self, placeholder: str = "", parent=None, validator=None) -> None:
+        super().__init__(placeholder, parent, "application/x-bazzalt-entity", validator)
 
 
 class AssetPickerInput(PickerInput):
-    pass
+    def __init__(self, placeholder: str = "", parent=None, validator=None) -> None:
+        super().__init__(placeholder, parent, "application/x-bazzalt-asset", validator)
 
 
 class ColorInput(FieldStateSupport, QPushButton):
@@ -351,16 +377,17 @@ class ColorInput(FieldStateSupport, QPushButton):
         self.ValueChanged.emit(self.GetValue())
 
     def _Pick(self) -> None:
-        color = QColorDialog.getColor(self._color, self)
-        if color.isValid():
-            self.SetValue(color)
+        dialog=QColorDialog(self._color,self);dialog.setOption(QColorDialog.ColorDialogOption.DontUseNativeDialog)
+        if dialog.exec():self.SetValue(dialog.selectedColor())
 
     def _UpdateSwatch(self) -> None:
         self.setText(self._color.name(QColor.NameFormat.HexArgb))
-        self.setStyleSheet(
-            f"background-color: {self._color.name()}; "
-            f"color: {'#111111' if self._color.lightness() > 150 else '#ffffff'};"
-        )
+        self.update()
+
+    def paintEvent(self,event:QPaintEvent)->None:
+        super().paintEvent(event);painter=QPainter(self);swatch=self.rect().adjusted(5,5,-5,-5)
+        swatch.setWidth(min(18,swatch.width()));painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(self._color)
+        painter.drawRoundedRect(swatch,2,2);painter.end()
 
 
 __all__ = [

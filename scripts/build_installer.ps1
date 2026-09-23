@@ -6,8 +6,10 @@ param(
 )
 $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$Bundle = [System.IO.Path]::GetFullPath((Join-Path $Root $BundleDirectory))
-$Output = [System.IO.Path]::GetFullPath((Join-Path $Root $OutputDirectory))
+$BundleInput = if ([System.IO.Path]::IsPathRooted($BundleDirectory)) { $BundleDirectory } else { Join-Path $Root $BundleDirectory }
+$OutputInput = if ([System.IO.Path]::IsPathRooted($OutputDirectory)) { $OutputDirectory } else { Join-Path $Root $OutputDirectory }
+$Bundle = [System.IO.Path]::GetFullPath($BundleInput)
+$Output = [System.IO.Path]::GetFullPath($OutputInput)
 $VersionFolder = "bazzalt_" + $Version.Replace('.', '_')
 
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must use major.minor.patch" }
