@@ -26,6 +26,16 @@ UUID ParseUuid(const std::string& text) {
     return result;
 }
 
+py::str PathText(const std::filesystem::path& path) {
+#ifdef _WIN32
+    const std::wstring value = path.wstring();
+    return py::reinterpret_steal<py::str>(PyUnicode_FromWideChar(value.c_str(),
+        static_cast<Py_ssize_t>(value.size())));
+#else
+    return py::str(path.string());
+#endif
+}
+
 py::dict SnapshotEntity(Scene& scene, Entity entity) {
     py::dict result;
     result["uuid"] = entity.GetUUID().ToString();
@@ -63,10 +73,10 @@ public:
     bool SaveScene(const std::string& path) { return m_engine->SaveScene(std::filesystem::u8path(path)); }
     void NewScene() { Stop(); m_engine->CreateScene(); }
     std::string LastError() const { return m_engine->GetLastError(); }
-    std::string ProjectDirectory() const { return m_projectPath.empty() ? std::string{} : m_projectPath.parent_path().string(); }
-    std::string AssetDirectory() const {
-        if (m_projectPath.empty()) return {};
-        return (m_projectPath.parent_path() / m_engine->GetProject().AssetDirectory).string();
+    py::str ProjectDirectory() const { return m_projectPath.empty() ? py::str() : PathText(m_projectPath.parent_path()); }
+    py::str AssetDirectory() const {
+        if (m_projectPath.empty()) return py::str();
+        return PathText(m_projectPath.parent_path() / m_engine->GetProject().AssetDirectory);
     }
 
     py::list Entities() {

@@ -3,25 +3,51 @@
 from __future__ import annotations
 
 import importlib
+import importlib.util
+import os
 import sys
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
 
 
+_NATIVE_LOAD_ERROR = ""
+_DLL_DIRECTORIES: list[object] = []
+
+
+def _LoadExtension(path: Path):
+    if os.name == "nt" and hasattr(os, "add_dll_directory"):
+        for directory in (Path(sys.executable).resolve().parent, path.parent):
+            if directory.is_dir(): _DLL_DIRECTORIES.append(os.add_dll_directory(str(directory)))
+    spec = importlib.util.spec_from_file_location("_bazzalt_runtime", path)
+    if spec is None or spec.loader is None: raise ImportError(f"cannot create loader for {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def _LoadNativeModule():
+    global _NATIVE_LOAD_ERROR
+    errors: list[str] = []
     try:
         return importlib.import_module("Editor._bazzalt_runtime")
-    except ImportError:
-        root = Path(__file__).resolve().parent.parent
-        candidates = (root / "build" / "Editor", root / "build" / "Editor" / "Debug",
-                      root / "build" / "Editor" / "Release")
+    except ImportError as error:
+        errors.append(str(error))
+        source_root = Path(__file__).resolve().parent.parent
+        program_root = Path(sys.executable).resolve().parent
+        candidates = (program_root / "Editor", program_root, source_root / "Editor",
+                      source_root / "build" / "Editor", source_root / "build" / "Editor" / "Debug",
+                      source_root / "build" / "Editor" / "Release")
         for directory in candidates:
-            if directory.is_dir() and str(directory) not in sys.path:
-                sys.path.insert(0, str(directory))
+            for path in directory.glob("_bazzalt_runtime*.pyd" if os.name == "nt" else "_bazzalt_runtime*.so"):
+                try: return _LoadExtension(path)
+                except (ImportError, OSError) as native_error: errors.append(f"{path}: {native_error}")
         try:
             return importlib.import_module("_bazzalt_runtime")
-        except ImportError:
+        except ImportError as fallback_error:
+            errors.append(str(fallback_error))
+            _NATIVE_LOAD_ERROR = "; ".join(errors)
             return None
 
 
@@ -39,7 +65,8 @@ class RuntimeService(QObject):
         return self._host is not None
 
     def LastError(self) -> str:
-        return self._host.last_error() if self._host is not None else "Native editor runtime is not built"
+        if self._host is not None: return self._host.last_error()
+        return f"Native editor runtime could not be loaded: {_NATIVE_LOAD_ERROR or 'module not found'}"
 
     def LoadProject(self, path: str | Path) -> bool:
         if self._host is None or not self._host.load_project(str(path)):

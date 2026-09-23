@@ -1,7 +1,7 @@
 from __future__ import annotations
-import argparse, os, sys
+import argparse, os, sys, traceback
 from pathlib import Path
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QObject, QTimer, Qt, QThread, Signal, Slot
 from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QProgressBar, QVBoxLayout, QWidget
 
 if __package__ in {None, ""}:
@@ -17,7 +17,7 @@ else:
     from .resources import ResourceManager
     from .runtime import RuntimeService
     from .theme import Theme, ThemeManager
-from bazzalt.settings import ReadProjectMetadata, SettingsStore, Version
+from bazzalt.settings import DataPaths, ReadProjectMetadata, SettingsStore, Version
 
 EDITOR_PROJECT_FORMAT_MAX = 1
 
@@ -47,10 +47,13 @@ class ProjectScanner(QThread):
 class LoadingWindow(QWidget):
     Loaded=Signal(object)
     def __init__(self,project:Path,version:Version,runtime:RuntimeService)->None:
-        super().__init__();self.Project=project;self.Runtime=runtime;self.setWindowTitle("Loading BAZZALT Project");self.setFixedSize(480,130)
+        super().__init__();self.Project=project;self.Runtime=runtime;self.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose,False);self.setWindowTitle("Loading BAZZALT Project");self.setFixedSize(480,130)
         layout=QVBoxLayout(self);self.Title=QLabel(project.stem);self.Status=QLabel("Validating project…");self.Progress=QProgressBar();self.Progress.setRange(0,100)
         layout.addWidget(self.Title);layout.addWidget(self.Status);layout.addWidget(self.Progress)
-        self.Scanner=ProjectScanner(project,version);self.Scanner.Progress.connect(self._Progress);self.Scanner.Completed.connect(self._Scanned);self.Scanner.Failed.connect(self._Failed);self.Scanner.start()
+        self.Scanner=ProjectScanner(project,version);self.Scanner.Progress.connect(self._Progress);self.Scanner.Completed.connect(self._Scanned);self.Scanner.Failed.connect(self._Failed);self._started=False
+    def Start(self)->None:
+        if self._started:return
+        self._started=True;self.Scanner.start()
     def _Progress(self,value:int,status:str)->None:self.Progress.setValue(value);self.Status.setText(status)
     def _Scanned(self,metadata:dict)->None:
         self.Progress.setValue(90);self.Status.setText("Loading asset database and scene…")
@@ -61,15 +64,39 @@ class LoadingWindow(QWidget):
 def _EditorSettings()->SettingsStore:
     return SettingsStore("editor",1,lambda:{"schema_version":1,"theme":"dark","recent_scene":""},{0:lambda value:{"theme":value.get("theme","dark"),"recent_scene":""}})
 
+class EditorSession(QObject):
+    """Owns the complete loader-to-editor transition for the process lifetime."""
+    def __init__(self,app:QApplication,project:Path,version:Version,settings:dict)->None:
+        super().__init__();self.App=app;self.Project=project;self.Version=version;self.EditorWindow=None
+        self.Resources=ResourceManager();self.Localization=LocalizationManager(self.Resources)
+        self.Themes=ThemeManager(app,Theme.light() if settings.get("theme")=="light" else Theme.dark())
+        self.Runtime=RuntimeService();self.Loading=LoadingWindow(project,version,self.Runtime)
+        self.Loading.Loaded.connect(self.OpenEditor)
+    def Start(self)->None:self.Loading.show();self.Loading.Start()
+    @Slot(object)
+    def OpenEditor(self,metadata:dict)->None:
+        try:
+            window=Editor(self.Themes,self.Resources,self.Localization,self.Runtime)
+            window.Controller._ProjectLoaded(str(self.Project));window.Controller.RefreshHierarchy()
+            window.setWindowTitle(f"{metadata['name']} — BAZZALT {self.Version}")
+            self.EditorWindow=window;window.showMaximized();window.raise_();window.activateWindow()
+            self.Loading.hide();self.Loading.deleteLater()
+            QTimer.singleShot(0,lambda:self.App.setQuitOnLastWindowClosed(True))
+        except Exception:
+            details=traceback.format_exc();log=DataPaths.Logs()/"editor-startup.log"
+            try:log.parent.mkdir(parents=True,exist_ok=True);log.write_text(details,encoding="utf-8")
+            except OSError:pass
+            QMessageBox.critical(self.Loading,"Editor Could Not Be Opened",details);self.App.quit()
+
 def main(arguments:list[str]|None=None)->int:
-    parser=argparse.ArgumentParser(prog="BAZZALT Editor");parser.add_argument("--project",required=True,type=Path);parser.add_argument("--editor-version",default="1.0.0");options=parser.parse_args(arguments)
-    app=QApplication(sys.argv if arguments is None else [sys.argv[0],*arguments]);app.setApplicationName("BAZZALT Editor");app.setOrganizationName("BAZZALT")
+    parser=argparse.ArgumentParser(prog="BAZZALT Editor");parser.add_argument("--project",type=Path);parser.add_argument("--editor-version",default="1.0.0");parser.add_argument("--check-runtime",action="store_true",help=argparse.SUPPRESS);options=parser.parse_args(arguments)
+    if options.project is None and not options.check_runtime: parser.error("the following arguments are required: --project")
+    app=QApplication(sys.argv if arguments is None else [sys.argv[0],*arguments]);app.setApplicationName("BAZZALT Editor");app.setOrganizationName("BAZZALT");app.setQuitOnLastWindowClosed(False)
+    if options.check_runtime:
+        runtime=RuntimeService();return 0 if runtime.IsAvailable() else 3
     try:version=Version.Parse(options.editor_version)
     except ValueError as error:QMessageBox.critical(None,"Invalid Editor Version",str(error));return 2
-    store=_EditorSettings();settings=store.Load();resources=ResourceManager();localization=LocalizationManager(resources);themes=ThemeManager(app,Theme.light() if settings.get("theme")=="light" else Theme.dark());runtime=RuntimeService();state={}
-    loading=LoadingWindow(options.project.resolve(),version,runtime);state["loading"]=loading
-    def OpenEditor(metadata:dict)->None:
-        window=Editor(themes,resources,localization,runtime);window.Controller._ProjectLoaded(str(options.project.resolve()));window.Controller.RefreshHierarchy();window.setWindowTitle(f"{metadata['name']} — BAZZALT {version}");window.showMaximized();loading.close();state["editor"]=window
-    loading.Loaded.connect(OpenEditor);loading.show();result=app.exec();settings["theme"]="light" if themes.GetTheme().background==Theme.light().background else "dark";store.Save(settings);return result
+    store=_EditorSettings();settings=store.Load();session=EditorSession(app,options.project.resolve(),version,settings)
+    session.Start();result=app.exec();settings["theme"]="light" if session.Themes.GetTheme().background==Theme.light().background else "dark";store.Save(settings);return result
 
 if __name__=="__main__":raise SystemExit(main())

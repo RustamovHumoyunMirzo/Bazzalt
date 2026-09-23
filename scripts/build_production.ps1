@@ -39,6 +39,9 @@ New-Item -ItemType Directory -Force -Path (Join-Path $EditorTarget "Editor") | O
 Copy-Item -LiteralPath $Native.FullName -Destination (Join-Path $EditorTarget "Editor/$($Native.Name)") -Force
 $Manifest = @{ version=$Version; executable="Bazzalt.exe"; project_format_max=1 } | ConvertTo-Json
 Set-Content -LiteralPath (Join-Path $EditorTarget "editor.json") -Value $Manifest -Encoding utf8
+$RuntimeCheck = Start-Process -FilePath (Join-Path $EditorTarget "Bazzalt.exe") `
+    -ArgumentList "--check-runtime" -WorkingDirectory $EditorTarget -WindowStyle Hidden -Wait -PassThru
+if ($RuntimeCheck.ExitCode -ne 0) { throw "Packaged editor could not load _bazzalt_runtime (exit $($RuntimeCheck.ExitCode))" }
 Write-Host "Production bundle: $Hub"
 if ($CreateInstaller) {
     & (Join-Path $PSScriptRoot "build_installer.ps1") -Version $Version `
