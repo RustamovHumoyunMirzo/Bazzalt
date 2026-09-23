@@ -161,10 +161,10 @@ class EditorToolbar(QToolBar):
         self.StepAction.triggered.connect(self.StepRequested)
         localization.LocaleChanged.connect(lambda _: self._Retranslate())
         themes.ThemeChanged.connect(self._ThemeChanged)
-        self._gizmo_mode = GizmoMode.Select
+        self._gizmo_mode = GizmoMode.Translate
         self._UpdateIcons()
         self._Retranslate()
-        self.SetGizmoMode(GizmoMode.Select)
+        self.SetGizmoMode(GizmoMode.Translate)
         self.SetPlayState(PlayState.Stopped)
 
     def GetPlayState(self) -> PlayState:

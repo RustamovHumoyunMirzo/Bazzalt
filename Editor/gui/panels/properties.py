@@ -5,7 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QFrame, QGridLayout, QLabel, QMenu, QPushButton, QScrollArea, QSizePolicy, QToolButton, QVBoxLayout,
+    QFrame, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton, QScrollArea, QSizePolicy, QToolButton, QVBoxLayout,
     QWidget,
 )
 
@@ -13,7 +13,8 @@ from ...localization import LocalizationManager
 
 
 class ComponentSection(QFrame):
-    def __init__(self, title: str, expanded: bool = True) -> None:
+    RemoveRequested = Signal()
+    def __init__(self, title: str, expanded: bool = True, removable: bool = True) -> None:
         super().__init__(); self.setObjectName("ComponentSection")
         layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0);layout.setSpacing(0)
         self.Toggle=QToolButton();self.Toggle.setText(title);self.Toggle.setCheckable(True);self.Toggle.setChecked(expanded)
@@ -21,7 +22,10 @@ class ComponentSection(QFrame):
         self.Toggle.setObjectName("ComponentHeader")
         self.Body=QWidget();self.Form=QGridLayout(self.Body);self.Form.setContentsMargins(6,2,6,5)
         self.Form.setHorizontalSpacing(5);self.Form.setVerticalSpacing(2);self.Form.setColumnStretch(1,1)
-        layout.addWidget(self.Toggle);layout.addWidget(self.Body)
+        header=QWidget();header.setObjectName("ComponentHeaderRow");headerLayout=QHBoxLayout(header);headerLayout.setContentsMargins(0,0,2,0);headerLayout.setSpacing(0);headerLayout.addWidget(self.Toggle,1)
+        if removable:
+            remove=QToolButton();remove.setObjectName("RemoveComponentButton");remove.setText("×");remove.setToolTip("Remove Component");remove.clicked.connect(lambda:self.RemoveRequested.emit());headerLayout.addWidget(remove)
+        layout.addWidget(header);layout.addWidget(self.Body)
         self.Toggle.toggled.connect(self.SetExpanded);self.SetExpanded(expanded)
 
     def SetExpanded(self, expanded: bool) -> None:
@@ -37,6 +41,7 @@ class ComponentSection(QFrame):
 
 class PropertiesPanel(QWidget):
     AddComponentRequested = Signal()
+    RemoveComponentRequested = Signal(str)
     ContextMenuRequested = Signal(object, object)
 
     def __init__(self, localization: LocalizationManager) -> None:
@@ -52,9 +57,9 @@ class PropertiesPanel(QWidget):
         localization.LocaleChanged.connect(lambda _: self._Retranslate());self._Retranslate()
 
     def AddComponentSection(self, component_id: str, title: str,
-                            expanded: bool = True) -> ComponentSection:
+                            expanded: bool = True, removable: bool = True) -> ComponentSection:
         if component_id in self._sections:return self._sections[component_id]
-        section=ComponentSection(title,expanded);self._sections[component_id]=section
+        section=ComponentSection(title,expanded,removable);section.RemoveRequested.connect(lambda:self.RemoveComponentRequested.emit(component_id));self._sections[component_id]=section
         self.ComponentsLayout.insertWidget(self.ComponentsLayout.count()-1,section);return section
 
     def RemoveComponentSection(self, component_id: str) -> bool:

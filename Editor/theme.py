@@ -146,11 +146,17 @@ def BuildStyleSheet(theme: Theme) -> str:
     QCheckBox::indicator:hover {{ border-color: {t.border_focus}; }}
     QCheckBox::indicator:checked {{ background: {t.accent}; image: url({CHECK_ICON_PATH}); }}
     #ViewportPlaceholderLabel {{ color: {t.text_muted}; }}
+    #SceneViewControls {{ background: {t.surface_alt}; border-bottom: 1px solid {t.border}; }}
+    #SceneViewControls QComboBox {{ min-height: 20px; max-height: 20px; min-width: 58px; font-size: 11px; }}
+    #SceneViewControls QCheckBox, #SceneViewControls QLabel {{ min-height: 20px; max-height: 20px; font-size: 11px; }}
     #ComponentSection {{ background: {t.surface}; border: 1px solid {t.border}; border-radius: 2px; }}
     #ComponentHeader {{ background: {t.surface}; border: 0; border-bottom: 1px solid {t.border};
                         border-radius: 0; min-height: 21px; max-height: 21px;
                         padding: 0 5px; text-align: left; font-size: 11px; font-weight: 600; }}
     #ComponentHeader:hover {{ background: {t.surface_hover}; }}
+    #ComponentHeaderRow {{ background: {t.surface}; border-bottom: 1px solid {t.border}; }}
+    #RemoveComponentButton {{ min-width: 20px; max-width: 20px; min-height: 20px; max-height: 20px; border: 0; color: {t.text_muted}; }}
+    #RemoveComponentButton:hover {{ color: {t.error}; background: {t.surface_hover}; }}
     #PropertiesPanel #InspectorFieldLabel {{ color: {t.text_muted}; font-size: 11px; }}
     #PropertiesPanel QLineEdit, #PropertiesPanel QSpinBox, #PropertiesPanel QDoubleSpinBox,
     #PropertiesPanel QComboBox, #PropertiesPanel QPushButton {{ min-height: 20px; max-height: 20px;

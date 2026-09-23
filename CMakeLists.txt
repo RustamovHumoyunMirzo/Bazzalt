@@ -66,9 +66,26 @@ function(bazzalt_embed_post_process name symbol)
     set(BAZZALT_EMBEDDED_HEADERS ${BAZZALT_EMBEDDED_HEADERS} "${_header}" PARENT_SCOPE)
 endfunction()
 
+function(bazzalt_embed_binary source symbol output_name)
+    set(_header "${_bazzalt_generated_dir}/${output_name}.h")
+    add_custom_command(
+        OUTPUT "${_header}"
+        COMMAND "${CMAKE_COMMAND}" -DINPUT=${CMAKE_CURRENT_SOURCE_DIR}/${source}
+                -DOUTPUT=${_header} -DSYMBOL=${symbol}
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedBinary.cmake"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${source}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedBinary.cmake"
+        VERBATIM COMMENT "Embedding ${source}"
+    )
+    set(BAZZALT_EMBEDDED_HEADERS ${BAZZALT_EMBEDDED_HEADERS} "${_header}" PARENT_SCOPE)
+endfunction()
+
 bazzalt_embed_post_process(gaussian_blur GaussianBlurFilamat)
 bazzalt_embed_post_process(vignette VignetteFilamat)
 bazzalt_embed_post_process(editor_gizmo EditorGizmoFilamat)
+bazzalt_embed_binary(Editor/assets/gizmos/singlearrowx.glb EditorTranslateGizmoGlb editor_translate_gizmo_glb)
+bazzalt_embed_binary(Editor/assets/gizmos/scalearrowx.glb EditorScaleGizmoGlb editor_scale_gizmo_glb)
+bazzalt_embed_binary(Editor/assets/gizmos/rotring.glb EditorRotateGizmoGlb editor_rotate_gizmo_glb)
 
 set(_bazzalt_environment_dir "${_bazzalt_generated_dir}/environment")
 set(_bazzalt_environment_ibl "${_bazzalt_environment_dir}/environment_ibl.ktx")

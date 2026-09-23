@@ -37,8 +37,8 @@ def _LoadNativeModule():
         source_root = Path(__file__).resolve().parent.parent
         program_root = Path(sys.executable).resolve().parent
         candidates = (program_root / "Editor", program_root, source_root / "Editor",
-                      source_root / "build" / "Editor", source_root / "build" / "Editor" / "Debug",
-                      source_root / "build" / "Editor" / "Release")
+                      source_root / "build" / "Editor", source_root / "build" / "Editor" / "Release",
+                      source_root / "build" / "Editor" / "Debug")
         for directory in candidates:
             for path in directory.glob("_bazzalt_runtime*.pyd" if os.name == "nt" else "_bazzalt_runtime*.so"):
                 try: return _LoadExtension(path)
@@ -126,6 +126,11 @@ class RuntimeService(QObject):
         if result: self.SceneChanged.emit()
         return result
 
+    def RemoveComponent(self, entity_id: str, component_type: str) -> bool:
+        result=bool(self._host and hasattr(self._host,"remove_component") and self._host.remove_component(entity_id,component_type))
+        if result:self.SceneChanged.emit()
+        return result
+
     def SetParent(self, entity_id: str, parent_id: str = "") -> bool:
         result = bool(self._host and self._host.set_parent(entity_id, parent_id))
         if result: self.SceneChanged.emit()
@@ -153,6 +158,10 @@ class RuntimeService(QObject):
     def SetGizmo(self, entity_id: str, mode: int) -> None:
         if self._host is not None and hasattr(self._host, "set_gizmo"):
             self._host.set_gizmo(entity_id, mode)
+
+    def SetGrid(self, visible: bool, plane: int = 1) -> None:
+        if self._host is not None and hasattr(self._host, "set_grid"):
+            self._host.set_grid(visible, plane)
 
     def Play(self) -> bool:
         return bool(self._host and self._host.play())

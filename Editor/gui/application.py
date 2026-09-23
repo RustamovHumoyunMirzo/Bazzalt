@@ -57,8 +57,8 @@ class Editor(QMainWindow):
         self.ThemeManager.ThemeChanged.connect(self.Docking.set_theme)
 
         self.Console = ConsolePanel(self.Localization)
-        self.Output = ViewportPanel(self.Runtime, False, self.Localization)
-        self.Scene = ViewportPanel(self.Runtime, True, self.Localization)
+        self.Output = ViewportPanel(self.Runtime, False, self.Localization, self.Resources)
+        self.Scene = ViewportPanel(self.Runtime, True, self.Localization, self.Resources)
         self.Hierarchy = HierarchyPanel(self.Localization)
         self.Properties = PropertiesPanel(self.Localization)
         self.AssetBrowser = AssetBrowserPanel(self.Localization)

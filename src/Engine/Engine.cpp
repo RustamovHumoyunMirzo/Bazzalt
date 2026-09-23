@@ -108,7 +108,11 @@ void Engine::SetEditorCamera(std::uint64_t id, float eyeX, float eyeY, float eye
 }
 
 void Engine::SetEditorGizmo(bool visible, float x, float y, float z, int mode) {
-    if (m_isInitialized) m_renderBackend->SetEditorGizmo(visible, x, y, z, mode);
+    m_renderBackend->SetEditorGizmo(visible, x, y, z, mode);
+}
+
+void Engine::SetEditorGrid(bool visible, int plane) {
+    m_renderBackend->SetEditorGrid(visible, plane);
 }
 
 void Engine::Shutdown()

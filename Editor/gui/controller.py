@@ -41,12 +41,14 @@ class EditorController(QObject):
         window.Hierarchy.ReparentRequested.connect(self.ReparentEntity)
         window.Hierarchy.DeleteRequested.connect(self.DeleteEntity)
         window.Properties.AddComponentRequested.connect(self.ShowAddComponentMenu)
+        window.Properties.RemoveComponentRequested.connect(self.RemoveComponent)
         runtime.SceneChanged.connect(self.RefreshHierarchy)
         runtime.ProjectChanged.connect(self._ProjectLoaded)
         runtime.ErrorOccurred.connect(lambda text: window.Console.AddMessage(text, ConsoleLevel.Error))
         window.Scene.Surface.TranslationDragged.connect(self.ApplyGizmoTranslation)
         window.Scene.Surface.RotationDragged.connect(self.ApplyGizmoRotation)
         window.Scene.Surface.ScaleDragged.connect(self.ApplyGizmoScale)
+        window.Scene.Surface.Attached.connect(self._UpdateGizmo)
         if not runtime.IsAvailable():
             window.Console.AddMessage(runtime.LastError(), ConsoleLevel.Warning)
         else:
@@ -102,14 +104,15 @@ class EditorController(QObject):
     def SelectEntity(self, entity_id) -> None:  # type: ignore[no-untyped-def]
         self.SelectedEntity = str(entity_id or "")
         self.Window.Properties.Clear()
-        if not self.SelectedEntity: return
+        if not self.SelectedEntity:
+            self.Window.Scene.Surface.SetSelection(None);self._UpdateGizmo();return
         details = self.Runtime.EntityDetails(self.SelectedEntity)
         if not details:self._UpdateGizmo();return
         self.Window.Scene.Surface.SetSelection(details["position"])
-        identity = self.Window.Properties.AddComponentSection("identity", "Entity")
+        identity = self.Window.Properties.AddComponentSection("identity", "Entity", removable=False)
         name = StringInput(str(details["name"]));name.editingFinished.connect(lambda:self._Rename(name.text()))
         identity.AddField("Name", name)
-        transform = self.Window.Properties.AddComponentSection("transform", "Transform")
+        transform = self.Window.Properties.AddComponentSection("transform", "Transform", removable=False)
         position = Vec3Input(details["position"])
         rotation = Vec4Input(details["rotation"])
         scale = Vec3Input(details["scale"])
@@ -141,9 +144,23 @@ class EditorController(QObject):
         if isinstance(value, int):
             if component=="Light" and name=="Type":
                 editor=EnumInput();editor.SetOptions((("Directional",0),("Sun",1),("Point",2),("Spot",3)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(component,name,editor.GetValue()));return editor
+            if component=="Camera" and name=="Projection":
+                editor=EnumInput();editor.SetOptions((("Perspective",0),("Orthographic",1)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(component,name,editor.GetValue()));return editor
+            if component=="Camera" and name=="Aspect Mode":
+                editor=EnumInput();editor.SetOptions((("Automatic",0),("Fixed",1)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(component,name,editor.GetValue()));return editor
+            if component=="Camera" and name=="Anti Aliasing":
+                editor=EnumInput();editor.SetOptions((("None",0),("FXAA",1),("TAA",2)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(component,name,editor.GetValue()));return editor
+            if component=="Camera" and name=="Tone Mapping":
+                editor=EnumInput();editor.SetOptions((("Linear",0),("Filmic",1),("ACES",2)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(component,name,editor.GetValue()));return editor
+            if component=="Scene Query Bounds" and name=="Shape":
+                editor=EnumInput();editor.SetOptions((("Box",0),("Sphere",1)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(component,name,editor.GetValue()));return editor
             editor=IntInput(value=value);editor.valueChanged.connect(lambda v:self._CommitComponent(component,name,v));return editor
         if isinstance(value, float):
             editor=FloatInput(value=value);editor.valueChanged.connect(lambda v:self._CommitComponent(component,name,v));return editor
+        if isinstance(value, (tuple,list)) and len(value) in (3,4) and all(isinstance(v,(int,float)) for v in value):
+            editor=Vec3Input(value) if len(value)==3 else Vec4Input(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(component,name,v));return editor
+        if isinstance(value, str):
+            editor=StringInput(value);editor.editingFinished.connect(lambda:self._CommitComponent(component,name,editor.GetValue()));return editor
         return None
 
     def _CommitComponent(self, component: str, name: str, value) -> None:  # type: ignore[no-untyped-def]
@@ -184,6 +201,11 @@ class EditorController(QObject):
         if self.SelectedEntity and self.Runtime.AddComponent(self.SelectedEntity, component_type):
             self.SetDirty(True)
             self.SelectEntity(self.SelectedEntity)
+
+    def RemoveComponent(self, component_id: str) -> None:
+        if not component_id.startswith("runtime.") or not self.SelectedEntity:return
+        if self.Runtime.RemoveComponent(self.SelectedEntity,component_id.removeprefix("runtime.")):
+            self.SetDirty(True);self.SelectEntity(self.SelectedEntity)
 
     def DeleteEntity(self, entity_id) -> None:  # type: ignore[no-untyped-def]
         if entity_id and self.Runtime.DestroyEntity(str(entity_id)): self.SetDirty(True)

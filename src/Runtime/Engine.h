@@ -58,6 +58,7 @@ public:
     void SetEditorCamera(std::uint64_t id, float eyeX, float eyeY, float eyeZ,
                          float targetX, float targetY, float targetZ);
     void SetEditorGizmo(bool visible, float x, float y, float z, int mode);
+    void SetEditorGrid(bool visible, int plane);
 
 private:
     friend class Bazzalt::SceneManager;

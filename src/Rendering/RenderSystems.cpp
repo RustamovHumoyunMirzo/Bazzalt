@@ -154,7 +154,12 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
             .enabled = camera.PostProcessing.Enabled && camera.PostProcessing.Bloom
         });
         const auto& depthOfField = camera.PostProcessing.DepthOfField;
-        const float focusDistance = std::max(0.001f,
+        const auto* blur = entity.TryGetComponent<GaussianBlur>();
+        const bool blurEnabled = camera.PostProcessing.Enabled && blur && blur->Enabled &&
+            FiniteOr(blur->Size, 0.0f) > 0.0f;
+        const float blurRadius = blurEnabled
+            ? std::clamp(FiniteOr(blur->Size, 1.0f), 0.0f, 32.0f) : 0.0f;
+        const float focusDistance = blurEnabled ? 0.001f : std::max(0.001f,
             FiniteOr(depthOfField.FocusDistance, 10.0f));
         const float aperture = std::clamp(FiniteOr(depthOfField.Aperture, 16.0f), 0.5f, 64.0f);
         const float shutterSpeed = std::max(0.000001f,
@@ -170,40 +175,30 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
         if (depthOfField.Quality == DepthOfFieldQuality::Low) ringCount = 3;
         else if (depthOfField.Quality == DepthOfFieldQuality::High) ringCount = 7;
         resource.View->setDepthOfFieldOptions({
-            .cocScale = std::max(0.0f, FiniteOr(depthOfField.CocScale, 1.0f)),
+            .cocScale = blurEnabled ? std::max(1.0f, blurRadius) :
+                std::max(0.0f, FiniteOr(depthOfField.CocScale, 1.0f)),
             .cocAspectRatio = std::max(0.01f, FiniteOr(depthOfField.CocAspectRatio, 1.0f)),
-            .maxApertureDiameter = std::max(0.0f,
-                FiniteOr(depthOfField.MaxApertureDiameter, 0.01f)),
-            .enabled = camera.PostProcessing.Enabled && depthOfField.Enabled,
+            .maxApertureDiameter = blurEnabled ? std::max(0.01f, blurRadius * 0.01f) :
+                std::max(0.0f, FiniteOr(depthOfField.MaxApertureDiameter, 0.01f)),
+            .enabled = camera.PostProcessing.Enabled && (depthOfField.Enabled || blurEnabled),
             .filter = filament::View::DepthOfFieldOptions::Filter::MEDIAN,
             .nativeResolution = depthOfField.NativeResolution,
             .foregroundRingCount = ringCount,
             .backgroundRingCount = ringCount,
-            .fastGatherRingCount = ringCount
+            .fastGatherRingCount = ringCount,
+            .maxForegroundCOC = static_cast<std::uint16_t>(blurEnabled ? blurRadius : 0.0f),
+            .maxBackgroundCOC = static_cast<std::uint16_t>(blurEnabled ? blurRadius : 0.0f)
         });
         std::vector<CustomPostProcessEffect> customEffects;
-        const auto* blur = entity.TryGetComponent<GaussianBlur>();
-        if (camera.PostProcessing.Enabled && blur && blur->Enabled && pixelWidth > 0 && pixelHeight > 0 &&
-            FiniteOr(blur->Size, 0.0f) > 0.0f) {
-            CustomPostProcessEffect effect{GaussianBlurShaderId, "Gaussian Blur", true, -200};
-            effect.SetParameter(PostProcessParameter::Float(
-                "blurSize", std::clamp(blur->Size, 0.0f, 64.0f)));
-            effect.SetParameter(PostProcessParameter::Float2("texelSize", {
-                1.0f / static_cast<float>(pixelWidth), 1.0f / static_cast<float>(pixelHeight)}));
-            customEffects.push_back(std::move(effect));
-        }
         const auto* vignette = entity.TryGetComponent<Vignette>();
-        if (camera.PostProcessing.Enabled && vignette && vignette->Enabled) {
-            CustomPostProcessEffect effect{VignetteShaderId, "Vignette", true, -100};
-            effect.SetParameter(PostProcessParameter::Float4("color", vignette->Color));
-            effect.SetParameter(PostProcessParameter::Float(
-                "intensity", std::clamp(FiniteOr(vignette->Intensity, 0.35f), 0.0f, 1.0f)));
-            effect.SetParameter(PostProcessParameter::Float(
-                "smoothness", std::clamp(FiniteOr(vignette->Smoothness, 0.35f), 0.001f, 1.0f)));
-            effect.SetParameter(PostProcessParameter::Float(
-                "roundness", std::clamp(FiniteOr(vignette->Roundness, 1.0f), 0.0f, 1.0f)));
-            customEffects.push_back(std::move(effect));
-        }
+        const bool vignetteEnabled = camera.PostProcessing.Enabled && vignette && vignette->Enabled;
+        resource.View->setVignetteOptions({
+            .midPoint = vignetteEnabled ? 1.0f - std::clamp(FiniteOr(vignette->Intensity, .35f), 0.0f, 1.0f) : .5f,
+            .roundness = vignetteEnabled ? std::clamp(FiniteOr(vignette->Roundness, 1.0f), 0.0f, 1.0f) : .5f,
+            .feather = vignetteEnabled ? std::clamp(FiniteOr(vignette->Smoothness, .35f), .001f, 1.0f) : .5f,
+            .color = vignetteEnabled ? filament::math::float4{vignette->Color.X,vignette->Color.Y,vignette->Color.Z,vignette->Color.W} : filament::math::float4{0,0,0,1},
+            .enabled = vignetteEnabled
+        });
         for (const auto& effect : camera.PostProcessing.CustomEffects.GetEffects())
             if (effect.Enabled && effect.ShaderAsset)
                 customEffects.push_back(effect);

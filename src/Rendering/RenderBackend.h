@@ -40,6 +40,7 @@ public:
     void SetSceneCamera(std::uint64_t id, float eyeX, float eyeY, float eyeZ,
                         float targetX, float targetY, float targetZ);
     void SetEditorGizmo(bool visible, float x, float y, float z, int mode);
+    void SetEditorGrid(bool visible, int plane);
     void Render();
     [[nodiscard]] bool IsInitialized() const { return m_engine != nullptr; }
 
@@ -83,6 +84,11 @@ private:
     filament::Skybox* m_skybox = nullptr;
     filament::IndirectLight* m_indirectLight = nullptr;
     std::unique_ptr<GizmoResource> m_gizmo;
+    bool m_gizmoVisible = false;
+    float m_gizmoX = 0, m_gizmoY = 0, m_gizmoZ = 0;
+    int m_gizmoMode = 0;
+    bool m_gridVisible = true;
+    int m_gridPlane = 1;
 };
 
 } // namespace Bazzalt::Runtime
