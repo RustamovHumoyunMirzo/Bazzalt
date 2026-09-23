@@ -57,8 +57,12 @@ class LoadingWindow(QWidget):
     def _Progress(self,value:int,status:str)->None:self.Progress.setValue(value);self.Status.setText(status)
     def _Scanned(self,metadata:dict)->None:
         self.Progress.setValue(90);self.Status.setText("Loading asset database and scene…")
-        if not self.Runtime.LoadProject(self.Project):self._Failed(self.Runtime.LastError());return
-        self.Progress.setValue(100);self.Status.setText("Ready");self.Loaded.emit(metadata)
+        try:
+            if not self.Runtime.LoadProject(self.Project):self._Failed(self.Runtime.LastError());return
+        except Exception as error:
+            self._Failed(f"Native project loading failed: {error}");return
+        self.Progress.setValue(100);self.Status.setText("Opening editor…")
+        QTimer.singleShot(0, lambda: self.Loaded.emit(metadata))
     def _Failed(self,message:str)->None:QMessageBox.critical(self,"Project Could Not Be Loaded",message);QApplication.instance().quit()
 
 def _EditorSettings()->SettingsStore:

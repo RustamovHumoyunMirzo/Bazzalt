@@ -174,7 +174,7 @@ public:
     py::dict SceneInfo() const {
         py::dict result;
         result["uuid"] = m_engine->GetScene().GetUUID().ToString();
-        result["name"] = m_scenePath.empty() ? std::string("Untitled") : m_scenePath.stem().string();
+        result["name"] = m_scenePath.empty() ? py::str("Untitled") : PathText(m_scenePath.stem());
         result["path"] = m_scenePath.empty() ? py::str() : PathText(m_scenePath);
         return result;
     }

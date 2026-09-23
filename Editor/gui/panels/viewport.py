@@ -6,7 +6,7 @@ from math import cos, radians, sin, tan
 
 from PySide6.QtCore import QPoint, Qt, QTimer, Signal
 from PySide6.QtGui import QMouseEvent, QWheelEvent
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QVBoxLayout, QWidget
 from ..gizmos import GizmoDrag, GizmoMode, PickAxis, Ray, Vec3
 
 
@@ -93,10 +93,10 @@ class NativeRenderSurface(QWidget):
                 prior=self._last_scale;value=result.Scale;step=Vec3(value.X/prior.X,value.Y/prior.Y,value.Z/prior.Z);self._last_scale=value;self.ScaleDragged.emit(step)
             return
         if event.buttons() & Qt.MouseButton.RightButton:
-            self._yaw += delta.x() * .35; self._pitch = max(-89.0, min(89.0, self._pitch + delta.y() * .35)); self._UpdateCamera()
+            self._yaw -= delta.x() * .35; self._pitch = max(-89.0, min(89.0, self._pitch - delta.y() * .35)); self._UpdateCamera()
         elif event.buttons() & Qt.MouseButton.MiddleButton:
             scale = self._distance * .0015
-            self._target[0] -= delta.x() * scale; self._target[1] += delta.y() * scale; self._UpdateCamera()
+            self._target[0] += delta.x() * scale; self._target[1] -= delta.y() * scale; self._UpdateCamera()
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         if self.IsScene:
@@ -111,13 +111,6 @@ class ViewportPanel(QFrame):
     def __init__(self, runtime, scene: bool, localization, parent=None) -> None:
         super().__init__(parent); self.setObjectName("ViewportPanel")
         layout = QVBoxLayout(self); layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(0)
-        if scene:
-            controls = QFrame(); controls.setObjectName("SceneControls")
-            row = QHBoxLayout(controls); row.setContentsMargins(6, 3, 6, 3); row.setSpacing(3)
-            for text, tip in (("Q", "Select"), ("W", "Translate"), ("E", "Rotate"), ("R", "Scale")):
-                button = QToolButton(); button.setText(text); button.setToolTip(tip); button.setCheckable(True)
-                button.setAutoExclusive(True); row.addWidget(button)
-            row.addStretch(); row.addWidget(QLabel("Perspective")); layout.addWidget(controls)
         self.Surface = NativeRenderSurface(runtime, scene); layout.addWidget(self.Surface, 1)
 
     def Detach(self) -> None: self.Surface.Detach()

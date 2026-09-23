@@ -32,6 +32,11 @@ std::string Key(ryml::ConstNodeRef node) {
     return std::string(value.str, value.len);
 }
 
+std::string PathUtf8(const std::filesystem::path& path) {
+    const auto value = path.u8string();
+    return {reinterpret_cast<const char*>(value.data()), value.size()};
+}
+
 std::string QuoteYaml(const std::string& value) {
     std::ostringstream output;
     output << '"';
@@ -145,7 +150,7 @@ bool CollectGltfUris(const std::filesystem::path& source,
 bool RunTool(const std::filesystem::path& executable,
              const std::vector<std::filesystem::path>& arguments, std::string& error) {
     if (!std::filesystem::exists(executable)) {
-        error = "Filament tool was not found: " + executable.string(); return false;
+        error = "Filament tool was not found: " + PathUtf8(executable); return false;
     }
 #ifdef _WIN32
     auto quote = [](const std::wstring& value) {
@@ -166,12 +171,12 @@ bool RunTool(const std::filesystem::path& executable,
     PROCESS_INFORMATION process{};
     if (!CreateProcessW(nullptr, writable.data(), nullptr, nullptr, FALSE,
                         CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process)) {
-        error = "Could not start " + executable.string(); return false;
+        error = "Could not start " + PathUtf8(executable); return false;
     }
     WaitForSingleObject(process.hProcess, INFINITE);
     DWORD exitCode = 1; GetExitCodeProcess(process.hProcess, &exitCode);
     CloseHandle(process.hThread); CloseHandle(process.hProcess);
-    if (exitCode != 0) { error = executable.filename().string() + " failed with exit code " +
+    if (exitCode != 0) { error = PathUtf8(executable.filename()) + " failed with exit code " +
         std::to_string(exitCode); return false; }
     return true;
 #else
@@ -215,19 +220,19 @@ public:
         for (const auto& uri : uris) {
             const auto source = context.SourcePath.parent_path() / uri;
             if (!std::filesystem::is_regular_file(source)) {
-                error = "Missing glTF resource: " + source.string(); return false;
+                error = "Missing glTF resource: " + PathUtf8(source); return false;
             }
             std::error_code code;
             const auto destination = context.OutputPath.parent_path() / uri;
             if (!IsPathWithin(context.OutputPath.parent_path(), destination) ||
                 std::filesystem::absolute(destination).lexically_normal() ==
                     std::filesystem::absolute(context.OutputPath).lexically_normal()) {
-                error = "Unsafe glTF cache destination: " + uri.string(); return false;
+                error = "Unsafe glTF cache destination: " + PathUtf8(uri); return false;
             }
             std::filesystem::create_directories(destination.parent_path(), code);
             if (!code) std::filesystem::copy_file(source, destination,
                 std::filesystem::copy_options::overwrite_existing, code);
-            if (code) { error = "Could not cache glTF resource " + uri.string() + ": " + code.message(); return false; }
+            if (code) { error = "Could not cache glTF resource " + PathUtf8(uri) + ": " + code.message(); return false; }
         }
         return true;
     }
@@ -378,10 +383,11 @@ bool AssetDatabase::Refresh() {
 bool AssetDatabase::RegisterSource(const std::filesystem::path& source) {
     const std::filesystem::path normalized = NormalizeSource(source);
     if (!IsPathWithin(m_assetDirectory, normalized)) {
-        m_lastError = "Asset resolves outside the configured asset directory: " + source.string();
+        m_lastError = "Asset resolves outside the configured asset directory: " + PathUtf8(source);
         return false;
     }
-    const std::filesystem::path metaPath = std::filesystem::path(normalized.string() + ".meta");
+    std::filesystem::path metaPath = normalized;
+    metaPath += ".meta";
     Metadata metadata;
     const bool hadMeta = std::filesystem::exists(metaPath);
     bool metadataDirty = !hadMeta;
@@ -396,11 +402,11 @@ bool AssetDatabase::RegisterSource(const std::filesystem::path& source) {
     }
     AssetImporter* importer = SelectImporter(normalized, metadata.Importer);
     if (importer == nullptr) {
-        m_lastError = "No importer supports asset: " + normalized.string();
+        m_lastError = "No importer supports asset: " + PathUtf8(normalized);
         return false;
     }
     const std::string sourceHash = importer->ComputeSourceHash(normalized);
-    if (sourceHash.empty()) { m_lastError = "Could not hash asset: " + normalized.string(); return false; }
+    if (sourceHash.empty()) { m_lastError = "Could not hash asset: " + PathUtf8(normalized); return false; }
 
     AssetInfo record;
     record.Id = metadata.Id;
@@ -423,7 +429,7 @@ bool AssetDatabase::RegisterSource(const std::filesystem::path& source) {
         metadataDirty = true;
     }
     if (metadataDirty && !SaveMetadata(metaPath, metadata)) return false;
-    m_byPath.emplace(normalized.generic_string(), record.Id);
+    m_byPath.emplace(PathUtf8(normalized), record.Id);
     m_byId.emplace(record.Id, std::move(record));
     return true;
 }
@@ -432,13 +438,13 @@ bool AssetDatabase::LoadMetadata(const std::filesystem::path& path, Metadata& me
     std::error_code sizeError;
     constexpr std::uintmax_t MaxMetadataBytes = 4u * 1024u * 1024u;
     if (std::filesystem::file_size(path, sizeError) > MaxMetadataBytes || sizeError) {
-        m_lastError = sizeError ? "Could not inspect meta file: " + path.string()
-                                : "Asset metadata exceeds the 4 MiB limit: " + path.string();
+        m_lastError = sizeError ? "Could not inspect meta file: " + PathUtf8(path)
+                                : "Asset metadata exceeds the 4 MiB limit: " + PathUtf8(path);
         return false;
     }
     std::ifstream stream(path, std::ios::binary);
     std::string yaml((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
-    if (!stream && yaml.empty()) { m_lastError = "Could not read meta file: " + path.string(); return false; }
+    if (!stream && yaml.empty()) { m_lastError = "Could not read meta file: " + PathUtf8(path); return false; }
     try {
         ryml::Tree tree = ryml::parse_in_arena(ryml::csubstr(yaml.data(), yaml.size()));
         const ryml::ConstNodeRef root = tree.rootref();
@@ -448,11 +454,11 @@ bool AssetDatabase::LoadMetadata(const std::filesystem::path& path, Metadata& me
             version == 0 || version > CurrentMetaVersion || !root.has_child("UUID") ||
             !UUID::TryParse(Text(root["UUID"]), metadata.Id) || metadata.Id.IsRoot() ||
             !root.has_child("Importer") || !root.has_child("ImporterVersion")) {
-            m_lastError = "Invalid asset metadata: " + path.string(); return false;
+            m_lastError = "Invalid asset metadata: " + PathUtf8(path); return false;
         }
         metadata.Importer = Text(root["Importer"]);
         if (!ReadUnsigned(root["ImporterVersion"], metadata.ImporterVersion)) {
-            m_lastError = "Invalid importer version in asset metadata: " + path.string();
+            m_lastError = "Invalid importer version in asset metadata: " + PathUtf8(path);
             return false;
         }
         if (root.has_child("SourceHash")) metadata.SourceHash = Text(root["SourceHash"]);
@@ -463,13 +469,13 @@ bool AssetDatabase::LoadMetadata(const std::filesystem::path& path, Metadata& me
         }
         return true;
     } catch (const std::exception& error) {
-        m_lastError = "Could not parse meta YAML " + path.string() + ": " + error.what(); return false;
+        m_lastError = "Could not parse meta YAML " + PathUtf8(path) + ": " + error.what(); return false;
     }
 }
 
 bool AssetDatabase::SaveMetadata(const std::filesystem::path& path, const Metadata& metadata) {
     std::ofstream stream(path, std::ios::binary | std::ios::trunc);
-    if (!stream) { m_lastError = "Could not write meta file: " + path.string(); return false; }
+    if (!stream) { m_lastError = "Could not write meta file: " + PathUtf8(path); return false; }
     stream << "FormatVersion: " << CurrentMetaVersion << '\n'
            << "UUID: " << QuoteYaml(metadata.Id.ToString()) << '\n'
            << "Importer: " << QuoteYaml(metadata.Importer) << '\n'
@@ -496,7 +502,7 @@ bool AssetDatabase::ImportAsset(AssetInfo& record, Metadata& metadata, AssetImpo
     std::string error;
     if (!importer.Import({record.SourcePath, record.CachePath, metadata.Settings}, error)) {
         record.State = AssetState::Failed;
-        m_lastError = "Import failed for " + record.SourcePath.string() + ": " + error;
+        m_lastError = "Import failed for " + PathUtf8(record.SourcePath) + ": " + error;
         return false;
     }
     metadata.Importer = importer.GetName();
@@ -529,7 +535,7 @@ std::optional<AssetInfo> AssetDatabase::Find(UUID id) const {
 }
 
 std::optional<AssetInfo> AssetDatabase::Find(const std::filesystem::path& sourcePath) const {
-    const auto found = m_byPath.find(NormalizeSource(sourcePath).generic_string());
+    const auto found = m_byPath.find(PathUtf8(NormalizeSource(sourcePath)));
     return found == m_byPath.end() ? std::nullopt : Find(found->second);
 }
 
