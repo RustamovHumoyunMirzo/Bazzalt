@@ -12,6 +12,15 @@
 #include <filament/SwapChain.h>
 #include <filament/View.h>
 #include <filament/Viewport.h>
+#include <filament/Material.h>
+#include <filament/MaterialInstance.h>
+#include <filament/VertexBuffer.h>
+#include <filament/IndexBuffer.h>
+#include <filament/RenderableManager.h>
+#include <filament/TransformManager.h>
+#include <filament/Box.h>
+#include <backend/BufferDescriptor.h>
+#include <math/mat4.h>
 #include <math/vec3.h>
 #include <utils/EntityManager.h>
 #include <image/Ktx1Bundle.h>
@@ -19,6 +28,7 @@
 #include "Rendering/RenderAssets.h"
 #include "default_environment_ibl.h"
 #include "default_environment_skybox.h"
+#include "editor_gizmo_filamat.h"
 
 namespace Bazzalt::Runtime {
 
@@ -30,6 +40,14 @@ struct RenderBackend::ViewportResource {
     utils::Entity CameraEntity;
     std::uint32_t Width = 1;
     std::uint32_t Height = 1;
+};
+
+struct RenderBackend::GizmoResource {
+    filament::Material* Material = nullptr;
+    filament::VertexBuffer* Vertices = nullptr;
+    filament::IndexBuffer* Indices = nullptr;
+    std::array<filament::MaterialInstance*, 3> Instances{};
+    std::array<utils::Entity, 3> Entities{};
 };
 
 RenderBackend::RenderBackend() = default;
@@ -58,6 +76,34 @@ bool RenderBackend::Initialize() {
         m_scene->setIndirectLight(m_indirectLight);
         m_scene->setSkybox(m_skybox);
     }
+    m_gizmo = std::make_unique<GizmoResource>();
+    m_gizmo->Material = filament::Material::Builder()
+        .package(Embedded::EditorGizmoFilamat, Embedded::EditorGizmoFilamatSize).build(*m_engine);
+    static constexpr float vertices[] = {0,0,0, 1.5f,0,0, 1.5f,0,0, 1.25f,.12f,0,
+                                          1.5f,0,0, 1.25f,-.12f,0};
+    static constexpr std::uint16_t indices[] = {0,1,2,3,4,5};
+    m_gizmo->Vertices = filament::VertexBuffer::Builder().vertexCount(6).bufferCount(1)
+        .attribute(filament::VertexAttribute::POSITION, 0,
+                   filament::VertexBuffer::AttributeType::FLOAT3).build(*m_engine);
+    m_gizmo->Vertices->setBufferAt(*m_engine, 0, {vertices, sizeof(vertices)});
+    m_gizmo->Indices = filament::IndexBuffer::Builder().indexCount(6)
+        .bufferType(filament::IndexBuffer::IndexType::USHORT).build(*m_engine);
+    m_gizmo->Indices->setBuffer(*m_engine, {indices, sizeof(indices)});
+    const filament::math::float4 colors[] = {{.95f,.18f,.15f,1},{.25f,.9f,.25f,1},{.2f,.45f,1,1}};
+    for (int axis=0; axis<3; ++axis) {
+        m_gizmo->Entities[axis] = m_engine->getEntityManager().create();
+        m_gizmo->Instances[axis] = m_gizmo->Material->createInstance();
+        m_gizmo->Instances[axis]->setParameter("color", colors[axis]);
+        filament::RenderableManager::Builder(1)
+            .boundingBox({{.75f,0,0},{.8f,.2f,.2f}})
+            .material(0, m_gizmo->Instances[axis])
+            .geometry(0, filament::RenderableManager::PrimitiveType::LINES,
+                      m_gizmo->Vertices, m_gizmo->Indices)
+            .culling(false).castShadows(false).receiveShadows(false)
+            .build(*m_engine, m_gizmo->Entities[axis]);
+        auto instance = m_engine->getRenderableManager().getInstance(m_gizmo->Entities[axis]);
+        m_engine->getRenderableManager().setLayerMask(instance, 0xff, 0x80);
+    }
     m_assets = std::make_unique<RenderAssets>(*m_engine, *m_scene);
     return true;
 }
@@ -79,6 +125,7 @@ bool RenderBackend::CreateViewport(std::uint64_t id, std::uintptr_t nativeWindow
     viewport->View->setScene(m_scene);
     viewport->View->setCamera(viewport->Camera);
     viewport->View->setPostProcessingEnabled(true);
+    viewport->View->setVisibleLayers(0xff, kind == ViewportKind::Scene ? 0xff : 0x7f);
     if (kind == ViewportKind::Scene) {
         viewport->Camera->lookAt({6.0, 4.0, 8.0}, {0.0, 0.0, 0.0}, {0.0, 1.0, 0.0});
     } else {
@@ -125,6 +172,23 @@ void RenderBackend::SetSceneCamera(std::uint64_t id, float eyeX, float eyeY, flo
                                   {0.0, 1.0, 0.0});
 }
 
+void RenderBackend::SetEditorGizmo(bool visible, float x, float y, float z, int mode) {
+    if (!m_gizmo || !m_engine) return;
+    auto& transforms = m_engine->getTransformManager();
+    const float scale = mode == 0 ? 0.0f : 1.0f;
+    for (int axis=0; axis<3; ++axis) {
+        auto instance = transforms.getInstance(m_gizmo->Entities[axis]);
+        filament::math::mat4f rotation;
+        if (axis == 1) rotation = filament::math::mat4f::rotation(1.5707963f, filament::math::float3{0,0,1});
+        else if (axis == 2) rotation = filament::math::mat4f::rotation(-1.5707963f, filament::math::float3{0,1,0});
+        const auto transform = filament::math::mat4f::translation(filament::math::float3{x,y,z}) *
+            filament::math::mat4f::scaling(filament::math::float3{scale,scale,scale}) * rotation;
+        transforms.setTransform(instance, transform);
+        if (visible && scale > 0) m_scene->addEntity(m_gizmo->Entities[axis]);
+        else m_scene->remove(m_gizmo->Entities[axis]);
+    }
+}
+
 void RenderBackend::Render() {
     if (!m_renderer) return;
     for (const auto& [id, resource] : m_viewports) {
@@ -150,6 +214,18 @@ void RenderBackend::Shutdown() {
     m_activeViews.clear();
     m_postProcessEffects.clear();
     m_assets.reset();
+    if (m_gizmo) {
+        for (int axis=0; axis<3; ++axis) {
+            m_scene->remove(m_gizmo->Entities[axis]);
+            m_engine->destroy(m_gizmo->Entities[axis]);
+            if (m_gizmo->Instances[axis]) m_engine->destroy(m_gizmo->Instances[axis]);
+            m_engine->getEntityManager().destroy(m_gizmo->Entities[axis]);
+        }
+        if (m_gizmo->Vertices) m_engine->destroy(m_gizmo->Vertices);
+        if (m_gizmo->Indices) m_engine->destroy(m_gizmo->Indices);
+        if (m_gizmo->Material) m_engine->destroy(m_gizmo->Material);
+        m_gizmo.reset();
+    }
     if (m_scene) { m_scene->setSkybox(nullptr); m_scene->setIndirectLight(nullptr); }
     if (m_skybox) m_engine->destroy(m_skybox);
     if (m_indirectLight) m_engine->destroy(m_indirectLight);

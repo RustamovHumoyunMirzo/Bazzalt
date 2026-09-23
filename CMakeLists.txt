@@ -68,6 +68,7 @@ endfunction()
 
 bazzalt_embed_post_process(gaussian_blur GaussianBlurFilamat)
 bazzalt_embed_post_process(vignette VignetteFilamat)
+bazzalt_embed_post_process(editor_gizmo EditorGizmoFilamat)
 
 set(_bazzalt_environment_dir "${_bazzalt_generated_dir}/environment")
 set(_bazzalt_environment_ibl "${_bazzalt_environment_dir}/environment_ibl.ktx")

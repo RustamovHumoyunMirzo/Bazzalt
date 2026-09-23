@@ -92,6 +92,9 @@ class RuntimeService(QObject):
     def EntityDetails(self, entity_id: str) -> dict:
         return dict(self._host.entity_details(entity_id)) if self._host is not None else {}
 
+    def Rename(self, entity_id: str, name: str) -> bool:
+        return bool(self._host and self._host.rename(entity_id, name))
+
     def CreateEntity(self, name: str, parent: str = "") -> str:
         value = self._host.create_entity(name, parent) if self._host is not None else ""
         self.SceneChanged.emit(); return value
@@ -141,6 +144,15 @@ class RuntimeService(QObject):
 
     def SetSceneCamera(self, viewport_id: int, eye, target) -> None:
         if self._host is not None and hasattr(self._host, "set_scene_camera"): self._host.set_scene_camera(viewport_id, eye, target)
+
+    def SetComponentProperty(self, entity_id: str, component: str,
+                             property_name: str, value) -> bool:
+        return bool(self._host and hasattr(self._host, "set_component_property") and
+                    self._host.set_component_property(entity_id, component, property_name, value))
+
+    def SetGizmo(self, entity_id: str, mode: int) -> None:
+        if self._host is not None and hasattr(self._host, "set_gizmo"):
+            self._host.set_gizmo(entity_id, mode)
 
     def Play(self) -> bool:
         return bool(self._host and self._host.play())

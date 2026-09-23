@@ -107,6 +107,10 @@ void Engine::SetEditorCamera(std::uint64_t id, float eyeX, float eyeY, float eye
                                                          targetX, targetY, targetZ);
 }
 
+void Engine::SetEditorGizmo(bool visible, float x, float y, float z, int mode) {
+    if (m_isInitialized) m_renderBackend->SetEditorGizmo(visible, x, y, z, mode);
+}
+
 void Engine::Shutdown()
 {
     if (!m_isInitialized)

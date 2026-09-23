@@ -57,6 +57,7 @@ public:
     void DestroyEditorViewport(std::uint64_t id);
     void SetEditorCamera(std::uint64_t id, float eyeX, float eyeY, float eyeZ,
                          float targetX, float targetY, float targetZ);
+    void SetEditorGizmo(bool visible, float x, float y, float z, int mode);
 
 private:
     friend class Bazzalt::SceneManager;

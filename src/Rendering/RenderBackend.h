@@ -39,6 +39,7 @@ public:
     void DestroyViewport(std::uint64_t id);
     void SetSceneCamera(std::uint64_t id, float eyeX, float eyeY, float eyeZ,
                         float targetX, float targetY, float targetZ);
+    void SetEditorGizmo(bool visible, float x, float y, float z, int mode);
     void Render();
     [[nodiscard]] bool IsInitialized() const { return m_engine != nullptr; }
 
@@ -67,6 +68,7 @@ public:
 
 private:
     struct ViewportResource;
+    struct GizmoResource;
     filament::Engine* m_engine = nullptr;
     filament::Renderer* m_renderer = nullptr;
     filament::Scene* m_scene = nullptr;
@@ -80,6 +82,7 @@ private:
     filament::Texture* m_environmentSkyboxTexture = nullptr;
     filament::Skybox* m_skybox = nullptr;
     filament::IndirectLight* m_indirectLight = nullptr;
+    std::unique_ptr<GizmoResource> m_gizmo;
 };
 
 } // namespace Bazzalt::Runtime

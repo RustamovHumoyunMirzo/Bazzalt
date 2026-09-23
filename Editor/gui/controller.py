@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from math import cos, sin
 
 from PySide6.QtCore import QObject, QTimer
 from PySide6.QtWidgets import QFileDialog, QMenu
 
 from ..runtime import RuntimeService
 from .panels import ConsoleLevel
-from .widgets import PlayState, StringInput, Vec3Input, Vec4Input
+from .gizmos import GizmoMode
+from .widgets import BoolInput, EnumInput, FloatInput, IntInput, PlayState, StringInput, Vec3Input, Vec4Input
 
 
 class EditorController(QObject):
@@ -20,6 +22,7 @@ class EditorController(QObject):
         self.SelectedEntity = ""
         self.ScenePath = ""
         self._updating_inspector = False
+        self.IsDirty = False
         self.Timer = QTimer(self)
         self.Timer.setInterval(16)
         self.Timer.timeout.connect(runtime.Tick)
@@ -31,15 +34,19 @@ class EditorController(QObject):
         window.Toolbar.StopRequested.connect(self.Stop)
         window.Toolbar.PauseRequested.connect(runtime.Pause)
         window.Toolbar.StepRequested.connect(runtime.Step)
+        window.Toolbar.GizmoModeChanged.connect(self._GizmoModeChanged)
         window.Hierarchy.SelectionChanged.connect(self.SelectEntity)
         window.Hierarchy.CreateRequested.connect(self.CreateEntity)
         window.Hierarchy.CreateTypedRequested.connect(self.CreateTypedEntity)
-        window.Hierarchy.ReparentRequested.connect(runtime.SetParent)
+        window.Hierarchy.ReparentRequested.connect(self.ReparentEntity)
         window.Hierarchy.DeleteRequested.connect(self.DeleteEntity)
         window.Properties.AddComponentRequested.connect(self.ShowAddComponentMenu)
         runtime.SceneChanged.connect(self.RefreshHierarchy)
         runtime.ProjectChanged.connect(self._ProjectLoaded)
         runtime.ErrorOccurred.connect(lambda text: window.Console.AddMessage(text, ConsoleLevel.Error))
+        window.Scene.Surface.TranslationDragged.connect(self.ApplyGizmoTranslation)
+        window.Scene.Surface.RotationDragged.connect(self.ApplyGizmoRotation)
+        window.Scene.Surface.ScaleDragged.connect(self.ApplyGizmoScale)
         if not runtime.IsAvailable():
             window.Console.AddMessage(runtime.LastError(), ConsoleLevel.Warning)
         else:
@@ -52,16 +59,18 @@ class EditorController(QObject):
         if path and self.Runtime.LoadScene(path): self.ScenePath = path
 
     def SaveScene(self) -> None:
-        if self.ScenePath: self.Runtime.SaveScene(self.ScenePath)
+        if self.ScenePath:
+            if self.Runtime.SaveScene(self.ScenePath): self.SetDirty(False)
         else: self.SaveSceneAsDialog()
 
     def SaveSceneAsDialog(self) -> None:
         dialog=QFileDialog(self.Window,self.Window.Localization.Translate("dialog.save_scene"),self.Runtime.AssetDirectory(),self.Window.Localization.Translate("dialog.scene_filter"))
         dialog.setOption(QFileDialog.Option.DontUseNativeDialog);dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
         path=dialog.selectedFiles()[0] if dialog.exec() and dialog.selectedFiles() else ""
-        if path and self.Runtime.SaveScene(path): self.ScenePath = path
+        if path and self.Runtime.SaveScene(path): self.ScenePath = path; self.SetDirty(False)
 
     def _ProjectLoaded(self, path: str) -> None:
+        self.ScenePath = str(self.Runtime.SceneInfo().get("path", ""))
         assets = self.Runtime.AssetDirectory()
         self.Window.AssetBrowser.SetProjectRoot(assets or Path(path).parent)
         self.Window.Console.AddMessage(
@@ -95,9 +104,10 @@ class EditorController(QObject):
         self.Window.Properties.Clear()
         if not self.SelectedEntity: return
         details = self.Runtime.EntityDetails(self.SelectedEntity)
-        if not details: return
+        if not details:self._UpdateGizmo();return
+        self.Window.Scene.Surface.SetSelection(details["position"])
         identity = self.Window.Properties.AddComponentSection("identity", "Entity")
-        name = StringInput(str(details["name"])); name.setReadOnly(True)
+        name = StringInput(str(details["name"]));name.editingFinished.connect(lambda:self._Rename(name.text()))
         identity.AddField("Name", name)
         transform = self.Window.Properties.AddComponentSection("transform", "Transform")
         position = Vec3Input(details["position"])
@@ -112,18 +122,53 @@ class EditorController(QObject):
                                           rotation.GetValue(), scale.GetValue())
         position.ValueChanged.connect(Commit); rotation.ValueChanged.connect(Commit)
         scale.ValueChanged.connect(Commit)
+        for field in (position, rotation, scale): field.ValueChanged.connect(lambda _=None:self.SetDirty(True))
+        component_data = details.get("component_data", {})
         for component in details.get("components", ())[1:]:
             if component != "Transform":
-                self.Window.Properties.AddComponentSection(
+                section = self.Window.Properties.AddComponentSection(
                     f"runtime.{component}", str(component), expanded=False
                 )
+                for property_name, value in dict(component_data.get(component, {})).items():
+                    editor = self._ComponentEditor(component, property_name, value)
+                    if editor is not None: section.AddField(property_name, editor)
+
+        self._UpdateGizmo()
+
+    def _ComponentEditor(self, component: str, name: str, value):  # type: ignore[no-untyped-def]
+        if isinstance(value, bool):
+            editor=BoolInput(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(component,name,v));return editor
+        if isinstance(value, int):
+            if component=="Light" and name=="Type":
+                editor=EnumInput();editor.SetOptions((("Directional",0),("Sun",1),("Point",2),("Spot",3)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(component,name,editor.GetValue()));return editor
+            editor=IntInput(value=value);editor.valueChanged.connect(lambda v:self._CommitComponent(component,name,v));return editor
+        if isinstance(value, float):
+            editor=FloatInput(value=value);editor.valueChanged.connect(lambda v:self._CommitComponent(component,name,v));return editor
+        return None
+
+    def _CommitComponent(self, component: str, name: str, value) -> None:  # type: ignore[no-untyped-def]
+        if self.SelectedEntity and self.Runtime.SetComponentProperty(self.SelectedEntity,component,name,value): self.SetDirty(True)
+
+    def _Rename(self, name: str) -> None:
+        if self.SelectedEntity and name.strip() and self.Runtime.Rename(self.SelectedEntity,name.strip()):self.SetDirty(True);self.RefreshHierarchy()
+
+    def SetDirty(self, dirty: bool = True) -> None:
+        self.IsDirty=dirty;title=self.Window.windowTitle().rstrip(" *")
+        self.Window.setWindowTitle(title + (" *" if dirty else ""))
+
+    def _GizmoModeChanged(self, mode) -> None: self.Window.Scene.Surface.SetGizmoMode(mode);self._UpdateGizmo()
+    def _UpdateGizmo(self) -> None:
+        modes={GizmoMode.Select:0,GizmoMode.Translate:1,GizmoMode.Rotate:2,GizmoMode.Scale:3}
+        self.Runtime.SetGizmo(self.SelectedEntity, modes[self.Window.Toolbar.GetGizmoMode()])
 
     def CreateEntity(self, parent) -> None:  # type: ignore[no-untyped-def]
         self.Runtime.CreateEntity(self.Window.Localization.Translate("entity.new"), str(parent or ""))
+        self.SetDirty(True)
 
     def CreateTypedEntity(self, component_type: str, parent) -> None:  # type: ignore[no-untyped-def]
         entity_id = self.Runtime.CreateEntity(component_type if component_type != "Entity" else self.Window.Localization.Translate("entity.new"), str(parent or ""))
         if entity_id and component_type != "Entity": self.Runtime.AddComponent(entity_id, component_type)
+        if entity_id:self.SetDirty(True)
 
     def ShowAddComponentMenu(self) -> None:
         if not self.SelectedEntity: return
@@ -137,10 +182,14 @@ class EditorController(QObject):
 
     def _AddComponent(self, component_type: str) -> None:
         if self.SelectedEntity and self.Runtime.AddComponent(self.SelectedEntity, component_type):
+            self.SetDirty(True)
             self.SelectEntity(self.SelectedEntity)
 
     def DeleteEntity(self, entity_id) -> None:  # type: ignore[no-untyped-def]
-        if entity_id: self.Runtime.DestroyEntity(str(entity_id))
+        if entity_id and self.Runtime.DestroyEntity(str(entity_id)): self.SetDirty(True)
+
+    def ReparentEntity(self, entity_id: str, parent_id: str) -> None:
+        if self.Runtime.SetParent(entity_id,parent_id):self.SetDirty(True)
 
     def Play(self) -> None:
         if self.Runtime.Play(): pass
@@ -150,9 +199,26 @@ class EditorController(QObject):
         self.Runtime.Stop()
 
     def ApplyGizmoTranslation(self, delta) -> bool:  # type: ignore[no-untyped-def]
-        return bool(self.SelectedEntity and self.Runtime.Translate(
+        changed=bool(self.SelectedEntity and self.Runtime.Translate(
             self.SelectedEntity, (delta.X, delta.Y, delta.Z)
-        ))
+        ));self.SetDirty(changed or self.IsDirty);self._UpdateGizmo();return changed
+
+    def ApplyGizmoRotation(self, axis, angle: float) -> bool:  # type: ignore[no-untyped-def]
+        details=self.Runtime.EntityDetails(self.SelectedEntity) if self.SelectedEntity else {}
+        if not details:return False
+        x,y,z,w=details["rotation"];s=sin(angle*.5);dx,dy,dz,dw=axis.X*s,axis.Y*s,axis.Z*s,cos(angle*.5)
+        rotation=(dw*x+dx*w+dy*z-dz*y,dw*y-dx*z+dy*w+dz*x,dw*z+dx*y-dy*x+dz*w,dw*w-dx*x-dy*y-dz*z)
+        changed=self.Runtime.SetTransform(self.SelectedEntity,details["position"],rotation,details["scale"])
+        if changed:self.SetDirty(True);self._UpdateGizmo()
+        return changed
+
+    def ApplyGizmoScale(self, factor) -> bool:  # type: ignore[no-untyped-def]
+        details=self.Runtime.EntityDetails(self.SelectedEntity) if self.SelectedEntity else {}
+        if not details:return False
+        scale=tuple(a*b for a,b in zip(details["scale"],(factor.X,factor.Y,factor.Z)))
+        changed=self.Runtime.SetTransform(self.SelectedEntity,details["position"],details["rotation"],scale)
+        if changed:self.SetDirty(True);self._UpdateGizmo()
+        return changed
 
 
 __all__ = ["EditorController"]

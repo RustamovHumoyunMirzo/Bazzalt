@@ -61,6 +61,18 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
     if (entity.HasComponent<Vignette>()) components.append("Vignette");
     if (entity.HasComponent<SceneQueryBounds>()) components.append("Scene Query Bounds");
     result["components"] = components;
+    py::dict data;
+    if (const auto* camera=entity.TryGetComponent<Camera>()) {
+        py::dict v; v["Field of View"]=ToDegrees(camera->VerticalFieldOfView);v["Near"]=camera->NearPlane;v["Far"]=camera->FarPlane;v["Priority"]=camera->Priority;v["Active"]=camera->Active;data["Camera"]=v;
+    }
+    if (const auto* light=entity.TryGetComponent<Light>()) {
+        py::dict v;v["Type"]=static_cast<int>(light->Type);v["Intensity"]=light->Intensity;v["Range"]=light->Range;v["Cast Shadows"]=light->CastShadows;v["Enabled"]=light->Enabled;data["Light"]=v;
+    }
+    if (const auto* mesh=entity.TryGetComponent<Mesh>()) { py::dict v;v["Visible"]=mesh->Visible;v["Cast Shadows"]=mesh->CastShadows;v["Receive Shadows"]=mesh->ReceiveShadows;v["Layer Mask"]=mesh->LayerMask;data["Mesh"]=v; }
+    if (const auto* blur=entity.TryGetComponent<GaussianBlur>()) { py::dict v;v["Enabled"]=blur->Enabled;v["Size"]=blur->Size;data["Gaussian Blur"]=v; }
+    if (const auto* vignette=entity.TryGetComponent<Vignette>()) { py::dict v;v["Enabled"]=vignette->Enabled;v["Intensity"]=vignette->Intensity;v["Smoothness"]=vignette->Smoothness;v["Roundness"]=vignette->Roundness;data["Vignette"]=v; }
+    if (const auto* bounds=entity.TryGetComponent<SceneQueryBounds>()) { py::dict v;v["Shape"]=static_cast<int>(bounds->Shape);v["Center"]=py::make_tuple(bounds->Center.X,bounds->Center.Y,bounds->Center.Z);v["Extents"]=py::make_tuple(bounds->Extents.X,bounds->Extents.Y,bounds->Extents.Z);v["Radius"]=bounds->Radius;v["Enabled"]=bounds->Enabled;data["Scene Query Bounds"]=v; }
+    result["component_data"] = data;
     return result;
 }
 
@@ -72,12 +84,16 @@ public:
     bool LoadProject(const std::string& path) {
         Stop();
         const bool result = m_engine->LoadProject(std::filesystem::u8path(path), true);
-        if (result) m_projectPath = std::filesystem::u8path(path);
+        if (result) {
+            m_projectPath = std::filesystem::u8path(path);
+            m_scenePath = m_engine->GetProject().StartupScene.empty() ? std::filesystem::path{} :
+                m_projectPath.parent_path() / m_engine->GetProject().StartupScene;
+        }
         return result;
     }
-    bool LoadScene(const std::string& path) { Stop(); return m_engine->LoadScene(std::filesystem::u8path(path)); }
-    bool SaveScene(const std::string& path) { return m_engine->SaveScene(std::filesystem::u8path(path)); }
-    void NewScene() { Stop(); m_engine->CreateScene(); }
+    bool LoadScene(const std::string& path) { Stop(); const bool ok=m_engine->LoadScene(std::filesystem::u8path(path));if(ok)m_scenePath=std::filesystem::u8path(path);return ok; }
+    bool SaveScene(const std::string& path) { const bool ok=m_engine->SaveScene(std::filesystem::u8path(path));if(ok)m_scenePath=std::filesystem::u8path(path);return ok; }
+    void NewScene() { Stop(); m_engine->CreateScene();m_scenePath.clear(); }
     std::string LastError() const { return m_engine->GetLastError(); }
     py::str ProjectDirectory() const { return m_projectPath.empty() ? py::str() : PathText(m_projectPath.parent_path()); }
     py::str AssetDirectory() const {
@@ -158,8 +174,24 @@ public:
     py::dict SceneInfo() const {
         py::dict result;
         result["uuid"] = m_engine->GetScene().GetUUID().ToString();
-        result["name"] = "Untitled";
+        result["name"] = m_scenePath.empty() ? std::string("Untitled") : m_scenePath.stem().string();
+        result["path"] = m_scenePath.empty() ? py::str() : PathText(m_scenePath);
         return result;
+    }
+    bool SetComponentProperty(const std::string& id, const std::string& type,
+                              const std::string& property, py::object value) {
+        Entity entity=RequireEntity(id);
+        if(type=="Camera"&&entity.HasComponent<Camera>()){auto&v=entity.GetComponent<Camera>();if(property=="Field of View")v.VerticalFieldOfView=ToRadians(value.cast<float>());else if(property=="Near")v.NearPlane=value.cast<float>();else if(property=="Far")v.FarPlane=value.cast<float>();else if(property=="Priority")v.Priority=value.cast<int>();else if(property=="Active")v.Active=value.cast<bool>();else return false;return true;}
+        if(type=="Light"&&entity.HasComponent<Light>()){auto&v=entity.GetComponent<Light>();if(property=="Type")v.Type=static_cast<LightType>(value.cast<int>());else if(property=="Intensity")v.Intensity=value.cast<float>();else if(property=="Range")v.Range=value.cast<float>();else if(property=="Cast Shadows")v.CastShadows=value.cast<bool>();else if(property=="Enabled")v.Enabled=value.cast<bool>();else return false;return true;}
+        if(type=="Mesh"&&entity.HasComponent<Mesh>()){auto&v=entity.GetComponent<Mesh>();if(property=="Visible")v.Visible=value.cast<bool>();else if(property=="Cast Shadows")v.CastShadows=value.cast<bool>();else if(property=="Receive Shadows")v.ReceiveShadows=value.cast<bool>();else if(property=="Layer Mask")v.LayerMask=static_cast<std::uint8_t>(value.cast<int>());else return false;return true;}
+        if(type=="Gaussian Blur"&&entity.HasComponent<GaussianBlur>()){auto&v=entity.GetComponent<GaussianBlur>();if(property=="Enabled")v.Enabled=value.cast<bool>();else if(property=="Size")v.Size=value.cast<float>();else return false;return true;}
+        if(type=="Vignette"&&entity.HasComponent<Vignette>()){auto&v=entity.GetComponent<Vignette>();if(property=="Enabled")v.Enabled=value.cast<bool>();else if(property=="Intensity")v.Intensity=value.cast<float>();else if(property=="Smoothness")v.Smoothness=value.cast<float>();else if(property=="Roundness")v.Roundness=value.cast<float>();else return false;return true;}
+        return false;
+    }
+    void SetGizmo(const std::string& id, int mode) {
+        Entity entity=m_engine->GetScene().GetEntity(ParseUuid(id));
+        if(!entity||mode==0){m_engine->SetEditorGizmo(false,0,0,0,0);return;}
+        Vec3 p=entity.GetWorldMatrix().TransformPoint({});m_engine->SetEditorGizmo(true,p.X,p.Y,p.Z,mode);
     }
     bool CreateViewport(std::uint64_t id, std::uintptr_t handle, bool scene,
                         std::uint32_t width, std::uint32_t height) {
@@ -212,6 +244,7 @@ private:
     std::unique_ptr<Runtime::Engine> m_engine;
     std::filesystem::path m_projectPath;
     std::filesystem::path m_snapshot;
+    std::filesystem::path m_scenePath;
     bool m_playing = false;
     bool m_paused = false;
 };
@@ -247,6 +280,8 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("resize_viewport", &Bazzalt::EditorBridge::EditorHost::ResizeViewport)
         .def("destroy_viewport", &Bazzalt::EditorBridge::EditorHost::DestroyViewport)
         .def("set_scene_camera", &Bazzalt::EditorBridge::EditorHost::SetSceneCamera)
+        .def("set_component_property", &Bazzalt::EditorBridge::EditorHost::SetComponentProperty)
+        .def("set_gizmo", &Bazzalt::EditorBridge::EditorHost::SetGizmo)
         .def("play", &Bazzalt::EditorBridge::EditorHost::Play)
         .def("pause", &Bazzalt::EditorBridge::EditorHost::Pause)
         .def("step", &Bazzalt::EditorBridge::EditorHost::Step)

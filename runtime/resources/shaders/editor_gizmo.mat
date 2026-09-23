@@ -1,0 +1,14 @@
+material {
+    name : EditorGizmo,
+    shadingModel : unlit,
+    parameters : [ { type : float4, name : color } ],
+    depthWrite : false,
+    depthCulling : false,
+    doubleSided : true
+}
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = materialParams.color;
+    }
+}
