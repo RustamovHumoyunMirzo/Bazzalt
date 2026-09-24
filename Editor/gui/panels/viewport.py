@@ -16,6 +16,7 @@ class NativeRenderSurface(QWidget):
     ScaleDragged = Signal(object)
     CameraChanged = Signal(float, float)
     Attached = Signal()
+    EntityPicked = Signal(str)
     _next_id = 1
 
     def __init__(self, runtime, scene: bool, parent: QWidget | None = None) -> None:
@@ -79,13 +80,35 @@ class NativeRenderSurface(QWidget):
         spread=tan(radians(30.0));aspect=self.width()/max(1,self.height())
         return Ray(eye,(forward+right*(x*spread*aspect)+up*(y*spread)).Normalized())
 
+    def _Project(self,position)->tuple[float,float,float]|None:
+        eye=Vec3(*self._eye);forward=(Vec3(*self._target)-eye).Normalized();right=forward.Cross(Vec3(0,1,0)).Normalized();up=right.Cross(forward).Normalized();rel=Vec3(*position)-eye;depth=rel.Dot(forward)
+        if depth<=.05:return None
+        focal=self.height()/(2.0*tan(radians(30.0)))
+        return self.width()*.5+rel.Dot(right)*focal/depth,self.height()*.5-rel.Dot(up)*focal/depth,depth
+
+    def _PickSceneIcon(self,point:QPoint)->str:
+        best="";best_distance=18.0*18.0;best_depth=float("inf")
+        try:entities=self.Runtime.Entities()
+        except Exception:return ""
+        for entity in entities:
+            components=entity.get("components",())
+            if "Camera" not in components and "Light" not in components:continue
+            projected=self._Project(entity.get("world_position",entity.get("position",(0,0,0))))
+            if projected is None:continue
+            x,y,depth=projected;distance=(x-point.x())**2+(y-point.y())**2
+            if distance<=best_distance and depth<best_depth:best=str(entity.get("uuid",""));best_distance=distance;best_depth=depth
+        return best
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
         self._last = event.position().toPoint(); self.setFocus()
         if self.IsScene and event.button()==Qt.MouseButton.RightButton:self._navigating=True;event.accept();return
         if self.IsScene and event.button()==Qt.MouseButton.LeftButton and self._selection and self._mode is not GizmoMode.Select:
             ray=self._Ray(self._last);handle=PickAxis(ray,self._selection,1.5,max(.08,self._distance*.012))
             if handle is not None:
-                self._gizmo_drag=GizmoDrag(self._mode,handle,ray,self._selection,(Vec3(*self._target)-Vec3(*self._eye)).Normalized());self._last_delta=Vec3();self._last_angle=0.0;self._last_scale=Vec3(1,1,1);event.accept()
+                self._gizmo_drag=GizmoDrag(self._mode,handle,ray,self._selection,(Vec3(*self._target)-Vec3(*self._eye)).Normalized());self._last_delta=Vec3();self._last_angle=0.0;self._last_scale=Vec3(1,1,1);event.accept();return
+        if self.IsScene and event.button()==Qt.MouseButton.LeftButton:
+            entity_id=self._PickSceneIcon(self._last)
+            if entity_id:self.EntityPicked.emit(entity_id);event.accept();return
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         if not self.IsScene: return

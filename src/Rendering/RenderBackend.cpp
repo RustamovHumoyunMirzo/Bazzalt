@@ -121,13 +121,16 @@ bool RenderBackend::Initialize() {
     for (int axis=0; axis<3; ++axis) {
         m_gizmo->Instances[axis] = m_gizmo->Material->createInstance();
         m_gizmo->Instances[axis]->setParameter("color", colors[axis]);
+        m_gizmo->Instances[axis]->setDoubleSided(true);
+        m_gizmo->Instances[axis]->setDepthWrite(true);
+        m_gizmo->Instances[axis]->setDepthCulling(false);
         for (int model=0; model<3; ++model) {
             const int index=model*3+axis;m_gizmo->Entities[index]=m_engine->getEntityManager().create();
             m_engine->getTransformManager().create(m_gizmo->Entities[index]);
             filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{1.1f,1.1f,1.1f}})
                 .material(0,m_gizmo->Instances[axis]).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,
                     m_gizmo->Vertices[model],m_gizmo->Indices[model]).culling(false).castShadows(false).receiveShadows(false)
-                .layerMask(0xff,0x80)
+                .layerMask(0xff,0x80).priority(7)
                 .build(*m_engine,m_gizmo->Entities[index]);
             auto instance=m_engine->getRenderableManager().getInstance(m_gizmo->Entities[index]);
             m_engine->getRenderableManager().setLayerMask(instance,0xff,0x80);
@@ -141,8 +144,8 @@ bool RenderBackend::Initialize() {
     m_gizmo->GridVertices->setBufferAt(*m_engine,0,{grid,vertexCount*3*sizeof(float),[](void* b,size_t,void*){delete[] static_cast<float*>(b);}});
     m_gizmo->GridIndices=filament::IndexBuffer::Builder().indexCount(indexCount).bufferType(filament::IndexBuffer::IndexType::USHORT).build(*m_engine);
     m_gizmo->GridIndices->setBuffer(*m_engine,{gridIndices,indexCount*sizeof(std::uint16_t),[](void* b,size_t,void*){delete[] static_cast<std::uint16_t*>(b);}});
-    m_gizmo->GridInstance=m_gizmo->Material->createInstance();m_gizmo->GridInstance->setParameter("color",filament::math::float4{.32f,.34f,.38f,1.0f});
-    m_gizmo->GridEntity=m_engine->getEntityManager().create();m_engine->getTransformManager().create(m_gizmo->GridEntity);filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{11,11,.1f}}).material(0,m_gizmo->GridInstance).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,m_gizmo->GridVertices,m_gizmo->GridIndices).culling(false).castShadows(false).receiveShadows(false).layerMask(0xff,0x80).build(*m_engine,m_gizmo->GridEntity);
+    m_gizmo->GridInstance=m_gizmo->Material->createInstance();m_gizmo->GridInstance->setParameter("color",filament::math::float4{.32f,.34f,.38f,1.0f});m_gizmo->GridInstance->setDoubleSided(true);m_gizmo->GridInstance->setDepthWrite(true);m_gizmo->GridInstance->setDepthCulling(true);
+    m_gizmo->GridEntity=m_engine->getEntityManager().create();m_engine->getTransformManager().create(m_gizmo->GridEntity);filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{11,11,.1f}}).material(0,m_gizmo->GridInstance).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,m_gizmo->GridVertices,m_gizmo->GridIndices).culling(false).castShadows(false).receiveShadows(false).layerMask(0xff,0x80).priority(7).build(*m_engine,m_gizmo->GridEntity);
     m_engine->getRenderableManager().setLayerMask(m_engine->getRenderableManager().getInstance(m_gizmo->GridEntity),0xff,0x80);
     m_assets = std::make_unique<RenderAssets>(*m_engine, *m_scene);
     SetEditorGrid(m_gridVisible,m_gridPlane);SetEditorGizmo(m_gizmoVisible,m_gizmoX,m_gizmoY,m_gizmoZ,m_gizmoMode);

@@ -48,6 +48,7 @@ class EditorController(QObject):
         window.Scene.Surface.TranslationDragged.connect(self.ApplyGizmoTranslation)
         window.Scene.Surface.RotationDragged.connect(self.ApplyGizmoRotation)
         window.Scene.Surface.ScaleDragged.connect(self.ApplyGizmoScale)
+        window.Scene.Surface.EntityPicked.connect(self.SelectSceneEntity)
         window.Scene.Surface.Attached.connect(self._UpdateGizmo)
         if not runtime.IsAvailable():
             window.Console.AddMessage(runtime.LastError(), ConsoleLevel.Warning)
@@ -137,6 +138,9 @@ class EditorController(QObject):
                     if editor is not None: section.AddField(property_name, editor)
 
         self._UpdateGizmo()
+
+    def SelectSceneEntity(self,entity_id:str)->None:
+        self.SelectEntity(entity_id);self.RefreshHierarchy()
 
     def _ComponentEditor(self, component: str, name: str, value):  # type: ignore[no-untyped-def]
         if isinstance(value, bool):
