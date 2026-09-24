@@ -151,6 +151,22 @@ def PickAxis(ray: Ray, origin: Vec3, length: float,
     return handle if distance <= tolerance else None
 
 
+def PickRotationAxis(ray: Ray, origin: Vec3, radius: float,
+                     tolerance: float) -> GizmoHandle | None:
+    """Pick the nearest axis ring by intersecting its rotation plane."""
+    if radius <= 0.0 or tolerance < 0.0:
+        raise ValueError("radius must be positive and tolerance cannot be negative")
+    candidates: list[tuple[float, GizmoHandle]] = []
+    for handle in (GizmoHandle.X, GizmoHandle.Y, GizmoHandle.Z):
+        hit = RayPlaneIntersection(ray, Plane(origin, AxisVector(handle)))
+        if hit is not None:
+            candidates.append((abs((hit - origin).Length() - radius), handle))
+    if not candidates:
+        return None
+    distance, handle = min(candidates, key=lambda item: item[0])
+    return handle if distance <= tolerance else None
+
+
 def TranslationAlongAxis(start: Ray, current: Ray, origin: Vec3,
                          axis: Vec3) -> Vec3:
     first = ClosestRayAxisParameter(start, origin, axis)
@@ -275,7 +291,7 @@ class GizmoDrag:
 
 __all__ = [
     "AxisVector", "ClosestRayAxisParameter", "DistanceToAxisHandle", "GizmoDelta",
-    "GizmoDrag", "GizmoHandle", "GizmoMode", "PickAxis", "Plane", "Ray",
+    "GizmoDrag", "GizmoHandle", "GizmoMode", "PickAxis", "PickRotationAxis", "Plane", "Ray",
     "RayPlaneIntersection", "RotationAroundAxis", "ScaleAlongAxis", "Snap",
     "TranslationAlongAxis", "TranslationOnPlane", "UniformScale", "Vec3",
 ]

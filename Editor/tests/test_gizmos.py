@@ -8,6 +8,7 @@ from Editor.gui.gizmos import (
     GizmoHandle,
     GizmoMode,
     PickAxis,
+    PickRotationAxis,
     Plane,
     Ray,
     RayPlaneIntersection,
@@ -41,6 +42,10 @@ class GizmoMathTests(unittest.TestCase):
     def test_axis_picker_chooses_nearest_handle(self) -> None:
         ray = Ray(Vec3(0.5, 0.02, 2), Vec3(0, 0, -1))
         self.assertEqual(PickAxis(ray, Vec3(), 1.0, 0.05), GizmoHandle.X)
+
+    def test_rotation_picker_chooses_ring_plane(self) -> None:
+        ray = Ray(Vec3(0, 0.98, 5), Vec3(0, 0, -1))
+        self.assertEqual(PickRotationAxis(ray, Vec3(), 1.0, 0.05), GizmoHandle.Z)
 
     def test_drag_outputs_transform_delta_without_runtime_dependency(self) -> None:
         start = Ray(Vec3(0, 1, 5), Vec3(0, -1, -5))

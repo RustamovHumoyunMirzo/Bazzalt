@@ -109,7 +109,7 @@ class EditorController(QObject):
             self.Window.Scene.Surface.SetSelection(None);self._UpdateGizmo();return
         details = self.Runtime.EntityDetails(self.SelectedEntity)
         if not details:self._UpdateGizmo();return
-        self.Window.Scene.Surface.SetSelection(details["position"])
+        self.Window.Scene.Surface.SetSelection(details.get("world_position", details["position"]))
         identity = self.Window.Properties.AddComponentSection("identity", "Entity", removable=False)
         name = StringInput(str(details["name"]));name.editingFinished.connect(lambda:self._Rename(name.text()))
         identity.AddField("Name", name)

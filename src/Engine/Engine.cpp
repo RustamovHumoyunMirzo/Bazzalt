@@ -111,6 +111,10 @@ void Engine::SetEditorGizmo(bool visible, float x, float y, float z, int mode) {
     m_renderBackend->SetEditorGizmo(visible, x, y, z, mode);
 }
 
+void Engine::SetEditorGizmoHover(int axis) {
+    m_renderBackend->SetEditorGizmoHover(axis);
+}
+
 void Engine::SetEditorGrid(bool visible, int plane) {
     m_renderBackend->SetEditorGrid(visible, plane);
 }

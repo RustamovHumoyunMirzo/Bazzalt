@@ -210,6 +210,7 @@ public:
         if(!entity||mode==0){m_engine->SetEditorGizmo(false,0,0,0,0);return;}
         Vec3 p=entity.GetWorldMatrix().TransformPoint({});m_engine->SetEditorGizmo(true,p.X,p.Y,p.Z,mode);
     }
+    void SetGizmoHover(int axis) { m_engine->SetEditorGizmoHover(axis); }
     void SetGrid(bool visible, int plane) { m_engine->SetEditorGrid(visible, plane); }
     bool CreateViewport(std::uint64_t id, std::uintptr_t handle, bool scene,
                         std::uint32_t width, std::uint32_t height) {
@@ -301,6 +302,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("set_scene_camera", &Bazzalt::EditorBridge::EditorHost::SetSceneCamera)
         .def("set_component_property", &Bazzalt::EditorBridge::EditorHost::SetComponentProperty)
         .def("set_gizmo", &Bazzalt::EditorBridge::EditorHost::SetGizmo)
+        .def("set_gizmo_hover", &Bazzalt::EditorBridge::EditorHost::SetGizmoHover)
         .def("set_grid", &Bazzalt::EditorBridge::EditorHost::SetGrid)
         .def("play", &Bazzalt::EditorBridge::EditorHost::Play)
         .def("pause", &Bazzalt::EditorBridge::EditorHost::Pause)

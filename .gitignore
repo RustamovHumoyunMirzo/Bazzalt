@@ -10,3 +10,4 @@ pytest-cache-files-*/
 /nuitka-crash-report.xml
 /deps/
 .bazzalt/
+TODO.md

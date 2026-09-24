@@ -159,6 +159,10 @@ class RuntimeService(QObject):
         if self._host is not None and hasattr(self._host, "set_gizmo"):
             self._host.set_gizmo(entity_id, mode)
 
+    def SetGizmoHover(self, axis: int) -> None:
+        if self._host is not None and hasattr(self._host, "set_gizmo_hover"):
+            self._host.set_gizmo_hover(axis)
+
     def SetGrid(self, visible: bool, plane: int = 1) -> None:
         if self._host is not None and hasattr(self._host, "set_grid"):
             self._host.set_grid(visible, plane)

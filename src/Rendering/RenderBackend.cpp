@@ -1,6 +1,7 @@
 #include "Rendering/RenderBackend.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include <filament/Engine.h>
 #include <filament/Camera.h>
@@ -136,7 +137,7 @@ bool RenderBackend::Initialize() {
             m_engine->getRenderableManager().setLayerMask(instance,0xff,0x80);
         }
     }
-    constexpr int half=10;constexpr int lineCount=(half*2+1)*2;constexpr int vertexCount=lineCount*4;constexpr int indexCount=lineCount*6;constexpr float width=.025f;
+    constexpr int half=200;constexpr int lineCount=(half*2+1)*2;constexpr int vertexCount=lineCount*4;constexpr int indexCount=lineCount*6;constexpr float width=.0125f;
     auto* grid=new float[vertexCount*3];auto* gridIndices=new std::uint16_t[indexCount];int vertexCursor=0,indexCursor=0,base=0;
     const auto quad=[&](float x0,float y0,float x1,float y1){const float values[]={x0,y0,0,x1,y0,0,x1,y1,0,x0,y1,0};for(float v:values)grid[vertexCursor++]=v;const std::uint16_t ids[]={std::uint16_t(base),std::uint16_t(base+1),std::uint16_t(base+2),std::uint16_t(base),std::uint16_t(base+2),std::uint16_t(base+3)};for(auto v:ids)gridIndices[indexCursor++]=v;base+=4;};
     for(int i=-half;i<=half;++i){quad(float(-half),float(i)-width,float(half),float(i)+width);quad(float(i)-width,float(-half),float(i)+width,float(half));}
@@ -145,7 +146,7 @@ bool RenderBackend::Initialize() {
     m_gizmo->GridIndices=filament::IndexBuffer::Builder().indexCount(indexCount).bufferType(filament::IndexBuffer::IndexType::USHORT).build(*m_engine);
     m_gizmo->GridIndices->setBuffer(*m_engine,{gridIndices,indexCount*sizeof(std::uint16_t),[](void* b,size_t,void*){delete[] static_cast<std::uint16_t*>(b);}});
     m_gizmo->GridInstance=m_gizmo->Material->createInstance();m_gizmo->GridInstance->setParameter("color",filament::math::float4{.32f,.34f,.38f,1.0f});m_gizmo->GridInstance->setDoubleSided(true);m_gizmo->GridInstance->setDepthWrite(true);m_gizmo->GridInstance->setDepthCulling(true);
-    m_gizmo->GridEntity=m_engine->getEntityManager().create();m_engine->getTransformManager().create(m_gizmo->GridEntity);filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{11,11,.1f}}).material(0,m_gizmo->GridInstance).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,m_gizmo->GridVertices,m_gizmo->GridIndices).culling(false).castShadows(false).receiveShadows(false).layerMask(0xff,0x80).priority(7).build(*m_engine,m_gizmo->GridEntity);
+    m_gizmo->GridEntity=m_engine->getEntityManager().create();m_engine->getTransformManager().create(m_gizmo->GridEntity);filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{201,201,.1f}}).material(0,m_gizmo->GridInstance).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,m_gizmo->GridVertices,m_gizmo->GridIndices).culling(false).castShadows(false).receiveShadows(false).layerMask(0xff,0x80).priority(7).build(*m_engine,m_gizmo->GridEntity);
     m_engine->getRenderableManager().setLayerMask(m_engine->getRenderableManager().getInstance(m_gizmo->GridEntity),0xff,0x80);
     m_assets = std::make_unique<RenderAssets>(*m_engine, *m_scene);
     SetEditorGrid(m_gridVisible,m_gridPlane);SetEditorGizmo(m_gizmoVisible,m_gizmoX,m_gizmoY,m_gizmoZ,m_gizmoMode);
@@ -215,6 +216,16 @@ void RenderBackend::SetSceneCamera(std::uint64_t id, float eyeX, float eyeY, flo
     if (found == m_viewports.end() || !found->second->Camera) return;
     found->second->Camera->lookAt({eyeX, eyeY, eyeZ}, {targetX, targetY, targetZ},
                                   {0.0, 1.0, 0.0});
+    if (found->second->Kind == ViewportKind::Scene) {
+        const float dx=eyeX-targetX,dy=eyeY-targetY,dz=eyeZ-targetZ;
+        const float distance=std::sqrt(dx*dx+dy*dy+dz*dz);
+        m_gridScale=std::pow(10.0f,std::max(0.0f,std::floor(std::log10(std::max(1.0f,distance/20.0f)))));
+        const float snap=10.0f*m_gridScale;
+        m_gridCenterX=std::round(targetX/snap)*snap;
+        m_gridCenterY=std::round(targetY/snap)*snap;
+        m_gridCenterZ=std::round(targetZ/snap)*snap;
+        SetEditorGrid(m_gridVisible,m_gridPlane);
+    }
 }
 
 void RenderBackend::SetEditorGizmo(bool visible, float x, float y, float z, int mode) {
@@ -224,11 +235,16 @@ void RenderBackend::SetEditorGizmo(bool visible, float x, float y, float z, int 
     const float scale = mode == 0 ? 0.0f : 1.0f;
     for (int model=0;model<3;++model) for (int axis=0; axis<3; ++axis) {
         const int index=model*3+axis;auto instance = transforms.getInstance(m_gizmo->Entities[index]);
-        const auto base = filament::math::mat4f::rotation(-1.5707963f, filament::math::float3{0,0,1});
-        filament::math::mat4f axisRotation;
-        if (axis == 1) axisRotation = filament::math::mat4f::rotation(1.5707963f, filament::math::float3{0,0,1});
-        else if (axis == 2) axisRotation = filament::math::mat4f::rotation(-1.5707963f, filament::math::float3{0,1,0});
-        const auto rotation = axisRotation * base;
+        filament::math::mat4f rotation;
+        if (model == 1) {
+            if (axis == 0) rotation=filament::math::mat4f::rotation(-1.5707963f,filament::math::float3{0,0,1});
+            else if (axis == 2) rotation=filament::math::mat4f::rotation(1.5707963f,filament::math::float3{1,0,0});
+        } else {
+            // Translate/scale assets point down -Y in source space.
+            if (axis == 0) rotation=filament::math::mat4f::rotation(1.5707963f,filament::math::float3{0,0,1});
+            else if (axis == 1) rotation=filament::math::mat4f::rotation(3.1415926f,filament::math::float3{0,0,1});
+            else rotation=filament::math::mat4f::rotation(-1.5707963f,filament::math::float3{1,0,0});
+        }
         const auto transform = filament::math::mat4f::translation(filament::math::float3{x,y,z}) *
             filament::math::mat4f::scaling(filament::math::float3{scale,scale,scale}) * rotation;
         transforms.setTransform(instance, transform);
@@ -237,7 +253,14 @@ void RenderBackend::SetEditorGizmo(bool visible, float x, float y, float z, int 
     }
 }
 
-void RenderBackend::SetEditorGrid(bool visible,int plane){m_gridVisible=visible;m_gridPlane=std::clamp(plane,0,2);if(!m_gizmo||!m_engine)return;auto& tm=m_engine->getTransformManager();auto instance=tm.getInstance(m_gizmo->GridEntity);filament::math::mat4f rotation;if(m_gridPlane==1)rotation=filament::math::mat4f::rotation(1.5707963f,filament::math::float3{1,0,0});else if(m_gridPlane==2)rotation=filament::math::mat4f::rotation(1.5707963f,filament::math::float3{0,1,0});tm.setTransform(instance,rotation);if(visible)m_scene->addEntity(m_gizmo->GridEntity);else m_scene->remove(m_gizmo->GridEntity);}
+void RenderBackend::SetEditorGizmoHover(int axis) {
+    m_gizmoHover=std::clamp(axis,-1,2);
+    if(!m_gizmo)return;
+    constexpr filament::math::float4 colors[]={{.95f,.18f,.15f,1},{.25f,.9f,.25f,1},{.2f,.45f,1,1}};
+    for(int i=0;i<3;++i){auto color=colors[i];if(i==m_gizmoHover){color.x+=(1-color.x)*.42f;color.y+=(1-color.y)*.42f;color.z+=(1-color.z)*.42f;}m_gizmo->Instances[i]->setParameter("color",color);}
+}
+
+void RenderBackend::SetEditorGrid(bool visible,int plane){m_gridVisible=visible;m_gridPlane=std::clamp(plane,0,2);if(!m_gizmo||!m_engine)return;auto& tm=m_engine->getTransformManager();auto instance=tm.getInstance(m_gizmo->GridEntity);filament::math::mat4f rotation;if(m_gridPlane==1)rotation=filament::math::mat4f::rotation(1.5707963f,filament::math::float3{1,0,0});else if(m_gridPlane==2)rotation=filament::math::mat4f::rotation(1.5707963f,filament::math::float3{0,1,0});filament::math::float3 center;if(m_gridPlane==0)center={m_gridCenterX,m_gridCenterY,0};else if(m_gridPlane==1)center={m_gridCenterX,0,m_gridCenterZ};else center={0,m_gridCenterY,m_gridCenterZ};const auto scale=filament::math::mat4f::scaling(filament::math::float3{m_gridScale,m_gridScale,m_gridScale});tm.setTransform(instance,filament::math::mat4f::translation(center)*rotation*scale);if(visible)m_scene->addEntity(m_gizmo->GridEntity);else m_scene->remove(m_gizmo->GridEntity);}
 
 void RenderBackend::Render() {
     if (!m_renderer) return;
