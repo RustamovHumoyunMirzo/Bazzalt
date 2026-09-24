@@ -133,7 +133,7 @@ bool RenderBackend::Initialize() {
             m_engine->getRenderableManager().setLayerMask(instance,0xff,0x80);
         }
     }
-    constexpr int half=10;constexpr int lineCount=(half*2+1)*2;constexpr int vertexCount=lineCount*4;constexpr int indexCount=lineCount*6;constexpr float width=.0125f;
+    constexpr int half=10;constexpr int lineCount=(half*2+1)*2;constexpr int vertexCount=lineCount*4;constexpr int indexCount=lineCount*6;constexpr float width=.025f;
     auto* grid=new float[vertexCount*3];auto* gridIndices=new std::uint16_t[indexCount];int vertexCursor=0,indexCursor=0,base=0;
     const auto quad=[&](float x0,float y0,float x1,float y1){const float values[]={x0,y0,0,x1,y0,0,x1,y1,0,x0,y1,0};for(float v:values)grid[vertexCursor++]=v;const std::uint16_t ids[]={std::uint16_t(base),std::uint16_t(base+1),std::uint16_t(base+2),std::uint16_t(base),std::uint16_t(base+2),std::uint16_t(base+3)};for(auto v:ids)gridIndices[indexCursor++]=v;base+=4;};
     for(int i=-half;i<=half;++i){quad(float(-half),float(i)-width,float(half),float(i)+width);quad(float(i)-width,float(-half),float(i)+width,float(half));}
@@ -141,7 +141,7 @@ bool RenderBackend::Initialize() {
     m_gizmo->GridVertices->setBufferAt(*m_engine,0,{grid,vertexCount*3*sizeof(float),[](void* b,size_t,void*){delete[] static_cast<float*>(b);}});
     m_gizmo->GridIndices=filament::IndexBuffer::Builder().indexCount(indexCount).bufferType(filament::IndexBuffer::IndexType::USHORT).build(*m_engine);
     m_gizmo->GridIndices->setBuffer(*m_engine,{gridIndices,indexCount*sizeof(std::uint16_t),[](void* b,size_t,void*){delete[] static_cast<std::uint16_t*>(b);}});
-    m_gizmo->GridInstance=m_gizmo->Material->createInstance();m_gizmo->GridInstance->setParameter("color",filament::math::float4{.08f,.09f,.11f,1.0f});
+    m_gizmo->GridInstance=m_gizmo->Material->createInstance();m_gizmo->GridInstance->setParameter("color",filament::math::float4{.32f,.34f,.38f,1.0f});
     m_gizmo->GridEntity=m_engine->getEntityManager().create();m_engine->getTransformManager().create(m_gizmo->GridEntity);filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{11,11,.1f}}).material(0,m_gizmo->GridInstance).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,m_gizmo->GridVertices,m_gizmo->GridIndices).culling(false).castShadows(false).receiveShadows(false).layerMask(0xff,0x80).build(*m_engine,m_gizmo->GridEntity);
     m_engine->getRenderableManager().setLayerMask(m_engine->getRenderableManager().getInstance(m_gizmo->GridEntity),0xff,0x80);
     m_assets = std::make_unique<RenderAssets>(*m_engine, *m_scene);

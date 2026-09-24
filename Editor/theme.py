@@ -155,8 +155,9 @@ def BuildStyleSheet(theme: Theme) -> str:
                         padding: 0 5px; text-align: left; font-size: 11px; font-weight: 600; }}
     #ComponentHeader:hover {{ background: {t.surface_hover}; }}
     #ComponentHeaderRow {{ background: {t.surface}; border-bottom: 1px solid {t.border}; }}
-    #RemoveComponentButton {{ min-width: 20px; max-width: 20px; min-height: 20px; max-height: 20px; border: 0; color: {t.text_muted}; }}
-    #RemoveComponentButton:hover {{ color: {t.error}; background: {t.surface_hover}; }}
+    #ComponentOptionsButton {{ min-width: 24px; max-width: 24px; min-height: 21px; max-height: 21px;
+                               border: 0; border-radius: 0; color: {t.text_muted}; font-size: 16px; font-weight: 700; }}
+    #ComponentOptionsButton:hover {{ color: {t.text}; background: {t.surface_hover}; }}
     #PropertiesPanel #InspectorFieldLabel {{ color: {t.text_muted}; font-size: 11px; }}
     #PropertiesPanel QLineEdit, #PropertiesPanel QSpinBox, #PropertiesPanel QDoubleSpinBox,
     #PropertiesPanel QComboBox, #PropertiesPanel QPushButton {{ min-height: 20px; max-height: 20px;

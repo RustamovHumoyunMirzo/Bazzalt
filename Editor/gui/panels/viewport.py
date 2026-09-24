@@ -140,8 +140,13 @@ class NativeRenderSurface(QWidget):
 
 
 class SceneOrientationWidget(QWidget):
-    def __init__(self,parent=None)->None:
-        super().__init__(parent);self._yaw=36.;self._pitch=20.;self.setFixedSize(92,92);self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents);self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground);self.setAutoFillBackground(False)
+    def __init__(self,surface:NativeRenderSurface)->None:
+        flags=Qt.WindowType.Tool|Qt.WindowType.FramelessWindowHint|Qt.WindowType.WindowTransparentForInput|Qt.WindowType.WindowDoesNotAcceptFocus
+        super().__init__(surface.window(),flags);self.Surface=surface;self._yaw=36.;self._pitch=20.;self.setFixedSize(92,92);self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents);self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground);self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating);self.setAutoFillBackground(False)
+        timer=QTimer(self);timer.setInterval(50);timer.timeout.connect(self._Sync);timer.start();self._timer=timer
+    def _Sync(self)->None:
+        if not self.Surface.isVisible() or self.Surface.window().isMinimized():self.hide();return
+        point=self.Surface.mapToGlobal(QPoint(max(6,self.Surface.width()-98),6));self.move(point);self.show()
     def SetCamera(self,yaw:float,pitch:float)->None:self._yaw=yaw;self._pitch=pitch;self.update()
     def paintEvent(self,event)->None:
         p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -160,12 +165,17 @@ class SceneOrientationWidget(QWidget):
 
 class SceneIconOverlay(QWidget):
     def __init__(self, surface: NativeRenderSurface, runtime, resources, parent=None)->None:
-        super().__init__(parent);self.Surface=surface;self.Runtime=runtime
+        flags=Qt.WindowType.Tool|Qt.WindowType.FramelessWindowHint|Qt.WindowType.WindowTransparentForInput|Qt.WindowType.WindowDoesNotAcceptFocus
+        super().__init__(surface.window(),flags);self.Surface=surface;self.Runtime=runtime
         self.CameraIcon=resources.Pixmap("icons/scene_cam.svg") if resources else None
         self.LightIcon=resources.Pixmap("icons/scene_light.svg") if resources else None
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents);self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground);self.setAutoFillBackground(False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents);self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground);self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating);self.setAutoFillBackground(False)
         surface.CameraChanged.connect(lambda _yaw,_pitch:self.update());runtime.SceneChanged.connect(self.update)
-        timer=QTimer(self);timer.setInterval(100);timer.timeout.connect(self.update);timer.start();self._timer=timer
+        timer=QTimer(self);timer.setInterval(50);timer.timeout.connect(self._Sync);timer.start();self._timer=timer
+
+    def _Sync(self)->None:
+        if not self.Surface.isVisible() or self.Surface.window().isMinimized():self.hide();return
+        self.setGeometry(self.Surface.mapToGlobal(QPoint(0,0)).x(),self.Surface.mapToGlobal(QPoint(0,0)).y(),self.Surface.width(),self.Surface.height());self.show();self.update()
 
     def paintEvent(self,event)->None:
         if self.width()<2 or self.height()<2:return
@@ -193,8 +203,7 @@ class ViewportPanel(QFrame):
             row.addWidget(grid);row.addWidget(QLabel("Plane"));row.addWidget(plane);row.addStretch();row.addWidget(QLabel("Fly"));row.addWidget(speed);layout.addWidget(controls)
         self.Surface = NativeRenderSurface(runtime, scene); layout.addWidget(self.Surface, 1)
         if scene:
-            self.SceneIcons=SceneIconOverlay(self.Surface,runtime,resources,self.Surface);self.SceneIcons.setGeometry(self.Surface.rect());self.SceneIcons.show();self.SceneIcons.raise_()
-            self.Orientation=SceneOrientationWidget(self.Surface);self.Orientation.move(max(6,self.Surface.width()-98),6);self.Orientation.raise_()
+            self.SceneIcons=SceneIconOverlay(self.Surface,runtime,resources);self.Orientation=SceneOrientationWidget(self.Surface)
             self.Surface.CameraChanged.connect(self.Orientation.SetCamera)
             grid.toggled.connect(lambda checked:runtime.SetGrid(checked,plane.currentIndex()))
             plane.currentIndexChanged.connect(lambda index:runtime.SetGrid(grid.isChecked(),index))
@@ -203,10 +212,11 @@ class ViewportPanel(QFrame):
 
     def resizeEvent(self,event)->None:
         super().resizeEvent(event)
-        if hasattr(self,"SceneIcons"):self.SceneIcons.setGeometry(self.Surface.rect());self.SceneIcons.raise_()
-        if hasattr(self,"Orientation"):self.Orientation.move(max(6,self.Surface.width()-98),6);self.Orientation.raise_()
 
-    def Detach(self) -> None: self.Surface.Detach()
+    def Detach(self) -> None:
+        if hasattr(self,"SceneIcons"):self.SceneIcons.close()
+        if hasattr(self,"Orientation"):self.Orientation.close()
+        self.Surface.Detach()
 
 
 __all__ = ["NativeRenderSurface", "ViewportPanel"]

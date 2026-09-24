@@ -183,16 +183,25 @@ target_link_libraries(BazzaltExample
 
 include(CTest)
 if(BUILD_TESTING)
+    function(bazzalt_enable_test_assertions target)
+        if(MSVC)
+            target_compile_options(${target} PRIVATE /UNDEBUG)
+        else()
+            target_compile_options(${target} PRIVATE -UNDEBUG)
+        endif()
+    endfunction()
     add_executable(BazzaltMathTests
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/MathTests.cpp"
     )
     target_link_libraries(BazzaltMathTests PRIVATE Bazzalt)
+    bazzalt_enable_test_assertions(BazzaltMathTests)
     add_test(NAME BazzaltMathTests COMMAND BazzaltMathTests)
 
     add_executable(BazzaltEcsTests
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/EcsTests.cpp"
     )
     target_link_libraries(BazzaltEcsTests PRIVATE Bazzalt)
+    bazzalt_enable_test_assertions(BazzaltEcsTests)
     add_test(NAME BazzaltEcsTests COMMAND BazzaltEcsTests)
 
     add_executable(BazzaltSerializationTests
@@ -200,6 +209,7 @@ if(BUILD_TESTING)
     )
     target_link_libraries(BazzaltSerializationTests PRIVATE Bazzalt)
     target_include_directories(BazzaltSerializationTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    bazzalt_enable_test_assertions(BazzaltSerializationTests)
     add_test(NAME BazzaltSerializationTests COMMAND BazzaltSerializationTests)
 
     add_executable(BazzaltRenderingTests
@@ -207,6 +217,7 @@ if(BUILD_TESTING)
     )
     target_link_libraries(BazzaltRenderingTests PRIVATE Bazzalt)
     target_include_directories(BazzaltRenderingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    bazzalt_enable_test_assertions(BazzaltRenderingTests)
     add_test(NAME BazzaltRenderingTests COMMAND BazzaltRenderingTests)
 
     add_executable(BazzaltAssetPipelineTests
@@ -214,5 +225,6 @@ if(BUILD_TESTING)
     )
     target_link_libraries(BazzaltAssetPipelineTests PRIVATE Bazzalt)
     target_include_directories(BazzaltAssetPipelineTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    bazzalt_enable_test_assertions(BazzaltAssetPipelineTests)
     add_test(NAME BazzaltAssetPipelineTests COMMAND BazzaltAssetPipelineTests)
 endif()
