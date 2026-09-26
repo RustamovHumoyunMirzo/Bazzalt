@@ -1,0 +1,21 @@
+shader MyShader {
+    properties {
+        baseColor: texture2d;
+        roughnessFactor: float = 0.5;
+        useBlur: bool = false;
+        blurRadius: float = 2.0;
+    }
+
+    material {
+        float finalRoughness = roughnessFactor;
+
+        if (useBlur) {
+            // High-level feature: 'blur' abstracts multi-tap sampling.
+            color = blur(baseColor, UV, blurRadius);
+        } else {
+            color = texture(baseColor, UV);
+        }
+
+        roughness = finalRoughness;
+    }
+}
