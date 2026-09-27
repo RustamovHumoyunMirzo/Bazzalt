@@ -207,7 +207,9 @@ class EditorController(QObject):
         self.SelectEntities((self.SelectedEntities+entity_ids) if additive else entity_ids);self.RefreshHierarchy()
 
     def BeginSceneBoxSelection(self,additive:bool)->None:
-        if not additive:self.SelectEntity(None);self.RefreshHierarchy()
+        if not additive:
+            blocker=QSignalBlocker(self.Window.Hierarchy.Tree);self.Window.Hierarchy.Tree.clearSelection();self.Window.Hierarchy.Tree.setCurrentItem(None);del blocker
+            self.SelectEntity(None)
 
     def _HistoryChanged(self)->None:
         self.Window.MenuBar.UndoAction.setEnabled(self.History.CanUndo());self.Window.MenuBar.RedoAction.setEnabled(self.History.CanRedo())

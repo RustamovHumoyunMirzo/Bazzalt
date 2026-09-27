@@ -5,10 +5,25 @@ from __future__ import annotations
 from math import cos, radians, sin, tan
 
 from PySide6.QtCore import QPoint, QPointF, QRect, Qt, QTimer, Signal
-from PySide6.QtGui import QKeyEvent, QMouseEvent, QWheelEvent
+from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QPainter, QPen, QWheelEvent
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel,
-                               QRubberBand, QStackedLayout, QVBoxLayout, QWidget)
+                               QStackedLayout, QVBoxLayout, QWidget)
 from ..gizmos import GizmoDrag, GizmoHandle, GizmoMode, PickAxis, PickRotationAxis, Ray, Vec3
+
+
+class SelectionMarquee(QWidget):
+    """Transient screen-space overlay that remains visible above a native swap chain."""
+    def __init__(self) -> None:
+        flags=(Qt.WindowType.ToolTip|Qt.WindowType.FramelessWindowHint|
+               Qt.WindowType.WindowDoesNotAcceptFocus|Qt.WindowType.WindowTransparentForInput)
+        super().__init__(None,flags);self.setObjectName("SceneSelectionMarquee")
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+
+    def paintEvent(self,event)->None:  # type: ignore[no-untyped-def]
+        painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing,False)
+        painter.fillRect(self.rect(),QColor(55,135,235,42));painter.setPen(QPen(QColor(110,185,255,235),1));painter.drawRect(self.rect().adjusted(0,0,-1,-1));painter.end()
 
 
 class NativeRenderSurface(QWidget):
@@ -86,6 +101,9 @@ class NativeRenderSurface(QWidget):
     def SetGizmoMode(self, mode: GizmoMode) -> None:
         self._mode = mode; self._SetHover(None)
     def SetMoveSpeed(self,speed:float)->None:self._move_speed=max(.1,float(speed))
+
+    def _DestroySelectionBand(self)->None:
+        if self._selection_band is not None:self._selection_band.hide();self._selection_band.deleteLater();self._selection_band=None
 
     def _Ray(self, point: QPoint) -> Ray:
         eye=Vec3(*self._eye);target=Vec3(*self._target);forward=(target-eye).Normalized()
@@ -165,12 +183,10 @@ class NativeRenderSurface(QWidget):
         if not self.IsScene: return
         current = event.position().toPoint(); delta = current - self._last; self._last = current
         if self._selection_box_start is not None and event.buttons()&Qt.MouseButton.LeftButton:
-            if self._selection_band is None:
-                self._selection_band=QRubberBand(QRubberBand.Shape.Rectangle,self)
-                self._selection_band.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-                self._selection_band.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
-                self._selection_band.setStyleSheet("QRubberBand { background-color: rgba(55, 135, 235, 38); border: 1px solid rgba(105, 180, 255, 220); }")
-            self._selection_band.setGeometry(QRect(self._selection_box_start,current).normalized());self._selection_band.show();return
+            if self._selection_band is None:self._selection_band=SelectionMarquee()
+            start_global=self.mapToGlobal(self._selection_box_start);current_global=self.mapToGlobal(current);geometry=QRect(start_global,current_global).normalized()
+            if geometry.width()>2 or geometry.height()>2:self._selection_band.setGeometry(geometry);self._selection_band.show();self._selection_band.raise_()
+            return
         if self._gizmo_drag is not None and event.buttons()&Qt.MouseButton.LeftButton:
             result=self._gizmo_drag.Calculate(self._Ray(current),translation_snap=.1,rotation_snap=radians(5),scale_snap=.05)
             if self._mode is GizmoMode.Translate:
@@ -196,7 +212,7 @@ class NativeRenderSurface(QWidget):
         if event.button()==Qt.MouseButton.LeftButton:
             if self._selection_box_start is not None:
                 start=self._selection_box_start;self._selection_box_start=None;end=event.position().toPoint()
-                if self._selection_band is not None:self._selection_band.hide()
+                self._DestroySelectionBand()
                 left,right=sorted((start.x(),end.x()));top,bottom=sorted((start.y(),end.y()));selected=[]
                 if right-left>4 or bottom-top>4:
                     for entity in self.Runtime.Entities():
@@ -216,7 +232,9 @@ class NativeRenderSurface(QWidget):
         self._keys.discard(event.key());event.accept()
 
     def focusOutEvent(self,event)->None:
-        self._keys.clear();self._navigating=False;super().focusOutEvent(event)
+        self._keys.clear();self._navigating=False
+        self._DestroySelectionBand()
+        self._selection_box_start=None;super().focusOutEvent(event)
 
     def leaveEvent(self,event)->None:
         if self._gizmo_drag is None:self._SetHover(None)

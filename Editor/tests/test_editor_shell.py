@@ -232,6 +232,8 @@ class EditorShellTests(unittest.TestCase):
         self.assertEqual(self.Window.Controller.SelectedEntities,[])
         surface.mouseMoveEvent(QMouseEvent(QMouseEvent.Type.MouseMove,QPointF(399,399),Qt.MouseButton.NoButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
         self.assertTrue(surface._selection_band.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground))
+        self.Application.processEvents();pixel=surface._selection_band.grab().toImage().pixelColor(10,10)
+        self.assertGreater(pixel.alpha(),0);self.assertLess(pixel.alpha(),255)
         surface.mouseReleaseEvent(QMouseEvent(QMouseEvent.Type.MouseButtonRelease,QPointF(399,399),Qt.MouseButton.LeftButton,Qt.MouseButton.NoButton,Qt.KeyboardModifier.NoModifier))
         self.assertIn(entity,self.Window.Controller.SelectedEntities)
 
