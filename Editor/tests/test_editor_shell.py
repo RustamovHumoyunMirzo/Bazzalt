@@ -208,6 +208,10 @@ class EditorShellTests(unittest.TestCase):
         self.assertIn("asset",self.Window.Properties._sections)
         self.assertFalse(self.Window.Properties.AddComponentButton.isVisible())
         self.assertEqual(browser._Unique("NewComponent.cpp").parent,root)
+        textures=next(browser.Tree.topLevelItem(0).child(i) for i in range(browser.Tree.topLevelItem(0).childCount()) if browser.Tree.topLevelItem(0).child(i).text(0)=="Textures")
+        browser.Tree.setCurrentItem(textures);browser.Refresh(root/"Textures"/".keep")
+        self.assertEqual(browser.CurrentFolder(),root/"Textures")
+        self.assertEqual(Path(browser.Browser.currentItem().data(Qt.ItemDataRole.UserRole)),root/"Textures"/".keep")
 
     def test_hierarchy_multi_selection_uses_center_gizmo_and_batch_translation(self) -> None:
         if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")
@@ -223,9 +227,11 @@ class EditorShellTests(unittest.TestCase):
 
     def test_scene_box_selection_works_outside_select_tool(self) -> None:
         if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")
-        entity=self.Window.Runtime.CreateEntity("Box selected");surface=self.Window.Scene.Surface;surface.resize(400,400);surface.SetGizmoMode(GizmoMode.Translate);surface.SetSelection(None)
+        entity=self.Window.Runtime.CreateEntity("Box selected");surface=self.Window.Scene.Surface;surface.resize(400,400);surface.SetGizmoMode(GizmoMode.Translate);self.Window.Controller.SelectEntity(entity)
         surface.mousePressEvent(QMouseEvent(QMouseEvent.Type.MouseButtonPress,QPointF(1,1),Qt.MouseButton.LeftButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
+        self.assertEqual(self.Window.Controller.SelectedEntities,[])
         surface.mouseMoveEvent(QMouseEvent(QMouseEvent.Type.MouseMove,QPointF(399,399),Qt.MouseButton.NoButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
+        self.assertTrue(surface._selection_band.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground))
         surface.mouseReleaseEvent(QMouseEvent(QMouseEvent.Type.MouseButtonRelease,QPointF(399,399),Qt.MouseButton.LeftButton,Qt.MouseButton.NoButton,Qt.KeyboardModifier.NoModifier))
         self.assertIn(entity,self.Window.Controller.SelectedEntities)
 

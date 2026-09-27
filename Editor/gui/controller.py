@@ -60,6 +60,7 @@ class EditorController(QObject):
         window.Scene.Surface.GizmoDragStarted.connect(lambda:self.History.Begin("Transform selection"))
         window.Scene.Surface.EntityPicked.connect(self.SelectSceneEntity)
         window.Scene.Surface.EntitiesBoxSelected.connect(self.SelectSceneBox)
+        window.Scene.Surface.SelectionBoxStarted.connect(self.BeginSceneBoxSelection)
         window.Scene.Surface.Attached.connect(self._UpdateGizmo)
         # The toolbar selects Translate before this controller is constructed,
         # so its initial GizmoModeChanged signal has already been emitted.
@@ -204,6 +205,9 @@ class EditorController(QObject):
 
     def SelectSceneBox(self,entity_ids:list[str],additive:bool=False)->None:
         self.SelectEntities((self.SelectedEntities+entity_ids) if additive else entity_ids);self.RefreshHierarchy()
+
+    def BeginSceneBoxSelection(self,additive:bool)->None:
+        if not additive:self.SelectEntity(None);self.RefreshHierarchy()
 
     def _HistoryChanged(self)->None:
         self.Window.MenuBar.UndoAction.setEnabled(self.History.CanUndo());self.Window.MenuBar.RedoAction.setEnabled(self.History.CanRedo())

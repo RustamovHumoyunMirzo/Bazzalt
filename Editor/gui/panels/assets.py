@@ -50,13 +50,21 @@ class AssetBrowserPanel(QWidget):
         name="dir.svg" if path.is_dir() else "nativecpp.svg" if ext in {".h",".hpp",".c",".cc",".cpp"} else "3dfiles.svg" if ext in MODEL_EXTENSIONS else "shader.svg" if ext in SHADER_EXTENSIONS else "file.svg"
         return self._resources.Icon(f"icons/abrowser/{name}") if self._resources else QIcon()
     def Refresh(self,select=None)->None:
+        previous_folder=self._folder if self._folder is not None and self._InsideRoot(self._folder) else self._root
         self.Tree.clear();self.Browser.clear();self._folder=None
         if self._root is None or not self._root.is_dir():return
-        root=QTreeWidgetItem([self._root.name]);root.setData(0,Qt.ItemDataRole.UserRole,self._root);root.setIcon(0,self._Icon(self._root));self.Tree.addTopLevelItem(root);self._PopulateDirectories(root,self._root);root.setExpanded(True);self.Tree.setCurrentItem(root)
+        root=QTreeWidgetItem([self._root.name]);root.setData(0,Qt.ItemDataRole.UserRole,self._root);root.setIcon(0,self._Icon(self._root));self.Tree.addTopLevelItem(root);self._PopulateDirectories(root,self._root);root.setExpanded(True)
+        target=self._FindDirectoryItem(root,previous_folder) or root;self.Tree.setCurrentItem(target);self.Tree.scrollToItem(target)
         if select:
             for i in range(self.Browser.count()):
                 item=self.Browser.item(i)
                 if Path(item.data(Qt.ItemDataRole.UserRole))==Path(select):item.setSelected(True);self.Browser.setCurrentItem(item);break
+    def _FindDirectoryItem(self,item,path):
+        if path is not None and Path(item.data(0,Qt.ItemDataRole.UserRole))==Path(path):return item
+        for index in range(item.childCount()):
+            found=self._FindDirectoryItem(item.child(index),path)
+            if found:return found
+        return None
     def _PopulateDirectories(self,parent,path)->None:
         try:entries=sorted((p for p in Path(path).iterdir() if p.is_dir() and not p.is_symlink()),key=lambda p:p.name.lower())
         except OSError:return
@@ -93,10 +101,11 @@ class AssetBrowserPanel(QWidget):
         if self._folder is None:return
         dialog=QFileDialog(self,self._localization.Translate("assets.import"));dialog.setOption(QFileDialog.Option.DontUseNativeDialog);dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
         if not dialog.exec():return
+        created=None
         for value in dialog.selectedFiles():
-            try:shutil.copy2(Path(value),self._Unique(Path(value).name))
+            try:created=self._Unique(Path(value).name);shutil.copy2(Path(value),created)
             except OSError:pass
-        self.Refresh()
+        self.Refresh(created)
     def _ItemRenamed(self,item)->None:
         old=Path(item.data(Qt.ItemDataRole.UserRole));name=item.text().strip()
         if not name or name==item.data(Qt.ItemDataRole.UserRole+1):return
@@ -117,11 +126,12 @@ class AssetBrowserPanel(QWidget):
     def _Copy(self)->None:self._clipboard=[Path(i.data(Qt.ItemDataRole.UserRole)) for i in self.Browser.selectedItems()]
     def _Paste(self)->None:
         if self._folder is None:return
+        created=None
         for source in self._clipboard:
             if not source.exists() or not self._InsideRoot(source):continue
-            try:shutil.copytree(source,self._Unique(source.name)) if source.is_dir() else shutil.copy2(source,self._Unique(source.name))
+            try:created=self._Unique(source.name);shutil.copytree(source,created) if source.is_dir() else shutil.copy2(source,created)
             except OSError:pass
-        self.Refresh()
+        self.Refresh(created)
     def _ShowContextMenu(self,widget,position)->None:
         tr=self._localization.Translate;menu=QMenu(self);create=menu.addMenu(tr("assets.create"))
         for key,label in (("folder","assets.folder"),("cpp","assets.native_cpp"),("shader","assets.shader"),("material","assets.material")):

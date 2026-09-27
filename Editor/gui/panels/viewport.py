@@ -20,6 +20,7 @@ class NativeRenderSurface(QWidget):
     Attached = Signal()
     EntityPicked = Signal(str)
     EntitiesBoxSelected = Signal(object, bool)
+    SelectionBoxStarted = Signal(bool)
     GizmoDragStarted = Signal()
     _next_id = 1
 
@@ -157,13 +158,18 @@ class NativeRenderSurface(QWidget):
             if entity_id:self.EntityPicked.emit(entity_id)
             else:
                 self._selection_box_start=self._last;self._selection_box_additive=bool(event.modifiers()&Qt.KeyboardModifier.ControlModifier)
+                self.SelectionBoxStarted.emit(self._selection_box_additive)
             event.accept();return
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         if not self.IsScene: return
         current = event.position().toPoint(); delta = current - self._last; self._last = current
         if self._selection_box_start is not None and event.buttons()&Qt.MouseButton.LeftButton:
-            if self._selection_band is None:self._selection_band=QRubberBand(QRubberBand.Shape.Rectangle,self)
+            if self._selection_band is None:
+                self._selection_band=QRubberBand(QRubberBand.Shape.Rectangle,self)
+                self._selection_band.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+                self._selection_band.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
+                self._selection_band.setStyleSheet("QRubberBand { background-color: rgba(55, 135, 235, 38); border: 1px solid rgba(105, 180, 255, 220); }")
             self._selection_band.setGeometry(QRect(self._selection_box_start,current).normalized());self._selection_band.show();return
         if self._gizmo_drag is not None and event.buttons()&Qt.MouseButton.LeftButton:
             result=self._gizmo_drag.Calculate(self._Ray(current),translation_snap=.1,rotation_snap=radians(5),scale_snap=.05)
