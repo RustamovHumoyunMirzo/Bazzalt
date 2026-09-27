@@ -291,6 +291,7 @@ struct Mat4 {
         return true;
     }
     [[nodiscard]] Mat4 Inversed() const { Mat4 result; return TryInverse(result) ? result : Mat4{0.0f}; }
+    [[nodiscard]] bool Decompose(Vec3& position, Quaternion& rotation, Vec3& scale) const;
     [[nodiscard]] Vec3 TransformPoint(Vec3 point) const;
     [[nodiscard]] Vec3 TransformDirection(Vec3 direction) const;
 };
@@ -390,6 +391,36 @@ inline Mat4 Mat4::Rotation(const Quaternion& value) {
 
 inline Mat4 Mat4::Transform(Vec3 position, const Quaternion& rotation, Vec3 scale) {
     return Translation(position) * Rotation(rotation) * Scaling(scale);
+}
+
+inline bool Mat4::Decompose(Vec3& position, Quaternion& rotation, Vec3& scale) const {
+    if (std::fabs((*this)(3, 3)) <= Epsilon) return false;
+    const float inverseW = 1.0f / (*this)(3, 3);
+    position = {(*this)(0, 3) * inverseW, (*this)(1, 3) * inverseW,
+                (*this)(2, 3) * inverseW};
+    Vec3 x{(*this)(0, 0), (*this)(1, 0), (*this)(2, 0)};
+    Vec3 y{(*this)(0, 1), (*this)(1, 1), (*this)(2, 1)};
+    Vec3 z{(*this)(0, 2), (*this)(1, 2), (*this)(2, 2)};
+    scale = {x.Length(), y.Length(), z.Length()};
+    if (scale.X <= Epsilon || scale.Y <= Epsilon || scale.Z <= Epsilon) return false;
+    if (Vec3::Dot(Vec3::Cross(x, y), z) < 0.0f) { scale.X = -scale.X; x = -x; }
+    x /= scale.X; y /= scale.Y; z /= scale.Z;
+    const float trace = x.X + y.Y + z.Z;
+    if (trace > 0.0f) {
+        const float s = std::sqrt(trace + 1.0f) * 2.0f;
+        rotation = {(y.Z - z.Y) / s, (z.X - x.Z) / s, (x.Y - y.X) / s, 0.25f * s};
+    } else if (x.X > y.Y && x.X > z.Z) {
+        const float s = std::sqrt(1.0f + x.X - y.Y - z.Z) * 2.0f;
+        rotation = {0.25f * s, (y.X + x.Y) / s, (z.X + x.Z) / s, (y.Z - z.Y) / s};
+    } else if (y.Y > z.Z) {
+        const float s = std::sqrt(1.0f + y.Y - x.X - z.Z) * 2.0f;
+        rotation = {(y.X + x.Y) / s, 0.25f * s, (z.Y + y.Z) / s, (z.X - x.Z) / s};
+    } else {
+        const float s = std::sqrt(1.0f + z.Z - x.X - y.Y) * 2.0f;
+        rotation = {(z.X + x.Z) / s, (z.Y + y.Z) / s, 0.25f * s, (x.Y - y.X) / s};
+    }
+    rotation.Normalize();
+    return true;
 }
 
 inline Vec3 Mat4::TransformPoint(Vec3 point) const {

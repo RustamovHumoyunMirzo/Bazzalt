@@ -1,0 +1,16 @@
+material {
+    name : EditorIcon,
+    shadingModel : unlit,
+    blending : transparent,
+    depthWrite : false,
+    depthCulling : false,
+    doubleSided : true,
+    parameters : [ { type : sampler2d, name : iconTexture } ],
+    requires : [ uv0 ]
+}
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = texture(materialParams_iconTexture, getUV0());
+    }
+}

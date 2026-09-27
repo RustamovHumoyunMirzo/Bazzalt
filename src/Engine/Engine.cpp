@@ -2,6 +2,8 @@
 #include "Runtime/AssetDatabase.h"
 #include "Rendering/RenderBackend.h"
 #include "Rendering/RenderSystems.h"
+#include "Bazzalt/Components/Camera.h"
+#include "Bazzalt/Components/Light.h"
 #include <algorithm>
 #include <cctype>
 #include <iostream>
@@ -82,6 +84,12 @@ void Engine::RenderEditorFrame()
     m_scene->UpdateSystem<CameraSystem>();
     m_scene->UpdateSystem<LightSystem>();
     m_scene->UpdateSystem<MeshSystem>();
+    std::vector<RenderBackend::EditorIcon> icons;
+    auto cameras=m_scene->GetRegistry().view<Camera>();
+    for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));const Vec3 p=entity.GetWorldMatrix().TransformPoint({});icons.push_back({p.X,p.Y,p.Z,true});}
+    auto lights=m_scene->GetRegistry().view<Light>();
+    for(auto handle:lights){Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));const Vec3 p=entity.GetWorldMatrix().TransformPoint({});icons.push_back({p.X,p.Y,p.Z,false});}
+    m_renderBackend->SetEditorIcons(icons);
     m_renderBackend->Render();
 }
 

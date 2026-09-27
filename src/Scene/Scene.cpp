@@ -81,7 +81,7 @@ std::size_t Scene::GetEntityCount() const {
     return entities != nullptr ? entities->in_use() : 0u;
 }
 
-bool Scene::SetParent(Entity child, Entity parent) {
+bool Scene::SetParent(Entity child, Entity parent, bool worldPositionStays) {
     if (!Owns(child) || !Owns(parent) || child.GetUUID().IsRoot() || child == parent || IsAncestor(child, parent)) return false;
     const UUID childUuid = child.GetUUID();
     const UUID parentUuid = parent.GetUUID();
@@ -93,16 +93,24 @@ bool Scene::SetParent(Entity child, Entity parent) {
         return true;
     }
 
+    const Mat4 world = worldPositionStays ? GetWorldMatrix(child) : Mat4::Identity();
+    Mat4 inverseParent;
+    if (worldPositionStays && !GetWorldMatrix(parent).TryInverse(inverseParent)) return false;
+    Transform preservedLocal;
+    if (worldPositionStays && !(inverseParent * world).Decompose(
+            preservedLocal.Position, preservedLocal.Rotation, preservedLocal.Scale)) return false;
+
     DetachFromParent(child);
     childHierarchy.Parent = parentUuid;
     auto& children = parent.GetComponent<Hierarchy>().Children;
     if (std::find(children.begin(), children.end(), childUuid) == children.end()) children.push_back(childUuid);
+    if (worldPositionStays) child.GetComponent<Transform>() = preservedLocal;
     return true;
 }
 
-bool Scene::RemoveParent(Entity child) {
+bool Scene::RemoveParent(Entity child, bool worldPositionStays) {
     if (!Owns(child) || child.GetUUID().IsRoot()) return false;
-    return SetParent(child, GetRootEntity());
+    return SetParent(child, GetRootEntity(), worldPositionStays);
 }
 
 Entity Scene::GetParent(Entity child) {
@@ -152,6 +160,28 @@ Mat4 Scene::GetWorldMatrix(Entity entity) const {
     return world;
 }
 
+Transform Scene::GetWorldTransform(Entity entity) const {
+    Transform result;
+    if (!Owns(entity) || !GetWorldMatrix(entity).Decompose(
+            result.Position, result.Rotation, result.Scale)) return result;
+    return result;
+}
+
+bool Scene::SetWorldTransform(Entity entity, const Transform& transform) {
+    if (!Owns(entity) || entity.GetUUID().IsRoot()) return false;
+    Mat4 local = transform.GetMatrix();
+    const Entity parent = GetParent(entity);
+    if (parent) {
+        Mat4 inverseParent;
+        if (!GetWorldMatrix(parent).TryInverse(inverseParent)) return false;
+        local = inverseParent * local;
+    }
+    Transform value;
+    if (!local.Decompose(value.Position, value.Rotation, value.Scale)) return false;
+    entity.GetComponent<Transform>() = value;
+    return true;
+}
+
 Entity Scene::InstantiateModel(const ModelAsset& model, Entity parent, std::string name) {
     if (!model.Id || model.Nodes.empty() || model.Roots.empty())
         throw std::invalid_argument("Model asset must have an id, nodes, and roots");
@@ -179,7 +209,7 @@ Entity Scene::InstantiateModel(const ModelAsset& model, Entity parent, std::stri
 
     Entity instance = CreateEntity(name.empty() ? model.Name : std::move(name));
     instance.AddComponent<ModelInstance>().ModelAsset = model.Id;
-    instance.SetParent(parent);
+    instance.SetParent(parent, false);
     std::vector<Entity> entities;
     entities.reserve(model.Nodes.size());
     try {
@@ -204,10 +234,10 @@ Entity Scene::InstantiateModel(const ModelAsset& model, Entity parent, std::stri
         }
         for (std::size_t index = 0; index < model.Nodes.size(); ++index)
             for (const auto child : model.Nodes[index].Children)
-                if (!entities[child].SetParent(entities[index]))
+                if (!entities[child].SetParent(entities[index], false))
                     throw std::logic_error("Could not construct model hierarchy");
         for (const auto root : model.Roots)
-            if (!entities[root].SetParent(instance))
+            if (!entities[root].SetParent(instance, false))
                 throw std::logic_error("Could not attach model root node");
         return instance;
     } catch (...) {

@@ -30,16 +30,24 @@ Mat4 Entity::GetWorldMatrix() const {
     return m_scene != nullptr ? m_scene->GetWorldMatrix(*this) : Mat4::Identity();
 }
 
-bool Entity::SetParent(Entity parent) const {
-    return m_scene != nullptr && m_scene->SetParent(*this, parent);
+Transform Entity::GetWorldTransform() const {
+    return m_scene != nullptr ? m_scene->GetWorldTransform(*this) : Transform{};
 }
 
-bool Entity::AddChild(Entity child) const {
-    return m_scene != nullptr && m_scene->SetParent(child, *this);
+bool Entity::SetWorldTransform(const Transform& transform) const {
+    return m_scene != nullptr && m_scene->SetWorldTransform(*this, transform);
 }
 
-bool Entity::RemoveParent() const {
-    return m_scene != nullptr && m_scene->RemoveParent(*this);
+bool Entity::SetParent(Entity parent, bool worldPositionStays) const {
+    return m_scene != nullptr && m_scene->SetParent(*this, parent, worldPositionStays);
+}
+
+bool Entity::AddChild(Entity child, bool worldPositionStays) const {
+    return m_scene != nullptr && m_scene->SetParent(child, *this, worldPositionStays);
+}
+
+bool Entity::RemoveParent(bool worldPositionStays) const {
+    return m_scene != nullptr && m_scene->RemoveParent(*this, worldPositionStays);
 }
 
 } // namespace Bazzalt

@@ -220,16 +220,14 @@ class EditorToolbar(QToolBar):
             self.PauseAction: QStyle.StandardPixmap.SP_MediaPause,
             self.StepAction: QStyle.StandardPixmap.SP_MediaSkipForward,
         }
-        modes = {
-            GizmoMode.Select: QStyle.StandardPixmap.SP_ArrowUp,
-            GizmoMode.Translate: QStyle.StandardPixmap.SP_ArrowRight,
-            GizmoMode.Rotate: QStyle.StandardPixmap.SP_BrowserReload,
-            GizmoMode.Scale: QStyle.StandardPixmap.SP_TitleBarMaxButton,
-        }
         for action, standard in standards.items():
             action.setIcon(self._ThemedStandardIcon(standard))
-        for mode, standard in modes.items():
-            self.ModeActions[mode].setIcon(self._ThemedStandardIcon(standard))
+        theme_name = "light" if self._themes.GetTheme().background == "#d4d4d4" else "dark"
+        names = {GizmoMode.Select:"sel_select.svg",GizmoMode.Translate:"sel_trans.svg",
+                 GizmoMode.Rotate:"sel_rot.svg",GizmoMode.Scale:"sel_scale.svg"}
+        resources=getattr(self.parentWidget(),"Resources",None)
+        for mode,name in names.items():
+            self.ModeActions[mode].setIcon(resources.Icon(f"icons/{theme_name}/{name}") if resources else QIcon())
 
     def _ThemedStandardIcon(self, standard: QStyle.StandardPixmap) -> QIcon:
         source = self.style().standardIcon(standard).pixmap(self.iconSize())

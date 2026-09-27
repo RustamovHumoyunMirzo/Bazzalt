@@ -1,5 +1,17 @@
 # Getting started
 
+## Run the editor from source
+
+During editor development, do not rebuild the Nuitka applications or installer. On Windows run:
+
+```powershell
+.\scripts\run_editor.ps1 -Project "C:\path\to\Game.bproject"
+```
+
+The launcher runs `bazzalt_editor.py` directly. Python, Qt, themes, panels, and other editor-only changes are picked up on the next launch without compiling. It checks native source timestamps and rebuilds only `_bazzalt_runtime` when C++ changed. Use `-NoBuild` to skip that check or `-RebuildNative` to force it. If `-Project` is omitted, the Alpha fixture project is used.
+
+On Linux or macOS, use `./scripts/run_editor.sh /path/to/Game.bproject`.
+
 ## Requirements
 
 - CMake 3.15 or newer

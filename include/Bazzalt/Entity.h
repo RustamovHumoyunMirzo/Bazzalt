@@ -102,9 +102,11 @@ public:
     [[nodiscard]] std::vector<Entity> GetChildren() const;
     [[nodiscard]] bool IsAncestorOf(Entity entity) const;
     [[nodiscard]] Mat4 GetWorldMatrix() const;
-    bool SetParent(Entity parent) const;
-    bool AddChild(Entity child) const;
-    bool RemoveParent() const;
+    [[nodiscard]] Transform GetWorldTransform() const;
+    bool SetWorldTransform(const Transform& transform) const;
+    bool SetParent(Entity parent, bool worldPositionStays = true) const;
+    bool AddChild(Entity child, bool worldPositionStays = true) const;
+    bool RemoveParent(bool worldPositionStays = true) const;
 
     friend bool operator==(Entity left, Entity right) {
         return left.m_handle == right.m_handle && left.m_registry == right.m_registry;

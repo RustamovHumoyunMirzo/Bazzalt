@@ -6,21 +6,27 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QLabel
+from PySide6.QtWidgets import QApplication, QLabel, QWidget
+from PySide6.QtGui import QColor
+from PySide6.QtGui import QMouseEvent
+from PySide6.QtCore import Qt
+from PySide6.QtCore import QPointF
 
 from Editor.gui.application import Editor
 from Editor.gui.panels import ConsoleLevel
 from Editor.gui.widgets import (
     AssetPickerInput,
+    ColorInput,
     EnumInput,
     FieldState,
     FloatInput,
     MultiSelectInput,
     RangeInput,
+    UIntInput,
     Vec3Input,
     PlayState,
 )
-from Editor.gui.gizmos import GizmoMode
+from Editor.gui.gizmos import GizmoMode, Vec3
 from Editor.gui.widgets import EditorMenu
 from Editor.localization import LocalizationManager
 from Editor.resources import ResourceManager
@@ -111,6 +117,13 @@ class EditorShellTests(unittest.TestCase):
         ranged.SetValue(9.0)
         self.assertEqual(ranged.GetValue(), 1.0)
 
+        color = ColorInput(QColor("white"))
+        color.SetValue((0.1,0.2,0.3,0.4))
+        self.assertAlmostEqual(color.GetValue().alphaF(),0.4,places=2)
+
+        unsigned=UIntInput(4_294_967_295)
+        self.assertEqual(unsigned.GetValue(),4_294_967_295)
+
     def test_enum_multiselect_and_picker_widgets(self) -> None:
         enum = EnumInput()
         enum.SetOptions((("Perspective", "perspective"), ("Orthographic", "ortho")))
@@ -145,6 +158,96 @@ class EditorShellTests(unittest.TestCase):
         self.assertTrue(self.Window.Runtime.SetTransform(
             entity_id, (3.0, 2.0, 1.0), (0.0, 0.0, 0.0, 1.0), (1.0, 1.0, 1.0)))
         self.assertEqual(self.Window.Runtime.EntityDetails(entity_id)["position"], (3.0, 2.0, 1.0))
+
+    def test_inspector_supports_many_components_and_structural_refresh(self) -> None:
+        if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")
+        entity_id=self.Window.Runtime.CreateEntity("Inspector Entity")
+        for component in ("Camera","Light","Mesh","Scene Query Bounds"):
+            self.assertTrue(self.Window.Runtime.AddComponent(entity_id,component))
+        self.Window.Controller.SelectEntity(entity_id,force=True)
+        self.assertGreaterEqual(len(self.Window.Properties._sections),6)
+        layer=self.Window.Properties._sections["runtime.Scene Query Bounds"]._fields["Layer Mask"]
+        self.assertEqual(layer.GetValue(),4_294_967_295)
+        self.Window.Controller.RemoveComponent("runtime.Light")
+        self.assertNotIn("runtime.Light",self.Window.Properties._sections)
+        self.Window.Controller._AddComponent("Light")
+        self.assertIn("runtime.Light",self.Window.Properties._sections)
+
+    def test_game_output_warns_until_an_active_scene_camera_exists(self) -> None:
+        if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")
+        output=self.Window.Output
+        self.assertIs(output._output_stack.currentWidget(),output._no_camera)
+        self.assertEqual(output._no_camera.text(),"No active camera in the scene")
+        entity_id=self.Window.Runtime.CreateEntity("Game Camera")
+        self.assertFalse(self.Window.Runtime.HasActiveCamera())
+        self.assertTrue(self.Window.Runtime.AddComponent(entity_id,"Camera"))
+        output.SetGameCameraAvailable(self.Window.Runtime.HasActiveCamera())
+        self.assertIs(output._output_stack.currentWidget(),output.Surface)
+        self.assertTrue(self.Window.Runtime.RemoveComponent(entity_id,"Camera"))
+        output.SetGameCameraAvailable(self.Window.Runtime.HasActiveCamera())
+        self.assertIs(output._output_stack.currentWidget(),output._no_camera)
+
+    def test_editor_hierarchy_preserves_and_displays_world_transforms(self) -> None:
+        if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")
+        parent=self.Window.Runtime.CreateEntity("Parent")
+        child=self.Window.Runtime.CreateEntity("Child")
+        self.assertTrue(self.Window.Runtime.SetTransform(parent,(10,0,0),(0,0,0,1),(1,1,1)))
+        self.assertTrue(self.Window.Runtime.SetTransform(child,(3,2,1),(0,0,0,1),(1,1,1)))
+        self.assertTrue(self.Window.Runtime.SetParent(child,parent))
+        self.assertEqual(self.Window.Runtime.EntityDetails(child)["position"],(3.0,2.0,1.0))
+        self.assertTrue(self.Window.Runtime.SetTransform(parent,(20,0,0),(0,0,0,1),(1,1,1)))
+        self.assertEqual(self.Window.Runtime.EntityDetails(child)["position"],(13.0,2.0,1.0))
+        self.assertTrue(self.Window.Runtime.SetParent(child,""))
+        self.assertEqual(self.Window.Runtime.EntityDetails(child)["position"],(13.0,2.0,1.0))
+
+    def test_asset_browser_creates_types_renames_and_populates_inspector(self) -> None:
+        root=Path("Editor/tests/fixtures/assets").resolve();browser=self.Window.AssetBrowser;browser.SetProjectRoot(root)
+        self.assertGreater(browser.Browser.count(),0)
+        item=browser.Browser.item(0);path=Path(item.data(Qt.ItemDataRole.UserRole))
+        self.assertFalse(item.icon().isNull());browser.AssetSelected.emit(path)
+        self.assertIn("asset",self.Window.Properties._sections)
+        self.assertFalse(self.Window.Properties.AddComponentButton.isVisible())
+        self.assertEqual(browser._Unique("NewComponent.cpp").parent,root)
+
+    def test_hierarchy_multi_selection_uses_center_gizmo_and_batch_translation(self) -> None:
+        if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")
+        first=self.Window.Runtime.CreateEntity("First");second=self.Window.Runtime.CreateEntity("Second")
+        self.Window.Runtime.SetTransform(first,(0,0,0),(0,0,0,1),(1,1,1));self.Window.Runtime.SetTransform(second,(4,0,0),(0,0,0,1),(1,1,1))
+        self.Window.Controller.SelectEntities([first,second])
+        self.assertEqual(self.Window.Controller.SelectedEntities,[first,second])
+        self.assertIn("selection",self.Window.Properties._sections)
+        self.assertTrue(self.Window.Controller.ApplyGizmoTranslation(Vec3(1,2,3)))
+        self.assertEqual(self.Window.Runtime.EntityDetails(first)["position"],(1.0,2.0,3.0))
+        self.assertEqual(self.Window.Runtime.EntityDetails(second)["position"],(5.0,2.0,3.0))
+        self.assertTrue(self.Window.Controller.ApplyGizmoRotation(Vec3(0,1,0),0.25))
+
+    def test_scene_box_selection_works_outside_select_tool(self) -> None:
+        if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")
+        entity=self.Window.Runtime.CreateEntity("Box selected");surface=self.Window.Scene.Surface;surface.resize(400,400);surface.SetGizmoMode(GizmoMode.Translate);surface.SetSelection(None)
+        surface.mousePressEvent(QMouseEvent(QMouseEvent.Type.MouseButtonPress,QPointF(1,1),Qt.MouseButton.LeftButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
+        surface.mouseMoveEvent(QMouseEvent(QMouseEvent.Type.MouseMove,QPointF(399,399),Qt.MouseButton.NoButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
+        surface.mouseReleaseEvent(QMouseEvent(QMouseEvent.Type.MouseButtonRelease,QPointF(399,399),Qt.MouseButton.LeftButton,Qt.MouseButton.NoButton,Qt.KeyboardModifier.NoModifier))
+        self.assertIn(entity,self.Window.Controller.SelectedEntities)
+
+    def test_scene_history_restores_create_transform_and_uuid(self) -> None:
+        if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")
+        before={item["uuid"] for item in self.Window.Runtime.Entities()};self.Window.Controller.CreateEntity(None);created=next(item["uuid"] for item in self.Window.Runtime.Entities() if item["uuid"] not in before)
+        self.assertTrue(self.Window.Controller.History.CanUndo());self.Window.Controller.Undo();self.assertFalse(self.Window.Runtime.EntityDetails(created));self.Window.Controller.Redo();self.assertTrue(self.Window.Runtime.EntityDetails(created))
+        self.Window.Controller._Mutate("Move entity",lambda:self.Window.Runtime.SetTransform(created,(8,7,6),(0,0,0,1),(1,1,1)));self.assertEqual(self.Window.Runtime.EntityDetails(created)["position"],(8.0,7.0,6.0));self.Window.Controller.Undo();self.assertEqual(self.Window.Runtime.EntityDetails(created)["position"],(0.0,0.0,0.0))
+
+    def test_native_scene_surface_has_no_qt_paint_overlay_and_same_selection_is_stable(self) -> None:
+        self.assertEqual(self.Window.Scene.Surface.findChildren(QWidget),[])
+        if not self.Window.Runtime.IsAvailable():
+            self.skipTest("native editor bridge is not built")
+        entity_id=self.Window.Runtime.CreateEntity("Stable Selection")
+        self.Window.Controller.SelectEntity(entity_id)
+        transform=self.Window.Properties._sections["transform"]
+        identity=self.Window.Properties._sections["identity"]
+        self.assertFalse(identity.IconLabel.isWindow())
+        self.assertIs(identity.IconLabel.parentWidget(),identity.findChild(QWidget,"ComponentHeaderRow"))
+        self.assertFalse(any(widget.isWindow() for widget in self.Window.Properties.findChildren(QWidget)))
+        self.Window.Controller.SelectEntity(entity_id)
+        self.assertIs(self.Window.Properties._sections["transform"],transform)
 
     def test_editor_toolbar_transport_and_modes(self) -> None:
         toolbar = self.Window.Toolbar
@@ -199,9 +302,14 @@ class EditorShellTests(unittest.TestCase):
         self.assertEqual(self.Window.Console.GetMessages(), ())
 
     def test_properties_sections_and_sticky_add_button(self) -> None:
-        section = self.Window.Properties.AddComponentSection("transform", "Transform")
+        section = self.Window.Properties.AddComponentSection(
+            "transform", "Transform",
+            icon=self.Window.Resources.Icon("icons/comp_transform.svg"))
         section.SetExpanded(False)
         self.assertFalse(section.Body.isVisible())
+        self.assertFalse(section.IconLabel.pixmap().isNull())
+        iconless = self.Window.Properties.AddComponentSection("custom", "Custom")
+        self.assertFalse(iconless.IconLabel.isVisible())
         self.assertEqual(self.Window.Properties.layout().itemAt(
             self.Window.Properties.layout().count() - 1
         ).widget(), self.Window.Properties.AddComponentButton)

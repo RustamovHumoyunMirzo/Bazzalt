@@ -61,7 +61,7 @@ class Editor(QMainWindow):
         self.Scene = ViewportPanel(self.Runtime, True, self.Localization, self.Resources)
         self.Hierarchy = HierarchyPanel(self.Localization)
         self.Properties = PropertiesPanel(self.Localization)
-        self.AssetBrowser = AssetBrowserPanel(self.Localization)
+        self.AssetBrowser = AssetBrowserPanel(self.Localization, self.Resources)
         self._PanelWidgets = {
             "console": self.Console,
             "output": self.Output,

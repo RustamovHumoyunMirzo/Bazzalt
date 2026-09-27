@@ -92,12 +92,21 @@ class RuntimeService(QObject):
     def EntityDetails(self, entity_id: str) -> dict:
         return dict(self._host.entity_details(entity_id)) if self._host is not None else {}
 
+    def HasActiveCamera(self) -> bool:
+        return bool(self._host and hasattr(self._host, "has_active_camera") and
+                    self._host.has_active_camera())
+
     def Rename(self, entity_id: str, name: str) -> bool:
         return bool(self._host and self._host.rename(entity_id, name))
 
     def CreateEntity(self, name: str, parent: str = "") -> str:
         value = self._host.create_entity(name, parent) if self._host is not None else ""
         self.SceneChanged.emit(); return value
+
+    def InstantiateModelPath(self, path: str | Path, parent: str = "") -> str:
+        value=self._host.instantiate_model_path(str(path),parent) if self._host is not None and hasattr(self._host,"instantiate_model_path") else ""
+        if value:self.SceneChanged.emit()
+        return value
 
     def DestroyEntity(self, entity_id: str) -> bool:
         result = bool(self._host and self._host.destroy_entity(entity_id))
@@ -117,6 +126,14 @@ class RuntimeService(QObject):
         if self._host is not None and hasattr(self._host, "scene_info"):
             return dict(self._host.scene_info())
         return {"uuid": "0", "name": "Untitled"}
+
+    def CaptureScene(self) -> bytes:
+        return bytes(self._host.capture_scene()) if self._host is not None and hasattr(self._host,"capture_scene") else b""
+
+    def RestoreScene(self, snapshot: bytes) -> bool:
+        result=bool(self._host and hasattr(self._host,"restore_scene") and self._host.restore_scene(snapshot))
+        if result:self.SceneChanged.emit()
+        return result
 
     def ComponentTypes(self) -> list[str]:
         return list(self._host.component_types()) if self._host is not None and hasattr(self._host, "component_types") else []
@@ -158,6 +175,10 @@ class RuntimeService(QObject):
     def SetGizmo(self, entity_id: str, mode: int) -> None:
         if self._host is not None and hasattr(self._host, "set_gizmo"):
             self._host.set_gizmo(entity_id, mode)
+
+    def SetGizmoPosition(self, position, mode: int) -> None:
+        if self._host is not None and hasattr(self._host,"set_gizmo_position"):
+            self._host.set_gizmo_position(position,mode)
 
     def SetGizmoHover(self, axis: int) -> None:
         if self._host is not None and hasattr(self._host, "set_gizmo_hover"):

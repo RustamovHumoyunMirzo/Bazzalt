@@ -1,4 +1,5 @@
 #include <filesystem>
+#include <fstream>
 #include <array>
 #include <functional>
 #include <memory>
@@ -45,7 +46,7 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
     result["name"] = entity.GetComponent<Name>().Value;
     const Entity parent = entity.GetParent();
     result["parent"] = parent ? parent.GetUUID().ToString() : std::string{};
-    const auto& transform = entity.GetComponent<Transform>();
+    const Transform transform = entity.GetWorldTransform();
     result["position"] = py::make_tuple(transform.Position.X, transform.Position.Y, transform.Position.Z);
     result["rotation"] = py::make_tuple(transform.Rotation.X, transform.Rotation.Y,
                                           transform.Rotation.Z, transform.Rotation.W);
@@ -121,6 +122,12 @@ public:
         Entity entity = m_engine->GetScene().GetEntity(ParseUuid(id));
         return entity ? SnapshotEntity(m_engine->GetScene(), entity) : py::dict{};
     }
+    bool HasActiveCamera() const {
+        const auto cameras = m_engine->GetScene().GetRegistry().view<Camera>();
+        for (const auto handle : cameras)
+            if (cameras.get<Camera>(handle).Active) return true;
+        return false;
+    }
     std::string CreateEntity(const std::string& name, const std::string& parent) {
         Entity entity = m_engine->GetScene().CreateEntity(name);
         if (!parent.empty()) entity.SetParent(RequireEntity(parent));
@@ -142,20 +149,27 @@ public:
     bool SetTransform(const std::string& id, const std::array<float, 3>& position,
                       const std::array<float, 4>& rotation,
                       const std::array<float, 3>& scale) {
-        auto& value = RequireEntity(id).GetComponent<Transform>();
+        Transform value;
         value.Position = {position[0], position[1], position[2]};
         value.Rotation = Quaternion{rotation[0], rotation[1], rotation[2], rotation[3]}.Normalized();
         value.Scale = {scale[0], scale[1], scale[2]};
-        return true;
+        return RequireEntity(id).SetWorldTransform(value);
     }
     bool Translate(const std::string& id, const std::array<float, 3>& delta) {
-        RequireEntity(id).GetComponent<Transform>().Translate({delta[0], delta[1], delta[2]});
-        return true;
+        Entity entity=RequireEntity(id);Transform value=entity.GetWorldTransform();
+        value.Translate({delta[0], delta[1], delta[2]});return entity.SetWorldTransform(value);
     }
     std::string InstantiateModel(const std::string& asset, const std::string& parent) {
         Entity entity = m_engine->GetScene().InstantiateModel(
             ParseUuid(asset), parent.empty() ? Entity{} : RequireEntity(parent));
         return entity.GetUUID().ToString();
+    }
+    std::string InstantiateModelPath(const std::string& path, const std::string& parent) {
+        const auto asset=AssetManager::GetAsset(std::filesystem::u8path(path));
+        if(!asset)return {};
+        Entity entity=m_engine->GetScene().InstantiateModel(asset->Id,
+            parent.empty()?Entity{}:RequireEntity(parent));
+        return entity?entity.GetUUID().ToString():std::string{};
     }
 
     bool AddComponent(const std::string& id, const std::string& type) {
@@ -193,12 +207,25 @@ public:
         result["path"] = m_scenePath.empty() ? py::str() : PathText(m_scenePath);
         return result;
     }
+    py::bytes CaptureScene() {
+        const auto path=std::filesystem::temp_directory_path()/("bazzalt-history-"+UUID::Generate().ToString()+".bscene");
+        if(!m_engine->SaveScene(path))return {};
+        std::ifstream stream(path,std::ios::binary);std::string data((std::istreambuf_iterator<char>(stream)),{});
+        std::error_code error;std::filesystem::remove(path,error);return py::bytes(data);
+    }
+    bool RestoreScene(const py::bytes& snapshot) {
+        const std::string data=snapshot;
+        if(data.empty())return false;
+        const auto path=std::filesystem::temp_directory_path()/("bazzalt-history-"+UUID::Generate().ToString()+".bscene");
+        {std::ofstream stream(path,std::ios::binary|std::ios::trunc);stream.write(data.data(),static_cast<std::streamsize>(data.size()));if(!stream){std::error_code error;std::filesystem::remove(path,error);return false;}}
+        const bool result=m_engine->LoadScene(path);std::error_code error;std::filesystem::remove(path,error);return result;
+    }
     bool SetComponentProperty(const std::string& id, const std::string& type,
                               const std::string& property, py::object value) {
         Entity entity=RequireEntity(id);
         if(type=="Camera"&&entity.HasComponent<Camera>()){auto&v=entity.GetComponent<Camera>();if(property=="Projection")v.Projection=static_cast<CameraProjection>(value.cast<int>());else if(property=="Field of View")v.VerticalFieldOfView=ToRadians(value.cast<float>());else if(property=="Orthographic Size")v.OrthographicSize=value.cast<float>();else if(property=="Near")v.NearPlane=value.cast<float>();else if(property=="Far")v.FarPlane=value.cast<float>();else if(property=="Aspect Ratio")v.AspectRatio=value.cast<float>();else if(property=="Aspect Mode")v.AspectMode=static_cast<CameraAspectMode>(value.cast<int>());else if(property=="Viewport"){auto a=value.cast<std::array<float,4>>();v.Viewport={a[0],a[1],a[2],a[3]};}else if(property=="Priority")v.Priority=value.cast<int>();else if(property=="Active")v.Active=value.cast<bool>();else if(property=="Clear Color"){auto a=value.cast<std::array<float,4>>();v.ClearColor={a[0],a[1],a[2],a[3]};}else if(property=="Post Processing")v.PostProcessing.Enabled=value.cast<bool>();else if(property=="Bloom")v.PostProcessing.Bloom=value.cast<bool>();else if(property=="Ambient Occlusion")v.PostProcessing.AmbientOcclusion=value.cast<bool>();else if(property=="Anti Aliasing")v.PostProcessing.AntiAliasingMode=static_cast<AntiAliasing>(value.cast<int>());else if(property=="Tone Mapping")v.PostProcessing.ToneMappingMode=static_cast<ToneMapping>(value.cast<int>());else if(property=="Exposure")v.PostProcessing.Exposure=value.cast<float>();else if(property=="Depth of Field")v.PostProcessing.DepthOfField.Enabled=value.cast<bool>();else if(property=="Focus Distance")v.PostProcessing.DepthOfField.FocusDistance=value.cast<float>();else if(property=="Aperture")v.PostProcessing.DepthOfField.Aperture=value.cast<float>();else if(property=="Shutter Speed")v.PostProcessing.DepthOfField.ShutterSpeed=value.cast<float>();else if(property=="Sensitivity")v.PostProcessing.DepthOfField.Sensitivity=value.cast<float>();else return false;return true;}
         if(type=="Light"&&entity.HasComponent<Light>()){auto&v=entity.GetComponent<Light>();if(property=="Type")v.Type=static_cast<LightType>(value.cast<int>());else if(property=="Color"){auto a=value.cast<std::array<float,3>>();v.Color={a[0],a[1],a[2]};}else if(property=="Intensity")v.Intensity=value.cast<float>();else if(property=="Range")v.Range=value.cast<float>();else if(property=="Inner Cone")v.InnerConeAngle=ToRadians(value.cast<float>());else if(property=="Outer Cone")v.OuterConeAngle=ToRadians(value.cast<float>());else if(property=="Sun Angular Radius")v.SunAngularRadius=value.cast<float>();else if(property=="Sun Halo Size")v.SunHaloSize=value.cast<float>();else if(property=="Sun Halo Falloff")v.SunHaloFalloff=value.cast<float>();else if(property=="Cast Shadows")v.CastShadows=value.cast<bool>();else if(property=="Enabled")v.Enabled=value.cast<bool>();else return false;return true;}
-        if(type=="Mesh"&&entity.HasComponent<Mesh>()){auto&v=entity.GetComponent<Mesh>();if(property=="Mesh Asset"){UUID id;if(!UUID::TryParse(value.cast<std::string>(),id))return false;v.MeshAsset=id;}else if(property=="Model Node Index")v.ModelNodeIndex=value.cast<std::uint32_t>();else if(property=="Visible")v.Visible=value.cast<bool>();else if(property=="Cast Shadows")v.CastShadows=value.cast<bool>();else if(property=="Receive Shadows")v.ReceiveShadows=value.cast<bool>();else if(property=="Layer Mask")v.LayerMask=static_cast<std::uint8_t>(value.cast<int>());else return false;return true;}
+        if(type=="Mesh"&&entity.HasComponent<Mesh>()){auto&v=entity.GetComponent<Mesh>();if(property=="Mesh Asset"){const auto text=value.cast<std::string>();UUID id;if(!UUID::TryParse(text,id)){const auto asset=AssetManager::GetAsset(std::filesystem::u8path(text));if(!asset)return false;id=asset->Id;}v.MeshAsset=id;}else if(property=="Model Node Index")v.ModelNodeIndex=value.cast<std::uint32_t>();else if(property=="Visible")v.Visible=value.cast<bool>();else if(property=="Cast Shadows")v.CastShadows=value.cast<bool>();else if(property=="Receive Shadows")v.ReceiveShadows=value.cast<bool>();else if(property=="Layer Mask")v.LayerMask=static_cast<std::uint8_t>(value.cast<int>());else return false;return true;}
         if(type=="Gaussian Blur"&&entity.HasComponent<GaussianBlur>()){auto&v=entity.GetComponent<GaussianBlur>();if(property=="Enabled")v.Enabled=value.cast<bool>();else if(property=="Size")v.Size=value.cast<float>();else return false;return true;}
         if(type=="Vignette"&&entity.HasComponent<Vignette>()){auto&v=entity.GetComponent<Vignette>();if(property=="Enabled")v.Enabled=value.cast<bool>();else if(property=="Color"){auto a=value.cast<std::array<float,4>>();v.Color={a[0],a[1],a[2],a[3]};}else if(property=="Intensity")v.Intensity=value.cast<float>();else if(property=="Smoothness")v.Smoothness=value.cast<float>();else if(property=="Roundness")v.Roundness=value.cast<float>();else return false;return true;}
         if(type=="Scene Query Bounds"&&entity.HasComponent<SceneQueryBounds>()){auto&v=entity.GetComponent<SceneQueryBounds>();if(property=="Shape")v.Shape=static_cast<SceneQueryShape>(value.cast<int>());else if(property=="Center"){auto a=value.cast<std::array<float,3>>();v.Center={a[0],a[1],a[2]};}else if(property=="Extents"){auto a=value.cast<std::array<float,3>>();v.Extents={a[0],a[1],a[2]};}else if(property=="Radius")v.Radius=value.cast<float>();else if(property=="Layer Mask")v.LayerMask=value.cast<std::uint32_t>();else if(property=="Enabled")v.Enabled=value.cast<bool>();else return false;return true;}
@@ -209,6 +236,9 @@ public:
         Entity entity=m_engine->GetScene().GetEntity(ParseUuid(id));
         if(!entity||mode==0){m_engine->SetEditorGizmo(false,0,0,0,0);return;}
         Vec3 p=entity.GetWorldMatrix().TransformPoint({});m_engine->SetEditorGizmo(true,p.X,p.Y,p.Z,mode);
+    }
+    void SetGizmoPosition(const std::array<float,3>& position,int mode) {
+        m_engine->SetEditorGizmo(mode!=0,position[0],position[1],position[2],mode);
     }
     void SetGizmoHover(int axis) { m_engine->SetEditorGizmoHover(axis); }
     void SetGrid(bool visible, int plane) { m_engine->SetEditorGrid(visible, plane); }
@@ -283,6 +313,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("asset_directory", &Bazzalt::EditorBridge::EditorHost::AssetDirectory)
         .def("entities", &Bazzalt::EditorBridge::EditorHost::Entities)
         .def("entity_details", &Bazzalt::EditorBridge::EditorHost::EntityDetails)
+        .def("has_active_camera", &Bazzalt::EditorBridge::EditorHost::HasActiveCamera)
         .def("create_entity", &Bazzalt::EditorBridge::EditorHost::CreateEntity,
              py::arg("name"), py::arg("parent") = "")
         .def("destroy_entity", &Bazzalt::EditorBridge::EditorHost::DestroyEntity)
@@ -292,16 +323,21 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("translate", &Bazzalt::EditorBridge::EditorHost::Translate)
         .def("instantiate_model", &Bazzalt::EditorBridge::EditorHost::InstantiateModel,
              py::arg("asset"), py::arg("parent") = "")
+        .def("instantiate_model_path", &Bazzalt::EditorBridge::EditorHost::InstantiateModelPath,
+             py::arg("path"), py::arg("parent") = "")
         .def("add_component", &Bazzalt::EditorBridge::EditorHost::AddComponent)
         .def("remove_component", &Bazzalt::EditorBridge::EditorHost::RemoveComponent)
         .def("component_types", &Bazzalt::EditorBridge::EditorHost::ComponentTypes)
         .def("scene_info", &Bazzalt::EditorBridge::EditorHost::SceneInfo)
+        .def("capture_scene", &Bazzalt::EditorBridge::EditorHost::CaptureScene)
+        .def("restore_scene", &Bazzalt::EditorBridge::EditorHost::RestoreScene)
         .def("create_viewport", &Bazzalt::EditorBridge::EditorHost::CreateViewport)
         .def("resize_viewport", &Bazzalt::EditorBridge::EditorHost::ResizeViewport)
         .def("destroy_viewport", &Bazzalt::EditorBridge::EditorHost::DestroyViewport)
         .def("set_scene_camera", &Bazzalt::EditorBridge::EditorHost::SetSceneCamera)
         .def("set_component_property", &Bazzalt::EditorBridge::EditorHost::SetComponentProperty)
         .def("set_gizmo", &Bazzalt::EditorBridge::EditorHost::SetGizmo)
+        .def("set_gizmo_position", &Bazzalt::EditorBridge::EditorHost::SetGizmoPosition)
         .def("set_gizmo_hover", &Bazzalt::EditorBridge::EditorHost::SetGizmoHover)
         .def("set_grid", &Bazzalt::EditorBridge::EditorHost::SetGrid)
         .def("play", &Bazzalt::EditorBridge::EditorHost::Play)

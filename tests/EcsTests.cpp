@@ -77,6 +77,14 @@ int main() {
     child.GetComponent<Bazzalt::Transform>().Position = {2.0f, 0.0f, 0.0f};
     grandchild.GetComponent<Bazzalt::Transform>().Position = {1.0f, 0.0f, 0.0f};
     assert(grandchild.GetWorldMatrix().TransformPoint({}).X == 13.0f);
+    Bazzalt::Entity stationary = scene.CreateEntity("World-stable child");
+    stationary.GetComponent<Bazzalt::Transform>().Position = {4.0f, 3.0f, 2.0f};
+    assert(stationary.SetParent(parent));
+    assert(stationary.GetWorldTransform().Position == Bazzalt::Vec3(4.0f, 3.0f, 2.0f));
+    parent.GetComponent<Bazzalt::Transform>().Position = {20.0f, 0.0f, 0.0f};
+    assert(stationary.GetWorldTransform().Position == Bazzalt::Vec3(14.0f, 3.0f, 2.0f));
+    assert(stationary.RemoveParent());
+    assert(stationary.GetWorldTransform().Position == Bazzalt::Vec3(14.0f, 3.0f, 2.0f));
     parent.AddComponent<InheritedSettings>().Value = 42;
     assert(!child.HasComponent<InheritedSettings>());
     assert(scene.TryGetInheritedComponent<InheritedSettings>(grandchild)->Value == 42);

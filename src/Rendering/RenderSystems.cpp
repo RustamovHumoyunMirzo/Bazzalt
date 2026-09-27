@@ -93,6 +93,9 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
             resource.View = engine.createView();
             resource.View->setScene(&m_backend.GetScene());
             resource.View->setCamera(resource.Camera);
+            // Runtime cameras must never render editor-only layer 0x80
+            // (grid, transform gizmos, and other Scene-view helpers).
+            resource.View->setVisibleLayers(0xff, 0x7f);
             found = m_resources.emplace(id, resource).first;
         }
 

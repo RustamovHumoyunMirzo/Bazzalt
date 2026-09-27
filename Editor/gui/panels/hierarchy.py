@@ -11,6 +11,13 @@ from ...localization import LocalizationManager
 
 class HierarchyTree(QTreeWidget):
     ReparentRequested = Signal(str, str)
+    AssetDropped = Signal(str, str)
+    BackgroundClicked = Signal()
+
+    def mousePressEvent(self,event)->None:
+        if event.button()==Qt.MouseButton.LeftButton and self.itemAt(event.position().toPoint()) is None:
+            self.clearSelection();self.setCurrentItem(None);self.BackgroundClicked.emit()
+        super().mousePressEvent(event)
 
     def mimeData(self, items):  # type: ignore[no-untyped-def]
         mime = QMimeData()
@@ -21,17 +28,21 @@ class HierarchyTree(QTreeWidget):
         return mime
 
     def dragEnterEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        if event.mimeData().hasFormat("application/x-bazzalt-entity"): event.acceptProposedAction()
+        if event.mimeData().hasFormat("application/x-bazzalt-entity") or event.mimeData().hasFormat("application/x-bazzalt-asset"): event.acceptProposedAction()
         else: event.ignore()
 
     def dragMoveEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         event.acceptProposedAction()
 
     def dropEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        source = bytes(event.mimeData().data("application/x-bazzalt-entity")).decode()
         target = self.itemAt(event.position().toPoint())
         parent = "" if target is None or target.data(0, Qt.ItemDataRole.UserRole + 1) == "scene" else str(target.data(0, Qt.ItemDataRole.UserRole) or "")
-        if source and source != parent: self.ReparentRequested.emit(source, parent); event.acceptProposedAction()
+        if event.mimeData().hasFormat("application/x-bazzalt-entity"):
+            source=bytes(event.mimeData().data("application/x-bazzalt-entity")).decode()
+            if source and source!=parent:self.ReparentRequested.emit(source,parent);event.acceptProposedAction()
+        elif event.mimeData().hasFormat("application/x-bazzalt-asset"):
+            source=bytes(event.mimeData().data("application/x-bazzalt-asset")).decode()
+            if source:self.AssetDropped.emit(source,parent);event.acceptProposedAction()
 
 
 class HierarchyPanel(QWidget):
@@ -41,19 +52,18 @@ class HierarchyPanel(QWidget):
     ContextMenuRequested = Signal(object, object)
     CreateTypedRequested = Signal(str, object)
     ReparentRequested = Signal(str, str)
+    AssetDropped = Signal(str, str)
 
     def __init__(self, localization: LocalizationManager) -> None:
         super().__init__(); self._localization = localization
         layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0)
-        self.Tree=HierarchyTree();self.Tree.setHeaderHidden(True);self.Tree.setRootIsDecorated(True);self.Tree.setItemsExpandable(True);self.Tree.setIndentation(14);self.Tree.setUniformRowHeights(True);self.Tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.Tree=HierarchyTree();self.Tree.setHeaderHidden(True);self.Tree.setRootIsDecorated(True);self.Tree.setItemsExpandable(True);self.Tree.setIndentation(14);self.Tree.setUniformRowHeights(True);self.Tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);self.Tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.Tree.setDragEnabled(True);self.Tree.setAcceptDrops(True);self.Tree.setDropIndicatorShown(True);self.Tree.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
         self.Tree.ReparentRequested.connect(self.ReparentRequested)
+        self.Tree.AssetDropped.connect(self.AssetDropped)
+        self.Tree.BackgroundClicked.connect(lambda:self.SelectionChanged.emit(None))
         self.Tree.customContextMenuRequested.connect(self._ShowContextMenu)
-        self.Tree.currentItemChanged.connect(lambda item,_: self.SelectionChanged.emit(item.data(0,Qt.ItemDataRole.UserRole) if item else None))
-        # A viewport selection and Qt's current row can temporarily disagree;
-        # clicking a row must always reassert that entity, even if Qt does not
-        # emit currentItemChanged for it.
-        self.Tree.itemClicked.connect(lambda item,_: self.SelectionChanged.emit(item.data(0,Qt.ItemDataRole.UserRole)))
+        self.Tree.itemSelectionChanged.connect(self._SelectionChanged)
         layout.addWidget(self.Tree)
 
     def AddItem(self, name: str, data=None, parent: QTreeWidgetItem | None = None,
@@ -65,7 +75,11 @@ class HierarchyPanel(QWidget):
 
     def Clear(self) -> None: self.Tree.clear()
     def GetSelectedData(self):
-        item=self.Tree.currentItem();return item.data(0,Qt.ItemDataRole.UserRole) if item else None
+        values=[item.data(0,Qt.ItemDataRole.UserRole) for item in self.Tree.selectedItems() if item.data(0,Qt.ItemDataRole.UserRole+1)=="entity"]
+        return values
+
+    def _SelectionChanged(self)->None:
+        values=self.GetSelectedData();self.SelectionChanged.emit(values if len(values)>1 else values[0] if values else None)
 
     def _ShowContextMenu(self, position) -> None:  # type: ignore[no-untyped-def]
         item=self.Tree.itemAt(position);menu=QMenu(self)
@@ -73,7 +87,7 @@ class HierarchyPanel(QWidget):
         create_menu=menu.addMenu(self._localization.Translate("hierarchy.add_new"))
         for title,kind in ((self._localization.Translate("hierarchy.empty"),"Entity"),("Camera","Camera"),("Light","Light"),("Mesh","Mesh")):
             action=create_menu.addAction(title);action.triggered.connect(lambda _=False,k=kind:self.CreateTypedRequested.emit(k,parent))
-        delete=QAction(self._localization.Translate("hierarchy.delete"),menu);delete.setEnabled(item is not None and item.data(0,Qt.ItemDataRole.UserRole+1)=="entity");delete.triggered.connect(lambda:self.DeleteRequested.emit(item.data(0,Qt.ItemDataRole.UserRole) if item else None));menu.addAction(delete)
+        delete=QAction(self._localization.Translate("hierarchy.delete"),menu);delete.setEnabled(item is not None and item.data(0,Qt.ItemDataRole.UserRole+1)=="entity");delete.triggered.connect(lambda:self.DeleteRequested.emit(self.GetSelectedData()));menu.addAction(delete)
         self.ContextMenuRequested.emit(menu,self.Tree.mapToGlobal(position));menu.exec(self.Tree.mapToGlobal(position))
 
 

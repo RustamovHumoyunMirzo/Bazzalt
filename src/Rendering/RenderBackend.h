@@ -26,6 +26,7 @@ class RenderAssets;
 class RenderBackend final {
 public:
     enum class ViewportKind { Scene, Game };
+    struct EditorIcon { float X, Y, Z; bool Camera; };
     RenderBackend();
     ~RenderBackend();
     RenderBackend(const RenderBackend&) = delete;
@@ -42,6 +43,7 @@ public:
     void SetEditorGizmo(bool visible, float x, float y, float z, int mode);
     void SetEditorGizmoHover(int axis);
     void SetEditorGrid(bool visible, int plane);
+    void SetEditorIcons(const std::vector<EditorIcon>& icons);
     void Render();
     [[nodiscard]] bool IsInitialized() const { return m_engine != nullptr; }
 

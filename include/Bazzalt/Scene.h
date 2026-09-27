@@ -48,12 +48,14 @@ public:
     [[nodiscard]] UUID GetUUID() const { return m_uuid; }
     [[nodiscard]] std::size_t GetEntityCount() const;
 
-    bool SetParent(Entity child, Entity parent);
-    bool RemoveParent(Entity child);
+    bool SetParent(Entity child, Entity parent, bool worldPositionStays = true);
+    bool RemoveParent(Entity child, bool worldPositionStays = true);
     [[nodiscard]] Entity GetParent(Entity child);
     [[nodiscard]] std::vector<Entity> GetChildren(Entity parent);
     [[nodiscard]] bool IsAncestor(Entity ancestor, Entity descendant) const;
     [[nodiscard]] Mat4 GetWorldMatrix(Entity entity) const;
+    [[nodiscard]] Transform GetWorldTransform(Entity entity) const;
+    bool SetWorldTransform(Entity entity, const Transform& transform);
     Entity InstantiateModel(const ModelAsset& model, Entity parent = {},
                             std::string name = {});
     Entity InstantiateModel(UUID modelAsset, Entity parent = {}, std::string name = {});

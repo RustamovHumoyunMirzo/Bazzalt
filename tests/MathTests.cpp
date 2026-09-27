@@ -34,6 +34,17 @@ int main() {
     component.Rotation = rotation;
     component.Scale = {2, 2, 2};
     assert(Near(component.GetMatrix().TransformPoint({0, 0, -1}), transformed));
+
+    Bazzalt::Vec3 decomposedPosition, decomposedScale;
+    Bazzalt::Quaternion decomposedRotation;
+    const Bazzalt::Mat4 composed = Bazzalt::Mat4::Transform(
+        {3, -2, 7}, Bazzalt::Quaternion::FromEuler({.2f, -.4f, .7f}), {2, 3, 4});
+    assert(composed.Decompose(decomposedPosition, decomposedRotation, decomposedScale));
+    assert(Near(decomposedPosition, {3, -2, 7}));
+    assert(Near(decomposedScale, {2, 3, 4}));
+    assert(Near(Bazzalt::Mat4::Transform(decomposedPosition, decomposedRotation,
+                                        decomposedScale).TransformPoint({1, 2, 3}),
+                composed.TransformPoint({1, 2, 3})));
     assert(Near(component.GetForward(), {-1, 0, 0}));
 
     return 0;

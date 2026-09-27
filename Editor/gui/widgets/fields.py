@@ -94,6 +94,17 @@ class IntInput(FieldStateSupport, QSpinBox):
         self.setValue(value)
 
 
+class UIntInput(FieldStateSupport, QDoubleSpinBox):
+    """Exact unsigned 32-bit editor backed by Qt's wider floating range."""
+    ValueChanged = Signal(object)
+    def __init__(self,value:int=0,parent:QWidget|None=None)->None:
+        super().__init__(parent);self.setDecimals(0);self.setRange(0,4_294_967_295)
+        self.setKeyboardTracking(False);self.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.setValue(float(value));self.valueChanged.connect(lambda number:self.ValueChanged.emit(int(number)))
+    def GetValue(self)->int:return int(self.value())
+    def SetValue(self,value:int)->None:self.setValue(float(max(0,min(4_294_967_295,int(value)))))
+
+
 class FloatInput(FieldStateSupport, QDoubleSpinBox):
     def __init__(self, minimum: float = -1.0e12, maximum: float = 1.0e12,
                  value: float = 0.0, decimals: int = 4,
@@ -138,10 +149,10 @@ class VectorInput(FieldWidget):
         self.Inputs: list[FloatInput] = []
         self.Labels: list[QLabel] = []
         for axis, component in zip(self.AxisNames, values):
-            label = QLabel(axis)
+            label = QLabel(axis, self)
             label.setObjectName("VectorAxisLabel");label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             label.setFixedWidth(10)
-            field = FloatInput(value=float(component), decimals=decimals)
+            field = FloatInput(value=float(component), decimals=decimals, parent=self)
             field.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Fixed)
             field.valueChanged.connect(lambda _value: self.ValueChanged.emit(self.GetValue()))
             self.Labels.append(label);self.Inputs.append(field)
@@ -194,9 +205,9 @@ class RangeInput(FieldWidget):
         self._minimum, self._maximum = float(minimum), float(maximum)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        self.Slider = QSlider(Qt.Orientation.Horizontal)
+        self.Slider = QSlider(Qt.Orientation.Horizontal, self)
         self.Slider.setRange(0, self._Resolution)
-        self.Input = FloatInput(minimum, maximum, value, decimals)
+        self.Input = FloatInput(minimum, maximum, value, decimals, self)
         layout.addWidget(self.Slider, 1)
         layout.addWidget(self.Input)
         self.Slider.valueChanged.connect(self._SliderChanged)
@@ -306,12 +317,12 @@ class PickerInput(FieldWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(3)
-        self.Display = QLineEdit()
+        self.Display = QLineEdit(self)
         self.Display.setReadOnly(True)
         self.Display.setPlaceholderText(placeholder)
-        self.PickButton = QPushButton("…")
+        self.PickButton = QPushButton("…",self)
         self.PickButton.setObjectName("PickerButton")
-        self.ClearButton = QPushButton("×")
+        self.ClearButton = QPushButton("×",self)
         self.ClearButton.setObjectName("PickerClearButton")
         self.ClearButton.setEnabled(False)
         self.PickButton.clicked.connect(self.PickRequested)
@@ -369,8 +380,12 @@ class ColorInput(FieldStateSupport, QPushButton):
     def GetValue(self) -> QColor:
         return QColor(self._color)
 
-    def SetValue(self, color: QColor | str) -> None:
-        candidate = QColor(color)
+    def SetValue(self, color: QColor | str | Sequence[float]) -> None:
+        if isinstance(color,(tuple,list)) and len(color) in (3,4):
+            values=tuple(float(component) for component in color)
+            candidate=QColor.fromRgbF(values[0],values[1],values[2],values[3] if len(values)==4 else 1.0)
+        else:
+            candidate = QColor(color)
         if not candidate.isValid():
             raise ValueError("invalid color")
         self._color = candidate
@@ -394,6 +409,6 @@ class ColorInput(FieldStateSupport, QPushButton):
 __all__ = [
     "AssetPickerInput", "BoolInput", "ColorInput", "EnumInput", "FieldState",
     "FieldStateSupport", "FieldWidget", "FloatInput", "IntInput", "MultiSelectInput", "ObjectPickerInput",
-    "PickerInput", "RangeInput", "StringInput", "Vec2Input", "Vec3Input", "Vec4Input",
+    "PickerInput", "RangeInput", "StringInput", "UIntInput", "Vec2Input", "Vec3Input", "Vec4Input",
     "VectorInput",
 ]

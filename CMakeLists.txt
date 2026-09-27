@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 project(BAZZALT VERSION 1.0.0 LANGUAGES CXX)
+find_package(Python COMPONENTS Interpreter REQUIRED)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -83,9 +84,26 @@ endfunction()
 bazzalt_embed_post_process(gaussian_blur GaussianBlurFilamat)
 bazzalt_embed_post_process(vignette VignetteFilamat)
 bazzalt_embed_post_process(editor_gizmo EditorGizmoFilamat)
+bazzalt_embed_post_process(editor_icon EditorIconFilamat)
 bazzalt_embed_binary(Editor/assets/gizmos/singlearrowx.glb EditorTranslateGizmoGlb editor_translate_gizmo_glb)
 bazzalt_embed_binary(Editor/assets/gizmos/scalearrowx.glb EditorScaleGizmoGlb editor_scale_gizmo_glb)
 bazzalt_embed_binary(Editor/assets/gizmos/rotring.glb EditorRotateGizmoGlb editor_rotate_gizmo_glb)
+
+function(bazzalt_embed_svg_icon name symbol)
+    set(_rgba "${_bazzalt_generated_dir}/${name}.rgba")
+    set(_header "${_bazzalt_generated_dir}/${name}_rgba.h")
+    add_custom_command(OUTPUT "${_header}"
+        COMMAND "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RasterizeSvg.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/Editor/assets/icons/${name}.svg" "${_rgba}" 64
+        COMMAND "${CMAKE_COMMAND}" -DINPUT=${_rgba} -DOUTPUT=${_header} -DSYMBOL=${symbol}
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedBinary.cmake"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Editor/assets/icons/${name}.svg"
+                "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RasterizeSvg.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedBinary.cmake" VERBATIM)
+    set(BAZZALT_EMBEDDED_HEADERS ${BAZZALT_EMBEDDED_HEADERS} "${_header}" PARENT_SCOPE)
+endfunction()
+bazzalt_embed_svg_icon(scene_cam SceneCameraIconRgba)
+bazzalt_embed_svg_icon(scene_light SceneLightIconRgba)
 
 set(_bazzalt_environment_dir "${_bazzalt_generated_dir}/environment")
 set(_bazzalt_environment_ibl "${_bazzalt_environment_dir}/environment_ibl.ktx")
@@ -146,13 +164,12 @@ target_compile_definitions(Bazzalt PRIVATE
 
 option(BAZZALT_BUILD_EDITOR_BRIDGE "Build the private Python editor runtime bridge" ON)
 if(BAZZALT_BUILD_EDITOR_BRIDGE)
-    find_package(Python COMPONENTS Interpreter Development.Module REQUIRED)
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/deps/pybind11/CMakeLists.txt")
-        add_subdirectory(deps/pybind11 EXCLUDE_FROM_ALL)
-        set(pybind11_FOUND TRUE)
-    else()
-        find_package(pybind11 CONFIG QUIET)
-    endif()
+    find_package(Python COMPONENTS Development.Module REQUIRED)
+    # Resolve pybind11 as a package. Avoid a conditional add_subdirectory for
+    # the optional, normally-empty dependency folder: IDE CMake parsers inspect
+    # that call without evaluating EXISTS and report a false missing-CMakeLists
+    # diagnostic.
+    find_package(pybind11 CONFIG QUIET)
     if(NOT pybind11_FOUND)
         execute_process(COMMAND "${Python_EXECUTABLE}" -m pybind11 --cmakedir
             OUTPUT_VARIABLE _bazzalt_pybind11_dir OUTPUT_STRIP_TRAILING_WHITESPACE

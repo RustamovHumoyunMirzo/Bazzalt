@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (
     QApplication, QFrame, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton, QScrollArea, QSizePolicy, QToolButton, QVBoxLayout,
     QWidget,
@@ -17,18 +17,22 @@ from ...localization import LocalizationManager
 class ComponentSection(QFrame):
     RemoveRequested = Signal()
     def __init__(self, title: str, expanded: bool = True, removable: bool = True,
-                 localization: LocalizationManager | None = None) -> None:
-        super().__init__(); self.setObjectName("ComponentSection")
+                 localization: LocalizationManager | None = None,
+                 icon: QIcon | None = None, parent: QWidget | None = None) -> None:
+        super().__init__(parent); self.setObjectName("ComponentSection")
         layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0);layout.setSpacing(0)
-        self.Toggle=QToolButton();self.Toggle.setText(title);self.Toggle.setCheckable(True);self.Toggle.setChecked(expanded)
+        header=QWidget(self);header.setObjectName("ComponentHeaderRow");headerLayout=QHBoxLayout(header);headerLayout.setContentsMargins(3,0,2,0);headerLayout.setSpacing(3)
+        self.Toggle=QToolButton(header);self.Toggle.setText(title);self.Toggle.setCheckable(True);self.Toggle.setChecked(expanded)
         self.Toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.Toggle.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Fixed)
         self.Toggle.setObjectName("ComponentHeader")
         self._fields:dict[str,QWidget]={};self._localization=localization;self._removable=removable
-        self.Body=QWidget();self.Form=QGridLayout(self.Body);self.Form.setContentsMargins(6,2,6,5)
+        self.Body=QWidget(self);self.Form=QGridLayout(self.Body);self.Form.setContentsMargins(6,2,6,5)
         self.Form.setHorizontalSpacing(5);self.Form.setVerticalSpacing(2);self.Form.setColumnStretch(1,1)
-        header=QWidget();header.setObjectName("ComponentHeaderRow");headerLayout=QHBoxLayout(header);headerLayout.setContentsMargins(0,0,2,0);headerLayout.setSpacing(0);headerLayout.addWidget(self.Toggle,1)
-        options=QToolButton();options.setObjectName("ComponentOptionsButton");options.setText("⋮");options.clicked.connect(lambda:self._ShowOptions(options));headerLayout.addWidget(options)
+        self.IconLabel=QLabel(header);self.IconLabel.setObjectName("ComponentIcon");self.IconLabel.setFixedSize(16,16);self.IconLabel.setVisible(icon is not None and not icon.isNull())
+        if icon is not None and not icon.isNull():self.IconLabel.setPixmap(icon.pixmap(16,16))
+        headerLayout.addWidget(self.IconLabel);headerLayout.addWidget(self.Toggle,1)
+        options=QToolButton(header);options.setObjectName("ComponentOptionsButton");options.setText("⋮");options.clicked.connect(lambda:self._ShowOptions(options));headerLayout.addWidget(options)
         layout.addWidget(header);layout.addWidget(self.Body)
         self.Toggle.toggled.connect(self.SetExpanded);self.SetExpanded(expanded)
 
@@ -37,8 +41,9 @@ class ComponentSection(QFrame):
         self.Body.setVisible(expanded)
 
     def AddField(self, label: str, editor: QWidget) -> None:
-        row=self.Form.rowCount();caption=QLabel(label);caption.setObjectName("InspectorFieldLabel")
+        row=self.Form.rowCount();caption=QLabel(label,self.Body);caption.setObjectName("InspectorFieldLabel")
         caption.setFixedWidth(72);caption.setAlignment(Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter)
+        editor.setParent(self.Body)
         editor.setMinimumWidth(0);editor.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Fixed)
         self.Form.addWidget(caption,row,0);self.Form.addWidget(editor,row,1)
         self._fields[label]=editor
@@ -81,19 +86,20 @@ class PropertiesPanel(QWidget):
     def __init__(self, localization: LocalizationManager) -> None:
         super().__init__();self.setObjectName("PropertiesPanel");self._localization=localization;self._sections:dict[str,ComponentSection]={}
         layout=QVBoxLayout(self);layout.setContentsMargins(3,3,3,3);layout.setSpacing(3)
-        self.Scroll=QScrollArea();self.Scroll.setWidgetResizable(True);self.Scroll.setFrameShape(QFrame.Shape.NoFrame);self.Scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.Container=QWidget();self.ComponentsLayout=QVBoxLayout(self.Container);self.ComponentsLayout.setContentsMargins(0,0,0,0);self.ComponentsLayout.addStretch()
+        self.Scroll=QScrollArea(self);self.Scroll.setWidgetResizable(True);self.Scroll.setFrameShape(QFrame.Shape.NoFrame);self.Scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.Container=QWidget(self.Scroll);self.ComponentsLayout=QVBoxLayout(self.Container);self.ComponentsLayout.setContentsMargins(0,0,0,0);self.ComponentsLayout.addStretch()
         self.Container.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.Container.customContextMenuRequested.connect(self._ShowContextMenu)
         self.Scroll.setWidget(self.Container);layout.addWidget(self.Scroll,1)
-        self.AddComponentButton=QPushButton();self.AddComponentButton.setObjectName("AddComponentButton")
+        self.AddComponentButton=QPushButton(self);self.AddComponentButton.setObjectName("AddComponentButton")
         self.AddComponentButton.clicked.connect(self.AddComponentRequested);layout.addWidget(self.AddComponentButton)
         localization.LocaleChanged.connect(lambda _: self._Retranslate());self._Retranslate()
 
     def AddComponentSection(self, component_id: str, title: str,
-                            expanded: bool = True, removable: bool = True) -> ComponentSection:
+                            expanded: bool = True, removable: bool = True,
+                            icon: QIcon | None = None) -> ComponentSection:
         if component_id in self._sections:return self._sections[component_id]
-        section=ComponentSection(title,expanded,removable,self._localization);section.RemoveRequested.connect(lambda:self.RemoveComponentRequested.emit(component_id));self._sections[component_id]=section
+        section=ComponentSection(title,expanded,removable,self._localization,icon,self.Container);section.RemoveRequested.connect(lambda:self.RemoveComponentRequested.emit(component_id));self._sections[component_id]=section
         self.ComponentsLayout.insertWidget(self.ComponentsLayout.count()-1,section);return section
 
     def RemoveComponentSection(self, component_id: str) -> bool:
