@@ -88,6 +88,7 @@ private:
     bool m_gizmoVisible = false;
     float m_gizmoX = 0, m_gizmoY = 0, m_gizmoZ = 0;
     int m_gizmoMode = 0;
+    float m_gizmoScale = 1;
     int m_gizmoHover = -1;
     bool m_gridVisible = true;
     int m_gridPlane = 1;

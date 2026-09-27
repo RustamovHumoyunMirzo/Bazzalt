@@ -44,6 +44,7 @@ struct RenderBackend::ViewportResource {
     utils::Entity CameraEntity;
     std::uint32_t Width = 1;
     std::uint32_t Height = 1;
+    filament::math::float3 Eye{6.0f, 4.0f, 8.0f};
 };
 
 struct RenderBackend::GizmoResource {
@@ -92,7 +93,7 @@ bool RenderBackend::Initialize() {
         m_indirectLight = filament::IndirectLight::Builder()
             .reflections(m_environmentIblTexture).intensity(30000.0f).build(*m_engine);
         m_skybox = filament::Skybox::Builder()
-            .environment(m_environmentSkyboxTexture).intensity(30000.0f).showSun(true).build(*m_engine);
+            .environment(m_environmentSkyboxTexture).intensity(30000.0f).showSun(false).build(*m_engine);
         m_scene->setIndirectLight(m_indirectLight);
         m_scene->setSkybox(m_skybox);
     }
@@ -169,7 +170,7 @@ bool RenderBackend::CreateViewport(std::uint64_t id, std::uintptr_t nativeWindow
     viewport->View = m_engine->createView();
     viewport->View->setScene(m_scene);
     viewport->View->setCamera(viewport->Camera);
-    viewport->View->setPostProcessingEnabled(kind == ViewportKind::Game);
+    viewport->View->setPostProcessingEnabled(true);
     viewport->View->setVisibleLayers(0xff, kind == ViewportKind::Scene ? 0xff : 0x7f);
     if (kind == ViewportKind::Scene) {
         viewport->Camera->lookAt({6.0, 4.0, 8.0}, {0.0, 0.0, 0.0}, {0.0, 1.0, 0.0});
@@ -197,6 +198,8 @@ void RenderBackend::ResizeViewport(std::uint64_t id, std::uint32_t width,
     }
     if (viewport.Kind == ViewportKind::Game)
         SetPresentationSize(viewport.Width, viewport.Height);
+    else if(m_gizmoVisible)
+        SetEditorGizmo(true,m_gizmoX,m_gizmoY,m_gizmoZ,m_gizmoMode);
 }
 
 void RenderBackend::DestroyViewport(std::uint64_t id) {
@@ -216,6 +219,7 @@ void RenderBackend::SetSceneCamera(std::uint64_t id, float eyeX, float eyeY, flo
     if (found == m_viewports.end() || !found->second->Camera) return;
     found->second->Camera->lookAt({eyeX, eyeY, eyeZ}, {targetX, targetY, targetZ},
                                   {0.0, 1.0, 0.0});
+    found->second->Eye={eyeX,eyeY,eyeZ};
     if (found->second->Kind == ViewportKind::Scene) {
         const float dx=eyeX-targetX,dy=eyeY-targetY,dz=eyeZ-targetZ;
         const float distance=std::sqrt(dx*dx+dy*dy+dz*dz);
@@ -225,28 +229,27 @@ void RenderBackend::SetSceneCamera(std::uint64_t id, float eyeX, float eyeY, flo
         m_gridCenterY=std::round(targetY/snap)*snap;
         m_gridCenterZ=std::round(targetZ/snap)*snap;
         SetEditorGrid(m_gridVisible,m_gridPlane);
+        if(m_gizmoVisible)SetEditorGizmo(true,m_gizmoX,m_gizmoY,m_gizmoZ,m_gizmoMode);
     }
 }
 
 void RenderBackend::SetEditorGizmo(bool visible, float x, float y, float z, int mode) {
     m_gizmoVisible=visible;m_gizmoX=x;m_gizmoY=y;m_gizmoZ=z;m_gizmoMode=mode;
     if (!m_gizmo || !m_engine) return;
+    for(const auto& [id,viewport]:m_viewports){(void)id;if(viewport->Kind!=ViewportKind::Scene)continue;const float dx=viewport->Eye.x-x,dy=viewport->Eye.y-y,dz=viewport->Eye.z-z;const float depth=std::sqrt(dx*dx+dy*dy+dz*dz);constexpr float desiredPixels=96.0f;constexpr float modelLength=.9f;m_gizmoScale=std::clamp(depth*2.0f*std::tan(0.5235988f)*desiredPixels/(std::max(1u,viewport->Height)*modelLength),.01f,10000.0f);break;}
     auto& transforms = m_engine->getTransformManager();
-    const float scale = mode == 0 ? 0.0f : 1.0f;
+    const float scale = mode == 0 ? 0.0f : m_gizmoScale;
     for (int model=0;model<3;++model) for (int axis=0; axis<3; ++axis) {
         const int index=model*3+axis;auto instance = transforms.getInstance(m_gizmo->Entities[index]);
         filament::math::mat4f rotation;
-        if (model == 1) {
-            if (axis == 0) rotation=filament::math::mat4f::rotation(-1.5707963f,filament::math::float3{0,0,1});
-            else if (axis == 2) rotation=filament::math::mat4f::rotation(1.5707963f,filament::math::float3{1,0,0});
-        } else {
-            // Translate/scale assets point down -Y in source space.
-            if (axis == 0) rotation=filament::math::mat4f::rotation(1.5707963f,filament::math::float3{0,0,1});
-            else if (axis == 1) rotation=filament::math::mat4f::rotation(3.1415926f,filament::math::float3{0,0,1});
-            else rotation=filament::math::mat4f::rotation(-1.5707963f,filament::math::float3{1,0,0});
-        }
+        const auto base=filament::math::mat4f::rotation(-1.5707963f,filament::math::float3{0,0,1});
+        filament::math::mat4f axisRotation;
+        if(axis==1)axisRotation=filament::math::mat4f::rotation(1.5707963f,filament::math::float3{0,0,1});
+        else if(axis==2)axisRotation=filament::math::mat4f::rotation(-1.5707963f,filament::math::float3{0,1,0});
+        rotation=axisRotation*base;
+        const auto modelOffset=model==1?filament::math::mat4f{}:filament::math::mat4f::translation(filament::math::float3{0,.8f,0});
         const auto transform = filament::math::mat4f::translation(filament::math::float3{x,y,z}) *
-            filament::math::mat4f::scaling(filament::math::float3{scale,scale,scale}) * rotation;
+            filament::math::mat4f::scaling(filament::math::float3{scale,scale,scale}) * rotation * modelOffset;
         transforms.setTransform(instance, transform);
         const bool active=visible&&scale>0&&model==mode-1;
         if (active) m_scene->addEntity(m_gizmo->Entities[index]); else m_scene->remove(m_gizmo->Entities[index]);

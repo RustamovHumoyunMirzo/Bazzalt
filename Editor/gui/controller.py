@@ -25,7 +25,7 @@ class EditorController(QObject):
         self.IsDirty = False
         self.Timer = QTimer(self)
         self.Timer.setInterval(16)
-        self.Timer.timeout.connect(runtime.Tick)
+        self.Timer.timeout.connect(self._Tick)
 
         window.MenuBar.OpenSceneRequested.connect(self.OpenSceneDialog)
         window.MenuBar.SaveSceneRequested.connect(self.SaveScene)
@@ -48,8 +48,12 @@ class EditorController(QObject):
         window.Scene.Surface.TranslationDragged.connect(self.ApplyGizmoTranslation)
         window.Scene.Surface.RotationDragged.connect(self.ApplyGizmoRotation)
         window.Scene.Surface.ScaleDragged.connect(self.ApplyGizmoScale)
+        window.Scene.Surface.GizmoDragFinished.connect(self._FinishGizmoDrag)
         window.Scene.Surface.EntityPicked.connect(self.SelectSceneEntity)
         window.Scene.Surface.Attached.connect(self._UpdateGizmo)
+        # The toolbar selects Translate before this controller is constructed,
+        # so its initial GizmoModeChanged signal has already been emitted.
+        window.Scene.Surface.SetGizmoMode(window.Toolbar.GetGizmoMode())
         if not runtime.IsAvailable():
             window.Console.AddMessage(runtime.LastError(), ConsoleLevel.Warning)
         else:
@@ -60,6 +64,12 @@ class EditorController(QObject):
         dialog.setOption(QFileDialog.Option.DontUseNativeDialog);dialog.setFileMode(QFileDialog.FileMode.ExistingFile);dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptOpen)
         path=dialog.selectedFiles()[0] if dialog.exec() and dialog.selectedFiles() else ""
         if path and self.Runtime.LoadScene(path): self.ScenePath = path
+
+    def _Tick(self) -> None:
+        self.Runtime.Tick()
+        # Editor gizmos follow the authoritative world transform every frame.
+        # This also covers transforms changed by systems or native user code.
+        if self.SelectedEntity:self._UpdateGizmo()
 
     def SaveScene(self) -> None:
         if self.ScenePath:
@@ -103,15 +113,19 @@ class EditorController(QObject):
             self.SelectEntity(None)
 
     def SelectEntity(self, entity_id) -> None:  # type: ignore[no-untyped-def]
-        self.SelectedEntity = str(entity_id or "")
-        self.Window.Properties.Clear()
+        next_entity = str(entity_id or "")
+        self._updating_inspector = True
+        try:self.Window.Properties.Clear()
+        finally:self._updating_inspector = False
+        self.SelectedEntity = next_entity
         if not self.SelectedEntity:
             self.Window.Scene.Surface.SetSelection(None);self._UpdateGizmo();return
         details = self.Runtime.EntityDetails(self.SelectedEntity)
         if not details:self._UpdateGizmo();return
         self.Window.Scene.Surface.SetSelection(details.get("world_position", details["position"]))
         identity = self.Window.Properties.AddComponentSection("identity", "Entity", removable=False)
-        name = StringInput(str(details["name"]));name.editingFinished.connect(lambda:self._Rename(name.text()))
+        inspected_entity=self.SelectedEntity
+        name = StringInput(str(details["name"]));name.editingFinished.connect(lambda:self._Rename(inspected_entity,name.text()))
         identity.AddField("Name", name)
         transform = self.Window.Properties.AddComponentSection("transform", "Transform", removable=False)
         position = Vec3Input(details["position"])
@@ -122,8 +136,8 @@ class EditorController(QObject):
         transform.AddField("Scale", scale)
         def Commit(_value=None) -> None:
             if not self._updating_inspector:
-                self.Runtime.SetTransform(self.SelectedEntity, position.GetValue(),
-                                          rotation.GetValue(), scale.GetValue())
+                if inspected_entity==self.SelectedEntity and self.Runtime.SetTransform(inspected_entity, position.GetValue(),
+                                             rotation.GetValue(), scale.GetValue()):self._UpdateGizmo()
         position.ValueChanged.connect(Commit); rotation.ValueChanged.connect(Commit)
         scale.ValueChanged.connect(Commit)
         for field in (position, rotation, scale): field.ValueChanged.connect(lambda _=None:self.SetDirty(True))
@@ -134,7 +148,7 @@ class EditorController(QObject):
                     f"runtime.{component}", str(component), expanded=False
                 )
                 for property_name, value in dict(component_data.get(component, {})).items():
-                    editor = self._ComponentEditor(component, property_name, value)
+                    editor = self._ComponentEditor(inspected_entity, component, property_name, value)
                     if editor is not None: section.AddField(property_name, editor)
 
         self._UpdateGizmo()
@@ -142,36 +156,36 @@ class EditorController(QObject):
     def SelectSceneEntity(self,entity_id:str)->None:
         self.SelectEntity(entity_id);self.RefreshHierarchy()
 
-    def _ComponentEditor(self, component: str, name: str, value):  # type: ignore[no-untyped-def]
+    def _ComponentEditor(self, entity_id: str, component: str, name: str, value):  # type: ignore[no-untyped-def]
         if isinstance(value, bool):
-            editor=BoolInput(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(component,name,v));return editor
+            editor=BoolInput(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
         if isinstance(value, int):
             if component=="Light" and name=="Type":
-                editor=EnumInput();editor.SetOptions((("Directional",0),("Sun",1),("Point",2),("Spot",3)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(component,name,editor.GetValue()));return editor
+                editor=EnumInput();editor.SetOptions((("Directional",0),("Sun",1),("Point",2),("Spot",3)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
             if component=="Camera" and name=="Projection":
-                editor=EnumInput();editor.SetOptions((("Perspective",0),("Orthographic",1)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(component,name,editor.GetValue()));return editor
+                editor=EnumInput();editor.SetOptions((("Perspective",0),("Orthographic",1)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
             if component=="Camera" and name=="Aspect Mode":
-                editor=EnumInput();editor.SetOptions((("Automatic",0),("Fixed",1)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(component,name,editor.GetValue()));return editor
+                editor=EnumInput();editor.SetOptions((("Automatic",0),("Fixed",1)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
             if component=="Camera" and name=="Anti Aliasing":
-                editor=EnumInput();editor.SetOptions((("None",0),("FXAA",1),("TAA",2)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(component,name,editor.GetValue()));return editor
+                editor=EnumInput();editor.SetOptions((("None",0),("FXAA",1),("TAA",2)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
             if component=="Camera" and name=="Tone Mapping":
-                editor=EnumInput();editor.SetOptions((("Linear",0),("Filmic",1),("ACES",2)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(component,name,editor.GetValue()));return editor
+                editor=EnumInput();editor.SetOptions((("Linear",0),("Filmic",1),("ACES",2)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
             if component=="Scene Query Bounds" and name=="Shape":
-                editor=EnumInput();editor.SetOptions((("Box",0),("Sphere",1)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(component,name,editor.GetValue()));return editor
-            editor=IntInput(value=value);editor.valueChanged.connect(lambda v:self._CommitComponent(component,name,v));return editor
+                editor=EnumInput();editor.SetOptions((("Box",0),("Sphere",1)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
+            editor=IntInput(value=value);editor.valueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
         if isinstance(value, float):
-            editor=FloatInput(value=value);editor.valueChanged.connect(lambda v:self._CommitComponent(component,name,v));return editor
+            editor=FloatInput(value=value);editor.valueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
         if isinstance(value, (tuple,list)) and len(value) in (3,4) and all(isinstance(v,(int,float)) for v in value):
-            editor=Vec3Input(value) if len(value)==3 else Vec4Input(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(component,name,v));return editor
+            editor=Vec3Input(value) if len(value)==3 else Vec4Input(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
         if isinstance(value, str):
-            editor=StringInput(value);editor.editingFinished.connect(lambda:self._CommitComponent(component,name,editor.GetValue()));return editor
+            editor=StringInput(value);editor.editingFinished.connect(lambda:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
         return None
 
-    def _CommitComponent(self, component: str, name: str, value) -> None:  # type: ignore[no-untyped-def]
-        if self.SelectedEntity and self.Runtime.SetComponentProperty(self.SelectedEntity,component,name,value): self.SetDirty(True)
+    def _CommitComponent(self, entity_id: str, component: str, name: str, value) -> None:  # type: ignore[no-untyped-def]
+        if not self._updating_inspector and entity_id==self.SelectedEntity and self.Runtime.SetComponentProperty(entity_id,component,name,value): self.SetDirty(True)
 
-    def _Rename(self, name: str) -> None:
-        if self.SelectedEntity and name.strip() and self.Runtime.Rename(self.SelectedEntity,name.strip()):self.SetDirty(True);self.RefreshHierarchy()
+    def _Rename(self, entity_id: str, name: str) -> None:
+        if not self._updating_inspector and entity_id==self.SelectedEntity and name.strip() and self.Runtime.Rename(entity_id,name.strip()):self.SetDirty(True);self.RefreshHierarchy()
 
     def SetDirty(self, dirty: bool = True) -> None:
         self.IsDirty=dirty;title=self.Window.windowTitle().rstrip(" *")
@@ -180,7 +194,13 @@ class EditorController(QObject):
     def _GizmoModeChanged(self, mode) -> None: self.Window.Scene.Surface.SetGizmoMode(mode);self._UpdateGizmo()
     def _UpdateGizmo(self) -> None:
         modes={GizmoMode.Select:0,GizmoMode.Translate:1,GizmoMode.Rotate:2,GizmoMode.Scale:3}
+        if self.SelectedEntity:
+            details=self.Runtime.EntityDetails(self.SelectedEntity)
+            if details:self.Window.Scene.Surface.SetSelection(details.get("world_position",details["position"]))
         self.Runtime.SetGizmo(self.SelectedEntity, modes[self.Window.Toolbar.GetGizmoMode()])
+
+    def _FinishGizmoDrag(self) -> None:
+        if self.SelectedEntity:self.SelectEntity(self.SelectedEntity)
 
     def CreateEntity(self, parent) -> None:  # type: ignore[no-untyped-def]
         self.Runtime.CreateEntity(self.Window.Localization.Translate("entity.new"), str(parent or ""))

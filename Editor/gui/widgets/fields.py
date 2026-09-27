@@ -134,6 +134,7 @@ class VectorInput(FieldWidget):
         self._layout = QHBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.setSpacing(3)
+        self.setMaximumWidth(360)
         self.Inputs: list[FloatInput] = []
         self.Labels: list[QLabel] = []
         for axis, component in zip(self.AxisNames, values):

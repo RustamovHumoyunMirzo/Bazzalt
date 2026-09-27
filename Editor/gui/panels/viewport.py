@@ -14,6 +14,7 @@ class NativeRenderSurface(QWidget):
     TranslationDragged = Signal(object)
     RotationDragged = Signal(object, float)
     ScaleDragged = Signal(object)
+    GizmoDragFinished = Signal()
     CameraChanged = Signal(float, float)
     Attached = Signal()
     EntityPicked = Signal(str)
@@ -71,7 +72,7 @@ class NativeRenderSurface(QWidget):
 
     def SetSelection(self, position) -> None:
         self._selection = Vec3(*position) if position is not None else None
-        self._SetHover(None)
+        if position is None:self._SetHover(None)
     def SetGizmoMode(self, mode: GizmoMode) -> None:
         self._mode = mode; self._SetHover(None)
     def SetMoveSpeed(self,speed:float)->None:self._move_speed=max(.1,float(speed))
@@ -104,9 +105,9 @@ class NativeRenderSurface(QWidget):
 
     def _PickGizmo(self, point: QPoint):
         if self._selection is None or self._mode is GizmoMode.Select:return None
-        ray=self._Ray(point);tolerance=max(.07,self._distance*.009)
-        if self._mode is GizmoMode.Rotate:return PickRotationAxis(ray,self._selection,1.0,tolerance)
-        return PickAxis(ray,self._selection,1.0,tolerance)
+        ray=self._Ray(point);depth=(Vec3(*self._eye)-self._selection).Length();world_per_pixel=depth*2.*tan(radians(30.))/max(1,self.height());length=world_per_pixel*96.;tolerance=world_per_pixel*11.
+        if self._mode is GizmoMode.Rotate:return PickRotationAxis(ray,self._selection,length/.9,tolerance)
+        return PickAxis(ray,self._selection,length,tolerance)
 
     def _SetHover(self, handle) -> None:
         if handle is self._hover_handle:return
@@ -152,7 +153,10 @@ class NativeRenderSurface(QWidget):
             self._UpdateCamera(); event.accept()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
-        if event.button()==Qt.MouseButton.LeftButton:self._gizmo_drag=None;self._SetHover(self._PickGizmo(event.position().toPoint()))
+        if event.button()==Qt.MouseButton.LeftButton:
+            dragged=self._gizmo_drag is not None;self._gizmo_drag=None
+            if dragged:self.GizmoDragFinished.emit()
+            self._hover_handle=None;self._SetHover(self._PickGizmo(event.position().toPoint()))
         if event.button()==Qt.MouseButton.RightButton:self._navigating=False;self._keys.clear();event.accept()
 
     def keyPressEvent(self,event:QKeyEvent)->None:
@@ -186,13 +190,25 @@ class NativeRenderSurface(QWidget):
 
 class SceneOrientationWidget(QWidget):
     def __init__(self,surface:NativeRenderSurface)->None:
-        flags=Qt.WindowType.Tool|Qt.WindowType.FramelessWindowHint|Qt.WindowType.WindowTransparentForInput|Qt.WindowType.WindowDoesNotAcceptFocus
-        super().__init__(surface.window(),flags);self.Surface=surface;self._yaw=36.;self._pitch=20.;self.setFixedSize(92,92);self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents);self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground);self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating);self.setAutoFillBackground(False)
+        flags=Qt.WindowType.Tool|Qt.WindowType.FramelessWindowHint|Qt.WindowType.WindowDoesNotAcceptFocus
+        super().__init__(surface.window(),flags);self.Surface=surface;self._yaw=36.;self._pitch=20.;self._axis_points=[];self._animation=None;self.setFixedSize(92,92);self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground);self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating);self.setAutoFillBackground(False);self.setCursor(Qt.CursorShape.PointingHandCursor)
         timer=QTimer(self);timer.setInterval(50);timer.timeout.connect(self._Sync);timer.start();self._timer=timer
     def _Sync(self)->None:
         if not self.Surface.isVisible() or self.Surface.window().isMinimized():self.hide();return
         point=self.Surface.mapToGlobal(QPoint(max(6,self.Surface.width()-98),6));self.move(point);self.show()
     def SetCamera(self,yaw:float,pitch:float)->None:self._yaw=yaw;self._pitch=pitch;self.update()
+    def mousePressEvent(self,event:QMouseEvent)->None:
+        if event.button()!=Qt.MouseButton.LeftButton:return
+        point=event.position();nearest=min(self._axis_points,key=lambda item:(item[0]-point).manhattanLength(),default=None)
+        if nearest is not None and (nearest[0]-point).manhattanLength()<=20:self._AnimateTo(*nearest[1])
+    def _AnimateTo(self,yaw:float,pitch:float)->None:
+        start_yaw=self.Surface._yaw;delta=(yaw-start_yaw+180)%360-180;start_pitch=self.Surface._pitch;step=0
+        timer=QTimer(self);timer.setInterval(16)
+        def tick():
+            nonlocal step;step+=1;t=min(1.,step/12.);ease=1-(1-t)**3
+            self.Surface._yaw=start_yaw+delta*ease;self.Surface._pitch=start_pitch+(pitch-start_pitch)*ease;self.Surface._UpdateCamera()
+            if t>=1:timer.stop()
+        timer.timeout.connect(tick);self._animation=timer;timer.start()
     def paintEvent(self,event)->None:
         p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
         cy,sy=cos(radians(self._yaw)),sin(radians(self._yaw));cp,sp=cos(radians(self._pitch)),sin(radians(self._pitch));center=QPointF(46,46)
@@ -203,8 +219,8 @@ class SceneOrientationWidget(QWidget):
         for face,color in (((4,5,6,7),QColor(65,105,210,185)),((1,5,6,2),QColor(205,70,65,180)),((3,2,6,7),QColor(75,175,85,180))):
             p.setBrush(color);p.drawPolygon(QPolygonF([corners[i] for i in face]))
         for a,b in ((0,1),(1,2),(2,3),(3,0),(4,5),(5,6),(6,7),(7,4),(0,4),(1,5),(2,6),(3,7)):p.drawLine(corners[a],corners[b])
-        axes=((project((1,0,0)),QColor('#d45b5b'),'X'),(project((0,1,0)),QColor('#68a85c'),'Y'),(project((0,0,1)),QColor('#5686cf'),'Z'))
-        for end,color,label in axes:p.setPen(QPen(color,2));p.drawLine(center,end);p.setBrush(color);p.setPen(Qt.PenStyle.NoPen);p.drawEllipse(end,8,8);p.setPen(QColor('white'));p.drawText(end.x()-4,end.y()+4,label)
+        axes=((project((1,0,0)),QColor('#d45b5b'),'X',(90.,0.)),(project((0,1,0)),QColor('#68a85c'),'Y',(self._yaw,89.)),(project((0,0,1)),QColor('#5686cf'),'Z',(0.,0.)));self._axis_points=[(end,target) for end,_color,_label,target in axes]
+        for end,color,label,_target in axes:p.setPen(QPen(color,2));p.drawLine(center,end);p.setBrush(color);p.setPen(Qt.PenStyle.NoPen);p.drawEllipse(end,8,8);p.setPen(QColor('white'));p.drawText(end.x()-4,end.y()+4,label)
         p.end()
 
 

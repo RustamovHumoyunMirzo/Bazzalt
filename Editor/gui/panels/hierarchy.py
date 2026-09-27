@@ -50,6 +50,10 @@ class HierarchyPanel(QWidget):
         self.Tree.ReparentRequested.connect(self.ReparentRequested)
         self.Tree.customContextMenuRequested.connect(self._ShowContextMenu)
         self.Tree.currentItemChanged.connect(lambda item,_: self.SelectionChanged.emit(item.data(0,Qt.ItemDataRole.UserRole) if item else None))
+        # A viewport selection and Qt's current row can temporarily disagree;
+        # clicking a row must always reassert that entity, even if Qt does not
+        # emit currentItemChanged for it.
+        self.Tree.itemClicked.connect(lambda item,_: self.SelectionChanged.emit(item.data(0,Qt.ItemDataRole.UserRole)))
         layout.addWidget(self.Tree)
 
     def AddItem(self, name: str, data=None, parent: QTreeWidgetItem | None = None,
