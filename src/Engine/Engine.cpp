@@ -94,15 +94,16 @@ void Engine::RenderEditorFrame()
 }
 
 bool Engine::CreateEditorViewport(std::uint64_t id, std::uintptr_t nativeWindow, bool scene,
-                                  std::uint32_t width, std::uint32_t height) {
+                                  std::uint32_t width, std::uint32_t height, float pixelRatio) {
     if (!m_isInitialized && !Init()) return false;
     return m_renderBackend->CreateViewport(id, nativeWindow,
         scene ? RenderBackend::ViewportKind::Scene : RenderBackend::ViewportKind::Game,
-        width, height);
+        width, height, pixelRatio);
 }
 
-void Engine::ResizeEditorViewport(std::uint64_t id, std::uint32_t width, std::uint32_t height) {
-    if (m_isInitialized) m_renderBackend->ResizeViewport(id, width, height);
+void Engine::ResizeEditorViewport(std::uint64_t id, std::uint32_t width, std::uint32_t height,
+                                  float pixelRatio) {
+    if (m_isInitialized) m_renderBackend->ResizeViewport(id, width, height, pixelRatio);
 }
 
 void Engine::DestroyEditorViewport(std::uint64_t id) {

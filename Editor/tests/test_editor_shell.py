@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget
 from PySide6.QtGui import QColor
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtCore import QPointF
+from PySide6.QtCore import QPoint, QPointF
 
 from Editor.gui.application import Editor
 from Editor.gui.panels import ConsoleLevel
@@ -389,6 +389,12 @@ class EditorShellTests(unittest.TestCase):
         surface.mousePressEvent(QMouseEvent(QMouseEvent.Type.MouseButtonPress,QPointF(100,100),Qt.MouseButton.RightButton,Qt.MouseButton.RightButton,Qt.KeyboardModifier.NoModifier))
         surface.mouseMoveEvent(QMouseEvent(QMouseEvent.Type.MouseMove,QPointF(130,115),Qt.MouseButton.NoButton,Qt.MouseButton.RightButton,Qt.KeyboardModifier.NoModifier))
         self.assertEqual(surface._eye,eye);self.assertNotEqual(tuple(surface._target),target)
+
+    def test_native_orientation_axis_is_clickable(self) -> None:
+        surface=self.Window.Scene.Surface;surface.resize(400,400)
+        # Projected +X endpoint for the default 36° yaw / 20° pitch.
+        self.assertTrue(surface._PickOrientation(QPoint(373,48)))
+        self.assertTrue(surface._orientation_animation.isActive())
 
     def test_hierarchy_rebuild_preserves_real_parent_and_expansion(self) -> None:
         parent=self.Window.Runtime.CreateEntity("Tree Parent");child=self.Window.Runtime.CreateEntity("Tree Child")

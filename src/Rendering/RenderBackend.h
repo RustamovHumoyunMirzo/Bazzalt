@@ -35,8 +35,10 @@ public:
     bool Initialize();
     void Shutdown();
     bool CreateViewport(std::uint64_t id, std::uintptr_t nativeWindow,
-                        ViewportKind kind, std::uint32_t width, std::uint32_t height);
-    void ResizeViewport(std::uint64_t id, std::uint32_t width, std::uint32_t height);
+                        ViewportKind kind, std::uint32_t width, std::uint32_t height,
+                        float pixelRatio = 1.0f);
+    void ResizeViewport(std::uint64_t id, std::uint32_t width, std::uint32_t height,
+                        float pixelRatio = 1.0f);
     void DestroyViewport(std::uint64_t id);
     void SetSceneCamera(std::uint64_t id, float eyeX, float eyeY, float eyeZ,
                         float targetX, float targetY, float targetZ);

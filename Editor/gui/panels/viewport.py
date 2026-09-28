@@ -81,14 +81,14 @@ class NativeRenderSurface(QWidget):
         self.setCursor(Qt.CursorShape.ArrowCursor)
         width, height = self._PixelSize()
         self._attached = self.Runtime.CreateViewport(
-            self.ViewportId, int(self.winId()), self.IsScene, width, height)
+            self.ViewportId, int(self.winId()), self.IsScene, width, height,self.devicePixelRatioF())
         if self._attached and self.IsScene: self._UpdateCamera()
         if self._attached:self.Attached.emit()
 
     def resizeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         super().resizeEvent(event)
         if self._attached:
-            width, height = self._PixelSize(); self.Runtime.ResizeViewport(self.ViewportId, width, height)
+            width, height = self._PixelSize(); self.Runtime.ResizeViewport(self.ViewportId, width, height,self.devicePixelRatioF())
 
     def Detach(self) -> None:
         if self._attached: self.Runtime.DestroyViewport(self.ViewportId); self._attached = False
@@ -175,14 +175,21 @@ class NativeRenderSurface(QWidget):
         self.Runtime.SetGizmoHover(axis)
 
     def _PickOrientation(self,point:QPoint)->bool:
-        if point.x()<self.width()-104 or point.y()>104:return False
-        cy,sy=cos(radians(self._yaw)),sin(radians(self._yaw));cp,sp=cos(radians(self._pitch)),sin(radians(self._pitch));center=QPointF(self.width()-48,48)
+        if point.x()<self.width()-88 or point.y()>88:return False
+        cy,sy=cos(radians(self._yaw)),sin(radians(self._yaw));cp,sp=cos(radians(self._pitch)),sin(radians(self._pitch));center=QPointF(self.width()-44,44)
         def project(v):
             x,y,z=v;x,z=x*cy-z*sy,x*sy+z*cy;y,z=y*cp-z*sp,y*sp+z*cp
-            return QPointF(center.x()+x*28,center.y()-y*28)
+            return QPointF(center.x()+x*21,center.y()-y*21)
         axes=((project((1,0,0)),(90.,0.)),(project((0,1,0)),(self._yaw,89.)),(project((0,0,1)),(0.,0.)))
-        position=QPointF(point);_end,target=min(axes,key=lambda item:(item[0]-position).manhattanLength())
-        if (_end-position).manhattanLength()>22:return False
+        position=QPointF(point)
+        def line_distance(end):
+            # Ignore the crowded center and hit-test the visible axis segment.
+            start=center+(end-center)*.18;segment=end-start;length=segment.x()*segment.x()+segment.y()*segment.y()
+            if length<=.0001:return (position-end).manhattanLength()
+            offset=position-start;t=max(0.,min(1.,(offset.x()*segment.x()+offset.y()*segment.y())/length));nearest=start+segment*t
+            dx=position.x()-nearest.x();dy=position.y()-nearest.y();return (dx*dx+dy*dy)**.5
+        _end,target=min(axes,key=lambda item:line_distance(item[0]))
+        if line_distance(_end)>9:return False
         start_yaw=self._yaw;delta=(target[0]-start_yaw+180)%360-180;start_pitch=self._pitch;step=0
         timer=QTimer(self);timer.setInterval(16)
         def tick():

@@ -243,11 +243,12 @@ public:
     void SetGizmoHover(int axis) { m_engine->SetEditorGizmoHover(axis); }
     void SetGrid(bool visible, int plane) { m_engine->SetEditorGrid(visible, plane); }
     bool CreateViewport(std::uint64_t id, std::uintptr_t handle, bool scene,
-                        std::uint32_t width, std::uint32_t height) {
-        return m_engine->CreateEditorViewport(id, handle, scene, width, height);
+                        std::uint32_t width, std::uint32_t height, float pixelRatio) {
+        return m_engine->CreateEditorViewport(id, handle, scene, width, height, pixelRatio);
     }
-    void ResizeViewport(std::uint64_t id, std::uint32_t width, std::uint32_t height) {
-        m_engine->ResizeEditorViewport(id, width, height);
+    void ResizeViewport(std::uint64_t id, std::uint32_t width, std::uint32_t height,
+                        float pixelRatio) {
+        m_engine->ResizeEditorViewport(id, width, height, pixelRatio);
     }
     void DestroyViewport(std::uint64_t id) { m_engine->DestroyEditorViewport(id); }
     void SetSceneCamera(std::uint64_t id, const std::array<float, 3>& eye,

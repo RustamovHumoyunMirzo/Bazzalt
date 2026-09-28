@@ -48,6 +48,7 @@ struct RenderBackend::ViewportResource {
     utils::Entity CameraEntity;
     std::uint32_t Width = 1;
     std::uint32_t Height = 1;
+    float PixelRatio = 1.0f;
     filament::math::float3 Eye{6.0f, 4.0f, 8.0f};
     filament::View* HelperView = nullptr;
     filament::Camera* HelperCamera = nullptr;
@@ -68,8 +69,8 @@ struct RenderBackend::GizmoResource {
     filament::Scene* HelperScene = nullptr;
     filament::VertexBuffer* HelperVertices = nullptr;
     filament::IndexBuffer* HelperIndices = nullptr;
-    std::array<filament::MaterialInstance*,4> HelperInstances{};
-    std::array<utils::Entity,4> HelperEntities{};
+    std::array<filament::MaterialInstance*,3> HelperInstances{};
+    std::array<utils::Entity,3> HelperEntities{};
     std::vector<Icon> Icons;
     filament::Material* IconMaterial=nullptr;
     filament::Texture* CameraIconTexture=nullptr;
@@ -175,10 +176,13 @@ bool RenderBackend::Initialize() {
     m_gizmo->HelperVertices->setBufferAt(*m_engine,0,{cubeVertices,sizeof(cubeVertices)});
     m_gizmo->HelperIndices=filament::IndexBuffer::Builder().indexCount(36).bufferType(filament::IndexBuffer::IndexType::USHORT).build(*m_engine);
     m_gizmo->HelperIndices->setBuffer(*m_engine,{cubeIndices,sizeof(cubeIndices)});
-    constexpr filament::math::float4 helperColors[]={{.62f,.65f,.72f,1},{.95f,.18f,.15f,1},{.25f,.9f,.25f,1},{.2f,.45f,1,1}};
-    constexpr filament::math::float3 helperScale[]={{.34f,.34f,.34f},{.55f,.065f,.065f},{.065f,.55f,.065f},{.065f,.065f,.55f}};
-    constexpr filament::math::float3 helperPosition[]={{0,0,0},{.78f,0,0},{0,.78f,0},{0,0,.78f}};
-    for(int i=0;i<4;++i){m_gizmo->HelperInstances[i]=m_gizmo->Material->createInstance();m_gizmo->HelperInstances[i]->setParameter("color",helperColors[i]);m_gizmo->HelperInstances[i]->setDepthWrite(true);m_gizmo->HelperInstances[i]->setDepthCulling(true);m_gizmo->HelperEntities[i]=m_engine->getEntityManager().create();m_engine->getTransformManager().create(m_gizmo->HelperEntities[i]);filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{1,1,1}}).material(0,m_gizmo->HelperInstances[i]).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,m_gizmo->HelperVertices,m_gizmo->HelperIndices).culling(false).castShadows(false).receiveShadows(false).build(*m_engine,m_gizmo->HelperEntities[i]);auto ti=m_engine->getTransformManager().getInstance(m_gizmo->HelperEntities[i]);m_engine->getTransformManager().setTransform(ti,filament::math::mat4f::translation(helperPosition[i])*filament::math::mat4f::scaling(helperScale[i]));m_gizmo->HelperScene->addEntity(m_gizmo->HelperEntities[i]);}
+    // Native scene-orientation widget: three minimal, colored axis lines.  The
+    // unit cube is scaled from the origin toward +X/+Y/+Z; no center cube or
+    // background geometry is used.
+    constexpr filament::math::float4 helperColors[]={{.95f,.18f,.15f,1},{.25f,.9f,.25f,1},{.2f,.45f,1,1}};
+    constexpr filament::math::float3 helperScale[]={{.5f,.026f,.026f},{.026f,.5f,.026f},{.026f,.026f,.5f}};
+    constexpr filament::math::float3 helperPosition[]={{.5f,0,0},{0,.5f,0},{0,0,.5f}};
+    for(int i=0;i<3;++i){m_gizmo->HelperInstances[i]=m_gizmo->Material->createInstance();m_gizmo->HelperInstances[i]->setParameter("color",helperColors[i]);m_gizmo->HelperInstances[i]->setDepthWrite(true);m_gizmo->HelperInstances[i]->setDepthCulling(true);m_gizmo->HelperEntities[i]=m_engine->getEntityManager().create();m_engine->getTransformManager().create(m_gizmo->HelperEntities[i]);filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{1,1,1}}).material(0,m_gizmo->HelperInstances[i]).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,m_gizmo->HelperVertices,m_gizmo->HelperIndices).culling(false).castShadows(false).receiveShadows(false).build(*m_engine,m_gizmo->HelperEntities[i]);auto ti=m_engine->getTransformManager().getInstance(m_gizmo->HelperEntities[i]);m_engine->getTransformManager().setTransform(ti,filament::math::mat4f::translation(helperPosition[i])*filament::math::mat4f::scaling(helperScale[i]));m_gizmo->HelperScene->addEntity(m_gizmo->HelperEntities[i]);}
     m_gizmo->IconMaterial=filament::Material::Builder().package(Embedded::EditorIconFilamat,Embedded::EditorIconFilamatSize).build(*m_engine);
     auto makeTexture=[this](const std::uint8_t* pixels,std::size_t size){auto* texture=filament::Texture::Builder().width(64).height(64).levels(1).sampler(filament::Texture::Sampler::SAMPLER_2D).format(filament::Texture::InternalFormat::RGBA8).build(*m_engine);texture->setImage(*m_engine,0,filament::backend::PixelBufferDescriptor(pixels,size,filament::backend::PixelDataFormat::RGBA,filament::backend::PixelDataType::UBYTE));return texture;};
     m_gizmo->CameraIconTexture=makeTexture(Embedded::SceneCameraIconRgba,Embedded::SceneCameraIconRgbaSize);m_gizmo->LightIconTexture=makeTexture(Embedded::SceneLightIconRgba,Embedded::SceneLightIconRgbaSize);
@@ -191,13 +195,14 @@ bool RenderBackend::Initialize() {
 
 bool RenderBackend::CreateViewport(std::uint64_t id, std::uintptr_t nativeWindow,
                                    ViewportKind kind, std::uint32_t width,
-                                   std::uint32_t height) {
+                                   std::uint32_t height, float pixelRatio) {
     if (!m_engine || nativeWindow == 0) return false;
     DestroyViewport(id);
     auto viewport = std::make_unique<ViewportResource>();
     viewport->Kind = kind;
     viewport->Width = std::max(1u, width);
     viewport->Height = std::max(1u, height);
+    viewport->PixelRatio = std::max(1.0f,pixelRatio);
     viewport->SwapChain = m_engine->createSwapChain(reinterpret_cast<void*>(nativeWindow));
     if (!viewport->SwapChain) return false;
     viewport->CameraEntity = m_engine->getEntityManager().create();
@@ -212,30 +217,31 @@ bool RenderBackend::CreateViewport(std::uint64_t id, std::uintptr_t nativeWindow
     viewport->View->setVisibleLayers(0xff, kind == ViewportKind::Scene ? 0xff : 0x7f);
     if (kind == ViewportKind::Scene) {
         viewport->Camera->lookAt({6.0, 4.0, 8.0}, {0.0, 0.0, 0.0}, {0.0, 1.0, 0.0});
-        viewport->HelperCameraEntity=m_engine->getEntityManager().create();viewport->HelperCamera=m_engine->createCamera(viewport->HelperCameraEntity);viewport->HelperView=m_engine->createView();viewport->HelperView->setScene(m_gizmo->HelperScene);viewport->HelperView->setCamera(viewport->HelperCamera);viewport->HelperView->setPostProcessingEnabled(false);viewport->HelperView->setBlendMode(filament::View::BlendMode::TRANSLUCENT);viewport->HelperCamera->lookAt({2.1,1.4,2.8},{0,0,0},{0,1,0});viewport->HelperCamera->setProjection(38.0,1.0,0.1,10.0,filament::Camera::Fov::VERTICAL);
+        viewport->HelperCameraEntity=m_engine->getEntityManager().create();viewport->HelperCamera=m_engine->createCamera(viewport->HelperCameraEntity);viewport->HelperView=m_engine->createView();viewport->HelperView->setScene(m_gizmo->HelperScene);viewport->HelperView->setCamera(viewport->HelperCamera);viewport->HelperView->setPostProcessingEnabled(false);viewport->HelperView->setBlendMode(filament::View::BlendMode::TRANSLUCENT);viewport->HelperView->setChannelDepthClearEnabled(0,true);viewport->HelperCamera->lookAt({2.1,1.4,2.8},{0,0,0},{0,1,0});viewport->HelperCamera->setProjection(38.0,1.0,0.1,10.0,filament::Camera::Fov::VERTICAL);
     } else {
         viewport->Camera->lookAt({0.0, 2.0, 6.0}, {0.0, 1.0, 0.0}, {0.0, 1.0, 0.0});
     }
     m_viewports.emplace(id, std::move(viewport));
-    ResizeViewport(id, width, height);
+    ResizeViewport(id, width, height, pixelRatio);
     if(kind==ViewportKind::Scene){SetEditorGrid(m_gridVisible,m_gridPlane);SetEditorGizmo(m_gizmoVisible,m_gizmoX,m_gizmoY,m_gizmoZ,m_gizmoMode);}
     return true;
 }
 
 void RenderBackend::ResizeViewport(std::uint64_t id, std::uint32_t width,
-                                   std::uint32_t height) {
+                                   std::uint32_t height, float pixelRatio) {
     const auto found = m_viewports.find(id);
     if (found == m_viewports.end()) return;
     auto& viewport = *found->second;
     viewport.Width = std::max(1u, width);
     viewport.Height = std::max(1u, height);
+    viewport.PixelRatio = std::max(1.0f,pixelRatio);
     if (viewport.View) {
         viewport.View->setViewport({0, 0, viewport.Width, viewport.Height});
         viewport.Camera->setProjection(60.0,
             static_cast<double>(viewport.Width) / viewport.Height, 0.05, 5000.0,
             filament::Camera::Fov::VERTICAL);
     }
-    if(viewport.HelperView){constexpr std::uint32_t size=96;const auto inset=std::min(size,std::min(viewport.Width,viewport.Height));viewport.HelperView->setViewport({static_cast<std::int32_t>(viewport.Width-inset),static_cast<std::int32_t>(viewport.Height-inset),inset,inset});}
+    if(viewport.HelperView){const auto size=std::max(1u,static_cast<std::uint32_t>(std::lround(72.0f*viewport.PixelRatio)));const auto padding=static_cast<std::uint32_t>(std::lround(8.0f*viewport.PixelRatio));const auto availableWidth=viewport.Width>padding?viewport.Width-padding:viewport.Width;const auto availableHeight=viewport.Height>padding?viewport.Height-padding:viewport.Height;const auto inset=std::min(size,std::min(availableWidth,availableHeight));const auto x=viewport.Width>inset+padding?viewport.Width-inset-padding:0u;const auto y=viewport.Height>inset+padding?viewport.Height-inset-padding:0u;viewport.HelperView->setViewport({static_cast<std::int32_t>(x),static_cast<std::int32_t>(y),inset,inset});}
     if (viewport.Kind == ViewportKind::Game)
         SetPresentationSize(viewport.Width, viewport.Height);
     else if(m_gizmoVisible)
@@ -365,7 +371,7 @@ void RenderBackend::Shutdown() {
         }
         m_scene->remove(m_gizmo->GridEntity);m_engine->destroy(m_gizmo->GridEntity);m_engine->getEntityManager().destroy(m_gizmo->GridEntity);
         if(m_gizmo->GridInstance)m_engine->destroy(m_gizmo->GridInstance);if(m_gizmo->GridVertices)m_engine->destroy(m_gizmo->GridVertices);if(m_gizmo->GridIndices)m_engine->destroy(m_gizmo->GridIndices);
-        for(int i=0;i<4;++i){if(m_gizmo->HelperScene)m_gizmo->HelperScene->remove(m_gizmo->HelperEntities[i]);m_engine->destroy(m_gizmo->HelperEntities[i]);m_engine->getEntityManager().destroy(m_gizmo->HelperEntities[i]);if(m_gizmo->HelperInstances[i])m_engine->destroy(m_gizmo->HelperInstances[i]);}
+        for(int i=0;i<3;++i){if(m_gizmo->HelperScene)m_gizmo->HelperScene->remove(m_gizmo->HelperEntities[i]);m_engine->destroy(m_gizmo->HelperEntities[i]);m_engine->getEntityManager().destroy(m_gizmo->HelperEntities[i]);if(m_gizmo->HelperInstances[i])m_engine->destroy(m_gizmo->HelperInstances[i]);}
         for(auto& icon:m_gizmo->Icons){m_scene->remove(icon.Entity);m_engine->destroy(icon.Entity);m_engine->getEntityManager().destroy(icon.Entity);if(icon.Instance)m_engine->destroy(icon.Instance);}m_gizmo->Icons.clear();
         if(m_gizmo->IconVertices)m_engine->destroy(m_gizmo->IconVertices);if(m_gizmo->IconIndices)m_engine->destroy(m_gizmo->IconIndices);if(m_gizmo->CameraIconTexture)m_engine->destroy(m_gizmo->CameraIconTexture);if(m_gizmo->LightIconTexture)m_engine->destroy(m_gizmo->LightIconTexture);if(m_gizmo->IconMaterial)m_engine->destroy(m_gizmo->IconMaterial);
         if(m_gizmo->HelperVertices)m_engine->destroy(m_gizmo->HelperVertices);if(m_gizmo->HelperIndices)m_engine->destroy(m_gizmo->HelperIndices);if(m_gizmo->HelperScene)m_engine->destroy(m_gizmo->HelperScene);

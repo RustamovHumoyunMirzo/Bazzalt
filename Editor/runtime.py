@@ -154,12 +154,12 @@ class RuntimeService(QObject):
         return result
 
     def CreateViewport(self, viewport_id: int, handle: int, scene: bool,
-                       width: int, height: int) -> bool:
+                       width: int, height: int, pixel_ratio: float = 1.0) -> bool:
         return bool(self._host and hasattr(self._host, "create_viewport") and self._host.create_viewport(
-            viewport_id, handle, scene, width, height))
+            viewport_id, handle, scene, width, height, pixel_ratio))
 
-    def ResizeViewport(self, viewport_id: int, width: int, height: int) -> None:
-        if self._host is not None and hasattr(self._host, "resize_viewport"): self._host.resize_viewport(viewport_id, width, height)
+    def ResizeViewport(self, viewport_id: int, width: int, height: int, pixel_ratio: float = 1.0) -> None:
+        if self._host is not None and hasattr(self._host, "resize_viewport"): self._host.resize_viewport(viewport_id, width, height, pixel_ratio)
 
     def DestroyViewport(self, viewport_id: int) -> None:
         if self._host is not None and hasattr(self._host, "destroy_viewport"): self._host.destroy_viewport(viewport_id)
