@@ -66,12 +66,12 @@ class LoadingWindow(QWidget):
     def _Failed(self,message:str)->None:QMessageBox.critical(self,"Project Could Not Be Loaded",message);QApplication.instance().quit()
 
 def _EditorSettings()->SettingsStore:
-    return SettingsStore("editor",1,lambda:{"schema_version":1,"theme":"dark","recent_scene":""},{0:lambda value:{"theme":value.get("theme","dark"),"recent_scene":""}})
+    return SettingsStore("editor",2,lambda:{"schema_version":2,"theme":"dark","recent_scene":"","panel_layout":None},{0:lambda value:{"theme":value.get("theme","dark"),"recent_scene":""},1:lambda value:{**value,"panel_layout":None}})
 
 class EditorSession(QObject):
     """Owns the complete loader-to-editor transition for the process lifetime."""
-    def __init__(self,app:QApplication,project:Path,version:Version,settings:dict)->None:
-        super().__init__();self.App=app;self.Project=project;self.Version=version;self.EditorWindow=None
+    def __init__(self,app:QApplication,project:Path,version:Version,settings:dict,settings_saver=None)->None:
+        super().__init__();self.App=app;self.Project=project;self.Version=version;self.EditorWindow=None;self.Settings=settings;self.SettingsSaver=settings_saver
         self.Resources=ResourceManager();self.Localization=LocalizationManager(self.Resources)
         self.Themes=ThemeManager(app,Theme.light() if settings.get("theme")=="light" else Theme.dark())
         self.Runtime=RuntimeService();self.Loading=LoadingWindow(project,version,self.Runtime)
@@ -80,7 +80,7 @@ class EditorSession(QObject):
     @Slot(object)
     def OpenEditor(self,metadata:dict)->None:
         try:
-            window=Editor(self.Themes,self.Resources,self.Localization,self.Runtime)
+            window=Editor(self.Themes,self.Resources,self.Localization,self.Runtime,self.Settings,self.SettingsSaver)
             window.Controller._ProjectLoaded(str(self.Project));window.Controller.RefreshHierarchy()
             window.setWindowTitle(f"{metadata['name']} — BAZZALT {self.Version}")
             self.EditorWindow=window;window.showMaximized();window.raise_();window.activateWindow()
@@ -100,7 +100,7 @@ def main(arguments:list[str]|None=None)->int:
         runtime=RuntimeService();return 0 if runtime.IsAvailable() else 3
     try:version=Version.Parse(options.editor_version)
     except ValueError as error:QMessageBox.critical(None,"Invalid Editor Version",str(error));return 2
-    store=_EditorSettings();settings=store.Load();session=EditorSession(app,options.project.resolve(),version,settings)
+    store=_EditorSettings();settings=store.Load();session=EditorSession(app,options.project.resolve(),version,settings,store.Save)
     session.Start();result=app.exec();settings["theme"]="light" if session.Themes.GetTheme().background==Theme.light().background else "dark";store.Save(settings);return result
 
 if __name__=="__main__":raise SystemExit(main())

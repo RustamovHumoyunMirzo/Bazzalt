@@ -25,6 +25,8 @@ class EditorController(QObject):
         self.ScenePath = ""
         self._updating_inspector = False
         self.IsDirty = False
+        self._hierarchy_clipboard: list[dict] = []
+        self._box_selection_base: list[str] = []
         self.History=SceneHistory(runtime,self)
         self.Timer = QTimer(self)
         self.Timer.setInterval(16)
@@ -47,6 +49,9 @@ class EditorController(QObject):
         window.Hierarchy.ReparentRequested.connect(self.ReparentEntity)
         window.Hierarchy.AssetDropped.connect(self.InstantiateAsset)
         window.Hierarchy.DeleteRequested.connect(self.DeleteEntity)
+        window.Hierarchy.RenameRequested.connect(self.RenameHierarchyEntity)
+        window.Hierarchy.CopyRequested.connect(self.CopyHierarchyEntities)
+        window.Hierarchy.PasteRequested.connect(self.PasteHierarchyEntities)
         window.Properties.AddComponentRequested.connect(self.ShowAddComponentMenu)
         window.Properties.RemoveComponentRequested.connect(self.RemoveComponent)
         window.AssetBrowser.AssetSelected.connect(self.SelectAsset)
@@ -61,6 +66,7 @@ class EditorController(QObject):
         window.Scene.Surface.EntityPicked.connect(self.SelectSceneEntity)
         window.Scene.Surface.EntitiesBoxSelected.connect(self.SelectSceneBox)
         window.Scene.Surface.SelectionBoxStarted.connect(self.BeginSceneBoxSelection)
+        window.Scene.Surface.SelectionBoxFinished.connect(lambda:self._box_selection_base.clear())
         window.Scene.Surface.Attached.connect(self._UpdateGizmo)
         # The toolbar selects Translate before this controller is constructed,
         # so its initial GizmoModeChanged signal has already been emitted.
@@ -116,12 +122,22 @@ class EditorController(QObject):
             str(scene_info.get("name", "Untitled")), str(scene_info.get("uuid", "")),
             icon=self.Window.Resources.Icon(f"icons/{theme}/scene.svg"), kind="scene")
         scene_root.setExpanded(True)
-        for entity in entities:
-            parent = items.get(entity["parent"], scene_root)
-            items[entity["uuid"]] = self.Window.Hierarchy.AddItem(
-                entity["name"], entity["uuid"], parent,
-                self.Window.Resources.Icon(f"icons/{theme}/obj.svg"), "entity"
-            )
+        pending=list(entities)
+        root_ids={"","0","00000000-0000-0000-0000-000000000000"}
+        while pending:
+            progress=False
+            for entity in list(pending):
+                parent_id=str(entity.get("parent", ""))
+                if parent_id not in root_ids and parent_id not in items:continue
+                parent=items.get(parent_id,scene_root)
+                items[entity["uuid"]]=self.Window.Hierarchy.AddItem(entity["name"],entity["uuid"],parent,self.Window.Resources.Icon(f"icons/{theme}/obj.svg"),"entity")
+                pending.remove(entity);progress=True
+            if not progress:
+                # Corrupt/missing parent references remain visible but never
+                # steal otherwise valid descendants from their real parent.
+                for entity in pending:items[entity["uuid"]]=self.Window.Hierarchy.AddItem(entity["name"],entity["uuid"],scene_root,self.Window.Resources.Icon(f"icons/{theme}/obj.svg"),"entity")
+                break
+        self.Window.Hierarchy.ApplyExpansionState(items)
         if selected:
             blocker=QSignalBlocker(self.Window.Hierarchy.Tree)
             for value in selected:
@@ -187,7 +203,7 @@ class EditorController(QObject):
         self.SelectedEntities=unique;self.SelectedEntity=unique[0];self.Window.Properties.Clear();self.Window.Properties.AddComponentButton.setVisible(True)
         summary=self.Window.Properties.AddComponentSection("selection",self.Window.Localization.Translate("properties.multiple_entities",count=len(details)),removable=False)
         summary.AddField("Selection",QLabel(", ".join(str(value.get("name","")) for value in details)))
-        center=tuple(sum(float(value["position"][axis]) for value in details)/len(details) for axis in range(3));last_center=[center];position=Vec3Input(center);summary.AddField("Center",position)
+        center=tuple(sum(float(value.get("world_position",value["position"])[axis]) for value in details)/len(details) for axis in range(3));last_center=[center];position=Vec3Input(center);summary.AddField("Center",position)
         def move_center(_value=None):
             target=position.GetValue();delta=tuple(target[i]-last_center[0][i] for i in range(3));self.History.Begin("Move selection")
             results=[self.Runtime.Translate(entity,delta) for entity in unique]
@@ -204,9 +220,12 @@ class EditorController(QObject):
         self.Window.Scene.Surface.SetSelection(center);self._UpdateGizmo()
 
     def SelectSceneBox(self,entity_ids:list[str],additive:bool=False)->None:
-        self.SelectEntities((self.SelectedEntities+entity_ids) if additive else entity_ids);self.RefreshHierarchy()
+        desired=list(dict.fromkeys((self._box_selection_base if additive else [])+entity_ids))
+        if desired==self.SelectedEntities:return
+        self.SelectEntities(desired);self.Window.Hierarchy.SetSelectedData(desired)
 
     def BeginSceneBoxSelection(self,additive:bool)->None:
+        self._box_selection_base=list(self.SelectedEntities) if additive else []
         if not additive:
             blocker=QSignalBlocker(self.Window.Hierarchy.Tree);self.Window.Hierarchy.Tree.clearSelection();self.Window.Hierarchy.Tree.setCurrentItem(None);del blocker
             self.SelectEntity(None)
@@ -314,7 +333,9 @@ class EditorController(QObject):
     def _UpdateGizmo(self) -> None:
         modes={GizmoMode.Select:0,GizmoMode.Translate:1,GizmoMode.Rotate:2,GizmoMode.Scale:3}
         if len(self.SelectedEntities)>1:
-            positions=[self.Runtime.EntityDetails(value).get("position") for value in self.SelectedEntities]
+            positions=[]
+            for value in self.SelectedEntities:
+                details=self.Runtime.EntityDetails(value);positions.append(details.get("world_position",details.get("position")))
             positions=[value for value in positions if value]
             if positions:
                 center=tuple(sum(value[axis] for value in positions)/len(positions) for axis in range(3));self.Window.Scene.Surface.SetSelection(center);self.Runtime.SetGizmoPosition(center,modes[self.Window.Toolbar.GetGizmoMode()]);return
@@ -376,9 +397,48 @@ class EditorController(QObject):
         if any(results):self.History.Commit();self.SetDirty(True)
         else:self.History.Cancel()
 
+    def RenameHierarchyEntity(self,entity_id:str,name:str)->None:
+        if name.strip() and self._Mutate("Rename entity",lambda:self.Runtime.Rename(entity_id,name.strip())):
+            self.SetDirty(True);self.RefreshHierarchy()
+
+    def CopyHierarchyEntities(self,entity_ids)->None:
+        selected={str(value) for value in entity_ids if value};entities=self.Runtime.Entities()
+        by_parent={}
+        for entity in entities:by_parent.setdefault(str(entity.get("parent","")),[]).append(str(entity["uuid"]))
+        roots=[value for value in selected if str(self.Runtime.EntityDetails(value).get("parent","")) not in selected]
+        def snapshot(entity_id):
+            details=dict(self.Runtime.EntityDetails(entity_id))
+            return {"details":details,"children":[snapshot(child) for child in by_parent.get(entity_id,())]}
+        self._hierarchy_clipboard=[snapshot(value) for value in roots]
+
+    def PasteHierarchyEntities(self,parent_id)->None:
+        if not self._hierarchy_clipboard:return
+        self.History.Begin("Paste entities");created=[]
+        try:
+            for node in self._hierarchy_clipboard:
+                value=self._CloneHierarchyNode(node,str(parent_id or ""),True)
+                if value:created.append(value)
+        except Exception:
+            self.History.Cancel();raise
+        if not created:self.History.Cancel();return
+        self.History.Commit();self.SetDirty(True);self.RefreshHierarchy();self.SelectEntities(created)
+
+    def _CloneHierarchyNode(self,node:dict,parent_id:str,top_level:bool=False)->str:
+        details=node.get("details",{});name=str(details.get("name","Entity"))+(" Copy" if top_level else "")
+        entity=self.Runtime.CreateEntity(name,parent_id)
+        if not entity:return ""
+        self.Runtime.SetTransform(entity,details.get("position",(0,0,0)),details.get("rotation",(0,0,0,1)),details.get("scale",(1,1,1)))
+        supported=set(self.Runtime.ComponentTypes())
+        for component,fields in details.get("component_data",{}).items():
+            if component not in supported or not self.Runtime.AddComponent(entity,component):continue
+            for field,value in dict(fields).items():self.Runtime.SetComponentProperty(entity,component,field,value)
+        for child in node.get("children",()):self._CloneHierarchyNode(child,entity)
+        return entity
+
     def ReparentEntity(self, entity_id: str, parent_id: str) -> None:
         if self._Mutate("Reparent entity",lambda:self.Runtime.SetParent(entity_id,parent_id)):
             self.SetDirty(True)
+            self.Window.Hierarchy.ExpandData(parent_id)
             if entity_id==self.SelectedEntity:self.SelectEntity(entity_id,force=True)
 
     def Play(self) -> None:

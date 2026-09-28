@@ -479,8 +479,10 @@ class _DockGroup(QTabWidget):
 
     def _activated(self, index: int) -> None:
         if 0 <= index < len(self.node.panels):
+            changed = self.node.current != index
             self.node.current = index
             self.system.panel_activated.emit(self.system.panel(self.node.panels[index]))
+            if changed:self.system.layout_changed.emit()
 
     def _moved(self, old: int, new: int) -> None:
         if old == new or not (
@@ -644,10 +646,12 @@ class _FloatingWindow(QWidget):
     def moveEvent(self, event: Any) -> None:
         super().moveEvent(event)
         self.system._capture_floating_geometry(self.state)
+        self.system.layout_changed.emit()
 
     def resizeEvent(self, event: Any) -> None:
         super().resizeEvent(event)
         self.system._capture_floating_geometry(self.state)
+        self.system.layout_changed.emit()
 
     def dragEnterEvent(self, event: Any) -> None:
         self.system._drag_enter(self, event)
@@ -1236,9 +1240,12 @@ class DockingSystem(QWidget):
                 0, lambda s=splitter, sizes=list(node.sizes): s.setSizes(sizes)
             )
         splitter.splitterMoved.connect(
-            lambda pos, index, s=splitter, n=node: setattr(n, "sizes", s.sizes())
+            lambda pos, index, s=splitter, n=node: self._splitter_moved(s,n)
         )
         return splitter
+
+    def _splitter_moved(self,splitter:QSplitter,node:SplitNode)->None:
+        node.sizes=splitter.sizes();self.layout_changed.emit()
 
     @staticmethod
     def _clear_layout(layout: QVBoxLayout) -> None:

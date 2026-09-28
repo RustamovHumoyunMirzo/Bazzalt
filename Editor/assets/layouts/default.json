@@ -1,0 +1,28 @@
+{
+  "rootNode": {
+    "type": "split",
+    "orientation": "horizontal",
+    "ratios": [0.20, 0.55, 0.25],
+    "children": [
+      {
+        "type": "split",
+        "orientation": "vertical",
+        "ratios": [0.55, 0.45],
+        "children": [
+          { "type": "panelContainer", "activeTab": "Hierarchy", "tabs": [{ "name": "Hierarchy", "id": "panel_hierarchy" }] },
+          { "type": "panelContainer", "activeTab": "Asset Browser", "tabs": [{ "name": "Asset Browser", "id": "panel_assets" }, { "name": "Console", "id": "panel_console_secondary" }] }
+        ]
+      },
+      {
+        "type": "split",
+        "orientation": "vertical",
+        "ratios": [0.70, 0.30],
+        "children": [
+          { "type": "panelContainer", "activeTab": "Scene", "tabs": [{ "name": "Scene", "id": "panel_scene" }, { "name": "Output Game", "id": "panel_game" }] },
+          { "type": "panelContainer", "activeTab": "Console", "tabs": [{ "name": "Console", "id": "panel_console" }] }
+        ]
+      },
+      { "type": "panelContainer", "activeTab": "Inspector", "tabs": [{ "name": "Inspector", "id": "panel_inspector" }] }
+    ]
+  }
+}

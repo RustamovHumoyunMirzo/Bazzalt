@@ -29,6 +29,7 @@ class AssetBrowserPanel(QWidget):
         layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0);splitter=QSplitter(Qt.Orientation.Horizontal);splitter.setChildrenCollapsible(False)
         self.Tree=QTreeWidget();self.Tree.setHeaderHidden(True);self.Tree.currentItemChanged.connect(self._FolderSelected)
         self.Browser=AssetList();self.Browser.setViewMode(QListWidget.ViewMode.IconMode);self.Browser.setIconSize(QSize(48,48));self.Browser.setGridSize(QSize(104,86));self.Browser.setResizeMode(QListWidget.ResizeMode.Adjust);self.Browser.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection);self.Browser.setDragEnabled(True)
+        self.Browser.setUniformItemSizes(True);self.Browser.setWordWrap(False);self.Browser.setTextElideMode(Qt.TextElideMode.ElideMiddle);self.Browser.setSpacing(2);self.Browser.setMovement(QListWidget.Movement.Static)
         self.Browser.itemDoubleClicked.connect(self._Activate);self.Browser.itemSelectionChanged.connect(self._SelectionChanged);self.Browser.itemChanged.connect(self._ItemRenamed);self.Browser.EmptyClicked.connect(self.SelectionCleared);self.Tree.itemClicked.connect(lambda *_:self.SelectionCleared.emit())
         for widget in (self.Tree,self.Browser):widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);widget.customContextMenuRequested.connect(lambda pos,w=widget:self._ShowContextMenu(w,pos))
         self.Tree.setMinimumWidth(110);self.Browser.setMinimumWidth(140);splitter.addWidget(self.Tree);splitter.addWidget(self.Browser);splitter.setStretchFactor(0,1);splitter.setStretchFactor(1,3);splitter.setSizes([220,700]);layout.addWidget(splitter)
@@ -77,7 +78,7 @@ class AssetBrowserPanel(QWidget):
         except OSError:return
         for entry in entries:
             if entry.name.endswith(".meta"):continue
-            asset=QListWidgetItem(self._Icon(entry),entry.name);asset.setData(Qt.ItemDataRole.UserRole,entry);asset.setData(Qt.ItemDataRole.UserRole+1,entry.name);asset.setFlags(asset.flags()|Qt.ItemFlag.ItemIsEditable|Qt.ItemFlag.ItemIsDragEnabled);self.Browser.addItem(asset)
+            asset=QListWidgetItem(self._Icon(entry),entry.name);asset.setSizeHint(QSize(104,86));asset.setTextAlignment(Qt.AlignmentFlag.AlignHCenter|Qt.AlignmentFlag.AlignBottom);asset.setData(Qt.ItemDataRole.UserRole,entry);asset.setData(Qt.ItemDataRole.UserRole+1,entry.name);asset.setFlags(asset.flags()|Qt.ItemFlag.ItemIsEditable|Qt.ItemFlag.ItemIsDragEnabled);self.Browser.addItem(asset)
     def _SelectionChanged(self)->None:
         items=self.Browser.selectedItems()
         if len(items)==1:self.AssetSelected.emit(items[0].data(Qt.ItemDataRole.UserRole))

@@ -36,6 +36,7 @@ class NativeRenderSurface(QWidget):
     EntityPicked = Signal(str)
     EntitiesBoxSelected = Signal(object, bool)
     SelectionBoxStarted = Signal(bool)
+    SelectionBoxFinished = Signal()
     GizmoDragStarted = Signal()
     _next_id = 1
 
@@ -50,6 +51,7 @@ class NativeRenderSurface(QWidget):
         self._orientation_animation=None
         self._selection_box_start=None
         self._selection_box_additive=False;self._selection_band=None
+        self._selection_box_preview=()
         self._navigating=False;self._keys=set();self._move_speed=5.0
         self._fly_timer=QTimer(self);self._fly_timer.setInterval(16);self._fly_timer.timeout.connect(self._FlyTick);self._fly_timer.start()
         self.setAttribute(Qt.WidgetAttribute.WA_DontCreateNativeAncestors)
@@ -57,6 +59,9 @@ class NativeRenderSurface(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMouseTracking(True)
+        # A native render child can retain the OS cursor last used over a Qt
+        # text editor unless it owns an explicit cursor. Gizmos never replace it.
+        self.setCursor(Qt.CursorShape.ArrowCursor)
 
     def paintEngine(self):  # Filament owns every pixel on this native child surface.
         return None
@@ -73,6 +78,7 @@ class NativeRenderSurface(QWidget):
         # Delay native-window promotion until docking has finished constructing
         # and reparenting its tab hierarchy.
         self.setAttribute(Qt.WidgetAttribute.WA_NativeWindow)
+        self.setCursor(Qt.CursorShape.ArrowCursor)
         width, height = self._PixelSize()
         self._attached = self.Runtime.CreateViewport(
             self.ViewportId, int(self.winId()), self.IsScene, width, height)
@@ -95,6 +101,15 @@ class NativeRenderSurface(QWidget):
                self._target[2] + self._distance * cp * cos(yaw))
         self._eye=eye;self.Runtime.SetSceneCamera(self.ViewportId, eye, tuple(self._target));self.CameraChanged.emit(self._yaw,self._pitch)
 
+    def _LookFromEye(self) -> None:
+        """Rotate the view direction without orbiting the camera position."""
+        yaw,pitch=radians(self._yaw),radians(self._pitch);cp=cos(pitch)
+        radial=(cp*sin(yaw),sin(pitch),cp*cos(yaw))
+        self._target=[self._eye[0]-self._distance*radial[0],
+                      self._eye[1]-self._distance*radial[1],
+                      self._eye[2]-self._distance*radial[2]]
+        self.Runtime.SetSceneCamera(self.ViewportId,self._eye,tuple(self._target));self.CameraChanged.emit(self._yaw,self._pitch)
+
     def SetSelection(self, position) -> None:
         self._selection = Vec3(*position) if position is not None else None
         if position is None:self._SetHover(None)
@@ -104,6 +119,22 @@ class NativeRenderSurface(QWidget):
 
     def _DestroySelectionBand(self)->None:
         if self._selection_band is not None:self._selection_band.hide();self._selection_band.deleteLater();self._selection_band=None
+
+    def _EntitiesInSelectionBox(self,start:QPoint,end:QPoint)->list[str]:
+        left,right=sorted((start.x(),end.x()));top,bottom=sorted((start.y(),end.y()))
+        if right-left<=4 and bottom-top<=4:return []
+        selected=[]
+        for entity in self.Runtime.Entities():
+            projected=self._Project(entity.get("world_position",entity.get("position",(0,0,0))))
+            if projected and left<=projected[0]<=right and top<=projected[1]<=bottom:selected.append(str(entity.get("uuid","")))
+        return selected
+
+    def _PreviewSelectionBox(self,current:QPoint)->list[str]:
+        selected=self._EntitiesInSelectionBox(self._selection_box_start,current) if self._selection_box_start is not None else []
+        signature=tuple(selected)
+        if signature!=self._selection_box_preview:
+            self._selection_box_preview=signature;self.EntitiesBoxSelected.emit(selected,self._selection_box_additive)
+        return selected
 
     def _Ray(self, point: QPoint) -> Ray:
         eye=Vec3(*self._eye);target=Vec3(*self._target);forward=(target-eye).Normalized()
@@ -142,7 +173,6 @@ class NativeRenderSurface(QWidget):
         self._hover_handle=handle
         axis={GizmoHandle.X:0,GizmoHandle.Y:1,GizmoHandle.Z:2}.get(handle,-1)
         self.Runtime.SetGizmoHover(axis)
-        if not self._navigating:self.setCursor(Qt.CursorShape.OpenHandCursor if handle else Qt.CursorShape.ArrowCursor)
 
     def _PickOrientation(self,point:QPoint)->bool:
         if point.x()<self.width()-104 or point.y()>104:return False
@@ -168,7 +198,7 @@ class NativeRenderSurface(QWidget):
         if self.IsScene and event.button()==Qt.MouseButton.LeftButton and self._selection and self._mode is not GizmoMode.Select:
             ray=self._Ray(self._last);handle=self._PickGizmo(self._last)
             if handle is not None:
-                self._SetHover(handle);self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                self._SetHover(handle)
                 self.GizmoDragStarted.emit()
                 self._gizmo_drag=GizmoDrag(self._mode,handle,ray,self._selection,(Vec3(*self._target)-Vec3(*self._eye)).Normalized());self._last_delta=Vec3();self._last_angle=0.0;self._last_scale=Vec3(1,1,1);event.accept();return
         if self.IsScene and event.button()==Qt.MouseButton.LeftButton:
@@ -176,6 +206,7 @@ class NativeRenderSurface(QWidget):
             if entity_id:self.EntityPicked.emit(entity_id)
             else:
                 self._selection_box_start=self._last;self._selection_box_additive=bool(event.modifiers()&Qt.KeyboardModifier.ControlModifier)
+                self._selection_box_preview=()
                 self.SelectionBoxStarted.emit(self._selection_box_additive)
             event.accept();return
 
@@ -186,6 +217,8 @@ class NativeRenderSurface(QWidget):
             if self._selection_band is None:self._selection_band=SelectionMarquee()
             start_global=self.mapToGlobal(self._selection_box_start);current_global=self.mapToGlobal(current);geometry=QRect(start_global,current_global).normalized()
             if geometry.width()>2 or geometry.height()>2:self._selection_band.setGeometry(geometry);self._selection_band.show();self._selection_band.raise_()
+            else:self._selection_band.hide()
+            self._PreviewSelectionBox(current)
             return
         if self._gizmo_drag is not None and event.buttons()&Qt.MouseButton.LeftButton:
             result=self._gizmo_drag.Calculate(self._Ray(current),translation_snap=.1,rotation_snap=radians(5),scale_snap=.05)
@@ -197,7 +230,7 @@ class NativeRenderSurface(QWidget):
                 prior=self._last_scale;value=result.Scale;step=Vec3(value.X/prior.X,value.Y/prior.Y,value.Z/prior.Z);self._last_scale=value;self.ScaleDragged.emit(step)
             return
         if event.buttons() & Qt.MouseButton.RightButton:
-            self._yaw -= delta.x() * .35; self._pitch = max(-89.0, min(89.0, self._pitch + delta.y() * .35)); self._UpdateCamera()
+            self._yaw -= delta.x() * .35; self._pitch = max(-89.0, min(89.0, self._pitch + delta.y() * .35)); self._LookFromEye()
         elif event.buttons() & Qt.MouseButton.MiddleButton:
             scale = self._distance * .0015
             self._target[0] += delta.x() * scale; self._target[1] -= delta.y() * scale; self._UpdateCamera()
@@ -213,12 +246,9 @@ class NativeRenderSurface(QWidget):
             if self._selection_box_start is not None:
                 start=self._selection_box_start;self._selection_box_start=None;end=event.position().toPoint()
                 self._DestroySelectionBand()
-                left,right=sorted((start.x(),end.x()));top,bottom=sorted((start.y(),end.y()));selected=[]
-                if right-left>4 or bottom-top>4:
-                    for entity in self.Runtime.Entities():
-                        projected=self._Project(entity.get("world_position",entity.get("position",(0,0,0))))
-                        if projected and left<=projected[0]<=right and top<=projected[1]<=bottom:selected.append(str(entity.get("uuid","")))
-                self.EntitiesBoxSelected.emit(selected,self._selection_box_additive);event.accept();return
+                selected=self._EntitiesInSelectionBox(start,end)
+                if tuple(selected)!=self._selection_box_preview:self.EntitiesBoxSelected.emit(selected,self._selection_box_additive)
+                self._selection_box_preview=();self.SelectionBoxFinished.emit();event.accept();return
             dragged=self._gizmo_drag is not None;self._gizmo_drag=None
             if dragged:self.GizmoDragFinished.emit()
             self._hover_handle=None;self._SetHover(self._PickGizmo(event.position().toPoint()))
@@ -234,11 +264,15 @@ class NativeRenderSurface(QWidget):
     def focusOutEvent(self,event)->None:
         self._keys.clear();self._navigating=False
         self._DestroySelectionBand()
-        self._selection_box_start=None;super().focusOutEvent(event)
+        if self._selection_box_start is not None:self.SelectionBoxFinished.emit()
+        self._selection_box_start=None;self._selection_box_preview=();super().focusOutEvent(event)
 
     def leaveEvent(self,event)->None:
         if self._gizmo_drag is None:self._SetHover(None)
         super().leaveEvent(event)
+
+    def enterEvent(self,event)->None:
+        self.setCursor(Qt.CursorShape.ArrowCursor);super().enterEvent(event)
 
     def _FlyTick(self)->None:
         if not self._navigating or not self._keys:return

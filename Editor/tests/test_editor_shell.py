@@ -6,10 +6,10 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QLabel, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget
 from PySide6.QtGui import QColor
 from PySide6.QtGui import QMouseEvent
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtCore import QPointF
 
 from Editor.gui.application import Editor
@@ -26,7 +26,7 @@ from Editor.gui.widgets import (
     Vec3Input,
     PlayState,
 )
-from Editor.gui.gizmos import GizmoMode, Vec3
+from Editor.gui.gizmos import GizmoHandle, GizmoMode, Vec3
 from Editor.gui.widgets import EditorMenu
 from Editor.localization import LocalizationManager
 from Editor.resources import ResourceManager
@@ -218,7 +218,9 @@ class EditorShellTests(unittest.TestCase):
         first=self.Window.Runtime.CreateEntity("First");second=self.Window.Runtime.CreateEntity("Second")
         self.Window.Runtime.SetTransform(first,(0,0,0),(0,0,0,1),(1,1,1));self.Window.Runtime.SetTransform(second,(4,0,0),(0,0,0,1),(1,1,1))
         self.Window.Controller.SelectEntities([first,second])
+        self.Window.Controller.RefreshHierarchy();self.Window.Hierarchy.SetSelectedData([first,second])
         self.assertEqual(self.Window.Controller.SelectedEntities,[first,second])
+        self.assertEqual(set(self.Window.Hierarchy.GetSelectedData()),{first,second})
         self.assertIn("selection",self.Window.Properties._sections)
         self.assertTrue(self.Window.Controller.ApplyGizmoTranslation(Vec3(1,2,3)))
         self.assertEqual(self.Window.Runtime.EntityDetails(first)["position"],(1.0,2.0,3.0))
@@ -232,6 +234,11 @@ class EditorShellTests(unittest.TestCase):
         self.assertEqual(self.Window.Controller.SelectedEntities,[])
         surface.mouseMoveEvent(QMouseEvent(QMouseEvent.Type.MouseMove,QPointF(399,399),Qt.MouseButton.NoButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
         self.assertTrue(surface._selection_band.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground))
+        self.assertIn(entity,self.Window.Controller.SelectedEntities)
+        surface.mouseMoveEvent(QMouseEvent(QMouseEvent.Type.MouseMove,QPointF(2,2),Qt.MouseButton.NoButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
+        self.assertNotIn(entity,self.Window.Controller.SelectedEntities)
+        surface.mouseMoveEvent(QMouseEvent(QMouseEvent.Type.MouseMove,QPointF(399,399),Qt.MouseButton.NoButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
+        self.assertIn(entity,self.Window.Controller.SelectedEntities)
         self.Application.processEvents();pixel=surface._selection_band.grab().toImage().pixelColor(10,10)
         self.assertGreater(pixel.alpha(),0);self.assertLess(pixel.alpha(),255)
         surface.mouseReleaseEvent(QMouseEvent(QMouseEvent.Type.MouseButtonRelease,QPointF(399,399),Qt.MouseButton.LeftButton,Qt.MouseButton.NoButton,Qt.KeyboardModifier.NoModifier))
@@ -336,6 +343,75 @@ class EditorShellTests(unittest.TestCase):
         self.Window._ResetWorkspace()
         placed = str(self.Window.Docking.save_layout())
         self.assertIn("console", placed)
+
+    def test_workspace_layout_autosaves_and_restores_from_settings(self) -> None:
+        settings={"schema_version":2};saved=[]
+        window=Editor(self.Themes,settings=settings,settings_saver=lambda value:saved.append(dict(value)))
+        try:
+            window.Docking.close_panel("hierarchy");window._SaveWorkspace()
+            self.assertTrue(saved);self.assertIn("panel_layout",settings)
+            restored=Editor(self.Themes,settings=settings)
+            try:self.assertFalse(restored.Docking.is_panel_open("hierarchy"))
+            finally:restored.close()
+        finally:window.close()
+
+    def test_default_workspace_is_readable_pseudo_json(self) -> None:
+        import json
+        value=json.loads(self.Window.Resources.ReadText("layouts/default.json"))
+        self.assertEqual(value["rootNode"]["type"],"split")
+        self.assertEqual(value["rootNode"]["ratios"],[0.20,0.55,0.25])
+
+    def test_gizmo_hover_and_drag_do_not_replace_scene_cursor(self) -> None:
+        surface=self.Window.Scene.Surface;self.assertEqual(surface.cursor().shape(),Qt.CursorShape.ArrowCursor);surface._SetHover(GizmoHandle.X)
+        self.assertEqual(surface.cursor().shape(),Qt.CursorShape.ArrowCursor)
+
+    def test_cursor_policy_limits_ibeam_to_text_editors(self) -> None:
+        ordinary=QLabel("Panel content",self.Window)
+        ordinary.setCursor(Qt.CursorShape.IBeamCursor)
+        QApplication.sendEvent(ordinary,QEvent(QEvent.Type.Enter))
+        self.assertEqual(ordinary.cursor().shape(),Qt.CursorShape.ArrowCursor)
+
+        text=QLineEdit(self.Window)
+        text.setCursor(Qt.CursorShape.ArrowCursor)
+        QApplication.sendEvent(text,QEvent(QEvent.Type.Enter))
+        self.assertEqual(text.cursor().shape(),Qt.CursorShape.IBeamCursor)
+
+    def test_asset_browser_uses_uniform_tiles(self) -> None:
+        browser=self.Window.AssetBrowser.Browser
+        self.assertTrue(browser.uniformItemSizes())
+        self.assertEqual(browser.gridSize(),browser.item(0).sizeHint() if browser.count() else browser.gridSize())
+
+    def test_hierarchy_drag_uses_non_destructive_transport(self) -> None:
+        self.assertEqual(self.Window.Hierarchy.Tree.supportedDragActions(),Qt.DropAction.CopyAction)
+
+    def test_scene_right_drag_looks_without_orbiting_eye(self) -> None:
+        surface=self.Window.Scene.Surface;eye=surface._eye;target=tuple(surface._target)
+        surface.mousePressEvent(QMouseEvent(QMouseEvent.Type.MouseButtonPress,QPointF(100,100),Qt.MouseButton.RightButton,Qt.MouseButton.RightButton,Qt.KeyboardModifier.NoModifier))
+        surface.mouseMoveEvent(QMouseEvent(QMouseEvent.Type.MouseMove,QPointF(130,115),Qt.MouseButton.NoButton,Qt.MouseButton.RightButton,Qt.KeyboardModifier.NoModifier))
+        self.assertEqual(surface._eye,eye);self.assertNotEqual(tuple(surface._target),target)
+
+    def test_hierarchy_rebuild_preserves_real_parent_and_expansion(self) -> None:
+        parent=self.Window.Runtime.CreateEntity("Tree Parent");child=self.Window.Runtime.CreateEntity("Tree Child")
+        self.assertTrue(self.Window.Runtime.SetParent(child,parent));self.Window.Controller.RefreshHierarchy()
+        def find(value):
+            from PySide6.QtWidgets import QTreeWidgetItemIterator
+            iterator=QTreeWidgetItemIterator(self.Window.Hierarchy.Tree)
+            while iterator.value() is not None:
+                item=iterator.value()
+                if str(item.data(0,Qt.ItemDataRole.UserRole))==value:return item
+                iterator+=1
+            return None
+        parent_item=find(parent);child_item=find(child)
+        self.assertIsNotNone(parent_item);self.assertIsNotNone(child_item);self.assertIs(child_item.parent(),parent_item)
+        self.assertTrue(parent_item.isExpanded())
+        parent_item.setExpanded(False);self.Window.Controller.RefreshHierarchy()
+        self.assertFalse(find(parent).isExpanded())
+        find(parent).setExpanded(True);self.Window.Controller.RefreshHierarchy()
+        self.assertTrue(find(parent).isExpanded())
+        self.Window.Controller.ReparentEntity(child,"")
+        child_item=find(child)
+        self.assertIsNotNone(child_item);self.assertEqual(child_item.parent().data(0,Qt.ItemDataRole.UserRole+1),"scene")
+        self.assertFalse(child_item.isHidden())
 
 
 if __name__ == "__main__":
