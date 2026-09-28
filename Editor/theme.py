@@ -9,7 +9,6 @@ from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QWidget
 
-CHECK_ICON_PATH = ":/docking/check.svg"
 ASSET_ROOT = Path(__file__).resolve().parent / "assets" / "icons"
 
 
@@ -107,6 +106,7 @@ def BuildStyleSheet(theme: Theme) -> str:
     """Return the single style sheet used by the application and floating UI."""
     t = theme
     icon_theme = "light" if t.background.lower() == "#d4d4d4" else "dark"
+    check_icon = (ASSET_ROOT / icon_theme / "check_selected.svg").as_posix()
     branch_closed = (ASSET_ROOT / icon_theme / "tree_closed.svg").as_posix()
     branch_open = (ASSET_ROOT / icon_theme / "tree_open.svg").as_posix()
     return f"""
@@ -144,7 +144,7 @@ def BuildStyleSheet(theme: Theme) -> str:
     QCheckBox::indicator {{ width: 14px; height: 14px; background: {t.input_background};
         border: 1px solid {t.border}; border-radius: 3px; }}
     QCheckBox::indicator:hover {{ border-color: {t.border_focus}; }}
-    QCheckBox::indicator:checked {{ background: {t.accent}; image: url({CHECK_ICON_PATH}); }}
+    QCheckBox::indicator:checked {{ background: {t.accent}; image: url({check_icon}); }}
     #ViewportPlaceholderLabel {{ color: {t.text_muted}; }}
     #SceneViewControls {{ background: {t.surface_alt}; border-bottom: 1px solid {t.border}; }}
     #SceneViewControls QComboBox {{ min-height: 20px; max-height: 20px; min-width: 58px; font-size: 11px; }}
@@ -215,7 +215,7 @@ def BuildStyleSheet(theme: Theme) -> str:
     QMenu::item:disabled {{ color: {t.text_disabled}; }}
     QMenu::icon {{ left: {t.spacing * 2}px; }}
     QMenu::indicator {{ width: 14px; height: 14px; left: {t.spacing * 2}px; }}
-    QMenu::indicator:checked {{ image: url({CHECK_ICON_PATH}); }}
+    QMenu::indicator:checked {{ image: url({check_icon}); }}
     QMenu::right-arrow {{ subcontrol-position: right center; right: {t.spacing * 2}px; }}
     QMenu::separator {{ height: 1px; background: {t.border}; margin: 3px {t.spacing}px; }}
     QToolTip {{ background: {t.surface}; color: {t.text}; border: 1px solid {t.border}; }}
