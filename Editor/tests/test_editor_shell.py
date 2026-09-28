@@ -6,7 +6,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget
+from PySide6.QtWidgets import QApplication, QAbstractItemView, QLabel, QLineEdit, QSizePolicy, QWidget
 from PySide6.QtGui import QColor
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtCore import QEvent, Qt
@@ -22,6 +22,7 @@ from Editor.gui.widgets import (
     FloatInput,
     MultiSelectInput,
     RangeInput,
+    StringInput,
     UIntInput,
     Vec3Input,
     PlayState,
@@ -141,6 +142,14 @@ class EditorShellTests(unittest.TestCase):
         self.assertTrue(picker.ClearButton.isEnabled())
         picker.Clear()
         self.assertIsNone(picker.GetValue())
+        typed=AssetPickerInput("Mesh",accepted_extensions={".glb"})
+        typed.ConfigureAssets(({"uuid":"mesh-id","name":"Robot.glb","path":"C:/Assets/Robot.glb","extension":".glb"},
+                               {"uuid":"image-id","name":"Albedo.png","path":"C:/Assets/Albedo.png","extension":".png"}))
+        self.assertTrue(typed._Accepts(typed._Record("C:/Assets/Robot.glb")))
+        self.assertFalse(typed._Accepts(typed._Record("C:/Assets/Albedo.png")))
+        typed.SetValue("mesh-id")
+        self.assertEqual(typed.Display.text(),"Robot.glb")
+        self.assertNotIn("mesh-id",typed.Display.text())
 
     def test_editor_uses_custom_menu_bar(self) -> None:
         self.assertIs(self.Window.menuBar(), self.Window.MenuBar)
@@ -325,6 +334,11 @@ class EditorShellTests(unittest.TestCase):
         self.assertFalse(section.IconLabel.pixmap().isNull())
         iconless = self.Window.Properties.AddComponentSection("custom", "Custom")
         self.assertFalse(iconless.IconLabel.isVisible())
+        field=StringInput("compact");second=StringInput("equal");iconless.AddField("Value",field);iconless.AddField("Long Property Name",second)
+        self.assertEqual(field.maximumWidth(),260);self.assertEqual(field.sizePolicy().horizontalPolicy(),QSizePolicy.Policy.Expanding)
+        self.Window.show();self.Application.processEvents();self.assertGreater(field.width(),0);self.assertEqual(field.width(),second.width())
+        caption=next(label for label in iconless.findChildren(QLabel,"InspectorFieldLabel") if label.text()=="Long Property Name")
+        self.assertGreater(caption.width(),72);self.assertTrue(caption.alignment()&Qt.AlignmentFlag.AlignLeading)
         self.assertEqual(self.Window.Properties.layout().itemAt(
             self.Window.Properties.layout().count() - 1
         ).widget(), self.Window.Properties.AddComponentButton)
@@ -337,6 +351,10 @@ class EditorShellTests(unittest.TestCase):
         self.assertIn("Textures", names)
         self.assertIn("player.png", names)
         self.assertNotIn("player.png.meta", names)
+        self.assertEqual(self.Window.AssetBrowser.Browser.dragDropMode(),QAbstractItemView.DragDropMode.DragOnly)
+        self.assertEqual(self.Window.AssetBrowser.Browser.supportedDragActions(),Qt.DropAction.CopyAction)
+        player=next(self.Window.AssetBrowser.Browser.item(index) for index in range(self.Window.AssetBrowser.Browser.count()) if self.Window.AssetBrowser.Browser.item(index).text()=="player.png")
+        self.assertTrue(self.Window.AssetBrowser.Browser.mimeData([player]).hasFormat("application/x-bazzalt-asset"))
 
     def test_reset_workspace_restores_closed_panel(self) -> None:
         self.Window.Docking.close_panel("console")

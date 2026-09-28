@@ -28,7 +28,7 @@ class ComponentSection(QFrame):
         self.Toggle.setObjectName("ComponentHeader")
         self._fields:dict[str,QWidget]={};self._localization=localization;self._removable=removable
         self.Body=QWidget(self);self.Form=QGridLayout(self.Body);self.Form.setContentsMargins(6,2,6,5)
-        self.Form.setHorizontalSpacing(5);self.Form.setVerticalSpacing(2);self.Form.setColumnStretch(1,1)
+        self.Form.setHorizontalSpacing(14);self.Form.setVerticalSpacing(3);self.Form.setColumnStretch(1,1)
         self.IconLabel=QLabel(header);self.IconLabel.setObjectName("ComponentIcon");self.IconLabel.setFixedSize(16,16);self.IconLabel.setVisible(icon is not None and not icon.isNull())
         if icon is not None and not icon.isNull():self.IconLabel.setPixmap(icon.pixmap(16,16))
         headerLayout.addWidget(self.IconLabel);headerLayout.addWidget(self.Toggle,1)
@@ -42,9 +42,9 @@ class ComponentSection(QFrame):
 
     def AddField(self, label: str, editor: QWidget) -> None:
         row=self.Form.rowCount();caption=QLabel(label,self.Body);caption.setObjectName("InspectorFieldLabel")
-        caption.setFixedWidth(72);caption.setAlignment(Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter)
+        caption.setMinimumWidth(72);caption.setMaximumWidth(120);caption.setSizePolicy(QSizePolicy.Policy.Preferred,QSizePolicy.Policy.Fixed);caption.setAlignment(Qt.AlignmentFlag.AlignLeading|Qt.AlignmentFlag.AlignVCenter)
         editor.setParent(self.Body)
-        editor.setMinimumWidth(0);editor.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Fixed)
+        editor.setMinimumWidth(0);editor.setMaximumWidth(260);editor.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Fixed)
         self.Form.addWidget(caption,row,0);self.Form.addWidget(editor,row,1)
         self._fields[label]=editor
 

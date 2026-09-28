@@ -11,6 +11,8 @@ from PySide6.QtWidgets import QFileDialog, QLabel, QMenu
 from ..runtime import RuntimeService
 from ..history import SceneHistory
 from .panels import ConsoleLevel
+from .panels.assets import (ENVIRONMENT_EXTENSIONS, IMAGE_EXTENSIONS,
+                            MODEL_EXTENSIONS, SHADER_EXTENSIONS)
 from .gizmos import GizmoMode, Vec3
 from .widgets import AssetPickerInput, BoolInput, ColorInput, EnumInput, FloatInput, IntInput, PlayState, StringInput, UIntInput, Vec3Input, Vec4Input
 
@@ -311,13 +313,40 @@ class EditorController(QObject):
             editor=Vec3Input(value) if len(value)==3 else Vec4Input(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
         if isinstance(value, str):
             if "Asset" in name:
-                editor=AssetPickerInput("Select asset");editor.SetValue(value,value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v or "0"));editor.PickRequested.connect(lambda:self._PickAsset(editor));return editor
+                tr=self.Window.Localization.Translate;editor=AssetPickerInput(tr("properties.select_project_asset"),accepted_extensions=self._AssetExtensions(name),picker_title=tr("properties.select_project_asset"),search_placeholder=tr("properties.search_project_assets"),missing_label=tr("properties.missing_asset"));editor.ConfigureAssets(self._ProjectAssets());editor.SetValue(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v or "0"));editor.PickRequested.connect(editor.OpenProjectPicker);return editor
             editor=StringInput(value);editor.editingFinished.connect(lambda:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
         return None
 
-    def _PickAsset(self,editor:AssetPickerInput)->None:
-        dialog=QFileDialog(self.Window,"Select Asset",self.Runtime.AssetDirectory());dialog.setOption(QFileDialog.Option.DontUseNativeDialog);dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
-        if dialog.exec() and dialog.selectedFiles():editor.SetValue(dialog.selectedFiles()[0],Path(dialog.selectedFiles()[0]).name)
+    def _AssetExtensions(self,field_name:str)->set[str]:
+        name=field_name.casefold()
+        if "mesh" in name or "model" in name:return set(MODEL_EXTENSIONS)
+        if "texture" in name or "image" in name:return set(IMAGE_EXTENSIONS)|set(ENVIRONMENT_EXTENSIONS)
+        if "material" in name:return {".mat",".matinst"}
+        if "shader" in name:return set(SHADER_EXTENSIONS)
+        if "scene" in name:return {".bscene"}
+        return set()
+
+    def _ProjectAssets(self)->list[dict]:
+        root_text=self.Runtime.AssetDirectory()
+        if not root_text:return []
+        root=Path(root_text).resolve();result=[]
+        try:paths=sorted((value for value in root.rglob("*") if value.is_file() and not value.name.endswith(".meta")),key=lambda value:str(value).casefold())
+        except OSError:return []
+        for path in paths:
+            meta=path.with_name(path.name+".meta")
+            if not meta.is_file():continue
+            try:
+                fields={}
+                for line in meta.read_text(encoding="utf-8").splitlines():
+                    if ":" not in line:continue
+                    key,raw=line.split(":",1);fields[key.strip()]=raw.strip().strip("'\"")
+                asset_id=fields.get("UUID",fields.get("uuid",""))
+                if not asset_id:continue
+                result.append({"uuid":asset_id,"name":path.name,"path":str(path),
+                               "relative_path":path.relative_to(root).as_posix(),
+                               "extension":path.suffix.lower(),"importer":fields.get("Importer",fields.get("importer",""))})
+            except (OSError,UnicodeError,ValueError):continue
+        return result
 
     def _CommitComponent(self, entity_id: str, component: str, name: str, value) -> None:  # type: ignore[no-untyped-def]
         if not self._updating_inspector and entity_id==self.SelectedEntity and self._Mutate(f"Edit {component}",lambda:self.Runtime.SetComponentProperty(entity_id,component,name,value)):self.SetDirty(True)

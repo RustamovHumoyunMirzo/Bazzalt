@@ -6,21 +6,26 @@ from collections.abc import Iterable, Sequence
 from enum import Enum
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QAction, QColor, QPainter, QPaintEvent
+from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPaintEvent
 from PySide6.QtWidgets import (
     QAbstractSpinBox, QCheckBox,
     QColorDialog,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QDoubleSpinBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMenu,
     QPushButton,
     QSlider,
     QSizePolicy,
     QSpinBox,
     QToolButton,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -84,6 +89,7 @@ class IntInput(FieldStateSupport, QSpinBox):
         super().__init__(parent)
         self.setRange(minimum, maximum)
         self.setValue(value)
+        self.setAlignment(Qt.AlignmentFlag.AlignLeading|Qt.AlignmentFlag.AlignVCenter)
         self.setKeyboardTracking(False)
         self.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
 
@@ -98,7 +104,7 @@ class UIntInput(FieldStateSupport, QDoubleSpinBox):
     """Exact unsigned 32-bit editor backed by Qt's wider floating range."""
     ValueChanged = Signal(object)
     def __init__(self,value:int=0,parent:QWidget|None=None)->None:
-        super().__init__(parent);self.setDecimals(0);self.setRange(0,4_294_967_295)
+        super().__init__(parent);self.setDecimals(0);self.setRange(0,4_294_967_295);self.setAlignment(Qt.AlignmentFlag.AlignLeading|Qt.AlignmentFlag.AlignVCenter)
         self.setKeyboardTracking(False);self.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         self.setValue(float(value));self.valueChanged.connect(lambda number:self.ValueChanged.emit(int(number)))
     def GetValue(self)->int:return int(self.value())
@@ -112,6 +118,7 @@ class FloatInput(FieldStateSupport, QDoubleSpinBox):
         super().__init__(parent)
         self.setRange(minimum, maximum)
         self.setDecimals(decimals)
+        self.setAlignment(Qt.AlignmentFlag.AlignLeading|Qt.AlignmentFlag.AlignVCenter)
         self.setValue(value)
         self.setKeyboardTracking(False)
         self.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
@@ -144,14 +151,14 @@ class VectorInput(FieldWidget):
             raise ValueError("value size must match dimensions")
         self._layout = QHBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
-        self._layout.setSpacing(3)
+        self._layout.setSpacing(5)
         self.setMaximumWidth(360)
         self.Inputs: list[FloatInput] = []
         self.Labels: list[QLabel] = []
         for axis, component in zip(self.AxisNames, values):
             label = QLabel(axis, self)
-            label.setObjectName("VectorAxisLabel");label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            label.setFixedWidth(10)
+            label.setObjectName("VectorAxisLabel");label.setAlignment(Qt.AlignmentFlag.AlignLeading|Qt.AlignmentFlag.AlignVCenter)
+            label.setFixedWidth(12)
             field = FloatInput(value=float(component), decimals=decimals, parent=self)
             field.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Fixed)
             field.valueChanged.connect(lambda _value: self.ValueChanged.emit(self.GetValue()))
@@ -319,6 +326,7 @@ class PickerInput(FieldWidget):
         layout.setSpacing(3)
         self.Display = QLineEdit(self)
         self.Display.setReadOnly(True)
+        self.Display.setAlignment(Qt.AlignmentFlag.AlignLeading|Qt.AlignmentFlag.AlignVCenter)
         self.Display.setPlaceholderText(placeholder)
         self.PickButton = QPushButton("…",self)
         self.PickButton.setObjectName("PickerButton")
@@ -363,8 +371,61 @@ class ObjectPickerInput(PickerInput):
 
 
 class AssetPickerInput(PickerInput):
-    def __init__(self, placeholder: str = "", parent=None, validator=None) -> None:
+    def __init__(self, placeholder: str = "", parent=None, validator=None,
+                 accepted_extensions:Iterable[str]=(),picker_title:str="Select Project Asset",
+                 search_placeholder:str="Search project assets…",missing_label:str="Missing Asset") -> None:
         super().__init__(placeholder, parent, "application/x-bazzalt-asset", validator)
+        self._assets=[];self._accepted_extensions={str(value).lower() for value in accepted_extensions};self._picker_title=picker_title;self._search_placeholder=search_placeholder;self._missing_label=missing_label
+
+    def ConfigureAssets(self,assets)->None:
+        self._assets=[dict(asset) for asset in assets]
+
+    def _Accepts(self,asset)->bool:
+        return (not self._accepted_extensions or
+                str(asset.get("extension","")).lower() in self._accepted_extensions)
+
+    def _Record(self,value):
+        text=str(value or "");normalized=text.replace("\\","/").lower()
+        for asset in self._assets:
+            if (text==str(asset.get("uuid","")) or
+                    normalized==str(asset.get("path","")).replace("\\","/").lower()):return asset
+        return None
+
+    def SetValue(self,value:object,display_name:str|None=None)->None:
+        record=self._Record(value)
+        if record is not None:super().SetValue(record["uuid"],display_name or record["name"])
+        elif value in (None,"","0","00000000-0000-0000-0000-000000000000"):super().SetValue(None,"")
+        else:super().SetValue(value,display_name or self._missing_label)
+
+    def OpenProjectPicker(self)->None:
+        dialog=QDialog(self);dialog.setObjectName("AssetPickerDialog");dialog.setWindowTitle(self._picker_title);dialog.resize(420,460)
+        layout=QVBoxLayout(dialog);search=QLineEdit(dialog);search.setPlaceholderText(self._search_placeholder);assets=QListWidget(dialog);assets.setObjectName("AssetPickerList")
+        for asset in self._assets:
+            if not self._Accepts(asset):continue
+            item=QListWidgetItem(str(asset.get("name","Asset")));item.setData(Qt.ItemDataRole.UserRole,asset)
+            path=str(asset.get("path",""));icon=QIcon(path)
+            if not icon.isNull():item.setIcon(icon)
+            item.setToolTip(str(asset.get("relative_path",path)));assets.addItem(item)
+            if str(asset.get("uuid",""))==str(self._value):assets.setCurrentItem(item)
+        def filter_items(text):
+            query=text.casefold()
+            for index in range(assets.count()):
+                item=assets.item(index);record=item.data(Qt.ItemDataRole.UserRole);item.setHidden(query not in item.text().casefold() and query not in str(record.get("relative_path","")).casefold())
+        search.textChanged.connect(filter_items);buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel,dialog);buttons.accepted.connect(dialog.accept);buttons.rejected.connect(dialog.reject);assets.itemDoubleClicked.connect(lambda _item:dialog.accept())
+        layout.addWidget(search);layout.addWidget(assets,1);layout.addWidget(buttons)
+        if dialog.exec() and assets.currentItem() is not None:
+            asset=assets.currentItem().data(Qt.ItemDataRole.UserRole);self.SetValue(asset["uuid"],asset["name"])
+
+    def dragEnterEvent(self,event)->None:  # type: ignore[no-untyped-def]
+        if event.mimeData().hasFormat("application/x-bazzalt-asset"):
+            path=bytes(event.mimeData().data("application/x-bazzalt-asset")).decode();asset=self._Record(path)
+            if asset is not None and self._Accepts(asset):event.acceptProposedAction();return
+        event.ignore()
+
+    def dropEvent(self,event)->None:  # type: ignore[no-untyped-def]
+        path=bytes(event.mimeData().data("application/x-bazzalt-asset")).decode();asset=self._Record(path)
+        if asset is not None and self._Accepts(asset):self.SetValue(asset["uuid"],asset["name"]);event.acceptProposedAction()
+        else:event.ignore()
 
 
 class ColorInput(FieldStateSupport, QPushButton):
