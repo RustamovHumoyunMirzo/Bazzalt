@@ -117,3 +117,12 @@ submitting changes.
 
 BAZZALT has no published stable release yet. Report security-sensitive findings
 privately to the repository owner rather than opening a public issue.
+
+## License
+
+This project uses a modular multi-license structure:
+
+* **Core Engine:** Licensed under the **Apache License 2.0**. You can find the full terms in the root [LICENSE](LICENSE) file.
+* **Editor (`/Editor`):** Licensed under the **GNU Lesser General Public License v3 (LGPLv3)**. The specific terms for the editor are located in the [Editor/LICENSE](Editor/LICENSE) file. 
+
+This structure allows the core engine to remain permissive under Apache 2.0 while ensuring full legal and technical compliance with the [PySide6 (Qt)](https://www.qt.io/qt-for-python) framework used by the editor.
