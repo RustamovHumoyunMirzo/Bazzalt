@@ -113,6 +113,14 @@ class HierarchyPanel(QWidget):
         (parent.addChild(item) if parent else self.Tree.addTopLevelItem(item));return item
 
     def Clear(self) -> None: self.Tree.clear()
+    def SetDirtyScenes(self,scene_ids)->None:
+        dirty={str(value) for value in scene_ids};blocked=self.Tree.blockSignals(True)
+        for index in range(self.Tree.topLevelItemCount()):
+            item=self.Tree.topLevelItem(index)
+            if item.data(0,Qt.ItemDataRole.UserRole+1)!="scene":continue
+            base=str(item.data(0,Qt.ItemDataRole.UserRole+2) or item.text(0)).removesuffix(" *")
+            item.setData(0,Qt.ItemDataRole.UserRole+2,base);item.setText(0,base+(" *" if str(item.data(0,Qt.ItemDataRole.UserRole)) in dirty else ""))
+        self.Tree.blockSignals(blocked)
     def ExpandedData(self)->set[str]:
         values=set();iterator=QTreeWidgetItemIterator(self.Tree)
         while iterator.value() is not None:

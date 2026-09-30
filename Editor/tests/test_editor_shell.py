@@ -55,6 +55,16 @@ class EditorShellTests(unittest.TestCase):
         self.assertNotEqual(dark_icon,light_icon)
         self.assertFalse(self.Window.windowIcon().isNull())
 
+    def test_hierarchy_scene_shows_per_scene_dirty_marker(self) -> None:
+        self.Window.Controller.RefreshHierarchy()
+        scene=self.Window.Hierarchy.Tree.topLevelItem(0);scene_id=str(scene.data(0,Qt.ItemDataRole.UserRole))
+        self.Window.Controller.SetDirty(True,[scene_id])
+        self.assertTrue(scene.text(0).endswith(" *"))
+        self.assertTrue(self.Window.Controller.IsDirty)
+        self.Window.Controller.SetDirty(False)
+        self.assertFalse(scene.text(0).endswith(" *"))
+        self.assertFalse(self.Window.Controller.IsDirty)
+
     def test_shortcuts_use_custom_menu_rendering(self) -> None:
         self.assertIsInstance(self.Window.MenuBar.FileMenu, EditorMenu)
         save = next(action for action in self.Window.MenuBar.FileMenu.actions()

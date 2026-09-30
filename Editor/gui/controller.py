@@ -27,6 +27,7 @@ class EditorController(QObject):
         self.ScenePath = ""
         self._updating_inspector = False
         self.IsDirty = False
+        self._dirty_scenes:set[str]=set()
         self._hierarchy_clipboard: list[dict] = []
         self._box_selection_base: list[str] = []
         self.History=SceneHistory(runtime,self)
@@ -99,19 +100,22 @@ class EditorController(QObject):
         # This also covers transforms changed by systems or native user code.
         if self.SelectedEntity:self._UpdateGizmo()
 
-    def SaveScene(self) -> None:
+    def SaveScene(self) -> bool:
         if self.ScenePath:
-            if self.Runtime.SaveScene(self.ScenePath): self.SetDirty(False)
-        else: self.SaveSceneAsDialog()
+            if self.Runtime.SaveScene(self.ScenePath): self.SetDirty(False);return True
+            return False
+        return self.SaveSceneAsDialog()
 
-    def SaveSceneAsDialog(self) -> None:
+    def SaveSceneAsDialog(self) -> bool:
         dialog=QFileDialog(self.Window,self.Window.Localization.Translate("dialog.save_scene"),self.Runtime.AssetDirectory(),self.Window.Localization.Translate("dialog.scene_filter"))
         dialog.setOption(QFileDialog.Option.DontUseNativeDialog);dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
         path=dialog.selectedFiles()[0] if dialog.exec() and dialog.selectedFiles() else ""
-        if path and self.Runtime.SaveScene(path): self.ScenePath = path; self.SetDirty(False)
+        if path and self.Runtime.SaveScene(path): self.ScenePath = path; self.SetDirty(False);return True
+        return False
 
     def _ProjectLoaded(self, path: str) -> None:
         self.History.Clear()
+        self.SetDirty(False)
         self.ScenePath = str(self.Runtime.SceneInfo().get("path", ""))
         assets = self.Runtime.AssetDirectory()
         self.Window.AssetBrowser.SetProjectRoot(assets or Path(path).parent)
@@ -127,7 +131,8 @@ class EditorController(QObject):
         theme = "light" if self.Window.ThemeManager.GetTheme().background == "#d4d4d4" else "dark"
         root_ids={"","0","00000000-0000-0000-0000-000000000000"}
         for scene_info in self.Runtime.LoadedScenes():
-            scene_root=self.Window.Hierarchy.AddItem(str(scene_info.get("name","Untitled")),str(scene_info.get("uuid","")),icon=self.Window.Resources.Icon(f"icons/{theme}/scene.svg"),kind="scene",active=bool(scene_info.get("active")))
+            scene_id=str(scene_info.get("uuid",""));scene_name=str(scene_info.get("name","Untitled"))
+            scene_root=self.Window.Hierarchy.AddItem(scene_name,scene_id,icon=self.Window.Resources.Icon(f"icons/{theme}/scene.svg"),kind="scene",active=bool(scene_info.get("active")))
             scene_root.setExpanded(True);pending=list(scene_info.get("entities",()))
             while pending:
                 progress=False
@@ -139,6 +144,7 @@ class EditorController(QObject):
                     for entity in pending:items[entity["uuid"]]=self.Window.Hierarchy.AddItem(entity["name"],entity["uuid"],scene_root,self.Window.Resources.Icon(f"icons/{theme}/obj.svg"),"entity")
                     break
         self.Window.Hierarchy.ApplyExpansionState(items)
+        self.Window.Hierarchy.SetDirtyScenes(self._dirty_scenes)
         if selected:
             blocker=QSignalBlocker(self.Window.Hierarchy.Tree)
             for value in selected:
@@ -385,9 +391,23 @@ class EditorController(QObject):
     def _Rename(self, entity_id: str, name: str) -> None:
         if not self._updating_inspector and entity_id==self.SelectedEntity and name.strip() and self._Mutate("Rename entity",lambda:self.Runtime.Rename(entity_id,name.strip())):self.SetDirty(True);self.RefreshHierarchy()
 
-    def SetDirty(self, dirty: bool = True) -> None:
-        self.IsDirty=dirty;title=self.Window.windowTitle().rstrip(" *")
-        self.Window.setWindowTitle(title + (" *" if dirty else ""))
+    def SetDirty(self, dirty: bool = True, scene_ids=None) -> None:
+        if not dirty:self._dirty_scenes.clear()
+        else:
+            ids={str(value) for value in (scene_ids or ()) if value}
+            if not ids:
+                for entity in self.SelectedEntities or ([self.SelectedEntity] if self.SelectedEntity else []):
+                    scene_id=str(self.Runtime.EntityDetails(entity).get("scene_uuid",""))
+                    if scene_id:ids.add(scene_id)
+            if not ids:
+                active=next((scene for scene in self.Runtime.LoadedScenes() if scene.get("active")),None)
+                if active:ids.add(str(active.get("uuid","")))
+            self._dirty_scenes.update(ids)
+        self._SyncDirtyPresentation()
+
+    def _SyncDirtyPresentation(self)->None:
+        self.IsDirty=bool(self._dirty_scenes);title=self.Window.windowTitle().rstrip(" *")
+        self.Window.setWindowTitle(title+(" *" if self.IsDirty else ""));self.Window.Hierarchy.SetDirtyScenes(self._dirty_scenes)
 
     def _GizmoModeChanged(self, mode) -> None: self.Window.Scene.Surface.SetGizmoMode(mode);self._UpdateGizmo()
     def _UpdateGizmo(self) -> None:
@@ -418,7 +438,7 @@ class EditorController(QObject):
             self.ScenePath=str(self.Runtime.SceneInfo().get("path",""));self.SelectEntity(None);self.Window.Output.SetGameCameraAvailable(self.Runtime.HasActiveCamera())
 
     def UnloadScene(self,scene_id:str)->None:
-        if self.Runtime.UnloadScene(scene_id):self.SelectEntity(None)
+        if self.Runtime.UnloadScene(scene_id):self._dirty_scenes.discard(str(scene_id));self._SyncDirtyPresentation();self.SelectEntity(None)
 
     def RenameScene(self,scene_id:str,name:str)->None:
         if self.Runtime.RenameLoadedScene(scene_id,name):self.ScenePath=str(self.Runtime.SceneInfo().get("path",self.ScenePath));self.Window.AssetBrowser.Refresh()
@@ -443,13 +463,13 @@ class EditorController(QObject):
         if self.SelectedEntity:self._RefreshInspectorValues();self._UpdateGizmo()
 
     def CreateEntity(self, parent) -> None:  # type: ignore[no-untyped-def]
-        if self._Mutate("Create entity",lambda:bool(self.Runtime.CreateEntity(self.Window.Localization.Translate("entity.new"),str(parent or "")))):self.SetDirty(True)
+        if self._Mutate("Create entity",lambda:bool(self.Runtime.CreateEntity(self.Window.Localization.Translate("entity.new"),str(parent or "")))):self.SetDirty(True,[self._SceneForParent(parent)])
 
     def CreateTypedEntity(self, component_type: str, parent) -> None:  # type: ignore[no-untyped-def]
         self.History.Begin(f"Create {component_type}")
         entity_id = self.Runtime.CreateEntity(component_type if component_type != "Entity" else self.Window.Localization.Translate("entity.new"), str(parent or ""))
         if entity_id and component_type != "Entity": self.Runtime.AddComponent(entity_id, component_type)
-        if entity_id:self.History.Commit();self.SetDirty(True)
+        if entity_id:self.History.Commit();self.SetDirty(True,[self._SceneForParent(parent)])
         else:self.History.Cancel()
 
     def ShowAddComponentMenu(self) -> None:
@@ -482,13 +502,14 @@ class EditorController(QObject):
     def InstantiateAsset(self,path:str,parent_id:str)->None:
         if Path(path).suffix.lower() in {".gltf",".glb",".obj",".fbx",".dae",".filamesh"}:
             self.History.Begin("Instantiate model");entity=self.Runtime.InstantiateModelPath(path,parent_id)
-            if entity:self.History.Commit();self.SetDirty(True);self.SelectEntity(entity)
+            if entity:self.History.Commit();self.SetDirty(True,[self._SceneForParent(parent_id)]);self.SelectEntity(entity)
             else:self.History.Cancel()
 
     def DeleteEntity(self, entity_id) -> None:  # type: ignore[no-untyped-def]
         targets=entity_id if isinstance(entity_id,(list,tuple)) else [entity_id]
+        scenes={str(self.Runtime.EntityDetails(str(value)).get("scene_uuid","")) for value in targets if value}
         self.History.Begin("Delete entities");results=[self.Runtime.DestroyEntity(str(value)) for value in targets if value]
-        if any(results):self.History.Commit();self.SetDirty(True)
+        if any(results):self.History.Commit();self.SetDirty(True,scenes)
         else:self.History.Cancel()
 
     def RenameHierarchyEntity(self,entity_id:str,name:str)->None:
@@ -515,7 +536,7 @@ class EditorController(QObject):
         except Exception:
             self.History.Cancel();raise
         if not created:self.History.Cancel();return
-        self.History.Commit();self.SetDirty(True);self.RefreshHierarchy();self.SelectEntities(created)
+        self.History.Commit();self.SetDirty(True,[self._SceneForParent(parent_id)]);self.RefreshHierarchy();self.SelectEntities(created)
 
     def _CloneHierarchyNode(self,node:dict,parent_id:str,top_level:bool=False)->str:
         details=node.get("details",{});name=str(details.get("name","Entity"))+(" Copy" if top_level else "")
@@ -530,8 +551,9 @@ class EditorController(QObject):
         return entity
 
     def ReparentEntity(self, entity_id: str, parent_id: str) -> None:
+        scene_id=str(self.Runtime.EntityDetails(entity_id).get("scene_uuid",""))
         if self._Mutate("Reparent entity",lambda:self.Runtime.SetParent(entity_id,parent_id)):
-            self.SetDirty(True)
+            self.SetDirty(True,[scene_id])
             self.Window.Hierarchy.ExpandData(parent_id)
             if entity_id==self.SelectedEntity:self.SelectEntity(entity_id,force=True)
 
@@ -542,9 +564,20 @@ class EditorController(QObject):
     def Stop(self) -> None:
         self.Runtime.Stop()
 
+    def _SceneForParent(self,parent)->str:
+        value=str(parent or "")
+        for scene in self.Runtime.LoadedScenes():
+            if str(scene.get("uuid",""))==value:return value
+        details=self.Runtime.EntityDetails(value) if value else {}
+        if details:return str(details.get("scene_uuid",""))
+        active=next((scene for scene in self.Runtime.LoadedScenes() if scene.get("active")),{})
+        return str(active.get("uuid",""))
+
     def ApplyGizmoTranslation(self, delta) -> bool:  # type: ignore[no-untyped-def]
         targets=self.SelectedEntities or ([self.SelectedEntity] if self.SelectedEntity else [])
-        results=[self.Runtime.Translate(entity,(delta.X,delta.Y,delta.Z)) for entity in targets];changed=any(results);self.SetDirty(changed or self.IsDirty);self._UpdateGizmo();return changed
+        results=[self.Runtime.Translate(entity,(delta.X,delta.Y,delta.Z)) for entity in targets];changed=any(results)
+        if changed:self.SetDirty(True)
+        self._UpdateGizmo();return changed
 
     def ApplyGizmoRotation(self, axis, angle: float) -> bool:  # type: ignore[no-untyped-def]
         if len(self.SelectedEntities)>1:

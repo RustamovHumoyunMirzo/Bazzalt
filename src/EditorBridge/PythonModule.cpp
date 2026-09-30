@@ -181,7 +181,7 @@ public:
         for(std::size_t index=0;index<m_loadedScenes.size();++index){Scene& scene=SceneAt(index);py::dict item;item["uuid"]=scene.GetUUID().ToString();item["name"]=m_loadedScenes[index].Path.empty()?py::str("Untitled"):PathText(m_loadedScenes[index].Path.stem());item["path"]=m_loadedScenes[index].Path.empty()?py::str():PathText(m_loadedScenes[index].Path);item["active"]=index==m_activeScene;item["entities"]=SceneEntities(scene);result.append(item);}return result;
     }
     py::dict EntityDetails(const std::string& id) {
-        auto [scene,entity]=FindEntity(id);if(!entity)return {};auto result=SnapshotEntity(*scene,entity);result["scene_active"]=(scene==&m_engine->GetScene());return result;
+        auto [scene,entity]=FindEntity(id);if(!entity)return {};auto result=SnapshotEntity(*scene,entity);result["scene_active"]=(scene==&m_engine->GetScene());result["scene_uuid"]=scene->GetUUID().ToString();return result;
     }
     bool HasActiveCamera() const {
         const auto cameras = m_engine->GetScene().GetRegistry().view<Camera>();

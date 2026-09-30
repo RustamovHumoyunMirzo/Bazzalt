@@ -6,7 +6,7 @@ import json
 from typing import Callable
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import QApplication, QMainWindow
+from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox
 
 from ..localization import LocalizationManager
 from ..resources import ResourceManager
@@ -213,6 +213,16 @@ class Editor(QMainWindow):
             except (OSError,ValueError):pass
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if self.Controller.IsDirty and self.isVisible():
+            tr=self.Localization.Translate;dialog=QMessageBox(self)
+            dialog.setWindowTitle(tr("dialog.unsaved_title"));dialog.setText(tr("dialog.unsaved_message"));dialog.setIcon(QMessageBox.Icon.Warning)
+            save=dialog.addButton(tr("dialog.save_and_close"),QMessageBox.ButtonRole.AcceptRole)
+            discard=dialog.addButton(tr("dialog.close_without_saving"),QMessageBox.ButtonRole.DestructiveRole)
+            cancel=dialog.addButton(tr("dialog.cancel_close"),QMessageBox.ButtonRole.RejectRole)
+            dialog.setDefaultButton(save);dialog.setEscapeButton(cancel);dialog.exec();clicked=dialog.clickedButton()
+            if clicked is cancel or clicked is None:event.ignore();return
+            if clicked is save and not self.Controller.SaveScene():event.ignore();return
+            if clicked is not discard and clicked is not save:event.ignore();return
         self._layout_save_timer.stop();self._SaveWorkspace()
         self.Scene.Detach(); self.Output.Detach()
         self.Controller.Stop()
