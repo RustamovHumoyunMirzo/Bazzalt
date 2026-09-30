@@ -7,6 +7,7 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication, QAbstractItemView, QLabel, QLineEdit, QSizePolicy, QWidget
+from PySide6.QtWidgets import QListWidgetItem
 from PySide6.QtGui import QColor
 from PySide6.QtGui import QKeyEvent, QMouseEvent
 from PySide6.QtCore import QEvent, Qt
@@ -64,6 +65,13 @@ class EditorShellTests(unittest.TestCase):
         self.Window.Controller.SetDirty(False)
         self.assertFalse(scene.text(0).endswith(" *"))
         self.assertFalse(self.Window.Controller.IsDirty)
+
+    def test_loaded_scene_cannot_be_activated_again_from_assets(self) -> None:
+        browser=self.Window.AssetBrowser;activated=[];browser.AssetActivated.connect(activated.append)
+        item=QListWidgetItem("Loaded");item.setData(Qt.ItemDataRole.UserRole,Path("Loaded.bscene"))
+        browser.SceneLoadedChecker=lambda _path:True
+        browser._Activate(item)
+        self.assertEqual(activated,[])
 
     def test_shortcuts_use_custom_menu_rendering(self) -> None:
         self.assertIsInstance(self.Window.MenuBar.FileMenu, EditorMenu)

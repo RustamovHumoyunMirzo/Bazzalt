@@ -5,11 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 from math import cos, sin
 
-from PySide6.QtCore import QObject, QSignalBlocker, QTimer
-from PySide6.QtWidgets import QFileDialog, QLabel, QMenu
+from PySide6.QtCore import QObject, QSignalBlocker, QTimer, Qt
+from PySide6.QtWidgets import QApplication, QFileDialog, QLabel, QMenu, QProgressDialog
 
 from ..runtime import RuntimeService
 from ..history import SceneHistory
+from ..scripting import ScriptAttachments, ScriptCompiler
 from .panels import ConsoleLevel
 from .panels.assets import (ENVIRONMENT_EXTENSIONS, IMAGE_EXTENSIONS,
                             MODEL_EXTENSIONS, SHADER_EXTENSIONS)
@@ -30,6 +31,7 @@ class EditorController(QObject):
         self._dirty_scenes:set[str]=set()
         self._hierarchy_clipboard: list[dict] = []
         self._box_selection_base: list[str] = []
+        self.ScriptCompiler=None;self.ScriptAttachments=None
         self.History=SceneHistory(runtime,self)
         self.Timer = QTimer(self)
         self.Timer.setInterval(16)
@@ -64,6 +66,7 @@ class EditorController(QObject):
         window.AssetBrowser.AssetActivated.connect(self.ActivateAsset)
         window.AssetBrowser.LoadSceneRequested.connect(self.LoadSceneAdditive)
         window.AssetBrowser.SceneRenameHandler=self.RenameSceneAsset
+        window.AssetBrowser.SceneLoadedChecker=self.Runtime.IsSceneLoaded
         window.AssetBrowser.AssetOperationFailed.connect(lambda text:window.Console.AddMessage(text,ConsoleLevel.Error,True,"Editor"))
         runtime.SceneChanged.connect(self.RefreshHierarchy)
         runtime.ProjectChanged.connect(self._ProjectLoaded)
@@ -119,6 +122,8 @@ class EditorController(QObject):
         self.ScenePath = str(self.Runtime.SceneInfo().get("path", ""))
         assets = self.Runtime.AssetDirectory()
         self.Window.AssetBrowser.SetProjectRoot(assets or Path(path).parent)
+        project=Path(path).parent if Path(path).is_file() else Path(path)
+        self.ScriptCompiler=ScriptCompiler(project);self.ScriptAttachments=ScriptAttachments(project)
         self.Window.Console.AddMessage(
             self.Window.Localization.Translate("console.project_loaded", path=path)
         )
@@ -202,6 +207,15 @@ class EditorController(QObject):
                 for property_name, value in dict(component_data.get(component, {})).items():
                     editor = self._ComponentEditor(inspected_entity, component, property_name, value)
                     if editor is not None: section.AddField(property_name, editor)
+        if self.ScriptAttachments is not None:
+            for script in self.ScriptAttachments.For(inspected_entity):
+                name=str(script.get("type","Script"));section=self.Window.Properties.AddComponentSection(f"script.{name}",name,expanded=False,enabled=bool(script.get("enabled",True)))
+                section.EnabledChanged.connect(lambda enabled,s=script:self._SetScriptEnabled(s,enabled))
+                for property_name,value in script.get("properties",{}).items():
+                    editor=self._ComponentEditor(inspected_entity,name,property_name,value)
+                    if editor is not None:
+                        editor.valueChanged.connect(lambda v,n=property_name,s=script:self._SetScriptProperty(s,n,v)) if hasattr(editor,"valueChanged") else None
+                        section.AddField(property_name,editor)
 
         self._UpdateGizmo()
 
@@ -479,6 +493,11 @@ class EditorController(QObject):
         for component_type in self.Runtime.ComponentTypes():
             action = menu.addAction(component_type); action.setEnabled(component_type not in existing)
             action.triggered.connect(lambda _=False, name=component_type: self._AddComponent(name))
+        scripts=self.ScriptCompiler.Discover() if self.ScriptCompiler else []
+        if scripts:
+            menu.addSeparator();script_menu=menu.addMenu("Scripts")
+            for descriptor in scripts:
+                action=script_menu.addAction(descriptor.name);action.triggered.connect(lambda _=False,d=descriptor:self._AttachScript(d))
         button = self.Window.Properties.AddComponentButton
         menu.exec(button.mapToGlobal(button.rect().topLeft()))
 
@@ -493,6 +512,10 @@ class EditorController(QObject):
 
     def RemoveComponent(self, component_id: str) -> None:
         if not self.SelectedEntity:return
+        if component_id.startswith("script.") and self.ScriptAttachments:
+            if self.ScriptAttachments.Remove(self.SelectedEntity,component_id.removeprefix("script.")):
+                self.SetDirty(True);self.SelectEntity(self.SelectedEntity,force=True)
+            return
         prefix="multi." if component_id.startswith("multi.") else "runtime." if component_id.startswith("runtime.") else ""
         if not prefix:return
         component=component_id.removeprefix(prefix);targets=self.SelectedEntities or [self.SelectedEntity];self.History.Begin(f"Remove {component}");results=[self.Runtime.RemoveComponent(target,component) for target in targets]
@@ -504,6 +527,10 @@ class EditorController(QObject):
             self.History.Begin("Instantiate model");entity=self.Runtime.InstantiateModelPath(path,parent_id)
             if entity:self.History.Commit();self.SetDirty(True,[self._SceneForParent(parent_id)]);self.SelectEntity(entity)
             else:self.History.Cancel()
+        elif Path(path).suffix.lower()==".cpp" and self.ScriptCompiler:
+            descriptor=self.ScriptCompiler.Inspect(path)
+            target=parent_id or self.SelectedEntity
+            if descriptor and target:self._AttachScript(descriptor,target)
 
     def DeleteEntity(self, entity_id) -> None:  # type: ignore[no-untyped-def]
         targets=entity_id if isinstance(entity_id,(list,tuple)) else [entity_id]
@@ -558,8 +585,27 @@ class EditorController(QObject):
             if entity_id==self.SelectedEntity:self.SelectEntity(entity_id,force=True)
 
     def Play(self) -> None:
-        if self.Runtime.Play(): pass
-        else: self.Window.Toolbar.SetPlayState(PlayState.Stopped)
+        if self.ScriptCompiler and self.ScriptAttachments:
+            progress=QProgressDialog("Compiling game scripts…",None,0,0,self.Window);progress.setWindowModality(Qt.WindowModality.WindowModal);progress.setCancelButton(None);progress.show();QApplication.processEvents()
+            try:result=self.ScriptCompiler.Build(self.ScriptAttachments.UsedSources())
+            finally:progress.close()
+            for diagnostic in result.diagnostics:
+                level=ConsoleLevel.Error if diagnostic.level=="error" else ConsoleLevel.Warning if diagnostic.level=="warning" else ConsoleLevel.Info
+                self.Window.Console.AddMessage(diagnostic.message,level,True,diagnostic.source)
+            if not result.success:self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
+        if not self.Runtime.Play():self.Window.Toolbar.SetPlayState(PlayState.Stopped)
+
+    def _AttachScript(self,descriptor,entity_id:str|None=None)->None:
+        entity_id=entity_id or self.SelectedEntity
+        if entity_id and self.ScriptAttachments and self.ScriptAttachments.Attach(entity_id,descriptor):self.SetDirty(True);self.SelectEntity(entity_id,force=True)
+
+    def _SetScriptEnabled(self,script:dict,enabled:bool)->None:
+        script["enabled"]=enabled
+        if self.ScriptAttachments:self.ScriptAttachments.Save();self.SetDirty(True)
+
+    def _SetScriptProperty(self,script:dict,name:str,value)->None:
+        script.setdefault("properties",{})[name]=value
+        if self.ScriptAttachments:self.ScriptAttachments.Save();self.SetDirty(True)
 
     def Stop(self) -> None:
         self.Runtime.Stop()

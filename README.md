@@ -76,6 +76,8 @@ python -m pip install -r requirements-build.txt
 
 ## Documentation
 
+- [C++ behaviors and bundled compiler](docs/scripting.md)
+
 The full engine handbook and API reference live in [`docs/`](docs/README.md):
 
 - [Getting started](docs/getting-started.md)
@@ -114,9 +116,6 @@ Issues and focused pull requests are welcome. Include tests for behavior
 changes, keep third-party types out of `include/Bazzalt`, preserve UUID and YAML
 forward compatibility, and run the native and editor test suites before
 submitting changes.
-
-BAZZALT has no published stable release yet. Report security-sensitive findings
-privately to the repository owner rather than opening a public issue.
 
 ## License
 

@@ -41,6 +41,11 @@ New-Item -ItemType Directory -Force -Path $EditorTarget | Out-Null
 Copy-Item -Path (Join-Path $EditorBuild "*") -Destination $EditorTarget -Recurse -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $EditorTarget "Editor") | Out-Null
 Copy-Item -LiteralPath $Native.FullName -Destination (Join-Path $EditorTarget "Editor/$($Native.Name)") -Force
+$Toolchain = Join-Path $Root "toolchain/llvm"
+if (-not (Test-Path (Join-Path $Toolchain "bin/clang++.exe"))) { throw "Bundled LLVM is missing. Run scripts/get_llvm.ps1 before production packaging." }
+New-Item -ItemType Directory -Force -Path (Join-Path $EditorTarget "toolchain") | Out-Null
+Copy-Item -LiteralPath $Toolchain -Destination (Join-Path $EditorTarget "toolchain/llvm") -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $Root "include") -Destination (Join-Path $EditorTarget "include") -Recurse -Force
 $Manifest = @{ version=$Version; executable="Bazzalt.exe"; project_format_max=1 } | ConvertTo-Json
 $Utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText((Join-Path $EditorTarget "editor.json"), $Manifest, $Utf8WithoutBom)
