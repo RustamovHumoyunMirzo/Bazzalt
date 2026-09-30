@@ -88,6 +88,30 @@ public:
         m_registry->template remove<Component>(m_handle);
     }
 
+    template<typename ComponentType>
+    [[nodiscard]] bool IsComponentEnabled() const {
+        static_assert(std::is_base_of_v<Bazzalt::Component, ComponentType>,
+                      "ComponentType must derive from Bazzalt::Component");
+        static_assert(!std::is_same_v<ComponentType, Identity> &&
+                      !std::is_same_v<ComponentType, Hierarchy> &&
+                      !std::is_same_v<ComponentType, Name> &&
+                      !std::is_same_v<ComponentType, Transform>,
+                      "Core entity components cannot be disabled");
+        return GetComponent<ComponentType>().IsEnabled();
+    }
+
+    template<typename ComponentType>
+    void SetComponentEnabled(bool enabled) const {
+        static_assert(std::is_base_of_v<Bazzalt::Component, ComponentType>,
+                      "ComponentType must derive from Bazzalt::Component");
+        static_assert(!std::is_same_v<ComponentType, Identity> &&
+                      !std::is_same_v<ComponentType, Hierarchy> &&
+                      !std::is_same_v<ComponentType, Name> &&
+                      !std::is_same_v<ComponentType, Transform>,
+                      "Core entity components cannot be disabled");
+        GetComponent<ComponentType>().SetEnabled(enabled);
+    }
+
     [[nodiscard]] bool IsValid() const {
         return m_registry != nullptr && m_registry->valid(m_handle);
     }

@@ -52,12 +52,18 @@ public:
                 const ComponentType* component = entity.TryGetComponent<ComponentType>();
                 if (component == nullptr) return false;
                 function(*component, properties);
+                properties["Enabled"] = component->IsEnabled() ? "true" : "false";
                 return true;
             };
         descriptor.Deserialize = [function = std::forward<DeserializeFunction>(deserialize)]
             (Entity entity, const PropertyMap& properties, std::uint32_t storedVersion) mutable {
                 ComponentType value{};
                 if (!function(value, properties, storedVersion)) return false;
+                if (const auto enabled = properties.find("Enabled"); enabled != properties.end()) {
+                    if (enabled->second == "true") value.SetEnabled(true);
+                    else if (enabled->second == "false") value.SetEnabled(false);
+                    else return false;
+                }
                 entity.AddOrReplaceComponent<ComponentType>(std::move(value));
                 return true;
             };

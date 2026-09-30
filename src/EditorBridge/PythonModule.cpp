@@ -64,19 +64,29 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
     if (entity.HasComponent<Vignette>()) components.append("Vignette");
     if (entity.HasComponent<SceneQueryBounds>()) components.append("Scene Query Bounds");
     result["components"] = components;
+    py::dict enabled;
+    if (const auto* value=entity.TryGetComponent<Camera>()) enabled["Camera"]=value->IsEnabled();
+    if (const auto* value=entity.TryGetComponent<Light>()) enabled["Light"]=value->IsEnabled();
+    if (const auto* value=entity.TryGetComponent<Mesh>()) enabled["Mesh"]=value->IsEnabled();
+    if (const auto* value=entity.TryGetComponent<ModelInstance>()) enabled["Model Instance"]=value->IsEnabled();
+    if (const auto* value=entity.TryGetComponent<ModelNode>()) enabled["Model Node"]=value->IsEnabled();
+    if (const auto* value=entity.TryGetComponent<GaussianBlur>()) enabled["Gaussian Blur"]=value->IsEnabled();
+    if (const auto* value=entity.TryGetComponent<Vignette>()) enabled["Vignette"]=value->IsEnabled();
+    if (const auto* value=entity.TryGetComponent<SceneQueryBounds>()) enabled["Scene Query Bounds"]=value->IsEnabled();
+    result["component_enabled"] = enabled;
     py::dict data;
     if (const auto* camera=entity.TryGetComponent<Camera>()) {
         py::dict v;v["Projection"]=static_cast<int>(camera->Projection);v["Field of View"]=ToDegrees(camera->VerticalFieldOfView);v["Orthographic Size"]=camera->OrthographicSize;v["Near"]=camera->NearPlane;v["Far"]=camera->FarPlane;v["Aspect Ratio"]=camera->AspectRatio;v["Aspect Mode"]=static_cast<int>(camera->AspectMode);v["Viewport"]=py::make_tuple(camera->Viewport.X,camera->Viewport.Y,camera->Viewport.Width,camera->Viewport.Height);v["Priority"]=camera->Priority;v["Active"]=camera->Active;v["Clear Color"]=py::make_tuple(camera->ClearColor.X,camera->ClearColor.Y,camera->ClearColor.Z,camera->ClearColor.W);v["Post Processing"]=camera->PostProcessing.Enabled;v["Bloom"]=camera->PostProcessing.Bloom;v["Ambient Occlusion"]=camera->PostProcessing.AmbientOcclusion;v["Anti Aliasing"]=static_cast<int>(camera->PostProcessing.AntiAliasingMode);v["Tone Mapping"]=static_cast<int>(camera->PostProcessing.ToneMappingMode);v["Exposure"]=camera->PostProcessing.Exposure;v["Depth of Field"]=camera->PostProcessing.DepthOfField.Enabled;v["Focus Distance"]=camera->PostProcessing.DepthOfField.FocusDistance;v["Aperture"]=camera->PostProcessing.DepthOfField.Aperture;v["Shutter Speed"]=camera->PostProcessing.DepthOfField.ShutterSpeed;v["Sensitivity"]=camera->PostProcessing.DepthOfField.Sensitivity;data["Camera"]=v;
     }
     if (const auto* light=entity.TryGetComponent<Light>()) {
-        py::dict v;v["Type"]=static_cast<int>(light->Type);v["Color"]=py::make_tuple(light->Color.X,light->Color.Y,light->Color.Z);v["Intensity"]=light->Intensity;v["Range"]=light->Range;v["Inner Cone"]=ToDegrees(light->InnerConeAngle);v["Outer Cone"]=ToDegrees(light->OuterConeAngle);v["Sun Angular Radius"]=light->SunAngularRadius;v["Sun Halo Size"]=light->SunHaloSize;v["Sun Halo Falloff"]=light->SunHaloFalloff;v["Cast Shadows"]=light->CastShadows;v["Enabled"]=light->Enabled;data["Light"]=v;
+        py::dict v;v["Type"]=static_cast<int>(light->Type);v["Color"]=py::make_tuple(light->Color.X,light->Color.Y,light->Color.Z);v["Intensity"]=light->Intensity;v["Range"]=light->Range;v["Inner Cone"]=ToDegrees(light->InnerConeAngle);v["Outer Cone"]=ToDegrees(light->OuterConeAngle);v["Sun Angular Radius"]=light->SunAngularRadius;v["Sun Halo Size"]=light->SunHaloSize;v["Sun Halo Falloff"]=light->SunHaloFalloff;v["Cast Shadows"]=light->CastShadows;data["Light"]=v;
     }
     if (const auto* mesh=entity.TryGetComponent<Mesh>()) { py::dict v;v["Mesh Asset"]=mesh->MeshAsset.ToString();v["Model Node Index"]=mesh->ModelNodeIndex;v["Material Count"]=static_cast<int>(mesh->Materials.size());v["Layer Mask"]=mesh->LayerMask;v["Visible"]=mesh->Visible;v["Cast Shadows"]=mesh->CastShadows;v["Receive Shadows"]=mesh->ReceiveShadows;data["Mesh"]=v; }
     if (const auto* model=entity.TryGetComponent<ModelInstance>()){py::dict v;v["Model Asset"]=model->ModelAsset.ToString();data["Model Instance"]=v;}
     if (const auto* node=entity.TryGetComponent<ModelNode>()){py::dict v;v["Model Asset"]=node->ModelAsset.ToString();v["Source Index"]=node->SourceIndex;v["Mesh Index"]=node->MeshIndex;v["Stable Path"]=node->StablePath;v["Has Mesh"]=node->HasMesh;data["Model Node"]=v;}
-    if (const auto* blur=entity.TryGetComponent<GaussianBlur>()) { py::dict v;v["Enabled"]=blur->Enabled;v["Size"]=blur->Size;data["Gaussian Blur"]=v; }
-    if (const auto* vignette=entity.TryGetComponent<Vignette>()) { py::dict v;v["Enabled"]=vignette->Enabled;v["Color"]=py::make_tuple(vignette->Color.X,vignette->Color.Y,vignette->Color.Z,vignette->Color.W);v["Intensity"]=vignette->Intensity;v["Smoothness"]=vignette->Smoothness;v["Roundness"]=vignette->Roundness;data["Vignette"]=v; }
-    if (const auto* bounds=entity.TryGetComponent<SceneQueryBounds>()) { py::dict v;v["Shape"]=static_cast<int>(bounds->Shape);v["Center"]=py::make_tuple(bounds->Center.X,bounds->Center.Y,bounds->Center.Z);v["Extents"]=py::make_tuple(bounds->Extents.X,bounds->Extents.Y,bounds->Extents.Z);v["Radius"]=bounds->Radius;v["Layer Mask"]=bounds->LayerMask;v["Enabled"]=bounds->Enabled;data["Scene Query Bounds"]=v; }
+    if (const auto* blur=entity.TryGetComponent<GaussianBlur>()) { py::dict v;v["Size"]=blur->Size;data["Gaussian Blur"]=v; }
+    if (const auto* vignette=entity.TryGetComponent<Vignette>()) { py::dict v;v["Color"]=py::make_tuple(vignette->Color.X,vignette->Color.Y,vignette->Color.Z,vignette->Color.W);v["Intensity"]=vignette->Intensity;v["Smoothness"]=vignette->Smoothness;v["Roundness"]=vignette->Roundness;data["Vignette"]=v; }
+    if (const auto* bounds=entity.TryGetComponent<SceneQueryBounds>()) { py::dict v;v["Shape"]=static_cast<int>(bounds->Shape);v["Center"]=py::make_tuple(bounds->Center.X,bounds->Center.Y,bounds->Center.Z);v["Extents"]=py::make_tuple(bounds->Extents.X,bounds->Extents.Y,bounds->Extents.Z);v["Radius"]=bounds->Radius;v["Layer Mask"]=bounds->LayerMask;data["Scene Query Bounds"]=v; }
     result["component_data"] = data;
     return result;
 }
@@ -125,7 +135,8 @@ public:
     bool HasActiveCamera() const {
         const auto cameras = m_engine->GetScene().GetRegistry().view<Camera>();
         for (const auto handle : cameras)
-            if (cameras.get<Camera>(handle).Active) return true;
+            if (const auto& camera=cameras.get<Camera>(handle);
+                camera.Active && camera.IsEnabled()) return true;
         return false;
     }
     std::string CreateEntity(const std::string& name, const std::string& parent) {
@@ -191,6 +202,19 @@ public:
         else if (type == "Gaussian Blur" && entity.HasComponent<GaussianBlur>()) entity.RemoveComponent<GaussianBlur>();
         else if (type == "Vignette" && entity.HasComponent<Vignette>()) entity.RemoveComponent<Vignette>();
         else if (type == "Scene Query Bounds" && entity.HasComponent<SceneQueryBounds>()) entity.RemoveComponent<SceneQueryBounds>();
+        else return false;
+        return true;
+    }
+    bool SetComponentEnabled(const std::string& id, const std::string& type, bool enabled) {
+        Entity entity = RequireEntity(id);
+        if (type == "Camera" && entity.HasComponent<Camera>()) entity.SetComponentEnabled<Camera>(enabled);
+        else if (type == "Light" && entity.HasComponent<Light>()) entity.SetComponentEnabled<Light>(enabled);
+        else if (type == "Mesh" && entity.HasComponent<Mesh>()) entity.SetComponentEnabled<Mesh>(enabled);
+        else if (type == "Model Instance" && entity.HasComponent<ModelInstance>()) entity.SetComponentEnabled<ModelInstance>(enabled);
+        else if (type == "Model Node" && entity.HasComponent<ModelNode>()) entity.SetComponentEnabled<ModelNode>(enabled);
+        else if (type == "Gaussian Blur" && entity.HasComponent<GaussianBlur>()) entity.SetComponentEnabled<GaussianBlur>(enabled);
+        else if (type == "Vignette" && entity.HasComponent<Vignette>()) entity.SetComponentEnabled<Vignette>(enabled);
+        else if (type == "Scene Query Bounds" && entity.HasComponent<SceneQueryBounds>()) entity.SetComponentEnabled<SceneQueryBounds>(enabled);
         else return false;
         return true;
     }
@@ -328,6 +352,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
              py::arg("path"), py::arg("parent") = "")
         .def("add_component", &Bazzalt::EditorBridge::EditorHost::AddComponent)
         .def("remove_component", &Bazzalt::EditorBridge::EditorHost::RemoveComponent)
+        .def("set_component_enabled", &Bazzalt::EditorBridge::EditorHost::SetComponentEnabled)
         .def("component_types", &Bazzalt::EditorBridge::EditorHost::ComponentTypes)
         .def("scene_info", &Bazzalt::EditorBridge::EditorHost::SceneInfo)
         .def("capture_scene", &Bazzalt::EditorBridge::EditorHost::CaptureScene)

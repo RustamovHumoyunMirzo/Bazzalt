@@ -5,7 +5,6 @@
 namespace Bazzalt {
 
 struct GaussianBlur : Component {
-    bool Enabled = true;
     // Blur radius multiplier in pixels. Zero produces an unchanged image.
     float Size = 1.0f;
 };

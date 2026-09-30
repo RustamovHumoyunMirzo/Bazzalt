@@ -148,6 +148,12 @@ class RuntimeService(QObject):
         if result:self.SceneChanged.emit()
         return result
 
+    def SetComponentEnabled(self,entity_id:str,component_type:str,enabled:bool)->bool:
+        # This changes component state, not scene structure. Emitting
+        # SceneChanged here rebuilds the hierarchy during the checkbox click
+        # and transiently clears its selection.
+        return bool(self._host and hasattr(self._host,"set_component_enabled") and self._host.set_component_enabled(entity_id,component_type,enabled))
+
     def SetParent(self, entity_id: str, parent_id: str = "") -> bool:
         result = bool(self._host and self._host.set_parent(entity_id, parent_id))
         if result: self.SceneChanged.emit()

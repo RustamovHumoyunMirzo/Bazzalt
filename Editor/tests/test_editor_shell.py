@@ -8,7 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication, QAbstractItemView, QLabel, QLineEdit, QSizePolicy, QWidget
 from PySide6.QtGui import QColor
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtGui import QKeyEvent, QMouseEvent
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtCore import QPoint, QPointF
 
@@ -47,8 +47,12 @@ class EditorShellTests(unittest.TestCase):
         self.Window.close()
 
     def test_shared_theme_updates_docking(self) -> None:
+        self.Window.Controller.RefreshHierarchy()
+        dark_icon=self.Window.Hierarchy.Tree.topLevelItem(0).icon(0).cacheKey()
         self.Themes.SetTheme(Theme.light())
         self.assertEqual(self.Window.Docking.theme.background, Theme.light().background)
+        light_icon=self.Window.Hierarchy.Tree.topLevelItem(0).icon(0).cacheKey()
+        self.assertNotEqual(dark_icon,light_icon)
 
     def test_shortcuts_use_custom_menu_rendering(self) -> None:
         self.assertIsInstance(self.Window.MenuBar.FileMenu, EditorMenu)
@@ -177,6 +181,12 @@ class EditorShellTests(unittest.TestCase):
         self.assertGreaterEqual(len(self.Window.Properties._sections),6)
         layer=self.Window.Properties._sections["runtime.Scene Query Bounds"]._fields["Layer Mask"]
         self.assertEqual(layer.GetValue(),4_294_967_295)
+        light_section=self.Window.Properties._sections["runtime.Light"]
+        self.Window.Hierarchy.SetSelectedData([entity_id])
+        light_section.Enabled.setChecked(False);self.Application.processEvents()
+        self.assertEqual(self.Window.Controller.SelectedEntity,entity_id)
+        self.assertEqual(self.Window.Hierarchy.GetSelectedData(),[entity_id])
+        self.assertFalse(self.Window.Runtime.EntityDetails(entity_id)["component_enabled"]["Light"])
         self.Window.Controller.RemoveComponent("runtime.Light")
         self.assertNotIn("runtime.Light",self.Window.Properties._sections)
         self.Window.Controller._AddComponent("Light")
@@ -190,6 +200,12 @@ class EditorShellTests(unittest.TestCase):
         entity_id=self.Window.Runtime.CreateEntity("Game Camera")
         self.assertFalse(self.Window.Runtime.HasActiveCamera())
         self.assertTrue(self.Window.Runtime.AddComponent(entity_id,"Camera"))
+        output.SetGameCameraAvailable(self.Window.Runtime.HasActiveCamera())
+        self.assertIs(output._output_stack.currentWidget(),output.Surface)
+        self.assertTrue(self.Window.Runtime.SetComponentEnabled(entity_id,"Camera",False))
+        output.SetGameCameraAvailable(self.Window.Runtime.HasActiveCamera())
+        self.assertIs(output._output_stack.currentWidget(),output._no_camera)
+        self.assertTrue(self.Window.Runtime.SetComponentEnabled(entity_id,"Camera",True))
         output.SetGameCameraAvailable(self.Window.Runtime.HasActiveCamera())
         self.assertIs(output._output_stack.currentWidget(),output.Surface)
         self.assertTrue(self.Window.Runtime.RemoveComponent(entity_id,"Camera"))
@@ -349,11 +365,12 @@ class EditorShellTests(unittest.TestCase):
         names = [self.Window.AssetBrowser.Browser.item(i).text()
                  for i in range(self.Window.AssetBrowser.Browser.count())]
         self.assertIn("Textures", names)
-        self.assertIn("player.png", names)
+        self.assertIn("player", names)
         self.assertNotIn("player.png.meta", names)
         self.assertEqual(self.Window.AssetBrowser.Browser.dragDropMode(),QAbstractItemView.DragDropMode.DragOnly)
         self.assertEqual(self.Window.AssetBrowser.Browser.supportedDragActions(),Qt.DropAction.CopyAction)
-        player=next(self.Window.AssetBrowser.Browser.item(index) for index in range(self.Window.AssetBrowser.Browser.count()) if self.Window.AssetBrowser.Browser.item(index).text()=="player.png")
+        player=next(self.Window.AssetBrowser.Browser.item(index) for index in range(self.Window.AssetBrowser.Browser.count()) if self.Window.AssetBrowser.Browser.item(index).text()=="player")
+        self.assertEqual(Path(player.data(Qt.ItemDataRole.UserRole)).name,"player.png")
         self.assertTrue(self.Window.AssetBrowser.Browser.mimeData([player]).hasFormat("application/x-bazzalt-asset"))
 
     def test_reset_workspace_restores_closed_panel(self) -> None:
@@ -402,11 +419,26 @@ class EditorShellTests(unittest.TestCase):
     def test_hierarchy_drag_uses_non_destructive_transport(self) -> None:
         self.assertEqual(self.Window.Hierarchy.Tree.supportedDragActions(),Qt.DropAction.CopyAction)
 
-    def test_scene_right_drag_looks_without_orbiting_eye(self) -> None:
+    def test_scene_right_drag_orbits_without_fly_keys(self) -> None:
         surface=self.Window.Scene.Surface;eye=surface._eye;target=tuple(surface._target)
         surface.mousePressEvent(QMouseEvent(QMouseEvent.Type.MouseButtonPress,QPointF(100,100),Qt.MouseButton.RightButton,Qt.MouseButton.RightButton,Qt.KeyboardModifier.NoModifier))
         surface.mouseMoveEvent(QMouseEvent(QMouseEvent.Type.MouseMove,QPointF(130,115),Qt.MouseButton.NoButton,Qt.MouseButton.RightButton,Qt.KeyboardModifier.NoModifier))
+        self.assertNotEqual(surface._eye,eye);self.assertEqual(tuple(surface._target),target)
+
+    def test_scene_right_drag_looks_from_eye_while_flying(self) -> None:
+        surface=self.Window.Scene.Surface;surface._UpdateCamera();eye=surface._eye;target=tuple(surface._target)
+        surface.mousePressEvent(QMouseEvent(QMouseEvent.Type.MouseButtonPress,QPointF(100,100),Qt.MouseButton.RightButton,Qt.MouseButton.RightButton,Qt.KeyboardModifier.NoModifier))
+        surface.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress,Qt.Key.Key_W,Qt.KeyboardModifier.NoModifier))
+        surface.mouseMoveEvent(QMouseEvent(QMouseEvent.Type.MouseMove,QPointF(130,115),Qt.MouseButton.NoButton,Qt.MouseButton.RightButton,Qt.KeyboardModifier.NoModifier))
         self.assertEqual(surface._eye,eye);self.assertNotEqual(tuple(surface._target),target)
+
+    def test_shift_right_drag_pans_scene_camera(self) -> None:
+        surface=self.Window.Scene.Surface;surface._UpdateCamera();eye=Vec3(*surface._eye);target=Vec3(*surface._target)
+        surface.mousePressEvent(QMouseEvent(QMouseEvent.Type.MouseButtonPress,QPointF(100,100),Qt.MouseButton.RightButton,Qt.MouseButton.RightButton,Qt.KeyboardModifier.ShiftModifier))
+        surface.mouseMoveEvent(QMouseEvent(QMouseEvent.Type.MouseMove,QPointF(130,115),Qt.MouseButton.NoButton,Qt.MouseButton.RightButton,Qt.KeyboardModifier.ShiftModifier))
+        moved_eye=Vec3(*surface._eye);moved_target=Vec3(*surface._target)
+        self.assertGreater((moved_eye-eye).Length(),0.0)
+        self.assertLess(((moved_eye-eye)-(moved_target-target)).Length(),.0001)
 
     def test_native_orientation_axis_is_clickable(self) -> None:
         surface=self.Window.Scene.Surface;surface.resize(400,400)

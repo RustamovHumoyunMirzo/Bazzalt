@@ -16,7 +16,7 @@ bool IsFinite(Vec3 value) {
 }
 
 bool Accept(Entity entity, const SceneQueryBounds& bounds, const SceneQueryOptions& options) {
-    return (options.IncludeDisabled || bounds.Enabled) &&
+    return (options.IncludeDisabled || bounds.IsEnabled()) &&
            (bounds.LayerMask & options.LayerMask) != 0 &&
            (!options.Filter || options.Filter(entity));
 }

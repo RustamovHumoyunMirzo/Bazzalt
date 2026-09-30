@@ -5,20 +5,31 @@ from __future__ import annotations
 import json
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtGui import QAction, QIcon, QPaintEvent
 from PySide6.QtWidgets import (
-    QApplication, QFrame, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton, QScrollArea, QSizePolicy, QToolButton, QVBoxLayout,
+    QApplication, QCheckBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton, QScrollArea, QSizePolicy, QStyle, QStyleOptionButton, QStylePainter, QToolButton, QVBoxLayout,
     QWidget,
 )
 
 from ...localization import LocalizationManager
 
 
+class CenteredCheckBox(QCheckBox):
+    """Paint a stylesheet-aware checkbox indicator exactly at widget center."""
+    def paintEvent(self,event:QPaintEvent)->None:
+        option=QStyleOptionButton();self.initStyleOption(option)
+        indicator=self.style().subElementRect(QStyle.SubElement.SE_CheckBoxIndicator,option,self)
+        option.rect=QStyle.alignedRect(self.layoutDirection(),Qt.AlignmentFlag.AlignCenter,indicator.size(),self.rect())
+        painter=QStylePainter(self);painter.drawControl(QStyle.ControlElement.CE_CheckBox,option)
+
+
 class ComponentSection(QFrame):
     RemoveRequested = Signal()
+    EnabledChanged = Signal(bool)
     def __init__(self, title: str, expanded: bool = True, removable: bool = True,
                  localization: LocalizationManager | None = None,
-                 icon: QIcon | None = None, parent: QWidget | None = None) -> None:
+                 icon: QIcon | None = None, enabled:bool|None=None,
+                 parent: QWidget | None = None) -> None:
         super().__init__(parent); self.setObjectName("ComponentSection")
         layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0);layout.setSpacing(0)
         header=QWidget(self);header.setObjectName("ComponentHeaderRow");headerLayout=QHBoxLayout(header);headerLayout.setContentsMargins(3,0,2,0);headerLayout.setSpacing(3)
@@ -31,7 +42,14 @@ class ComponentSection(QFrame):
         self.Form.setHorizontalSpacing(14);self.Form.setVerticalSpacing(3);self.Form.setColumnStretch(1,1)
         self.IconLabel=QLabel(header);self.IconLabel.setObjectName("ComponentIcon");self.IconLabel.setFixedSize(16,16);self.IconLabel.setVisible(icon is not None and not icon.isNull())
         if icon is not None and not icon.isNull():self.IconLabel.setPixmap(icon.pixmap(16,16))
-        headerLayout.addWidget(self.IconLabel);headerLayout.addWidget(self.Toggle,1)
+        headerLayout.addWidget(self.IconLabel)
+        enabledSlot=QWidget(header);enabledSlot.setObjectName("ComponentEnabledSlot");enabledSlot.setFixedSize(20,21)
+        enabledLayout=QHBoxLayout(enabledSlot);enabledLayout.setContentsMargins(0,0,0,0);enabledLayout.setSpacing(0)
+        self.Enabled=CenteredCheckBox(enabledSlot);self.Enabled.setObjectName("ComponentEnabled");self.Enabled.setFixedSize(20,21);self.Enabled.setToolTip("Enable component");enabledSlot.setVisible(enabled is not None)
+        if enabled is not None:self.Enabled.setChecked(enabled)
+        self.Enabled.toggled.connect(self.EnabledChanged)
+        enabledLayout.addWidget(self.Enabled,0,Qt.AlignmentFlag.AlignCenter)
+        headerLayout.addWidget(enabledSlot);headerLayout.addWidget(self.Toggle,1)
         options=QToolButton(header);options.setObjectName("ComponentOptionsButton");options.setText("⋮");options.clicked.connect(lambda:self._ShowOptions(options));headerLayout.addWidget(options)
         layout.addWidget(header);layout.addWidget(self.Body)
         self.Toggle.toggled.connect(self.SetExpanded);self.SetExpanded(expanded)
@@ -97,9 +115,10 @@ class PropertiesPanel(QWidget):
 
     def AddComponentSection(self, component_id: str, title: str,
                             expanded: bool = True, removable: bool = True,
-                            icon: QIcon | None = None) -> ComponentSection:
+                            icon: QIcon | None = None,
+                            enabled:bool|None=None) -> ComponentSection:
         if component_id in self._sections:return self._sections[component_id]
-        section=ComponentSection(title,expanded,removable,self._localization,icon,self.Container);section.RemoveRequested.connect(lambda:self.RemoveComponentRequested.emit(component_id));self._sections[component_id]=section
+        section=ComponentSection(title,expanded,removable,self._localization,icon,enabled,self.Container);section.RemoveRequested.connect(lambda:self.RemoveComponentRequested.emit(component_id));self._sections[component_id]=section
         self.ComponentsLayout.insertWidget(self.ComponentsLayout.count()-1,section);return section
 
     def RemoveComponentSection(self, component_id: str) -> bool:

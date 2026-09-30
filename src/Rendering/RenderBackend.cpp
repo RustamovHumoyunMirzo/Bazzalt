@@ -7,8 +7,6 @@
 #include <filament/Camera.h>
 #include <filament/Renderer.h>
 #include <filament/Scene.h>
-#include <filament/Skybox.h>
-#include <filament/IndirectLight.h>
 #include <filament/Texture.h>
 #include <filament/TextureSampler.h>
 #include <filament/SwapChain.h>
@@ -25,11 +23,7 @@
 #include <math/mat4.h>
 #include <math/vec3.h>
 #include <utils/EntityManager.h>
-#include <image/Ktx1Bundle.h>
-#include <ktxreader/Ktx1Reader.h>
 #include "Rendering/RenderAssets.h"
-#include "default_environment_ibl.h"
-#include "default_environment_skybox.h"
 #include "editor_gizmo_filamat.h"
 #include "editor_icon_filamat.h"
 #include "scene_cam_rgba.h"
@@ -103,20 +97,6 @@ bool RenderBackend::Initialize() {
     m_scene = m_engine->createScene();
     if (m_renderer == nullptr || m_scene == nullptr) { Shutdown(); return false; }
     m_renderer->setClearOptions({.clearColor = {0.055, 0.065, 0.085, 1.0}, .clear = true});
-    auto* iblBundle = new image::Ktx1Bundle(Embedded::DefaultEnvironmentIbl,
-                                            Embedded::DefaultEnvironmentIblSize);
-    auto* skyboxBundle = new image::Ktx1Bundle(Embedded::DefaultEnvironmentSkybox,
-                                               Embedded::DefaultEnvironmentSkyboxSize);
-    m_environmentIblTexture = ktxreader::Ktx1Reader::createTexture(m_engine, iblBundle, false);
-    m_environmentSkyboxTexture = ktxreader::Ktx1Reader::createTexture(m_engine, skyboxBundle, false);
-    if (m_environmentIblTexture && m_environmentSkyboxTexture) {
-        m_indirectLight = filament::IndirectLight::Builder()
-            .reflections(m_environmentIblTexture).intensity(30000.0f).build(*m_engine);
-        m_skybox = filament::Skybox::Builder()
-            .environment(m_environmentSkyboxTexture).intensity(30000.0f).showSun(false).build(*m_engine);
-        m_scene->setIndirectLight(m_indirectLight);
-        m_scene->setSkybox(m_skybox);
-    }
     m_gizmo = std::make_unique<GizmoResource>();
     m_gizmo->Material = filament::Material::Builder()
         .package(Embedded::EditorGizmoFilamat, Embedded::EditorGizmoFilamatSize).build(*m_engine);
@@ -380,13 +360,6 @@ void RenderBackend::Shutdown() {
         if (m_gizmo->Material) m_engine->destroy(m_gizmo->Material);
         m_gizmo.reset();
     }
-    if (m_scene) { m_scene->setSkybox(nullptr); m_scene->setIndirectLight(nullptr); }
-    if (m_skybox) m_engine->destroy(m_skybox);
-    if (m_indirectLight) m_engine->destroy(m_indirectLight);
-    if (m_environmentSkyboxTexture) m_engine->destroy(m_environmentSkyboxTexture);
-    if (m_environmentIblTexture) m_engine->destroy(m_environmentIblTexture);
-    m_skybox = nullptr; m_indirectLight = nullptr;
-    m_environmentSkyboxTexture = nullptr; m_environmentIblTexture = nullptr;
     if (m_scene != nullptr) m_engine->destroy(m_scene);
     if (m_renderer != nullptr) m_engine->destroy(m_renderer);
     m_scene = nullptr;

@@ -185,12 +185,15 @@ class EditorController(QObject):
         scale.ValueChanged.connect(Commit)
         for field in (position, rotation, scale): field.ValueChanged.connect(lambda _=None:self.SetDirty(True))
         component_data = details.get("component_data", {})
+        component_enabled=details.get("component_enabled",{})
         for component in details.get("components", ())[1:]:
             if component != "Transform":
                 section = self.Window.Properties.AddComponentSection(
                     f"runtime.{component}", str(component), expanded=False,
-                    icon=self._ComponentIcon(str(component))
+                    icon=self._ComponentIcon(str(component)),
+                    enabled=bool(component_enabled.get(component,True))
                 )
+                section.EnabledChanged.connect(lambda enabled,c=component:self._SetComponentEnabled([inspected_entity],str(c),enabled))
                 for property_name, value in dict(component_data.get(component, {})).items():
                     editor = self._ComponentEditor(inspected_entity, component, property_name, value)
                     if editor is not None: section.AddField(property_name, editor)
@@ -215,11 +218,21 @@ class EditorController(QObject):
         shared=set(details[0].get("components",()))
         for value in details[1:]:shared.intersection_update(value.get("components",()))
         for component in sorted(shared-set(("Transform",))):
-            section=self.Window.Properties.AddComponentSection(f"multi.{component}",component,expanded=False,icon=self._ComponentIcon(component))
+            states=[bool(value.get("component_enabled",{}).get(component,True)) for value in details]
+            section=self.Window.Properties.AddComponentSection(f"multi.{component}",component,expanded=False,icon=self._ComponentIcon(component),enabled=all(states))
+            section.EnabledChanged.connect(lambda enabled,c=component:self._SetComponentEnabled(unique,c,enabled))
             fields=[dict(value.get("component_data",{}).get(component,{})) for value in details]
             for name in set.intersection(*(set(value) for value in fields)) if fields else ():
                 values=[value[name] for value in fields];section.AddField(name,QLabel(str(values[0]) if all(v==values[0] for v in values) else "— Mixed —"))
         self.Window.Scene.Surface.SetSelection(center);self._UpdateGizmo()
+
+    def _SetComponentEnabled(self,entities:list[str],component:str,enabled:bool)->None:
+        if self._updating_inspector:return
+        self.History.Begin(("Enable " if enabled else "Disable ")+component)
+        results=[self.Runtime.SetComponentEnabled(entity,component,enabled) for entity in entities]
+        if any(results):
+            self.History.Commit();self.SetDirty(True)
+        else:self.History.Cancel()
 
     def SelectSceneBox(self,entity_ids:list[str],additive:bool=False)->None:
         desired=list(dict.fromkeys((self._box_selection_base if additive else [])+entity_ids))
@@ -253,7 +266,22 @@ class EditorController(QObject):
     def SelectAsset(self,path)->None:
         path=Path(path);self.SelectedEntity="";self.SelectedEntities=[];self.Window.Scene.Surface.SetSelection(None);self.Runtime.SetGizmo("",0);self.Window.Properties.Clear();self.Window.Properties.AddComponentButton.setVisible(False)
         section=self.Window.Properties.AddComponentSection("asset",self.Window.Localization.Translate("properties.asset"),removable=False)
-        for label,value in (("Name",path.name),("Type",path.suffix.lower() or "Folder"),("Path",str(path)),("Size",str(path.stat().st_size) if path.is_file() else "—")):section.AddField(self.Window.Localization.Translate(f"properties.asset_{label.lower()}") if label!="Name" else self.Window.Localization.Translate("properties.asset_name"),QLabel(value))
+        for label,value in (("Name",path.name),("Type",path.suffix.lower() or "Folder"),("Path",str(path)),("Size",self._FormatAssetSize(self._AssetSize(path)))):section.AddField(self.Window.Localization.Translate(f"properties.asset_{label.lower()}") if label!="Name" else self.Window.Localization.Translate("properties.asset_name"),QLabel(value))
+
+    @staticmethod
+    def _AssetSize(path:Path)->int:
+        try:
+            if path.is_symlink():return 0
+            if path.is_file():return path.stat().st_size
+            return sum(child.stat().st_size for child in path.rglob("*") if child.is_file() and not child.is_symlink())
+        except OSError:return 0
+
+    @staticmethod
+    def _FormatAssetSize(size:int)->str:
+        value=float(size)
+        for unit in ("B","KB","MB","GB","TB"):
+            if value<1024.0 or unit=="TB":return f"{int(value)} {unit}" if unit=="B" else f"{value:.1f} {unit}"
+            value/=1024.0
 
     def _RefreshInspectorValues(self) -> None:
         if not self.SelectedEntity:return
@@ -266,6 +294,10 @@ class EditorController(QObject):
         values.update({f"runtime.{name}":dict(fields) for name,fields in details.get("component_data",{}).items()})
         self._updating_inspector=True
         try:
+            for component,state in details.get("component_enabled",{}).items():
+                section=self.Window.Properties._sections.get(f"runtime.{component}")
+                if section is not None:
+                    blocker=QSignalBlocker(section.Enabled);section.Enabled.setChecked(bool(state));del blocker
             for section_id,fields in values.items():
                 section=self.Window.Properties._sections.get(section_id)
                 if section is None:continue

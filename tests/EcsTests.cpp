@@ -32,6 +32,7 @@ protected:
     void OnUpdate(Bazzalt::Scene& scene, float deltaTime) override {
         auto view = GetView(scene.GetRegistry());
         for (const auto handle : view) {
+            if (!AreComponentsEnabled(view, handle)) continue;
             auto& transform = view.get<Bazzalt::Transform>(handle);
             transform.Position += view.get<Velocity>(handle).Value * deltaTime;
         }
@@ -53,6 +54,10 @@ int main() {
     assert(entity.HasComponent<Velocity>());
     assert(&entity.GetComponent<Velocity>() == &velocity);
     assert(entity.TryGetComponent<Velocity>() == &velocity);
+    assert(entity.IsComponentEnabled<Velocity>());
+    entity.SetComponentEnabled<Velocity>(false);
+    assert(!entity.IsComponentEnabled<Velocity>());
+    entity.SetComponentEnabled<Velocity>(true);
 
     scene.AddSystem<MovementSystem>();
     assert(scene.HasSystem<MovementSystem>());

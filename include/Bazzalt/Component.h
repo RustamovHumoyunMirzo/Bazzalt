@@ -4,9 +4,17 @@
 
 namespace Bazzalt {
 
-// Marker base for components managed by Bazzalt's ECS. It intentionally has
-// no virtual functions or state so components remain lightweight data types.
-struct Component {};
+// Common non-virtual component state. Components stay lightweight data types,
+// while every user-defined component receives the same enable/disable API.
+class Component {
+public:
+    [[nodiscard]] bool IsEnabled() const { return Enabled; }
+    void SetEnabled(bool enabled) { Enabled = enabled; }
+
+    // Public for plain-data serialization and tooling. Prefer the methods on
+    // Entity when changing this state in gameplay code.
+    bool Enabled = true;
+};
 
 // Component lookup is local by default. Games may explicitly specialize this
 // trait for data that should fall back to the nearest ancestor.

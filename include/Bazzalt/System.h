@@ -42,6 +42,11 @@ protected:
     static auto GetView(const entt::registry& registry) {
         return registry.template view<Components...>();
     }
+
+    template<typename View, typename EntityType>
+    static bool AreComponentsEnabled(const View& view, EntityType entity) {
+        return (view.template get<Components>(entity).IsEnabled() && ...);
+    }
 };
 
 } // namespace Bazzalt

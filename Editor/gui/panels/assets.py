@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 from PySide6.QtCore import QFile,QMimeData,QSize,Qt,Signal
 from PySide6.QtGui import QColor,QIcon,QLinearGradient,QPainter,QPixmap,QRadialGradient
-from PySide6.QtWidgets import (QAbstractItemView,QFileDialog,QListWidget,QListWidgetItem,QMenu,QSplitter,QTreeWidget,QTreeWidgetItem,QVBoxLayout,QWidget)
+from PySide6.QtWidgets import (QAbstractItemView,QFileDialog,QLineEdit,QListWidget,QListWidgetItem,QMenu,QSplitter,QStyledItemDelegate,QTreeWidget,QTreeWidgetItem,QVBoxLayout,QWidget)
 from ...localization import LocalizationManager
 
 IMAGE_EXTENSIONS={".png",".jpg",".jpeg",".bmp",".gif",".webp"}
@@ -22,18 +22,26 @@ class AssetList(QListWidget):
         if paths:mime.setData("application/x-bazzalt-asset",paths[0].encode());mime.setData("application/x-bazzalt-assets","\n".join(paths).encode())
         return mime
 
+class AssetNameDelegate(QStyledItemDelegate):
+    """Keeps compact labels in the grid while exposing the real name for edits."""
+    def setEditorData(self,editor,index)->None:
+        path=index.data(Qt.ItemDataRole.UserRole)
+        if isinstance(editor,QLineEdit) and path:
+            editor.setText(Path(path).name);editor.selectAll();return
+        super().setEditorData(editor,index)
+
 class AssetBrowserPanel(QWidget):
     AssetActivated=Signal(object);AssetSelected=Signal(object);ContextMenuRequested=Signal(object,object);SelectionCleared=Signal()
     def __init__(self,localization:LocalizationManager,resources=None)->None:
         super().__init__();self._localization=localization;self._resources=resources;self._root=None;self._folder=None;self._clipboard=[]
         layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0);splitter=QSplitter(Qt.Orientation.Horizontal);splitter.setChildrenCollapsible(False)
         self.Tree=QTreeWidget();self.Tree.setHeaderHidden(True);self.Tree.currentItemChanged.connect(self._FolderSelected)
-        self.Browser=AssetList();self.Browser.setViewMode(QListWidget.ViewMode.IconMode);self.Browser.setIconSize(QSize(48,48));self.Browser.setGridSize(QSize(104,86));self.Browser.setResizeMode(QListWidget.ResizeMode.Adjust);self.Browser.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.Browser=AssetList();self.Browser.setItemDelegate(AssetNameDelegate(self.Browser));self.Browser.setViewMode(QListWidget.ViewMode.IconMode);self.Browser.setIconSize(QSize(48,48));self.Browser.setGridSize(QSize(104,86));self.Browser.setResizeMode(QListWidget.ResizeMode.Adjust);self.Browser.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.Browser.setUniformItemSizes(True);self.Browser.setWordWrap(False);self.Browser.setTextElideMode(Qt.TextElideMode.ElideMiddle);self.Browser.setSpacing(2);self.Browser.setMovement(QListWidget.Movement.Static)
         # QListView::setMovement resets drag/drop mode, so drag-source setup
         # must be applied after all icon-layout configuration.
         self.Browser.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly);self.Browser.setDragEnabled(True);self.Browser.setDefaultDropAction(Qt.DropAction.CopyAction);self.Browser.setSupportedDragActions(Qt.DropAction.CopyAction)
-        self.Browser.itemDoubleClicked.connect(self._Activate);self.Browser.itemSelectionChanged.connect(self._SelectionChanged);self.Browser.itemChanged.connect(self._ItemRenamed);self.Browser.EmptyClicked.connect(self.SelectionCleared);self.Tree.itemClicked.connect(lambda *_:self.SelectionCleared.emit())
+        self.Browser.itemDoubleClicked.connect(self._Activate);self.Browser.itemSelectionChanged.connect(self._SelectionChanged);self.Browser.itemChanged.connect(self._ItemRenamed);self.Browser.EmptyClicked.connect(self.SelectionCleared);self.Tree.itemClicked.connect(self._TreeSelected)
         for widget in (self.Tree,self.Browser):widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);widget.customContextMenuRequested.connect(lambda pos,w=widget:self._ShowContextMenu(w,pos))
         self.Tree.setMinimumWidth(110);self.Browser.setMinimumWidth(140);splitter.addWidget(self.Tree);splitter.addWidget(self.Browser);splitter.setStretchFactor(0,1);splitter.setStretchFactor(1,3);splitter.setSizes([220,700]);layout.addWidget(splitter)
     def SetProjectRoot(self,root)->None:self._root=Path(root).resolve() if root else None;self.Refresh()
@@ -51,7 +59,7 @@ class AssetBrowserPanel(QWidget):
             pixmap=QPixmap(64,64);pixmap.fill(Qt.GlobalColor.transparent);painter=QPainter(pixmap);gradient=QRadialGradient(25,20,35);gradient.setColorAt(0,QColor("#f4f4f4"));gradient.setColorAt(.35,QColor("#9aa5b5"));gradient.setColorAt(1,QColor("#1d222a"));painter.setBrush(gradient);painter.setPen(QColor("#59616d"));painter.drawEllipse(7,7,50,50);painter.end();return QIcon(pixmap)
         if ext in ENVIRONMENT_EXTENSIONS:
             pixmap=QPixmap(64,64);gradient=QLinearGradient(0,0,0,64);gradient.setColorAt(0,QColor("#456f9b"));gradient.setColorAt(.55,QColor("#d4b678"));gradient.setColorAt(1,QColor("#252d25"));painter=QPainter(pixmap);painter.fillRect(pixmap.rect(),gradient);painter.end();return QIcon(pixmap)
-        name="dir.svg" if path.is_dir() else "nativecpp.svg" if ext in {".h",".hpp",".c",".cc",".cpp"} else "3dfiles.svg" if ext in MODEL_EXTENSIONS else "shader.svg" if ext in SHADER_EXTENSIONS else "file.svg"
+        name="dir.svg" if path.is_dir() else "scene.svg" if ext==".bscene" else "nativecpp.svg" if ext in {".h",".hpp",".c",".cc",".cpp"} else "3dfiles.svg" if ext in MODEL_EXTENSIONS else "shader.svg" if ext in SHADER_EXTENSIONS else "file.svg"
         return self._resources.Icon(f"icons/abrowser/{name}") if self._resources else QIcon()
     def Refresh(self,select=None)->None:
         previous_folder=self._folder if self._folder is not None and self._InsideRoot(self._folder) else self._root
@@ -81,7 +89,12 @@ class AssetBrowserPanel(QWidget):
         except OSError:return
         for entry in entries:
             if entry.name.endswith(".meta"):continue
-            asset=QListWidgetItem(self._Icon(entry),entry.name);asset.setSizeHint(QSize(104,86));asset.setTextAlignment(Qt.AlignmentFlag.AlignHCenter|Qt.AlignmentFlag.AlignBottom);asset.setData(Qt.ItemDataRole.UserRole,entry);asset.setData(Qt.ItemDataRole.UserRole+1,entry.name);asset.setFlags(asset.flags()|Qt.ItemFlag.ItemIsEditable|Qt.ItemFlag.ItemIsDragEnabled);self.Browser.addItem(asset)
+            asset=QListWidgetItem(self._Icon(entry),self._DisplayName(entry));asset.setSizeHint(QSize(104,86));asset.setTextAlignment(Qt.AlignmentFlag.AlignHCenter|Qt.AlignmentFlag.AlignBottom);asset.setData(Qt.ItemDataRole.UserRole,entry);asset.setData(Qt.ItemDataRole.UserRole+1,entry.name);asset.setFlags(asset.flags()|Qt.ItemFlag.ItemIsEditable|Qt.ItemFlag.ItemIsDragEnabled);self.Browser.addItem(asset)
+    @staticmethod
+    def _DisplayName(path)->str:
+        path=Path(path);return path.name if path.is_dir() else path.stem
+    def _TreeSelected(self,item,_column)->None:
+        if item:self.AssetSelected.emit(Path(item.data(0,Qt.ItemDataRole.UserRole)))
     def _SelectionChanged(self)->None:
         items=self.Browser.selectedItems()
         if len(items)==1:self.AssetSelected.emit(items[0].data(Qt.ItemDataRole.UserRole))
@@ -112,11 +125,14 @@ class AssetBrowserPanel(QWidget):
         self.Refresh(created)
     def _ItemRenamed(self,item)->None:
         old=Path(item.data(Qt.ItemDataRole.UserRole));name=item.text().strip()
-        if not name or name==item.data(Qt.ItemDataRole.UserRole+1):return
+        if not name or name==item.data(Qt.ItemDataRole.UserRole+1):
+            self.Browser.blockSignals(True);item.setText(self._DisplayName(old));self.Browser.blockSignals(False);return
         target=old.with_name(name)
-        if not self._InsideRoot(target) or target.exists():item.setText(old.name);return
+        if not self._InsideRoot(target) or target.exists():
+            self.Browser.blockSignals(True);item.setText(self._DisplayName(old));self.Browser.blockSignals(False);return
         try:old.rename(target)
-        except OSError:item.setText(old.name);return
+        except OSError:
+            self.Browser.blockSignals(True);item.setText(self._DisplayName(old));self.Browser.blockSignals(False);return
         meta=old.with_name(old.name+".meta")
         if meta.exists():
             try:meta.rename(target.with_name(target.name+".meta"))

@@ -17,7 +17,6 @@ struct SceneQueryBounds : Component {
     Vec3 Extents{0.5f};
     float Radius = 0.5f;
     std::uint32_t LayerMask = 0xffffffffu;
-    bool Enabled = true;
 };
 
 } // namespace Bazzalt

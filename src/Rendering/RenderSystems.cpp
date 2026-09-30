@@ -84,6 +84,8 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
     for (const auto handle : view) {
         Entity entity = scene.GetEntity(static_cast<Entity::Id>(handle));
         const UUID id = entity.GetUUID();
+        const auto& camera = view.get<Camera>(handle);
+        if (!camera.IsEnabled()) continue;
         alive.insert(id);
         auto found = m_resources.find(id);
         if (found == m_resources.end()) {
@@ -99,7 +101,6 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
             found = m_resources.emplace(id, resource).first;
         }
 
-        const auto& camera = view.get<Camera>(handle);
         auto& resource = found->second;
         const Mat4 world = entity.GetWorldMatrix();
         const Vec3 position = SafeVector(world.TransformPoint({}));
@@ -158,7 +159,7 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
         });
         const auto& depthOfField = camera.PostProcessing.DepthOfField;
         const auto* blur = entity.TryGetComponent<GaussianBlur>();
-        const bool blurEnabled = camera.PostProcessing.Enabled && blur && blur->Enabled &&
+        const bool blurEnabled = camera.PostProcessing.Enabled && blur && blur->IsEnabled() &&
             FiniteOr(blur->Size, 0.0f) > 0.0f;
         const float blurRadius = blurEnabled
             ? std::clamp(FiniteOr(blur->Size, 1.0f), 0.0f, 32.0f) : 0.0f;
@@ -194,7 +195,7 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
         });
         std::vector<CustomPostProcessEffect> customEffects;
         const auto* vignette = entity.TryGetComponent<Vignette>();
-        const bool vignetteEnabled = camera.PostProcessing.Enabled && vignette && vignette->Enabled;
+        const bool vignetteEnabled = camera.PostProcessing.Enabled && vignette && vignette->IsEnabled();
         resource.View->setVignetteOptions({
             .midPoint = vignetteEnabled ? 1.0f - std::clamp(FiniteOr(vignette->Intensity, .35f), 0.0f, 1.0f) : .5f,
             .roundness = vignetteEnabled ? std::clamp(FiniteOr(vignette->Roundness, 1.0f), 0.0f, 1.0f) : .5f,
@@ -257,8 +258,10 @@ void LightSystem::OnUpdate(Scene& scene, float) {
     auto view = GetView(scene.GetRegistry());
     for (const auto handle : view) {
         Entity entity = scene.GetEntity(static_cast<Entity::Id>(handle));
-        const UUID id = entity.GetUUID(); alive.insert(id);
+        const UUID id = entity.GetUUID();
         const auto& light = view.get<Light>(handle);
+        if (!light.IsEnabled()) continue;
+        alive.insert(id);
         const LightType type = SafeLightType(light.Type);
         const Vec3 color = SafeVector(light.Color, {1,1,1});
         const float intensity = std::max(0.0f, FiniteOr(light.Intensity, 0.0f));
@@ -276,7 +279,7 @@ void LightSystem::OnUpdate(Scene& scene, float) {
             utils::Entity resource = engine.getEntityManager().create();
             filament::LightManager::Builder builder(ToFilament(type));
             builder.color(ToFilament(color))
-                   .intensity(light.Enabled ? intensity : 0.0f)
+                   .intensity(intensity)
                    .castShadows(light.CastShadows);
             const Mat4 initialWorld = entity.GetWorldMatrix();
             if (type == LightType::Point || type == LightType::Spot)
@@ -295,7 +298,7 @@ void LightSystem::OnUpdate(Scene& scene, float) {
         }
         const auto instance = manager.getInstance(found->second.Entity);
         manager.setColor(instance, ToFilament(color));
-        manager.setIntensity(instance, light.Enabled ? intensity : 0.0f);
+        manager.setIntensity(instance, intensity);
         const Mat4 world = entity.GetWorldMatrix();
         if (type == LightType::Point || type == LightType::Spot) {
             manager.setFalloff(instance, range);
@@ -330,8 +333,10 @@ void MeshSystem::OnUpdate(Scene& scene, float) {
     auto view = GetView(scene.GetRegistry());
     for (const auto handle : view) {
         Entity entity = scene.GetEntity(static_cast<Entity::Id>(handle));
-        const UUID id = entity.GetUUID(); alive.insert(id);
+        const UUID id = entity.GetUUID();
         const auto& mesh = view.get<Mesh>(handle);
+        if (!mesh.IsEnabled()) continue;
+        alive.insert(id);
         auto found = m_resources.find(id);
         if (found != m_resources.end() &&
             (found->second.MeshAsset != mesh.MeshAsset || found->second.Materials != mesh.Materials)) {

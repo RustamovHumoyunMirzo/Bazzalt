@@ -14,8 +14,6 @@ class Renderer;
 class Scene;
 class View;
 class Texture;
-class Skybox;
-class IndirectLight;
 }
 
 namespace Bazzalt::Runtime {
@@ -84,10 +82,6 @@ private:
     std::unordered_map<filament::View*, std::vector<CustomPostProcessEffect>> m_postProcessEffects;
     std::unique_ptr<RenderAssets> m_assets;
     std::unordered_map<std::uint64_t, std::unique_ptr<ViewportResource>> m_viewports;
-    filament::Texture* m_environmentIblTexture = nullptr;
-    filament::Texture* m_environmentSkyboxTexture = nullptr;
-    filament::Skybox* m_skybox = nullptr;
-    filament::IndirectLight* m_indirectLight = nullptr;
     std::unique_ptr<GizmoResource> m_gizmo;
     bool m_gizmoVisible = false;
     float m_gizmoX = 0, m_gizmoY = 0, m_gizmoZ = 0;

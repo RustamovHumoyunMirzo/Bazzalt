@@ -19,7 +19,6 @@ struct Light : Component {
     float SunHaloSize = 10.0f;
     float SunHaloFalloff = 80.0f;
     bool CastShadows = true;
-    bool Enabled = true;
 };
 
 } // namespace Bazzalt

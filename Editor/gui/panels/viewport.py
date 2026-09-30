@@ -110,6 +110,15 @@ class NativeRenderSurface(QWidget):
                       self._eye[2]-self._distance*radial[2]]
         self.Runtime.SetSceneCamera(self.ViewportId,self._eye,tuple(self._target));self.CameraChanged.emit(self._yaw,self._pitch)
 
+    def _PanCamera(self,delta:QPoint)->None:
+        """Translate the scene camera parallel to its current view plane."""
+        eye=Vec3(*self._eye);forward=(Vec3(*self._target)-eye).Normalized()
+        right=forward.Cross(Vec3(0,1,0)).Normalized();up=right.Cross(forward).Normalized()
+        scale=max(.0001,self._distance*.0015)
+        step=right*(-delta.x()*scale)+up*(delta.y()*scale)
+        self._target[0]+=step.X;self._target[1]+=step.Y;self._target[2]+=step.Z
+        self._UpdateCamera()
+
     def SetSelection(self, position) -> None:
         self._selection = Vec3(*position) if position is not None else None
         if position is None:self._SetHover(None)
@@ -237,7 +246,15 @@ class NativeRenderSurface(QWidget):
                 prior=self._last_scale;value=result.Scale;step=Vec3(value.X/prior.X,value.Y/prior.Y,value.Z/prior.Z);self._last_scale=value;self.ScaleDragged.emit(step)
             return
         if event.buttons() & Qt.MouseButton.RightButton:
-            self._yaw -= delta.x() * .35; self._pitch = max(-89.0, min(89.0, self._pitch + delta.y() * .35)); self._LookFromEye()
+            movement_keys={Qt.Key.Key_W,Qt.Key.Key_A,Qt.Key.Key_S,Qt.Key.Key_D,Qt.Key.Key_Q,Qt.Key.Key_E}
+            if event.modifiers()&Qt.KeyboardModifier.ShiftModifier and not self._keys.intersection(movement_keys):
+                self._PanCamera(delta)
+            else:
+                self._yaw-=delta.x()*.35;self._pitch=max(-89.0,min(89.0,self._pitch+delta.y()*.35))
+                # RMB alone is the usual editor orbit. Once fly keys are held,
+                # preserve the eye and turn like a first-person camera.
+                if self._keys.intersection(movement_keys):self._LookFromEye()
+                else:self._UpdateCamera()
         elif event.buttons() & Qt.MouseButton.MiddleButton:
             scale = self._distance * .0015
             self._target[0] += delta.x() * scale; self._target[1] -= delta.y() * scale; self._UpdateCamera()

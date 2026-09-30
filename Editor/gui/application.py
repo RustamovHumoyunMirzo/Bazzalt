@@ -101,6 +101,12 @@ class Editor(QMainWindow):
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.Toolbar)
         self.setCentralWidget(self.Docking)
         self.Controller = EditorController(self, self.Runtime)
+        # Hierarchy row icons are theme-specific SVGs rather than palette icons.
+        # Rebuild the rows when the theme changes so already-visible objects do
+        # not retain the previous theme's low-contrast artwork.
+        self.ThemeManager.ThemeChanged.connect(
+            lambda _: self.Controller.RefreshHierarchy()
+        )
 
         # Lower-case aliases preserve the original prototype's attributes.
         self.docking = self.Docking
