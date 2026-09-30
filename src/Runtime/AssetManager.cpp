@@ -22,6 +22,7 @@ namespace Bazzalt {
 namespace {
 std::vector<Runtime::Engine*> Engines;
 Runtime::Engine* ActiveEngine() { return Engines.empty() ? nullptr : Engines.back(); }
+std::string PathUtf8(const std::filesystem::path& path) { const auto value=path.u8string();return {reinterpret_cast<const char*>(value.data()),value.size()}; }
 
 std::string NodeText(ryml::ConstNodeRef node) {
     const auto value = node.val();
@@ -53,7 +54,7 @@ bool ReadArray(ryml::ConstNodeRef node, std::array<float, Size>& values) {
 std::string ReadModelJson(const std::filesystem::path& path) {
     std::ifstream stream(path, std::ios::binary);
     if (!stream) return {};
-    std::string extension = path.extension().string();
+    std::string extension = PathUtf8(path.extension());
     std::transform(extension.begin(), extension.end(), extension.begin(),
         [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     if (extension != ".glb")
@@ -143,7 +144,7 @@ bool AssetManager::IsAssetReady(UUID id) {
 std::optional<ModelAsset> AssetManager::LoadModel(UUID id) {
     const auto asset = GetAsset(id);
     if (!asset || asset->State != AssetState::Ready) return std::nullopt;
-    std::string extension = asset->SourcePath.extension().string();
+    std::string extension = PathUtf8(asset->SourcePath.extension());
     std::transform(extension.begin(), extension.end(), extension.begin(),
         [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     if (extension != ".gltf" && extension != ".glb")
@@ -154,7 +155,7 @@ std::optional<ModelAsset> AssetManager::LoadModel(UUID id) {
         auto tree = ryml::parse_in_arena(ryml::csubstr(json.data(), json.size()));
         const auto root = tree.rootref();
         if (!root.has_child("nodes")) return std::nullopt;
-        ModelAsset model; model.Id = id; model.Name = asset->SourcePath.stem().string();
+        ModelAsset model; model.Id = id; model.Name = PathUtf8(asset->SourcePath.stem());
         const auto sourceNodes = root["nodes"];
         model.Nodes.resize(sourceNodes.num_children());
         std::uint32_t index = 0;

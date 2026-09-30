@@ -72,7 +72,7 @@ std::string HashFile(const std::filesystem::path& path) {
 }
 
 std::string LowerExtension(const std::filesystem::path& path) {
-    std::string extension = path.extension().string();
+    std::string extension = PathUtf8(path.extension());
     std::transform(extension.begin(), extension.end(), extension.begin(),
         [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
     return extension;
@@ -120,7 +120,7 @@ bool CollectGltfUris(const std::filesystem::path& source,
                 if (child.has_key() && Key(child) == "uri" && child.has_val()) {
                     const std::string uri = Text(child);
                     if (uri.rfind("data:", 0) == 0) continue;
-                    const std::filesystem::path relative(uri);
+                    const std::filesystem::path relative=std::filesystem::u8path(uri);
                     if (relative.is_absolute() || relative.empty()) {
                         error = "glTF contains a non-local resource URI: " + uri; return false;
                     }
@@ -209,7 +209,7 @@ public:
             for (const unsigned char byte : value) { hash ^= byte; hash *= 1099511628211ULL; }
         };
         append(HashFile(source));
-        for (const auto& uri : uris) { append(uri.generic_string()); append(HashFile(source.parent_path() / uri)); }
+        for (const auto& uri : uris) { append(PathUtf8(uri)); append(HashFile(source.parent_path() / uri)); }
         std::ostringstream text; text << std::hex << std::setfill('0') << std::setw(16) << hash;
         return text.str();
     }
@@ -462,7 +462,7 @@ bool AssetDatabase::LoadMetadata(const std::filesystem::path& path, Metadata& me
             return false;
         }
         if (root.has_child("SourceHash")) metadata.SourceHash = Text(root["SourceHash"]);
-        if (root.has_child("CachePath")) metadata.CachePath = Text(root["CachePath"]);
+        if (root.has_child("CachePath")) metadata.CachePath = std::filesystem::u8path(Text(root["CachePath"]));
         if (root.has_child("Settings")) {
             for (const ryml::ConstNodeRef child : root["Settings"].children())
                 metadata.Settings[Key(child)] = Text(child);
@@ -481,7 +481,7 @@ bool AssetDatabase::SaveMetadata(const std::filesystem::path& path, const Metada
            << "Importer: " << QuoteYaml(metadata.Importer) << '\n'
            << "ImporterVersion: " << metadata.ImporterVersion << '\n'
            << "SourceHash: " << QuoteYaml(metadata.SourceHash) << '\n'
-           << "CachePath: " << QuoteYaml(metadata.CachePath.generic_string()) << '\n'
+           << "CachePath: " << QuoteYaml(PathUtf8(metadata.CachePath)) << '\n'
            << "Settings:\n";
     for (const auto& [key, value] : metadata.Settings)
         stream << "  " << QuoteYaml(key) << ": " << QuoteYaml(value) << '\n';

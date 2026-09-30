@@ -119,6 +119,32 @@ int main() {
     assert(projectEngine.GetProject().AssetDirectory == project.AssetDirectory);
     assert(projectEngine.GetProject().Properties == project.Properties);
 
+    // Project metadata and native filesystem paths must never pass through the
+    // Windows ANSI code page. This covers non-ASCII project, asset, and scene paths.
+#ifdef _WIN32
+    {
+    const auto unicodeDirectory = directory / std::filesystem::path(L"Проекты");
+    const auto unicodeAssets = std::filesystem::path(L"Ресурсы");
+    const auto unicodeScene = unicodeAssets / std::filesystem::path(L"Сцены") /
+                              std::filesystem::path(L"Главная.bscene");
+    std::filesystem::create_directories(unicodeDirectory / unicodeScene.parent_path());
+    std::filesystem::copy_file(preservedScenePath, unicodeDirectory / unicodeScene,
+                               std::filesystem::copy_options::overwrite_existing);
+    project.AssetDirectory = unicodeAssets;
+    project.StartupScene = unicodeScene;
+    const auto unicodeProjectPath = unicodeDirectory / std::filesystem::path(L"Игра.bproject");
+    assert(sourceEngine.SaveProject(unicodeProjectPath));
+    Runtime::Engine unicodeProjectEngine;
+    assert(unicodeProjectEngine.LoadProject(unicodeProjectPath, true));
+    assert(unicodeProjectEngine.GetProject().AssetDirectory == unicodeAssets);
+    assert(unicodeProjectEngine.GetProject().StartupScene == unicodeScene);
+    std::filesystem::remove(unicodeDirectory / unicodeScene);
+    Runtime::Engine missingUnicodeSceneEngine;
+    assert(missingUnicodeSceneEngine.LoadProject(unicodeProjectPath, true));
+    assert(missingUnicodeSceneEngine.GetProject().StartupScene.empty());
+    }
+#endif
+
     const auto sceneAsset = AssetManager::GetAsset(assetScenePath);
     assert(sceneAsset);
     assert(sceneAsset->Id);

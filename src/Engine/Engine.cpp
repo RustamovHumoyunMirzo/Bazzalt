@@ -238,7 +238,7 @@ bool Engine::RequestSceneLoad(const std::filesystem::path& path)
         m_lastError = "Scene path cannot be empty";
         return false;
     }
-    std::string extension = path.extension().string();
+    const auto extensionBytes=path.extension().u8string();std::string extension(reinterpret_cast<const char*>(extensionBytes.data()),extensionBytes.size());
     std::transform(extension.begin(), extension.end(), extension.begin(),
         [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
     if (extension != ".bscene")
@@ -316,7 +316,14 @@ bool Engine::LoadProject(const std::filesystem::path& path, bool loadStartupScen
     m_projectPath = path;
     if (loadStartupScene && !m_project.StartupScene.empty())
     {
-        if (!LoadScene(path.parent_path() / m_project.StartupScene)) return false;
+        const auto startupPath=path.parent_path()/m_project.StartupScene;
+        if(std::filesystem::is_regular_file(startupPath)){
+            if(!LoadScene(startupPath))return false;
+        }else{
+            // A scene can be renamed or removed outside an older editor. The
+            // project must still open so the user can load/activate a replacement.
+            CreateScene();m_project.StartupScene.clear();m_lastError.clear();
+        }
     }
     else if (loadStartupScene && m_project.StartupScene.empty())
     {

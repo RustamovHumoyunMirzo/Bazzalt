@@ -107,8 +107,10 @@ public:
     ~EditorHost() { Stop(); ClearLoadedScenes(); m_engine->Shutdown(); CleanupSnapshot(); }
 
     bool LoadProject(const std::string& path) {
-        Stop();
-        const bool result = m_engine->LoadProject(std::filesystem::u8path(path), true);
+        Stop();m_bridgeError.clear();bool result=false;
+        try { result=m_engine->LoadProject(std::filesystem::u8path(path),true); }
+        catch(const std::filesystem::filesystem_error& error){m_bridgeError="Filesystem error while loading the project: "+std::string(error.what());return false;}
+        catch(const std::exception& error){m_bridgeError="Native error while loading the project: "+std::string(error.what());return false;}
         if (result) {
             m_projectPath = std::filesystem::u8path(path);
             m_scenePath = m_engine->GetProject().StartupScene.empty() ? std::filesystem::path{} :
@@ -135,7 +137,7 @@ public:
         const auto target=FindLoadedScene(id);if(!target||*target==m_activeScene)return target.has_value();
         Stop();m_loadedScenes[m_activeScene].Data=m_engine->TakeScene();
         m_engine->SetScene(std::move(m_loadedScenes[*target].Data));m_activeScene=*target;
-        m_scenePath=m_loadedScenes[m_activeScene].Path;return true;
+        m_scenePath=m_loadedScenes[m_activeScene].Path;UpdateStartupScene();return true;
     }
     bool UnloadScene(const std::string& id) {
         const auto target=FindLoadedScene(id);if(!target||*target==m_activeScene)return false;
@@ -148,14 +150,14 @@ public:
     void NewScene() { Stop(); m_engine->CreateScene();m_scenePath.clear();ClearLoadedScenes();m_loadedScenes.push_back({{},nullptr});m_activeScene=0; }
     bool RenameLoadedScene(const std::string& idOrPath,const std::string& requestedName) {
         const auto found=FindLoadedScene(idOrPath);if(!found)return false;auto& loaded=m_loadedScenes[*found];if(loaded.Path.empty())return false;
-        auto filename=std::filesystem::path(requestedName).filename();if(filename.extension() != ".bscene")filename += ".bscene";
+        auto filename=std::filesystem::u8path(requestedName).filename();if(filename.extension() != ".bscene")filename += ".bscene";
         const auto target=loaded.Path.parent_path()/filename;if(target==loaded.Path)return true;if(std::filesystem::exists(target))return false;
         const auto old=loaded.Path;ReleaseSceneLock(loaded);std::error_code error;std::filesystem::rename(old,target,error);
-        if(error){AcquireSceneLock(loaded);return false;}const auto oldMeta=old.parent_path()/(old.filename().string()+".meta");const auto targetMeta=target.parent_path()/(target.filename().string()+".meta");if(std::filesystem::exists(oldMeta))std::filesystem::rename(oldMeta,targetMeta,error);
-        loaded.Path=target;if(*found==m_activeScene)m_scenePath=target;AcquireSceneLock(loaded);return true;
+        if(error){AcquireSceneLock(loaded);return false;}auto oldMeta=old;oldMeta += ".meta";auto targetMeta=target;targetMeta += ".meta";if(std::filesystem::exists(oldMeta))std::filesystem::rename(oldMeta,targetMeta,error);
+        loaded.Path=target;if(*found==m_activeScene){m_scenePath=target;UpdateStartupScene();}AcquireSceneLock(loaded);return true;
     }
     bool IsSceneLoaded(const std::string& path) { return FindLoadedScene(path).has_value(); }
-    std::string LastError() const { return m_engine->GetLastError(); }
+    std::string LastError() const { return m_bridgeError.empty()?m_engine->GetLastError():m_bridgeError; }
     py::str ProjectDirectory() const { return m_projectPath.empty() ? py::str() : PathText(m_projectPath.parent_path()); }
     py::str AssetDirectory() const {
         if (m_projectPath.empty()) return py::str();
@@ -381,6 +383,7 @@ private:
 #endif
     }
     void ClearLoadedScenes(){for(auto& loaded:m_loadedScenes)ReleaseSceneLock(loaded);m_loadedScenes.clear();}
+    void UpdateStartupScene(){if(m_projectPath.empty()||m_scenePath.empty())return;std::error_code error;auto relative=std::filesystem::relative(m_scenePath,m_projectPath.parent_path(),error);if(error||relative.empty()||relative.is_absolute()||*relative.begin()=="..")return;m_engine->GetProject().StartupScene=relative;m_engine->SaveProject(m_projectPath);}
     std::pair<Scene*,Entity> FindEntity(const std::string& id){const UUID uuid=ParseUuid(id);for(std::size_t i=0;i<m_loadedScenes.size();++i){Scene& scene=SceneAt(i);Entity entity=scene.GetEntity(uuid);if(entity)return {&scene,entity};}return {nullptr,{}};}
     Entity RequireEntity(const std::string& id) {
         Entity entity = FindEntity(id).second;
@@ -396,6 +399,7 @@ private:
     std::filesystem::path m_projectPath;
     std::filesystem::path m_snapshot;
     std::filesystem::path m_scenePath;
+    std::string m_bridgeError;
     std::vector<LoadedScene> m_loadedScenes;
     std::size_t m_activeScene = 0;
     bool m_playing = false;

@@ -46,7 +46,7 @@ std::vector<std::uint8_t> ReadBytes(const std::filesystem::path& path) {
 }
 
 std::string LowerExtension(const std::filesystem::path& path) {
-    std::string result = path.extension().string();
+    const auto bytes=path.extension().u8string();std::string result(reinterpret_cast<const char*>(bytes.data()),bytes.size());
     std::transform(result.begin(), result.end(), result.begin(),
         [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
     return result;

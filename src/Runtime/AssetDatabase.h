@@ -25,7 +25,7 @@ public:
     [[nodiscard]] virtual std::uint32_t GetVersion() const = 0;
     [[nodiscard]] virtual bool Supports(const std::filesystem::path& source) const = 0;
     [[nodiscard]] virtual std::string GetCacheExtension(
-        const std::filesystem::path& source) const { return source.extension().string(); }
+        const std::filesystem::path& source) const { const auto value=source.extension().u8string();return {reinterpret_cast<const char*>(value.data()),value.size()}; }
     [[nodiscard]] virtual std::string ComputeSourceHash(
         const std::filesystem::path& source) const;
     virtual bool Import(const AssetImportContext& context, std::string& error) = 0;
