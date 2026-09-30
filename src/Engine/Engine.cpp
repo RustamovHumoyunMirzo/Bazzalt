@@ -1,5 +1,6 @@
 #include "Runtime/Engine.h"
 #include "Runtime/AssetDatabase.h"
+#include "Runtime/NativeScriptRuntime.h"
 #include "Rendering/RenderBackend.h"
 #include "Rendering/RenderSystems.h"
 #include "Bazzalt/Components/Camera.h"
@@ -14,7 +15,7 @@ namespace Bazzalt::Runtime {
 
 Engine::Engine()
     : m_scene(std::make_unique<Scene>()), m_assetDatabase(std::make_unique<AssetDatabase>()),
-      m_renderBackend(std::make_unique<RenderBackend>())
+      m_renderBackend(std::make_unique<RenderBackend>()),m_scriptRuntime(std::make_unique<NativeScriptRuntime>())
 {
     SceneManager::Bind(this);
     AssetManager::Bind(this);
@@ -53,6 +54,7 @@ bool Engine::Init()
     m_frameCount = 0;
     m_deltaTime = 0.016f;
     m_lastFrameTime = std::chrono::steady_clock::now();
+    if(!m_scriptRuntime->Start(m_lastError)){DetachRenderSystems();m_renderBackend->Shutdown();m_isInitialized=false;return false;}
 
     std::cout << "[Engine] Initialization complete.\n";
     return true;
@@ -74,6 +76,7 @@ void Engine::Update()
 
     m_frameCount++;
     m_scene->Update(m_deltaTime);
+    m_scriptRuntime->Update(m_deltaTime);
     m_renderBackend->Render();
 }
 
@@ -137,6 +140,7 @@ void Engine::Shutdown()
 
     std::cout << "[Engine] Shutting down core subsystems...\n";
 
+    m_scriptRuntime->Stop();
     DetachRenderSystems();
     m_renderBackend->Shutdown();
 
@@ -153,6 +157,10 @@ void Engine::RequestClose()
 {
     m_shouldClose = true;
 }
+
+bool Engine::ConfigureScripts(std::vector<ScriptBinding> bindings){return m_scriptRuntime->Configure(std::move(bindings),m_lastError);}
+bool Engine::StartScripts(){return m_scriptRuntime->Start(m_lastError);}
+void Engine::StopScripts(){m_scriptRuntime->Stop();}
 
 Scene& Engine::CreateScene()
 {

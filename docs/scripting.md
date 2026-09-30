@@ -20,6 +20,8 @@ Create a C++ component from the Asset Browser, then drag it onto an entity or se
 
 Pressing Play builds only enabled, attached scripts. Compiler errors and warnings appear as itemized Console messages with the `Compiler` source. A failed build does not enter Play mode.
 
+Compiled modules expose a versioned C ABI. The private native runtime validates that ABI, creates one behavior instance per enabled attachment, applies serialized inspector properties, and calls `OnCreate`, `OnUpdate`, and `OnDestroy` with deterministic reverse-order teardown. Modules are unloaded on Stop; exceptions from gameplay callbacks are isolated from the editor loop.
+
 ## Toolchain ownership
 
 End users do not need a system compiler. Editor distributions carry a pinned private LLVM/Clang installation at `toolchain/llvm`. Engine developers install it with `scripts/get_llvm.ps1` on Windows or `scripts/get_llvm.sh` on supported POSIX hosts. Production packaging fails if that toolchain is absent, preventing a broken editor release.

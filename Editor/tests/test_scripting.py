@@ -20,4 +20,10 @@ class ScriptingTests(unittest.TestCase):
         finally:
             if manifest.exists():manifest.unlink()
 
+    def test_generated_module_has_versioned_entry_point(self):
+        descriptor=ScriptCompiler.Inspect(self.source);wrapper=ScriptCompiler._Wrapper(descriptor)
+        self.assertIn("BazzaltGetScriptModuleV1",wrapper)
+        self.assertIn('strcmp(name,"Speed")',wrapper)
+        self.assertIn("OnUpdate(void* p,float dt)",wrapper)
+
 if __name__=="__main__":unittest.main()

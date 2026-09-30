@@ -20,6 +20,7 @@
 #include <pybind11/stl.h>
 
 #include "Runtime/Engine.h"
+#include "Runtime/NativeScriptRuntime.h"
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Components/Light.h"
 #include "Bazzalt/Components/Mesh.h"
@@ -339,7 +340,7 @@ public:
         m_snapshot = std::filesystem::temp_directory_path() /
             ("bazzalt-editor-play-" + UUID::Generate().ToString() + ".bscene");
         if (!m_engine->SaveScene(m_snapshot)) return false;
-        if (!m_engine->Init()) { CleanupSnapshot(); return false; }
+        if (!m_engine->Init()||!m_engine->StartScripts()) { CleanupSnapshot(); return false; }
         m_playing = true; m_paused = false; return true;
     }
     void Pause(bool paused) { if (m_playing) m_paused = paused; }
@@ -351,11 +352,18 @@ public:
     void Stop() {
         if (!m_playing) return;
         m_playing = false; m_paused = false;
+        m_engine->StopScripts();
         if (!m_snapshot.empty()) m_engine->LoadScene(m_snapshot);
         CleanupSnapshot();
     }
     bool IsPlaying() const { return m_playing; }
     bool IsPaused() const { return m_paused; }
+
+    bool ConfigureScripts(const py::list& values) {
+        std::vector<Runtime::ScriptBinding> bindings;
+        try{for(const py::handle itemHandle:values){const auto item=py::reinterpret_borrow<py::dict>(itemHandle);Runtime::ScriptBinding binding;binding.Module=std::filesystem::u8path(py::str(item["module"]).cast<std::string>());binding.Entity=py::str(item["entity"]).cast<std::string>();binding.TypeName=py::str(item["type"]).cast<std::string>();const auto properties=py::reinterpret_borrow<py::dict>(item["properties"]);for(const auto& pair:properties){const std::string name=py::str(pair.first).cast<std::string>();const py::handle value=pair.second;std::string text;if(py::isinstance<py::bool_>(value))text=value.cast<bool>()?"true":"false";else if(py::isinstance<py::sequence>(value)&&!py::isinstance<py::str>(value)){const auto sequence=py::reinterpret_borrow<py::sequence>(value);for(const auto part:sequence){if(!text.empty())text+=',';text+=py::str(part).cast<std::string>();}}else text=py::str(value).cast<std::string>();binding.Properties.emplace(name,std::move(text));}bindings.push_back(std::move(binding));}}catch(const py::error_already_set& error){m_bridgeError=error.what();return false;}
+        m_bridgeError.clear();return m_engine->ConfigureScripts(std::move(bindings));
+    }
 
 private:
     struct LoadedScene { std::filesystem::path Path; std::unique_ptr<Scene> Data;
@@ -455,6 +463,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("set_gizmo_position", &Bazzalt::EditorBridge::EditorHost::SetGizmoPosition)
         .def("set_gizmo_hover", &Bazzalt::EditorBridge::EditorHost::SetGizmoHover)
         .def("set_grid", &Bazzalt::EditorBridge::EditorHost::SetGrid)
+        .def("configure_scripts", &Bazzalt::EditorBridge::EditorHost::ConfigureScripts)
         .def("play", &Bazzalt::EditorBridge::EditorHost::Play)
         .def("pause", &Bazzalt::EditorBridge::EditorHost::Pause)
         .def("step", &Bazzalt::EditorBridge::EditorHost::Step)

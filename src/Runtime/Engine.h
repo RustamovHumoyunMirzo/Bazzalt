@@ -6,6 +6,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "Bazzalt/Project.h"
 #include "Bazzalt/AssetManager.h"
@@ -17,6 +18,8 @@ namespace Bazzalt::Runtime {
 
 class AssetDatabase;
 class RenderBackend;
+class NativeScriptRuntime;
+struct ScriptBinding;
 
 // Runtime-owned orchestration. Kept outside the public include tree so only
 // the editor/runtime host can control initialization and frame flow.
@@ -64,6 +67,9 @@ public:
     void SetEditorGizmo(bool visible, float x, float y, float z, int mode);
     void SetEditorGizmoHover(int axis);
     void SetEditorGrid(bool visible, int plane);
+    bool ConfigureScripts(std::vector<ScriptBinding> bindings);
+    bool StartScripts();
+    void StopScripts();
 
 private:
     friend class Bazzalt::SceneManager;
@@ -91,6 +97,7 @@ private:
     std::optional<std::filesystem::path> m_pendingScenePath;
     std::unique_ptr<AssetDatabase> m_assetDatabase;
     std::unique_ptr<RenderBackend> m_renderBackend;
+    std::unique_ptr<NativeScriptRuntime> m_scriptRuntime;
 };
 
 } // namespace Bazzalt::Runtime

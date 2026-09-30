@@ -155,7 +155,7 @@ target_include_directories(Bazzalt
     "${_bazzalt_generated_dir}"
 )
 
-target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE ryml::ryml Filament::Filament)
+target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE ryml::ryml Filament::Filament ${CMAKE_DL_LIBS})
 
 target_compile_features(Bazzalt PUBLIC cxx_std_20)
 target_compile_definitions(Bazzalt PRIVATE
@@ -245,4 +245,13 @@ if(BUILD_TESTING)
     target_include_directories(BazzaltAssetPipelineTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     bazzalt_enable_test_assertions(BazzaltAssetPipelineTests)
     add_test(NAME BazzaltAssetPipelineTests COMMAND BazzaltAssetPipelineTests)
+
+    add_library(BazzaltScriptLifecycleModule MODULE tests/fixtures/ScriptLifecycleModule.cpp)
+    target_include_directories(BazzaltScriptLifecycleModule PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    set_target_properties(BazzaltScriptLifecycleModule PROPERTIES PREFIX "")
+    add_executable(BazzaltNativeScriptRuntimeTests tests/NativeScriptRuntimeTests.cpp src/Runtime/NativeScriptRuntime.cpp)
+    target_include_directories(BazzaltNativeScriptRuntimeTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(BazzaltNativeScriptRuntimeTests PRIVATE ${CMAKE_DL_LIBS})
+    bazzalt_enable_test_assertions(BazzaltNativeScriptRuntimeTests)
+    add_test(NAME BazzaltNativeScriptRuntimeTests COMMAND BazzaltNativeScriptRuntimeTests $<TARGET_FILE:BazzaltScriptLifecycleModule>)
 endif()

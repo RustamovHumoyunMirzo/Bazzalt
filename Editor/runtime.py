@@ -221,7 +221,12 @@ class RuntimeService(QObject):
             self._host.set_grid(visible, plane)
 
     def Play(self) -> bool:
-        return bool(self._host and self._host.play())
+        result=bool(self._host and self._host.play())
+        if not result:self.ErrorOccurred.emit(self.LastError())
+        return result
+
+    def ConfigureScripts(self,bindings:list[dict])->bool:
+        return bool(self._host and hasattr(self._host,"configure_scripts") and self._host.configure_scripts(bindings))
 
     def Pause(self, paused: bool) -> None:
         if self._host is not None: self._host.pause(paused)

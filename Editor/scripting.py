@@ -54,11 +54,13 @@ class ScriptCompiler:
         except (OSError,json.JSONDecodeError):state={}
         outputs=[];diagnostics=[]
         for descriptor in descriptors:
-            digest=hashlib.sha256(descriptor.path.read_bytes()+b"\0bazzalt-script-abi-1").hexdigest()
+            digest=hashlib.sha256(descriptor.path.read_bytes()+b"\0bazzalt-script-abi-1-wrapper-1").hexdigest()
             suffix=".dll" if os.name=="nt" else ".dylib" if os.sys.platform=="darwin" else ".so"
             output=self.cache/f"{descriptor.name}-{digest[:12]}{suffix}";outputs.append(output)
             if state.get(str(descriptor.path))==digest and output.exists():continue
-            command=[str(compiler),"-std=c++20","-shared","-fvisibility=hidden",f"-I{self.engine_root/'include'}",str(descriptor.path),"-o",str(output)]
+            wrapper=self.cache/f"{descriptor.name}-{digest[:12]}.module.cpp"
+            wrapper.write_text(self._Wrapper(descriptor),encoding="utf-8")
+            command=[str(compiler),"-std=c++20","-shared","-fvisibility=hidden",f"-I{self.engine_root/'include'}",str(wrapper),"-o",str(output)]
             process=subprocess.run(command,cwd=self.project,text=True,capture_output=True,encoding="utf-8",errors="replace",creationflags=subprocess.CREATE_NO_WINDOW if os.name=="nt" else 0)
             for line in (process.stdout+"\n"+process.stderr).splitlines():
                 if line.strip():diagnostics.append(Diagnostic("error" if "error:" in line.lower() else "warning" if "warning:" in line.lower() else "info",line.strip()))
@@ -66,6 +68,23 @@ class ScriptCompiler:
             state[str(descriptor.path)]=digest
         self.state_file.write_text(json.dumps(state,indent=2),encoding="utf-8")
         return BuildResult(True,tuple(outputs),tuple(diagnostics))
+
+    @staticmethod
+    def _Wrapper(descriptor: ScriptDescriptor)->str:
+        setters=[]
+        for prop in descriptor.properties:
+            kind=prop.type.replace("const","").replace("&","").strip()
+            if kind in ("bool",):body=f'self->{prop.name}=std::strcmp(value,"true")==0||std::strcmp(value,"1")==0;return true;'
+            elif kind in ("string","std::string"):body=f'self->{prop.name}=value;return true;'
+            elif kind in ("Vec2","Bazzalt::Vec2"):body=f'return std::sscanf(value,"%f,%f",&self->{prop.name}.X,&self->{prop.name}.Y)==2;'
+            elif kind in ("Vec3","Bazzalt::Vec3"):body=f'return std::sscanf(value,"%f,%f,%f",&self->{prop.name}.X,&self->{prop.name}.Y,&self->{prop.name}.Z)==3;'
+            elif kind in ("Vec4","Bazzalt::Vec4"):body=f'return std::sscanf(value,"%f,%f,%f,%f",&self->{prop.name}.X,&self->{prop.name}.Y,&self->{prop.name}.Z,&self->{prop.name}.W)==4;'
+            else:body=f'{{std::istringstream input(value);input>>self->{prop.name};return !input.fail();}}'
+            setters.append(f'if(std::strcmp(name,"{prop.name}")==0){{{body}}}')
+        source=str(descriptor.path).replace("\\","/").replace('"','\\"')
+        name=descriptor.name;setter="".join(setters)
+        wrapper=f'''#include <Bazzalt/Script.h>\n#include <cstdio>\n#include <cstring>\n#include <sstream>\n#include <string>\n#include "{source}"\n#if defined(_WIN32)\n#define BAZZALT_SCRIPT_EXPORT __declspec(dllexport)\n#else\n#define BAZZALT_SCRIPT_EXPORT __attribute__((visibility("default")))\n#endif\nnamespace {{\nvoid* Create(){{return new {name}();}}\nvoid Destroy(void* p){{delete static_cast<{name}*>(p);}}\nvoid OnCreate(void* p){{static_cast<{name}*>(p)->OnCreate();}}\nvoid OnUpdate(void* p,float dt){{static_cast<{name}*>(p)->OnUpdate(dt);}}\nvoid OnDestroy(void* p){{static_cast<{name}*>(p)->OnDestroy();}}\nbool SetProperty(void* p,const char* name,const char* value){{auto* self=static_cast<{name}*>(p);{setter}return false;}}\nconst Bazzalt::ScriptModuleApi Api{{Bazzalt::ScriptAbiVersion,"{name}",&Create,&Destroy,&OnCreate,&OnUpdate,&OnDestroy,&SetProperty}};\n}}\nextern "C" BAZZALT_SCRIPT_EXPORT const Bazzalt::ScriptModuleApi* BazzaltGetScriptModuleV1(){{return &Api;}}\n'''
+        return wrapper.replace(f"void* Create(){{return new {name}();}}",f"void* Create(const char* entity){{auto* value=new {name}();Bazzalt::ScriptRuntimeAccess::Bind(*value,entity);return value;}}")
 
 class ScriptAttachments:
     """Project-side attachment manifest, keyed by stable scene/entity UUIDs."""
@@ -85,6 +104,13 @@ class ScriptAttachments:
         if len(remaining)==len(entries):return False
         self.values["entities"][entity]=remaining;self.Save();return True
     def UsedSources(self)->list[str]:return list(dict.fromkeys(v.get("source","") for entries in self.values.get("entities",{}).values() for v in entries if v.get("enabled",True) and v.get("source")))
+    def RuntimeBindings(self,outputs: tuple[Path,...])->list[dict]:
+        sources=self.UsedSources();modules={str(Path(source).resolve()):str(output) for source,output in zip(sources,outputs)};result=[]
+        for entity,entries in self.values.get("entities",{}).items():
+            for value in entries:
+                source=str(Path(value.get("source","")).resolve())
+                if value.get("enabled",True) and source in modules:result.append({"module":modules[source],"entity":entity,"type":value.get("type",Path(source).stem),"properties":dict(value.get("properties",{}))})
+        return result
 
 def _Literal(value: str):
     value=value.strip()

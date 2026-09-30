@@ -212,10 +212,8 @@ class EditorController(QObject):
                 name=str(script.get("type","Script"));section=self.Window.Properties.AddComponentSection(f"script.{name}",name,expanded=False,enabled=bool(script.get("enabled",True)))
                 section.EnabledChanged.connect(lambda enabled,s=script:self._SetScriptEnabled(s,enabled))
                 for property_name,value in script.get("properties",{}).items():
-                    editor=self._ComponentEditor(inspected_entity,name,property_name,value)
-                    if editor is not None:
-                        editor.valueChanged.connect(lambda v,n=property_name,s=script:self._SetScriptProperty(s,n,v)) if hasattr(editor,"valueChanged") else None
-                        section.AddField(property_name,editor)
+                    editor=self._ScriptEditor(script,property_name,value)
+                    if editor is not None:section.AddField(property_name,editor)
 
         self._UpdateGizmo()
 
@@ -367,6 +365,14 @@ class EditorController(QObject):
                 tr=self.Window.Localization.Translate;editor=AssetPickerInput(tr("properties.select_project_asset"),accepted_extensions=self._AssetExtensions(name),picker_title=tr("properties.select_project_asset"),search_placeholder=tr("properties.search_project_assets"),missing_label=tr("properties.missing_asset"));editor.ConfigureAssets(self._ProjectAssets());editor.SetValue(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v or "0"));editor.PickRequested.connect(editor.OpenProjectPicker);return editor
             editor=StringInput(value);editor.editingFinished.connect(lambda:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
         return None
+
+    def _ScriptEditor(self,script:dict,name:str,value):
+        commit=lambda v:self._SetScriptProperty(script,name,v)
+        if isinstance(value,bool):editor=BoolInput(value);editor.ValueChanged.connect(commit);return editor
+        if isinstance(value,int):editor=IntInput(value=value);editor.valueChanged.connect(commit);return editor
+        if isinstance(value,float):editor=FloatInput(value=value);editor.valueChanged.connect(commit);return editor
+        if isinstance(value,(tuple,list)) and len(value) in (3,4):editor=Vec3Input(value) if len(value)==3 else Vec4Input(value);editor.ValueChanged.connect(commit);return editor
+        editor=StringInput(str(value));editor.editingFinished.connect(lambda:commit(editor.GetValue()));return editor
 
     def _AssetExtensions(self,field_name:str)->set[str]:
         name=field_name.casefold()
@@ -593,6 +599,8 @@ class EditorController(QObject):
                 level=ConsoleLevel.Error if diagnostic.level=="error" else ConsoleLevel.Warning if diagnostic.level=="warning" else ConsoleLevel.Info
                 self.Window.Console.AddMessage(diagnostic.message,level,True,diagnostic.source)
             if not result.success:self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
+            if not self.Runtime.ConfigureScripts(self.ScriptAttachments.RuntimeBindings(result.outputs)):
+                self.Window.Console.AddMessage(self.Runtime.LastError(),ConsoleLevel.Error,True,"Runtime");self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
         if not self.Runtime.Play():self.Window.Toolbar.SetPlayState(PlayState.Stopped)
 
     def _AttachScript(self,descriptor,entity_id:str|None=None)->None:
