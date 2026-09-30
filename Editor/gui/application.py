@@ -70,7 +70,7 @@ class Editor(QMainWindow):
         self.MenuBar.SetDockingSystem(self.Docking)
         self.ThemeManager.ThemeChanged.connect(self.Docking.set_theme)
 
-        self.Console = ConsolePanel(self.Localization)
+        self.Console = ConsolePanel(self.Localization,self.Resources,self.ThemeManager)
         self.Output = ViewportPanel(self.Runtime, False, self.Localization, self.Resources)
         self.Scene = ViewportPanel(self.Runtime, True, self.Localization, self.Resources)
         self.Hierarchy = HierarchyPanel(self.Localization)

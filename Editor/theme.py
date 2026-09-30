@@ -62,7 +62,7 @@ class Theme:
             input_background="#ffffff",
             border="#cccccc",
             border_focus="#397ebd",
-            accent="#7bb5f0",
+            accent="#9bc9f5",
             selection="#9bc9f5",
             text="#1f1f1f",
             text_muted="#6e6e6e",
@@ -109,6 +109,7 @@ def BuildStyleSheet(theme: Theme) -> str:
     check_icon = (ASSET_ROOT / icon_theme / "check_selected.svg").as_posix()
     branch_closed = (ASSET_ROOT / icon_theme / "tree_closed.svg").as_posix()
     branch_open = (ASSET_ROOT / icon_theme / "tree_open.svg").as_posix()
+    combo_arrow = branch_open
     return f"""
     QWidget {{ color: {t.text}; selection-background-color: {t.selection}; font-size: 12px; }}
     QWidget:disabled {{ color: {t.text_disabled}; }}
@@ -120,6 +121,15 @@ def BuildStyleSheet(theme: Theme) -> str:
     QAbstractItemView::item {{ min-height: {t.row_height}px; padding: 1px 5px; border: 0; }}
     QAbstractItemView::item:hover {{ background: {t.surface_hover}; }}
     QAbstractItemView::item:selected {{ background: {t.selection}; color: {t.text}; }}
+    QListWidget#ConsoleMessageList {{ background: {t.input_background}; border: 1px solid {t.border}; }}
+    QListWidget#ConsoleMessageList::item {{ padding: 3px 7px; border-bottom: 1px solid {t.border}; }}
+    QListWidget#ConsoleMessageList::item:hover {{ background: {t.surface_hover}; }}
+    QListWidget#ConsoleMessageList::item:selected {{ background: {t.selection}; }}
+    QToolButton#ConsoleLevelFilter {{ background: transparent; border: 0; padding: 3px 25px 3px 6px; }}
+    QToolButton#ConsoleLevelFilter:hover {{ background: {t.surface_hover}; }}
+    QToolButton#ConsoleLevelFilter::menu-indicator {{ image: url({combo_arrow});
+        width: 12px; height: 12px; subcontrol-origin: padding;
+        subcontrol-position: right center; right: 6px; }}
     QTreeView::branch {{ background: transparent; width: 14px; }}
     QTreeView::branch:has-children:closed {{ image: url({branch_closed}); }}
     QTreeView::branch:has-children:open {{ image: url({branch_open}); }}
@@ -128,9 +138,10 @@ def BuildStyleSheet(theme: Theme) -> str:
     QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{ background: {t.input_background};
         color: {t.text}; min-height: {t.control_height}px; padding: 0 6px;
         border: 1px solid {t.border}; border-radius: {t.radius}px; }}
-    QComboBox {{ padding-right: 22px; }}
+    QComboBox {{ padding-right: 26px; }}
     QComboBox::drop-down {{ subcontrol-origin: padding; subcontrol-position: top right;
-        width: 20px; border: 0; border-left: 1px solid {t.border}; }}
+        width: 24px; border: 0; border-left: 1px solid {t.border}; }}
+    QComboBox::down-arrow {{ image: url({combo_arrow}); width: 12px; height: 12px; }}
     QComboBox QAbstractItemView {{ border: 1px solid {t.border}; padding: 3px; }}
     QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{
         border-color: {t.border_focus}; }}

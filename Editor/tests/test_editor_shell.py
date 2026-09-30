@@ -335,11 +335,37 @@ class EditorShellTests(unittest.TestCase):
     def test_console_api_filters_and_clears_messages(self) -> None:
         self.Window.Console.AddMessage("built", ConsoleLevel.Info)
         self.Window.Console.AddMessage("failed", ConsoleLevel.Error)
+        self.Window.Console.AddMessage("plain",ConsoleLevel.Info,show_icon=False)
+        self.assertEqual(self.Window.Console.View.count(),3)
+        self.assertFalse(self.Window.Console.View.item(0).icon().isNull())
+        self.assertTrue(self.Window.Console.View.item(2).icon().isNull())
+        self.Window.Console.View.item(1).setSelected(True)
+        self.assertIn("failed",self.Window.Console.View.selectedItems()[0].text())
         self.Window.Console.SetLevelVisible(ConsoleLevel.Info, False)
         self.assertNotIn("built", self.Window.Console.View.toPlainText())
         self.assertIn("failed", self.Window.Console.View.toPlainText())
         self.Window.Console.Clear()
         self.assertEqual(self.Window.Console.GetMessages(), ())
+
+    def test_console_filters_sources_and_removes_rows(self) -> None:
+        console=self.Window.Console
+        console.AddMessage("editor ready",ConsoleLevel.Info,source="Editor")
+        console.AddMessage("body sleeping",ConsoleLevel.Info,source="Physics")
+        console.AddMessage("body failed",ConsoleLevel.Error,source="Physics")
+        console.SetSourceFilter("Physics")
+        self.assertEqual(console.View.count(),2)
+        self.assertTrue(console.View.item(0).text().endswith("Physics"))
+        self.assertEqual(set(console.LevelFilter.GetValues()),{"info","warning","error"})
+        self.assertEqual(console.LevelFilter.text(),"Filters")
+        console.Search.setText("failed")
+        self.assertEqual(console.View.count(),1)
+        console.ClearFiltered()
+        self.assertEqual(len(console.GetMessages()),2)
+        self.assertTrue(all(message.Text!="body failed" for message in console.GetMessages()))
+        console.Search.clear();console.SetSourceFilter("")
+        console.View.item(0).setSelected(True);console.View.item(1).setSelected(True)
+        console.RemoveSelected()
+        self.assertEqual(console.GetMessages(),())
 
     def test_properties_sections_and_sticky_add_button(self) -> None:
         section = self.Window.Properties.AddComponentSection(
