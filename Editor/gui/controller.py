@@ -54,9 +54,13 @@ class EditorController(QObject):
         window.Hierarchy.RenameRequested.connect(self.RenameHierarchyEntity)
         window.Hierarchy.CopyRequested.connect(self.CopyHierarchyEntities)
         window.Hierarchy.PasteRequested.connect(self.PasteHierarchyEntities)
+        window.Hierarchy.ActivateSceneRequested.connect(self.ActivateScene)
+        window.Hierarchy.UnloadSceneRequested.connect(self.UnloadScene)
         window.Properties.AddComponentRequested.connect(self.ShowAddComponentMenu)
         window.Properties.RemoveComponentRequested.connect(self.RemoveComponent)
         window.AssetBrowser.AssetSelected.connect(self.SelectAsset)
+        window.AssetBrowser.AssetActivated.connect(self.ActivateAsset)
+        window.AssetBrowser.LoadSceneRequested.connect(self.LoadSceneAdditive)
         runtime.SceneChanged.connect(self.RefreshHierarchy)
         runtime.ProjectChanged.connect(self._ProjectLoaded)
         runtime.ErrorOccurred.connect(lambda text: window.Console.AddMessage(text, ConsoleLevel.Error))
@@ -117,28 +121,20 @@ class EditorController(QObject):
         selected = list(self.SelectedEntities)
         self.Window.Hierarchy.Clear()
         items = {}
-        entities = self.Runtime.Entities()
-        scene_info = self.Runtime.SceneInfo()
         theme = "light" if self.Window.ThemeManager.GetTheme().background == "#d4d4d4" else "dark"
-        scene_root = self.Window.Hierarchy.AddItem(
-            str(scene_info.get("name", "Untitled")), str(scene_info.get("uuid", "")),
-            icon=self.Window.Resources.Icon(f"icons/{theme}/scene.svg"), kind="scene")
-        scene_root.setExpanded(True)
-        pending=list(entities)
         root_ids={"","0","00000000-0000-0000-0000-000000000000"}
-        while pending:
-            progress=False
-            for entity in list(pending):
-                parent_id=str(entity.get("parent", ""))
-                if parent_id not in root_ids and parent_id not in items:continue
-                parent=items.get(parent_id,scene_root)
-                items[entity["uuid"]]=self.Window.Hierarchy.AddItem(entity["name"],entity["uuid"],parent,self.Window.Resources.Icon(f"icons/{theme}/obj.svg"),"entity")
-                pending.remove(entity);progress=True
-            if not progress:
-                # Corrupt/missing parent references remain visible but never
-                # steal otherwise valid descendants from their real parent.
-                for entity in pending:items[entity["uuid"]]=self.Window.Hierarchy.AddItem(entity["name"],entity["uuid"],scene_root,self.Window.Resources.Icon(f"icons/{theme}/obj.svg"),"entity")
-                break
+        for scene_info in self.Runtime.LoadedScenes():
+            scene_root=self.Window.Hierarchy.AddItem(str(scene_info.get("name","Untitled")),str(scene_info.get("uuid","")),icon=self.Window.Resources.Icon(f"icons/{theme}/scene.svg"),kind="scene",active=bool(scene_info.get("active")))
+            scene_root.setExpanded(True);pending=list(scene_info.get("entities",()))
+            while pending:
+                progress=False
+                for entity in list(pending):
+                    parent_id=str(entity.get("parent",""))
+                    if parent_id not in root_ids and parent_id not in items:continue
+                    parent=items.get(parent_id,scene_root);items[entity["uuid"]]=self.Window.Hierarchy.AddItem(entity["name"],entity["uuid"],parent,self.Window.Resources.Icon(f"icons/{theme}/obj.svg"),"entity");pending.remove(entity);progress=True
+                if not progress:
+                    for entity in pending:items[entity["uuid"]]=self.Window.Hierarchy.AddItem(entity["name"],entity["uuid"],scene_root,self.Window.Resources.Icon(f"icons/{theme}/obj.svg"),"entity")
+                    break
         self.Window.Hierarchy.ApplyExpansionState(items)
         if selected:
             blocker=QSignalBlocker(self.Window.Hierarchy.Tree)
@@ -396,14 +392,30 @@ class EditorController(QObject):
         if len(self.SelectedEntities)>1:
             positions=[]
             for value in self.SelectedEntities:
-                details=self.Runtime.EntityDetails(value);positions.append(details.get("world_position",details.get("position")))
+                details=self.Runtime.EntityDetails(value)
+                if details.get("scene_active",True):positions.append(details.get("world_position",details.get("position")))
             positions=[value for value in positions if value]
             if positions:
                 center=tuple(sum(value[axis] for value in positions)/len(positions) for axis in range(3));self.Window.Scene.Surface.SetSelection(center);self.Runtime.SetGizmoPosition(center,modes[self.Window.Toolbar.GetGizmoMode()]);return
         if self.SelectedEntity:
             details=self.Runtime.EntityDetails(self.SelectedEntity)
+            if details and not details.get("scene_active",True):self.Window.Scene.Surface.SetSelection(None);self.Runtime.SetGizmo("",modes[self.Window.Toolbar.GetGizmoMode()]);return
             if details:self.Window.Scene.Surface.SetSelection(details.get("world_position",details["position"]))
         self.Runtime.SetGizmo(self.SelectedEntity, modes[self.Window.Toolbar.GetGizmoMode()])
+
+    def ActivateAsset(self,path)->None:
+        path=Path(path)
+        if path.suffix.lower()==".bscene":self.LoadSceneAdditive(path)
+
+    def LoadSceneAdditive(self,path)->None:
+        self.Runtime.LoadSceneAdditive(path)
+
+    def ActivateScene(self,scene_id:str)->None:
+        if self.Runtime.ActivateScene(scene_id):
+            self.ScenePath=str(self.Runtime.SceneInfo().get("path",""));self.SelectEntity(None);self.Window.Output.SetGameCameraAvailable(self.Runtime.HasActiveCamera())
+
+    def UnloadScene(self,scene_id:str)->None:
+        if self.Runtime.UnloadScene(scene_id):self.SelectEntity(None)
 
     def _FinishGizmoDrag(self) -> None:
         self.History.Commit()

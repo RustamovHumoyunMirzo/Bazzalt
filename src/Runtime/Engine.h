@@ -41,9 +41,12 @@ public:
     [[nodiscard]] const Scene& GetScene() const { return *m_scene; }
     Scene& CreateScene();
     void SetScene(std::unique_ptr<Scene> scene);
+    std::unique_ptr<Scene> TakeScene();
 
     bool SaveScene(const std::filesystem::path& path);
     bool LoadScene(const std::filesystem::path& path);
+    std::unique_ptr<Scene> LoadSceneAsset(const std::filesystem::path& path);
+    bool SaveSceneAsset(const Scene& scene, const std::filesystem::path& path);
     bool SaveProject(const std::filesystem::path& path);
     bool LoadProject(const std::filesystem::path& path, bool loadStartupScene = true);
 

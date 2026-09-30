@@ -164,8 +164,15 @@ Scene& Engine::CreateScene()
 void Engine::SetScene(std::unique_ptr<Scene> scene)
 {
     if (!scene) throw std::invalid_argument("Engine scene cannot be null");
+    DetachRenderSystems();
     m_scene = std::move(scene);
     AttachRenderSystems();
+}
+
+std::unique_ptr<Scene> Engine::TakeScene()
+{
+    DetachRenderSystems();
+    return std::move(m_scene);
 }
 
 bool Engine::SaveScene(const std::filesystem::path& path)
@@ -188,6 +195,23 @@ bool Engine::LoadScene(const std::filesystem::path& path)
     m_scene = std::move(scene);
     AttachRenderSystems();
     return true;
+}
+
+std::unique_ptr<Scene> Engine::LoadSceneAsset(const std::filesystem::path& path)
+{
+    m_lastError.clear();
+    auto scene = std::make_unique<Scene>();
+    if (m_sceneSerializer.Load(*scene, path)) return scene;
+    m_lastError = m_sceneSerializer.GetLastError();
+    return nullptr;
+}
+
+bool Engine::SaveSceneAsset(const Scene& scene, const std::filesystem::path& path)
+{
+    m_lastError.clear();
+    if (m_sceneSerializer.Save(scene, path)) return true;
+    m_lastError = m_sceneSerializer.GetLastError();
+    return false;
 }
 
 void Engine::AttachRenderSystems()

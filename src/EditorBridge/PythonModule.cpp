@@ -5,6 +5,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -93,7 +94,7 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
 
 class EditorHost final {
 public:
-    EditorHost() : m_engine(std::make_unique<Runtime::Engine>()) {}
+    EditorHost() : m_engine(std::make_unique<Runtime::Engine>()) { m_loadedScenes.push_back({{},nullptr}); }
     ~EditorHost() { Stop(); m_engine->Shutdown(); CleanupSnapshot(); }
 
     bool LoadProject(const std::string& path) {
@@ -103,12 +104,34 @@ public:
             m_projectPath = std::filesystem::u8path(path);
             m_scenePath = m_engine->GetProject().StartupScene.empty() ? std::filesystem::path{} :
                 m_projectPath.parent_path() / m_engine->GetProject().StartupScene;
+            m_loadedScenes.clear();
+            m_loadedScenes.push_back({m_scenePath, nullptr});
+            m_activeScene = 0;
         }
         return result;
     }
-    bool LoadScene(const std::string& path) { Stop(); const bool ok=m_engine->LoadScene(std::filesystem::u8path(path));if(ok)m_scenePath=std::filesystem::u8path(path);return ok; }
-    bool SaveScene(const std::string& path) { const bool ok=m_engine->SaveScene(std::filesystem::u8path(path));if(ok)m_scenePath=std::filesystem::u8path(path);return ok; }
-    void NewScene() { Stop(); m_engine->CreateScene();m_scenePath.clear(); }
+    bool LoadScene(const std::string& path) { Stop(); const bool ok=m_engine->LoadScene(std::filesystem::u8path(path));if(ok){m_scenePath=std::filesystem::u8path(path);m_loadedScenes.clear();m_loadedScenes.push_back({m_scenePath,nullptr});m_activeScene=0;}return ok; }
+    bool LoadSceneAdditive(const std::string& value) {
+        const auto path=std::filesystem::weakly_canonical(std::filesystem::u8path(value));
+        for(const auto& loaded:m_loadedScenes)if(!loaded.Path.empty()&&std::filesystem::weakly_canonical(loaded.Path)==path)return true;
+        auto scene=m_engine->LoadSceneAsset(path);
+        if(!scene)return false;
+        m_loadedScenes.push_back({path,std::move(scene)});return true;
+    }
+    bool ActivateScene(const std::string& id) {
+        const auto target=FindLoadedScene(id);if(!target||*target==m_activeScene)return target.has_value();
+        Stop();m_loadedScenes[m_activeScene].Data=m_engine->TakeScene();
+        m_engine->SetScene(std::move(m_loadedScenes[*target].Data));m_activeScene=*target;
+        m_scenePath=m_loadedScenes[m_activeScene].Path;return true;
+    }
+    bool UnloadScene(const std::string& id) {
+        const auto target=FindLoadedScene(id);if(!target||*target==m_activeScene)return false;
+        if(!m_loadedScenes[*target].Path.empty()&&!m_engine->SaveSceneAsset(*m_loadedScenes[*target].Data,m_loadedScenes[*target].Path))return false;
+        m_loadedScenes.erase(m_loadedScenes.begin()+static_cast<std::ptrdiff_t>(*target));
+        if(*target<m_activeScene)--m_activeScene;return true;
+    }
+    bool SaveScene(const std::string& path) { bool ok=m_engine->SaveScene(std::filesystem::u8path(path));if(ok){m_scenePath=std::filesystem::u8path(path);if(m_activeScene<m_loadedScenes.size())m_loadedScenes[m_activeScene].Path=m_scenePath;for(std::size_t i=0;i<m_loadedScenes.size()&&ok;++i)if(i!=m_activeScene&&!m_loadedScenes[i].Path.empty())ok=m_engine->SaveSceneAsset(*m_loadedScenes[i].Data,m_loadedScenes[i].Path);}return ok; }
+    void NewScene() { Stop(); m_engine->CreateScene();m_scenePath.clear();m_loadedScenes.clear();m_loadedScenes.push_back({{},nullptr});m_activeScene=0; }
     std::string LastError() const { return m_engine->GetLastError(); }
     py::str ProjectDirectory() const { return m_projectPath.empty() ? py::str() : PathText(m_projectPath.parent_path()); }
     py::str AssetDirectory() const {
@@ -116,9 +139,8 @@ public:
         return PathText(m_projectPath.parent_path() / m_engine->GetProject().AssetDirectory);
     }
 
-    py::list Entities() {
+    py::list SceneEntities(Scene& scene) {
         py::list result;
-        auto& scene = m_engine->GetScene();
         std::function<void(Entity)> append = [&](Entity parent) {
             for (Entity child : parent.GetChildren()) {
                 result.append(SnapshotEntity(scene, child));
@@ -128,9 +150,13 @@ public:
         append(scene.GetRootEntity());
         return result;
     }
+    py::list Entities() { return SceneEntities(m_engine->GetScene()); }
+    py::list LoadedScenes() {
+        py::list result;
+        for(std::size_t index=0;index<m_loadedScenes.size();++index){Scene& scene=SceneAt(index);py::dict item;item["uuid"]=scene.GetUUID().ToString();item["name"]=m_loadedScenes[index].Path.empty()?py::str("Untitled"):PathText(m_loadedScenes[index].Path.stem());item["path"]=m_loadedScenes[index].Path.empty()?py::str():PathText(m_loadedScenes[index].Path);item["active"]=index==m_activeScene;item["entities"]=SceneEntities(scene);result.append(item);}return result;
+    }
     py::dict EntityDetails(const std::string& id) {
-        Entity entity = m_engine->GetScene().GetEntity(ParseUuid(id));
-        return entity ? SnapshotEntity(m_engine->GetScene(), entity) : py::dict{};
+        auto [scene,entity]=FindEntity(id);if(!entity)return {};auto result=SnapshotEntity(*scene,entity);result["scene_active"]=(scene==&m_engine->GetScene());return result;
     }
     bool HasActiveCamera() const {
         const auto cameras = m_engine->GetScene().GetRegistry().view<Camera>();
@@ -140,19 +166,20 @@ public:
         return false;
     }
     std::string CreateEntity(const std::string& name, const std::string& parent) {
-        Entity entity = m_engine->GetScene().CreateEntity(name);
-        if (!parent.empty()) entity.SetParent(RequireEntity(parent));
+        Scene* scene=&m_engine->GetScene();Entity parentEntity;
+        if(!parent.empty()){if(const auto loaded=FindLoadedScene(parent))scene=&SceneAt(*loaded);else{auto found=FindEntity(parent);scene=found.first;parentEntity=found.second;if(!scene||!parentEntity)return {};}}
+        Entity entity = scene->CreateEntity(name);
+        if (parentEntity) entity.SetParent(parentEntity);
         return entity.GetUUID().ToString();
     }
     bool DestroyEntity(const std::string& id) {
-        Entity entity = m_engine->GetScene().GetEntity(ParseUuid(id));
-        if (!entity) return false;
-        m_engine->GetScene().DestroyEntity(entity); return true;
+        auto [scene,entity]=FindEntity(id);if(!scene||!entity)return false;scene->DestroyEntity(entity);return true;
     }
     bool SetParent(const std::string& id, const std::string& parent) {
-        Entity entity = RequireEntity(id);
-        return entity.SetParent(parent.empty() ? m_engine->GetScene().GetRootEntity()
-                                               : RequireEntity(parent));
+        auto [scene,entity]=FindEntity(id);if(!scene||!entity)return false;
+        if(parent.empty())return entity.SetParent(scene->GetRootEntity());
+        if(const auto loaded=FindLoadedScene(parent))return &SceneAt(*loaded)==scene&&entity.SetParent(scene->GetRootEntity());
+        auto [parentScene,parentEntity]=FindEntity(parent);return parentScene==scene&&parentEntity&&entity.SetParent(parentEntity);
     }
     bool Rename(const std::string& id, const std::string& name) {
         RequireEntity(id).GetComponent<Name>().Value = name; return true;
@@ -178,8 +205,9 @@ public:
     std::string InstantiateModelPath(const std::string& path, const std::string& parent) {
         const auto asset=AssetManager::GetAsset(std::filesystem::u8path(path));
         if(!asset)return {};
-        Entity entity=m_engine->GetScene().InstantiateModel(asset->Id,
-            parent.empty()?Entity{}:RequireEntity(parent));
+        Scene* scene=&m_engine->GetScene();Entity parentEntity;
+        if(!parent.empty()){if(const auto loaded=FindLoadedScene(parent))scene=&SceneAt(*loaded);else{auto found=FindEntity(parent);scene=found.first;parentEntity=found.second;if(!scene||!parentEntity)return {};}}
+        Entity entity=scene->InstantiateModel(asset->Id,parentEntity);
         return entity?entity.GetUUID().ToString():std::string{};
     }
 
@@ -305,8 +333,12 @@ public:
     bool IsPaused() const { return m_paused; }
 
 private:
+    struct LoadedScene { std::filesystem::path Path; std::unique_ptr<Scene> Data; };
+    Scene& SceneAt(std::size_t index){return index==m_activeScene?m_engine->GetScene():*m_loadedScenes[index].Data;}
+    std::optional<std::size_t> FindLoadedScene(const std::string& id){for(std::size_t i=0;i<m_loadedScenes.size();++i)if(SceneAt(i).GetUUID().ToString()==id||m_loadedScenes[i].Path==std::filesystem::u8path(id))return i;return std::nullopt;}
+    std::pair<Scene*,Entity> FindEntity(const std::string& id){const UUID uuid=ParseUuid(id);for(std::size_t i=0;i<m_loadedScenes.size();++i){Scene& scene=SceneAt(i);Entity entity=scene.GetEntity(uuid);if(entity)return {&scene,entity};}return {nullptr,{}};}
     Entity RequireEntity(const std::string& id) {
-        Entity entity = m_engine->GetScene().GetEntity(ParseUuid(id));
+        Entity entity = FindEntity(id).second;
         if (!entity) throw std::invalid_argument("Entity does not exist");
         return entity;
     }
@@ -319,6 +351,8 @@ private:
     std::filesystem::path m_projectPath;
     std::filesystem::path m_snapshot;
     std::filesystem::path m_scenePath;
+    std::vector<LoadedScene> m_loadedScenes;
+    std::size_t m_activeScene = 0;
     bool m_playing = false;
     bool m_paused = false;
 };
@@ -331,12 +365,16 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
     py::class_<Bazzalt::EditorBridge::EditorHost>(module, "EditorHost")
         .def(py::init<>()).def("load_project", &Bazzalt::EditorBridge::EditorHost::LoadProject)
         .def("load_scene", &Bazzalt::EditorBridge::EditorHost::LoadScene)
+        .def("load_scene_additive", &Bazzalt::EditorBridge::EditorHost::LoadSceneAdditive)
+        .def("activate_scene", &Bazzalt::EditorBridge::EditorHost::ActivateScene)
+        .def("unload_scene", &Bazzalt::EditorBridge::EditorHost::UnloadScene)
         .def("save_scene", &Bazzalt::EditorBridge::EditorHost::SaveScene)
         .def("new_scene", &Bazzalt::EditorBridge::EditorHost::NewScene)
         .def("last_error", &Bazzalt::EditorBridge::EditorHost::LastError)
         .def("project_directory", &Bazzalt::EditorBridge::EditorHost::ProjectDirectory)
         .def("asset_directory", &Bazzalt::EditorBridge::EditorHost::AssetDirectory)
         .def("entities", &Bazzalt::EditorBridge::EditorHost::Entities)
+        .def("loaded_scenes", &Bazzalt::EditorBridge::EditorHost::LoadedScenes)
         .def("entity_details", &Bazzalt::EditorBridge::EditorHost::EntityDetails)
         .def("has_active_camera", &Bazzalt::EditorBridge::EditorHost::HasActiveCamera)
         .def("create_entity", &Bazzalt::EditorBridge::EditorHost::CreateEntity,

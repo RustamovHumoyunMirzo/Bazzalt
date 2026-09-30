@@ -59,7 +59,7 @@ class HierarchyTree(QTreeWidget):
     def dropEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         target = self.itemAt(event.position().toPoint())
         self._ClearDropHighlight()
-        parent = "" if target is None or target.data(0, Qt.ItemDataRole.UserRole + 1) == "scene" else str(target.data(0, Qt.ItemDataRole.UserRole) or "")
+        parent = "" if target is None else str(target.data(0, Qt.ItemDataRole.UserRole) or "")
         if event.mimeData().hasFormat("application/x-bazzalt-entity"):
             source=bytes(event.mimeData().data("application/x-bazzalt-entity")).decode()
             # The scene owns the move.  Report CopyAction to Qt so its internal
@@ -81,6 +81,8 @@ class HierarchyPanel(QWidget):
     RenameRequested = Signal(str, str)
     CopyRequested = Signal(object)
     PasteRequested = Signal(object)
+    ActivateSceneRequested = Signal(str)
+    UnloadSceneRequested = Signal(str)
 
     def __init__(self, localization: LocalizationManager) -> None:
         super().__init__(); self._localization = localization;self._collapsed_ids:set[str]=set()
@@ -98,11 +100,13 @@ class HierarchyPanel(QWidget):
         layout.addWidget(self.Tree)
 
     def AddItem(self, name: str, data=None, parent: QTreeWidgetItem | None = None,
-                icon: QIcon | None = None, kind: str = "entity") -> QTreeWidgetItem:
+                icon: QIcon | None = None, kind: str = "entity", active: bool = False) -> QTreeWidgetItem:
         item=QTreeWidgetItem([name]);item.setData(0,Qt.ItemDataRole.UserRole,data)
         item.setData(0,Qt.ItemDataRole.UserRole+1,kind)
         item.setData(0,Qt.ItemDataRole.UserRole+2,name)
         if kind=="entity":item.setFlags(item.flags()|Qt.ItemFlag.ItemIsEditable|Qt.ItemFlag.ItemIsDragEnabled|Qt.ItemFlag.ItemIsDropEnabled)
+        if kind=="scene" and active:
+            font=item.font(0);font.setBold(True);item.setFont(0,font);item.setData(0,Qt.ItemDataRole.UserRole+3,True)
         if icon is not None:item.setIcon(0,icon)
         (parent.addChild(item) if parent else self.Tree.addTopLevelItem(item));return item
 
@@ -170,14 +174,19 @@ class HierarchyPanel(QWidget):
 
     def _ShowContextMenu(self, position) -> None:  # type: ignore[no-untyped-def]
         item=self.Tree.itemAt(position);menu=QMenu(self)
-        parent = item.data(0,Qt.ItemDataRole.UserRole) if item and item.data(0,Qt.ItemDataRole.UserRole+1)=="entity" else None
+        scene_id=str(item.data(0,Qt.ItemDataRole.UserRole) or "") if item and item.data(0,Qt.ItemDataRole.UserRole+1)=="scene" else ""
+        scene_active=bool(item.data(0,Qt.ItemDataRole.UserRole+3)) if scene_id else False
+        parent = item.data(0,Qt.ItemDataRole.UserRole) if item and item.data(0,Qt.ItemDataRole.UserRole+1) in {"entity","scene"} else None
         create_menu=menu.addMenu(self._localization.Translate("hierarchy.add_new"))
         for title,kind in ((self._localization.Translate("hierarchy.empty"),"Entity"),("Camera","Camera"),("Light","Light"),("Mesh","Mesh")):
             action=create_menu.addAction(title);action.triggered.connect(lambda _=False,k=kind:self.CreateTypedRequested.emit(k,parent))
-        menu.addSeparator();rename=menu.addAction(self._localization.Translate("hierarchy.rename"));rename.setShortcut(QKeySequence(Qt.Key.Key_F2));rename.setEnabled(parent is not None);rename.triggered.connect(self._BeginRename)
+        menu.addSeparator();rename=menu.addAction(self._localization.Translate("hierarchy.rename"));rename.setShortcut(QKeySequence(Qt.Key.Key_F2));rename.setEnabled(item is not None and item.data(0,Qt.ItemDataRole.UserRole+1)=="entity");rename.triggered.connect(self._BeginRename)
         copy=menu.addAction(self._localization.Translate("hierarchy.copy"));copy.setShortcut(QKeySequence.StandardKey.Copy);copy.setEnabled(bool(self.GetSelectedData()));copy.triggered.connect(lambda:self.CopyRequested.emit(self.GetSelectedData()))
         paste=menu.addAction(self._localization.Translate("hierarchy.paste"));paste.setShortcut(QKeySequence.StandardKey.Paste);paste.triggered.connect(lambda:self.PasteRequested.emit(parent))
         menu.addSeparator()
+        if scene_id:
+            activate=menu.addAction(self._localization.Translate("hierarchy.activate_scene"));activate.setEnabled(not scene_active and len(self.Tree.selectedItems())==1);activate.triggered.connect(lambda:self.ActivateSceneRequested.emit(scene_id))
+            unload=menu.addAction(self._localization.Translate("hierarchy.unload_scene"));unload.setEnabled(not scene_active);unload.triggered.connect(lambda:self.UnloadSceneRequested.emit(scene_id));menu.addSeparator()
         delete=QAction(self._localization.Translate("hierarchy.delete"),menu);delete.setEnabled(item is not None and item.data(0,Qt.ItemDataRole.UserRole+1)=="entity");delete.triggered.connect(lambda:self.DeleteRequested.emit(self.GetSelectedData()));menu.addAction(delete)
         self.ContextMenuRequested.emit(menu,self.Tree.mapToGlobal(position));menu.exec(self.Tree.mapToGlobal(position))
 

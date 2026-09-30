@@ -78,6 +78,24 @@ class RuntimeService(QObject):
             self.ErrorOccurred.emit(self.LastError()); return False
         self.SceneChanged.emit(); return True
 
+    def LoadSceneAdditive(self, path: str | Path) -> bool:
+        if self._host is None or not hasattr(self._host,"load_scene_additive") or not self._host.load_scene_additive(str(path)):
+            self.ErrorOccurred.emit(self.LastError());return False
+        self.SceneChanged.emit();return True
+
+    def ActivateScene(self, scene_id: str) -> bool:
+        result=bool(self._host and hasattr(self._host,"activate_scene") and self._host.activate_scene(scene_id))
+        if result:self.SceneChanged.emit()
+        return result
+
+    def UnloadScene(self, scene_id: str) -> bool:
+        result=bool(self._host and hasattr(self._host,"unload_scene") and self._host.unload_scene(scene_id))
+        if result:self.SceneChanged.emit()
+        return result
+
+    def LoadedScenes(self) -> list[dict]:
+        return [dict(scene) for scene in self._host.loaded_scenes()] if self._host is not None and hasattr(self._host,"loaded_scenes") else [dict(self.SceneInfo(),active=True,entities=self.Entities())]
+
     def SaveScene(self, path: str | Path) -> bool:
         if self._host is None or not self._host.save_scene(str(path)):
             self.ErrorOccurred.emit(self.LastError()); return False

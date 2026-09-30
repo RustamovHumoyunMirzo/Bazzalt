@@ -1,6 +1,7 @@
 """Project asset browser with safe filesystem editing and typed drag payloads."""
 from __future__ import annotations
 import shutil
+import uuid
 from pathlib import Path
 from PySide6.QtCore import QFile,QMimeData,QSize,Qt,Signal
 from PySide6.QtGui import QColor,QIcon,QLinearGradient,QPainter,QPixmap,QRadialGradient
@@ -31,7 +32,7 @@ class AssetNameDelegate(QStyledItemDelegate):
         super().setEditorData(editor,index)
 
 class AssetBrowserPanel(QWidget):
-    AssetActivated=Signal(object);AssetSelected=Signal(object);ContextMenuRequested=Signal(object,object);SelectionCleared=Signal()
+    AssetActivated=Signal(object);AssetSelected=Signal(object);ContextMenuRequested=Signal(object,object);SelectionCleared=Signal();LoadSceneRequested=Signal(object)
     def __init__(self,localization:LocalizationManager,resources=None)->None:
         super().__init__();self._localization=localization;self._resources=resources;self._root=None;self._folder=None;self._clipboard=[]
         layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0);splitter=QSplitter(Qt.Orientation.Horizontal);splitter.setChildrenCollapsible(False)
@@ -110,9 +111,9 @@ class AssetBrowserPanel(QWidget):
         while candidate.exists():candidate=candidate.with_name(f"{stem} {number}{suffix}");number+=1
         return candidate
     def _Create(self,kind)->None:
-        names={"folder":"New Folder","cpp":"NewComponent.cpp","shader":"NewShader.shad","material":"NewMaterial.matinst"};path=self._Unique(names[kind])
+        names={"folder":"New Folder","scene":"New Scene.bscene","cpp":"NewComponent.cpp","shader":"NewShader.shad","material":"NewMaterial.matinst"};path=self._Unique(names[kind])
         if kind=="folder":path.mkdir()
-        else:path.write_text("#include <Bazzalt/Component.h>\n\n// COMPONENT(NewComponent)\n" if kind=="cpp" else "shader NewShader {\n}\n" if kind=="shader" else '{\n  "shader": null,\n  "properties": {}\n}\n',encoding="utf-8")
+        else:path.write_text(f'FormatVersion: 1\nSceneUUID: "{uuid.uuid4()}"\nEntities:\n' if kind=="scene" else "#include <Bazzalt/Component.h>\n\n// COMPONENT(NewComponent)\n" if kind=="cpp" else "shader NewShader {\n}\n" if kind=="shader" else '{\n  "shader": null,\n  "properties": {}\n}\n',encoding="utf-8")
         self.Refresh(path);self.Browser.editItem(self.Browser.currentItem())
     def _Import(self)->None:
         if self._folder is None:return
@@ -154,9 +155,11 @@ class AssetBrowserPanel(QWidget):
         self.Refresh(created)
     def _ShowContextMenu(self,widget,position)->None:
         tr=self._localization.Translate;menu=QMenu(self);create=menu.addMenu(tr("assets.create"))
-        for key,label in (("folder","assets.folder"),("cpp","assets.native_cpp"),("shader","assets.shader"),("material","assets.material")):
+        for key,label in (("folder","assets.folder"),("scene","assets.scene"),("cpp","assets.native_cpp"),("shader","assets.shader"),("material","assets.material")):
             action=create.addAction(tr(label));action.triggered.connect(lambda _=False,k=key:self._Create(k))
         menu.addAction(tr("assets.import"),self._Import);menu.addSeparator();selected=bool(self.Browser.selectedItems()) if widget is self.Browser else False
+        current=Path(self.Browser.currentItem().data(Qt.ItemDataRole.UserRole)) if widget is self.Browser and self.Browser.currentItem() else None
+        load=menu.addAction(tr("assets.load_scene"));load.setVisible(bool(current and current.suffix.lower()==".bscene"));load.triggered.connect(lambda:self.LoadSceneRequested.emit(current) if current else None)
         rename=menu.addAction(tr("assets.rename"));rename.setEnabled(len(self.Browser.selectedItems())==1);rename.triggered.connect(lambda:self.Browser.editItem(self.Browser.currentItem()));copy=menu.addAction(tr("assets.copy"));copy.setEnabled(selected);copy.triggered.connect(self._Copy);paste=menu.addAction(tr("assets.paste"));paste.setEnabled(bool(self._clipboard));paste.triggered.connect(self._Paste);delete=menu.addAction(tr("assets.delete"));delete.setEnabled(selected);delete.triggered.connect(self._Delete);menu.addSeparator();menu.addAction(tr("assets.refresh"),self.Refresh)
         self.ContextMenuRequested.emit(menu,widget.mapToGlobal(position));menu.exec(widget.mapToGlobal(position))
 
