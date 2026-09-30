@@ -78,6 +78,7 @@
   "assets.folder": "Folder",
   "assets.scene": "Scene",
   "assets.load_scene": "Load Scene",
+  "assets.file_busy": "Cannot modify '{name}' because the scene is loaded. Unload it first.",
   "assets.native_cpp": "Native C++ File",
   "assets.shader": "Shader",
   "assets.material": "Material",

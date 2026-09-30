@@ -56,11 +56,14 @@ class EditorController(QObject):
         window.Hierarchy.PasteRequested.connect(self.PasteHierarchyEntities)
         window.Hierarchy.ActivateSceneRequested.connect(self.ActivateScene)
         window.Hierarchy.UnloadSceneRequested.connect(self.UnloadScene)
+        window.Hierarchy.RenameSceneRequested.connect(self.RenameScene)
         window.Properties.AddComponentRequested.connect(self.ShowAddComponentMenu)
         window.Properties.RemoveComponentRequested.connect(self.RemoveComponent)
         window.AssetBrowser.AssetSelected.connect(self.SelectAsset)
         window.AssetBrowser.AssetActivated.connect(self.ActivateAsset)
         window.AssetBrowser.LoadSceneRequested.connect(self.LoadSceneAdditive)
+        window.AssetBrowser.SceneRenameHandler=self.RenameSceneAsset
+        window.AssetBrowser.AssetOperationFailed.connect(lambda text:window.Console.AddMessage(text,ConsoleLevel.Error,True,"Editor"))
         runtime.SceneChanged.connect(self.RefreshHierarchy)
         runtime.ProjectChanged.connect(self._ProjectLoaded)
         runtime.ErrorOccurred.connect(lambda text: window.Console.AddMessage(text, ConsoleLevel.Error))
@@ -416,6 +419,24 @@ class EditorController(QObject):
 
     def UnloadScene(self,scene_id:str)->None:
         if self.Runtime.UnloadScene(scene_id):self.SelectEntity(None)
+
+    def RenameScene(self,scene_id:str,name:str)->None:
+        if self.Runtime.RenameLoadedScene(scene_id,name):self.ScenePath=str(self.Runtime.SceneInfo().get("path",self.ScenePath));self.Window.AssetBrowser.Refresh()
+        else:self.RefreshHierarchy()
+
+    def RenameSceneAsset(self,old:Path,target:Path)->bool:
+        target=target if target.suffix.lower()==".bscene" else target.with_name(target.name+".bscene")
+        if self.Runtime.IsSceneLoaded(old):
+            result=self.Runtime.RenameLoadedScene(str(old),target.name)
+        else:
+            try:
+                old.rename(target);meta=old.with_name(old.name+".meta")
+                if meta.exists():meta.rename(target.with_name(target.name+".meta"))
+                result=True
+            except OSError:result=False
+        self.Window.AssetBrowser.Refresh(target if result else old)
+        if result:self.ScenePath=str(self.Runtime.SceneInfo().get("path",self.ScenePath));self.RefreshHierarchy()
+        return result
 
     def _FinishGizmoDrag(self) -> None:
         self.History.Commit()

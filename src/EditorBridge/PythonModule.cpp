@@ -6,6 +6,15 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <Windows.h>
+#else
+#include <fcntl.h>
+#include <sys/file.h>
+#include <unistd.h>
+#endif
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -95,7 +104,7 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
 class EditorHost final {
 public:
     EditorHost() : m_engine(std::make_unique<Runtime::Engine>()) { m_loadedScenes.push_back({{},nullptr}); }
-    ~EditorHost() { Stop(); m_engine->Shutdown(); CleanupSnapshot(); }
+    ~EditorHost() { Stop(); ClearLoadedScenes(); m_engine->Shutdown(); CleanupSnapshot(); }
 
     bool LoadProject(const std::string& path) {
         Stop();
@@ -104,19 +113,23 @@ public:
             m_projectPath = std::filesystem::u8path(path);
             m_scenePath = m_engine->GetProject().StartupScene.empty() ? std::filesystem::path{} :
                 m_projectPath.parent_path() / m_engine->GetProject().StartupScene;
-            m_loadedScenes.clear();
+            ClearLoadedScenes();
             m_loadedScenes.push_back({m_scenePath, nullptr});
             m_activeScene = 0;
+            AcquireSceneLock(m_loadedScenes[0]);
         }
         return result;
     }
-    bool LoadScene(const std::string& path) { Stop(); const bool ok=m_engine->LoadScene(std::filesystem::u8path(path));if(ok){m_scenePath=std::filesystem::u8path(path);m_loadedScenes.clear();m_loadedScenes.push_back({m_scenePath,nullptr});m_activeScene=0;}return ok; }
+    bool LoadScene(const std::string& path) { Stop(); const bool ok=m_engine->LoadScene(std::filesystem::u8path(path));if(ok){m_scenePath=std::filesystem::weakly_canonical(std::filesystem::u8path(path));ClearLoadedScenes();m_loadedScenes.push_back({m_scenePath,nullptr});m_activeScene=0;AcquireSceneLock(m_loadedScenes[0]);}return ok; }
     bool LoadSceneAdditive(const std::string& value) {
         const auto path=std::filesystem::weakly_canonical(std::filesystem::u8path(value));
         for(const auto& loaded:m_loadedScenes)if(!loaded.Path.empty()&&std::filesystem::weakly_canonical(loaded.Path)==path)return true;
         auto scene=m_engine->LoadSceneAsset(path);
         if(!scene)return false;
-        m_loadedScenes.push_back({path,std::move(scene)});return true;
+        for(auto& loaded:m_loadedScenes)if(SceneFor(loaded).GetUUID()==scene->GetUUID()){
+            if(!loaded.Path.empty()&&!std::filesystem::exists(loaded.Path)){ReleaseSceneLock(loaded);loaded.Path=path;AcquireSceneLock(loaded);}return true;
+        }
+        m_loadedScenes.push_back({path,std::move(scene)});AcquireSceneLock(m_loadedScenes.back());return true;
     }
     bool ActivateScene(const std::string& id) {
         const auto target=FindLoadedScene(id);if(!target||*target==m_activeScene)return target.has_value();
@@ -126,12 +139,22 @@ public:
     }
     bool UnloadScene(const std::string& id) {
         const auto target=FindLoadedScene(id);if(!target||*target==m_activeScene)return false;
-        if(!m_loadedScenes[*target].Path.empty()&&!m_engine->SaveSceneAsset(*m_loadedScenes[*target].Data,m_loadedScenes[*target].Path))return false;
+        ReleaseSceneLock(m_loadedScenes[*target]);
+        if(!m_loadedScenes[*target].Path.empty()&&!m_engine->SaveSceneAsset(*m_loadedScenes[*target].Data,m_loadedScenes[*target].Path)){AcquireSceneLock(m_loadedScenes[*target]);return false;}
         m_loadedScenes.erase(m_loadedScenes.begin()+static_cast<std::ptrdiff_t>(*target));
         if(*target<m_activeScene)--m_activeScene;return true;
     }
-    bool SaveScene(const std::string& path) { bool ok=m_engine->SaveScene(std::filesystem::u8path(path));if(ok){m_scenePath=std::filesystem::u8path(path);if(m_activeScene<m_loadedScenes.size())m_loadedScenes[m_activeScene].Path=m_scenePath;for(std::size_t i=0;i<m_loadedScenes.size()&&ok;++i)if(i!=m_activeScene&&!m_loadedScenes[i].Path.empty())ok=m_engine->SaveSceneAsset(*m_loadedScenes[i].Data,m_loadedScenes[i].Path);}return ok; }
-    void NewScene() { Stop(); m_engine->CreateScene();m_scenePath.clear();m_loadedScenes.clear();m_loadedScenes.push_back({{},nullptr});m_activeScene=0; }
+    bool SaveScene(const std::string& path) { bool ok=true;for(auto& loaded:m_loadedScenes)ReleaseSceneLock(loaded);ok=m_engine->SaveScene(std::filesystem::u8path(path));if(ok){m_scenePath=std::filesystem::u8path(path);if(m_activeScene<m_loadedScenes.size())m_loadedScenes[m_activeScene].Path=m_scenePath;for(std::size_t i=0;i<m_loadedScenes.size()&&ok;++i)if(i!=m_activeScene&&!m_loadedScenes[i].Path.empty())ok=m_engine->SaveSceneAsset(*m_loadedScenes[i].Data,m_loadedScenes[i].Path);}for(auto& loaded:m_loadedScenes)AcquireSceneLock(loaded);return ok; }
+    void NewScene() { Stop(); m_engine->CreateScene();m_scenePath.clear();ClearLoadedScenes();m_loadedScenes.push_back({{},nullptr});m_activeScene=0; }
+    bool RenameLoadedScene(const std::string& idOrPath,const std::string& requestedName) {
+        const auto found=FindLoadedScene(idOrPath);if(!found)return false;auto& loaded=m_loadedScenes[*found];if(loaded.Path.empty())return false;
+        auto filename=std::filesystem::path(requestedName).filename();if(filename.extension() != ".bscene")filename += ".bscene";
+        const auto target=loaded.Path.parent_path()/filename;if(target==loaded.Path)return true;if(std::filesystem::exists(target))return false;
+        const auto old=loaded.Path;ReleaseSceneLock(loaded);std::error_code error;std::filesystem::rename(old,target,error);
+        if(error){AcquireSceneLock(loaded);return false;}const auto oldMeta=old.parent_path()/(old.filename().string()+".meta");const auto targetMeta=target.parent_path()/(target.filename().string()+".meta");if(std::filesystem::exists(oldMeta))std::filesystem::rename(oldMeta,targetMeta,error);
+        loaded.Path=target;if(*found==m_activeScene)m_scenePath=target;AcquireSceneLock(loaded);return true;
+    }
+    bool IsSceneLoaded(const std::string& path) { return FindLoadedScene(path).has_value(); }
     std::string LastError() const { return m_engine->GetLastError(); }
     py::str ProjectDirectory() const { return m_projectPath.empty() ? py::str() : PathText(m_projectPath.parent_path()); }
     py::str AssetDirectory() const {
@@ -333,9 +356,31 @@ public:
     bool IsPaused() const { return m_paused; }
 
 private:
-    struct LoadedScene { std::filesystem::path Path; std::unique_ptr<Scene> Data; };
+    struct LoadedScene { std::filesystem::path Path; std::unique_ptr<Scene> Data;
+#ifdef _WIN32
+        HANDLE Lock=INVALID_HANDLE_VALUE;
+#else
+        int Lock=-1;
+#endif
+    };
+    Scene& SceneFor(LoadedScene& loaded){return &loaded==&m_loadedScenes[m_activeScene]?m_engine->GetScene():*loaded.Data;}
     Scene& SceneAt(std::size_t index){return index==m_activeScene?m_engine->GetScene():*m_loadedScenes[index].Data;}
-    std::optional<std::size_t> FindLoadedScene(const std::string& id){for(std::size_t i=0;i<m_loadedScenes.size();++i)if(SceneAt(i).GetUUID().ToString()==id||m_loadedScenes[i].Path==std::filesystem::u8path(id))return i;return std::nullopt;}
+    std::optional<std::size_t> FindLoadedScene(const std::string& id){const auto requested=std::filesystem::u8path(id);for(std::size_t i=0;i<m_loadedScenes.size();++i)if(SceneAt(i).GetUUID().ToString()==id||(!m_loadedScenes[i].Path.empty()&&std::filesystem::weakly_canonical(m_loadedScenes[i].Path)==std::filesystem::weakly_canonical(requested)))return i;return std::nullopt;}
+    void AcquireSceneLock(LoadedScene& loaded){if(loaded.Path.empty()||!std::filesystem::exists(loaded.Path))return;
+#ifdef _WIN32
+        if(loaded.Lock==INVALID_HANDLE_VALUE)loaded.Lock=CreateFileW(loaded.Path.c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+#else
+        if(loaded.Lock<0){loaded.Lock=open(loaded.Path.c_str(),O_RDONLY);if(loaded.Lock>=0&&flock(loaded.Lock,LOCK_EX|LOCK_NB)!=0){close(loaded.Lock);loaded.Lock=-1;}}
+#endif
+    }
+    void ReleaseSceneLock(LoadedScene& loaded){
+#ifdef _WIN32
+        if(loaded.Lock!=INVALID_HANDLE_VALUE){CloseHandle(loaded.Lock);loaded.Lock=INVALID_HANDLE_VALUE;}
+#else
+        if(loaded.Lock>=0){flock(loaded.Lock,LOCK_UN);close(loaded.Lock);loaded.Lock=-1;}
+#endif
+    }
+    void ClearLoadedScenes(){for(auto& loaded:m_loadedScenes)ReleaseSceneLock(loaded);m_loadedScenes.clear();}
     std::pair<Scene*,Entity> FindEntity(const std::string& id){const UUID uuid=ParseUuid(id);for(std::size_t i=0;i<m_loadedScenes.size();++i){Scene& scene=SceneAt(i);Entity entity=scene.GetEntity(uuid);if(entity)return {&scene,entity};}return {nullptr,{}};}
     Entity RequireEntity(const std::string& id) {
         Entity entity = FindEntity(id).second;
@@ -368,6 +413,8 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("load_scene_additive", &Bazzalt::EditorBridge::EditorHost::LoadSceneAdditive)
         .def("activate_scene", &Bazzalt::EditorBridge::EditorHost::ActivateScene)
         .def("unload_scene", &Bazzalt::EditorBridge::EditorHost::UnloadScene)
+        .def("rename_loaded_scene", &Bazzalt::EditorBridge::EditorHost::RenameLoadedScene)
+        .def("is_scene_loaded", &Bazzalt::EditorBridge::EditorHost::IsSceneLoaded)
         .def("save_scene", &Bazzalt::EditorBridge::EditorHost::SaveScene)
         .def("new_scene", &Bazzalt::EditorBridge::EditorHost::NewScene)
         .def("last_error", &Bazzalt::EditorBridge::EditorHost::LastError)

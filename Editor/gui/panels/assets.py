@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 import uuid
 from pathlib import Path
-from PySide6.QtCore import QFile,QMimeData,QSize,Qt,Signal
+from PySide6.QtCore import QFile,QFileSystemWatcher,QMimeData,QSize,Qt,Signal
 from PySide6.QtGui import QColor,QIcon,QLinearGradient,QPainter,QPixmap,QRadialGradient
 from PySide6.QtWidgets import (QAbstractItemView,QFileDialog,QLineEdit,QListWidget,QListWidgetItem,QMenu,QSplitter,QStyledItemDelegate,QTreeWidget,QTreeWidgetItem,QVBoxLayout,QWidget)
 from ...localization import LocalizationManager
@@ -32,9 +32,10 @@ class AssetNameDelegate(QStyledItemDelegate):
         super().setEditorData(editor,index)
 
 class AssetBrowserPanel(QWidget):
-    AssetActivated=Signal(object);AssetSelected=Signal(object);ContextMenuRequested=Signal(object,object);SelectionCleared=Signal();LoadSceneRequested=Signal(object)
+    AssetActivated=Signal(object);AssetSelected=Signal(object);ContextMenuRequested=Signal(object,object);SelectionCleared=Signal();LoadSceneRequested=Signal(object);AssetOperationFailed=Signal(str)
     def __init__(self,localization:LocalizationManager,resources=None)->None:
-        super().__init__();self._localization=localization;self._resources=resources;self._root=None;self._folder=None;self._clipboard=[]
+        super().__init__();self._localization=localization;self._resources=resources;self._root=None;self._folder=None;self._clipboard=[];self.SceneRenameHandler=None
+        self._watcher=QFileSystemWatcher(self);self._watcher.directoryChanged.connect(lambda _path:self.Refresh())
         layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0);splitter=QSplitter(Qt.Orientation.Horizontal);splitter.setChildrenCollapsible(False)
         self.Tree=QTreeWidget();self.Tree.setHeaderHidden(True);self.Tree.currentItemChanged.connect(self._FolderSelected)
         self.Browser=AssetList();self.Browser.setItemDelegate(AssetNameDelegate(self.Browser));self.Browser.setViewMode(QListWidget.ViewMode.IconMode);self.Browser.setIconSize(QSize(48,48));self.Browser.setGridSize(QSize(104,86));self.Browser.setResizeMode(QListWidget.ResizeMode.Adjust);self.Browser.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -45,7 +46,11 @@ class AssetBrowserPanel(QWidget):
         self.Browser.itemDoubleClicked.connect(self._Activate);self.Browser.itemSelectionChanged.connect(self._SelectionChanged);self.Browser.itemChanged.connect(self._ItemRenamed);self.Browser.EmptyClicked.connect(self.SelectionCleared);self.Tree.itemClicked.connect(self._TreeSelected)
         for widget in (self.Tree,self.Browser):widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);widget.customContextMenuRequested.connect(lambda pos,w=widget:self._ShowContextMenu(w,pos))
         self.Tree.setMinimumWidth(110);self.Browser.setMinimumWidth(140);splitter.addWidget(self.Tree);splitter.addWidget(self.Browser);splitter.setStretchFactor(0,1);splitter.setStretchFactor(1,3);splitter.setSizes([220,700]);layout.addWidget(splitter)
-    def SetProjectRoot(self,root)->None:self._root=Path(root).resolve() if root else None;self.Refresh()
+    def SetProjectRoot(self,root)->None:
+        if self._watcher.directories():self._watcher.removePaths(self._watcher.directories())
+        self._root=Path(root).resolve() if root else None
+        if self._root and self._root.is_dir():self._watcher.addPath(str(self._root))
+        self.Refresh()
     def CurrentFolder(self):return self._folder
     def _InsideRoot(self,path):
         if self._root is None:return False
@@ -86,6 +91,10 @@ class AssetBrowserPanel(QWidget):
     def _FolderSelected(self,item,_previous)->None:
         self.Browser.blockSignals(True);self.Browser.clear();self.Browser.blockSignals(False);self._folder=Path(item.data(0,Qt.ItemDataRole.UserRole)) if item else None
         if self._folder is None:return
+        watched=self._watcher.directories()
+        for value in watched:
+            if self._root is None or Path(value)!=self._root:self._watcher.removePath(value)
+        if str(self._folder) not in self._watcher.directories():self._watcher.addPath(str(self._folder))
         try:entries=sorted(self._folder.iterdir(),key=lambda p:(not p.is_dir(),p.name.lower()))
         except OSError:return
         for entry in entries:
@@ -131,6 +140,9 @@ class AssetBrowserPanel(QWidget):
         target=old.with_name(name)
         if not self._InsideRoot(target) or target.exists():
             self.Browser.blockSignals(True);item.setText(self._DisplayName(old));self.Browser.blockSignals(False);return
+        if old.suffix.lower()==".bscene" and callable(self.SceneRenameHandler):
+            if self.SceneRenameHandler(old,target):return
+            self.Browser.blockSignals(True);item.setText(self._DisplayName(old));self.Browser.blockSignals(False);return
         try:old.rename(target)
         except OSError:
             self.Browser.blockSignals(True);item.setText(self._DisplayName(old));self.Browser.blockSignals(False);return
@@ -142,7 +154,9 @@ class AssetBrowserPanel(QWidget):
     def _Delete(self)->None:
         for item in self.Browser.selectedItems():
             path=Path(item.data(Qt.ItemDataRole.UserRole))
-            if self._InsideRoot(path):QFile.moveToTrash(str(path));meta=path.with_name(path.name+".meta");QFile.moveToTrash(str(meta)) if meta.exists() else None
+            if self._InsideRoot(path):
+                if not QFile.moveToTrash(str(path)):self.AssetOperationFailed.emit(self._localization.Translate("assets.file_busy",name=path.name));continue
+                meta=path.with_name(path.name+".meta");QFile.moveToTrash(str(meta)) if meta.exists() else None
         self.Refresh();self.SelectionCleared.emit()
     def _Copy(self)->None:self._clipboard=[Path(i.data(Qt.ItemDataRole.UserRole)) for i in self.Browser.selectedItems()]
     def _Paste(self)->None:

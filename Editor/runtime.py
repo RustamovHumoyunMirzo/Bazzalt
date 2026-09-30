@@ -93,6 +93,14 @@ class RuntimeService(QObject):
         if result:self.SceneChanged.emit()
         return result
 
+    def IsSceneLoaded(self, path: str | Path) -> bool:
+        return bool(self._host and hasattr(self._host,"is_scene_loaded") and self._host.is_scene_loaded(str(path)))
+
+    def RenameLoadedScene(self, scene_or_path: str, name: str) -> bool:
+        result=bool(self._host and hasattr(self._host,"rename_loaded_scene") and self._host.rename_loaded_scene(str(scene_or_path),name))
+        if result:self.SceneChanged.emit()
+        return result
+
     def LoadedScenes(self) -> list[dict]:
         return [dict(scene) for scene in self._host.loaded_scenes()] if self._host is not None and hasattr(self._host,"loaded_scenes") else [dict(self.SceneInfo(),active=True,entities=self.Entities())]
 

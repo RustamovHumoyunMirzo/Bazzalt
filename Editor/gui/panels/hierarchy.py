@@ -83,6 +83,7 @@ class HierarchyPanel(QWidget):
     PasteRequested = Signal(object)
     ActivateSceneRequested = Signal(str)
     UnloadSceneRequested = Signal(str)
+    RenameSceneRequested = Signal(str, str)
 
     def __init__(self, localization: LocalizationManager) -> None:
         super().__init__(); self._localization = localization;self._collapsed_ids:set[str]=set()
@@ -105,6 +106,7 @@ class HierarchyPanel(QWidget):
         item.setData(0,Qt.ItemDataRole.UserRole+1,kind)
         item.setData(0,Qt.ItemDataRole.UserRole+2,name)
         if kind=="entity":item.setFlags(item.flags()|Qt.ItemFlag.ItemIsEditable|Qt.ItemFlag.ItemIsDragEnabled|Qt.ItemFlag.ItemIsDropEnabled)
+        elif kind=="scene":item.setFlags(item.flags()|Qt.ItemFlag.ItemIsEditable|Qt.ItemFlag.ItemIsDropEnabled)
         if kind=="scene" and active:
             font=item.font(0);font.setBold(True);item.setFont(0,font);item.setData(0,Qt.ItemDataRole.UserRole+3,True)
         if icon is not None:item.setIcon(0,icon)
@@ -164,13 +166,17 @@ class HierarchyPanel(QWidget):
 
     def _BeginRename(self)->None:
         item=self.Tree.currentItem()
-        if item is not None and item.data(0,Qt.ItemDataRole.UserRole+1)=="entity":self.Tree.editItem(item,0)
+        if item is not None and item.data(0,Qt.ItemDataRole.UserRole+1) in {"entity","scene"}:self.Tree.editItem(item,0)
 
     def _ItemRenamed(self,item,column)->None:
-        if column!=0 or item.data(0,Qt.ItemDataRole.UserRole+1)!="entity":return
+        if column!=0:return
+        kind=item.data(0,Qt.ItemDataRole.UserRole+1)
+        if kind not in {"entity","scene"}:return
         old=str(item.data(0,Qt.ItemDataRole.UserRole+2) or "");name=item.text(0).strip()
         if not name:item.setText(0,old);return
-        if name!=old:item.setData(0,Qt.ItemDataRole.UserRole+2,name);self.RenameRequested.emit(str(item.data(0,Qt.ItemDataRole.UserRole)),name)
+        if name!=old:
+            item.setData(0,Qt.ItemDataRole.UserRole+2,name)
+            (self.RenameSceneRequested if kind=="scene" else self.RenameRequested).emit(str(item.data(0,Qt.ItemDataRole.UserRole)),name)
 
     def _ShowContextMenu(self, position) -> None:  # type: ignore[no-untyped-def]
         item=self.Tree.itemAt(position);menu=QMenu(self)
@@ -180,7 +186,7 @@ class HierarchyPanel(QWidget):
         create_menu=menu.addMenu(self._localization.Translate("hierarchy.add_new"))
         for title,kind in ((self._localization.Translate("hierarchy.empty"),"Entity"),("Camera","Camera"),("Light","Light"),("Mesh","Mesh")):
             action=create_menu.addAction(title);action.triggered.connect(lambda _=False,k=kind:self.CreateTypedRequested.emit(k,parent))
-        menu.addSeparator();rename=menu.addAction(self._localization.Translate("hierarchy.rename"));rename.setShortcut(QKeySequence(Qt.Key.Key_F2));rename.setEnabled(item is not None and item.data(0,Qt.ItemDataRole.UserRole+1)=="entity");rename.triggered.connect(self._BeginRename)
+        menu.addSeparator();rename=menu.addAction(self._localization.Translate("hierarchy.rename"));rename.setShortcut(QKeySequence(Qt.Key.Key_F2));rename.setEnabled(item is not None and item.data(0,Qt.ItemDataRole.UserRole+1) in {"entity","scene"});rename.triggered.connect(lambda:self.Tree.editItem(item,0) if item else None)
         copy=menu.addAction(self._localization.Translate("hierarchy.copy"));copy.setShortcut(QKeySequence.StandardKey.Copy);copy.setEnabled(bool(self.GetSelectedData()));copy.triggered.connect(lambda:self.CopyRequested.emit(self.GetSelectedData()))
         paste=menu.addAction(self._localization.Translate("hierarchy.paste"));paste.setShortcut(QKeySequence.StandardKey.Paste);paste.triggered.connect(lambda:self.PasteRequested.emit(parent))
         menu.addSeparator()
