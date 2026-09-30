@@ -116,6 +116,12 @@
   "dialog.close_without_saving": "Close Without Saving",
   "dialog.cancel_close": "Cancel",
   "console.project_loaded": "Project loaded: {path}",
+  "scripting.menu": "Scripts",
+  "scripting.compiling": "Compiling game scripts…",
+  "scripting.compiler_source": "Compiler",
+  "scripting.runtime_source": "Runtime",
+  "scripting.toolchain_missing": "Bundled LLVM/Clang toolchain is missing. Repair this editor installation.",
+  "scripting.compile_success": "Compiled {count} script module(s).",
   "entity.new": "New Entity",
   "viewport.scene_connected": "Scene viewport — runtime connected",
   "viewport.game_connected": "Game viewport — stopped"

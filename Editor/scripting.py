@@ -15,7 +15,7 @@ class ScriptDescriptor:
     path: Path; name: str; properties: tuple[ScriptProperty,...]=field(default_factory=tuple)
 @dataclass(frozen=True)
 class Diagnostic:
-    level: str; message: str; source: str="Compiler"
+    level: str; message: str; source: str="Compiler";localization_key: str=""
 @dataclass(frozen=True)
 class BuildResult:
     success: bool; outputs: tuple[Path,...]=(); diagnostics: tuple[Diagnostic,...]=()
@@ -48,7 +48,7 @@ class ScriptCompiler:
         descriptors=[value for path in dict.fromkeys(map(str,used)) if (value:=self.Inspect(path)) is not None]
         if not descriptors:return BuildResult(True)
         compiler=self._compiler()
-        if compiler is None:return BuildResult(False,diagnostics=(Diagnostic("error","Bundled LLVM/Clang toolchain is missing. Repair this editor installation."),))
+        if compiler is None:return BuildResult(False,diagnostics=(Diagnostic("error","Bundled LLVM/Clang toolchain is missing. Repair this editor installation.",localization_key="scripting.toolchain_missing"),))
         self.cache.mkdir(parents=True,exist_ok=True)
         try:state=json.loads(self.state_file.read_text(encoding="utf-8"))
         except (OSError,json.JSONDecodeError):state={}

@@ -2,6 +2,8 @@ import unittest
 from pathlib import Path
 
 from Editor.scripting import ScriptAttachments, ScriptCompiler
+from Editor.localization import LocalizationManager
+from Editor.resources import ResourceManager
 
 class ScriptingTests(unittest.TestCase):
     source=Path(__file__).parent/"fixtures"/"scripts"/"Mover.cpp"
@@ -25,5 +27,10 @@ class ScriptingTests(unittest.TestCase):
         self.assertIn("BazzaltGetScriptModuleV1",wrapper)
         self.assertIn('strcmp(name,"Speed")',wrapper)
         self.assertIn("OnUpdate(void* p,float dt)",wrapper)
+
+    def test_compilation_ui_text_is_localized(self):
+        localization=LocalizationManager(ResourceManager())
+        self.assertEqual(localization.Translate("scripting.compiling"),"Compiling game scripts…")
+        self.assertIn("3",localization.Translate("scripting.compile_success",count=3))
 
 if __name__=="__main__":unittest.main()

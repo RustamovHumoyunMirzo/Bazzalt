@@ -501,7 +501,7 @@ class EditorController(QObject):
             action.triggered.connect(lambda _=False, name=component_type: self._AddComponent(name))
         scripts=self.ScriptCompiler.Discover() if self.ScriptCompiler else []
         if scripts:
-            menu.addSeparator();script_menu=menu.addMenu("Scripts")
+            menu.addSeparator();script_menu=menu.addMenu(self.Window.Localization.Translate("scripting.menu"))
             for descriptor in scripts:
                 action=script_menu.addAction(descriptor.name);action.triggered.connect(lambda _=False,d=descriptor:self._AttachScript(d))
         button = self.Window.Properties.AddComponentButton
@@ -592,15 +592,18 @@ class EditorController(QObject):
 
     def Play(self) -> None:
         if self.ScriptCompiler and self.ScriptAttachments:
-            progress=QProgressDialog("Compiling game scripts…",None,0,0,self.Window);progress.setWindowModality(Qt.WindowModality.WindowModal);progress.setCancelButton(None);progress.show();QApplication.processEvents()
+            tr=self.Window.Localization.Translate
+            progress=QProgressDialog(tr("scripting.compiling"),None,0,0,self.Window);progress.setWindowModality(Qt.WindowModality.WindowModal);progress.setCancelButton(None);progress.show();QApplication.processEvents()
             try:result=self.ScriptCompiler.Build(self.ScriptAttachments.UsedSources())
             finally:progress.close()
             for diagnostic in result.diagnostics:
                 level=ConsoleLevel.Error if diagnostic.level=="error" else ConsoleLevel.Warning if diagnostic.level=="warning" else ConsoleLevel.Info
-                self.Window.Console.AddMessage(diagnostic.message,level,True,diagnostic.source)
+                message=tr(diagnostic.localization_key) if diagnostic.localization_key else diagnostic.message
+                self.Window.Console.AddMessage(message,level,True,tr("scripting.compiler_source"))
             if not result.success:self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
+            if result.outputs:self.Window.Console.AddMessage(tr("scripting.compile_success",count=len(result.outputs)),ConsoleLevel.Info,True,tr("scripting.compiler_source"))
             if not self.Runtime.ConfigureScripts(self.ScriptAttachments.RuntimeBindings(result.outputs)):
-                self.Window.Console.AddMessage(self.Runtime.LastError(),ConsoleLevel.Error,True,"Runtime");self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
+                self.Window.Console.AddMessage(self.Runtime.LastError(),ConsoleLevel.Error,True,tr("scripting.runtime_source"));self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
         if not self.Runtime.Play():self.Window.Toolbar.SetPlayState(PlayState.Stopped)
 
     def _AttachScript(self,descriptor,entity_id:str|None=None)->None:
