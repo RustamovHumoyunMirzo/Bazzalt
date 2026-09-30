@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Engine Hub</title>
+    <title>BAZZALT Hub</title>
+    <link rel="icon" type="image/svg+xml" href="BazzaltLogo.svg">
     <style>
         :root {
             /* Light Theme Palette - Classic Crisp Desktop */
@@ -146,14 +147,27 @@
         .brand-icon {
             width: 24px;
             height: 24px;
-            background: var(--text-main);
-            color: var(--bg-app);
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 4px;
-            font-weight: bold;
-            font-size: 12px;
+        }
+
+        .brand-icon img, .project-icon img, .empty-logo {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            filter: invert(1);
+        }
+
+        [data-theme="dark"] .brand-icon img,
+        [data-theme="dark"] .project-icon img,
+        [data-theme="dark"] .empty-logo {
+            filter: none;
+        }
+
+        .empty-logo {
+            width: 48px;
+            height: 48px;
         }
 
         .brand-title {
@@ -398,9 +412,8 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-weight: bold;
-            color: var(--text-main);
             flex-shrink: 0;
+            padding: 6px;
         }
 
         .project-title {
@@ -640,8 +653,8 @@
         <aside class="sidebar">
             <div class="sidebar-top">
                 <div class="brand">
-                    <div class="brand-icon">E</div>
-                    <div class="brand-title">Engine Hub</div>
+                    <div class="brand-icon"><img src="BazzaltLogo.svg" alt=""></div>
+                    <div class="brand-title">BAZZALT Hub</div>
                 </div>
 
                 <ul class="nav-list">
@@ -707,7 +720,7 @@
                     </tbody>
                 </table>
                 <div class="empty-state" id="emptyState" style="display: none;">
-                    <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm0 12H4V8h16v10z"/></svg>
+                    <img class="empty-logo" src="BazzaltLogo.svg" alt="">
                     <div>No projects found</div>
                 </div>
             </section>
@@ -906,12 +919,10 @@
                 tr.className = 'project-row';
                 tr.onclick = () => launchProject(proj.id);
 
-                const firstChar = proj.name.charAt(0).toUpperCase();
-
                 tr.innerHTML = `
                     <td>
                         <div class="project-name-cell">
-                            <div class="project-icon">${firstChar}</div>
+                            <div class="project-icon"><img src="BazzaltLogo.svg" alt=""></div>
                             <div>
                                 <div class="project-title">${escapeHtml(proj.name)} <span class="engine-badge">${proj.version || '2026.1'}</span></div>
                             </div>

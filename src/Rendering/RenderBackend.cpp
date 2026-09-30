@@ -25,6 +25,7 @@
 #include <utils/EntityManager.h>
 #include "Rendering/RenderAssets.h"
 #include "editor_gizmo_filamat.h"
+#include "editor_grid_filamat.h"
 #include "editor_icon_filamat.h"
 #include "scene_cam_rgba.h"
 #include "scene_light_rgba.h"
@@ -58,6 +59,7 @@ struct RenderBackend::GizmoResource {
     std::array<utils::Entity, 9> Entities{};
     filament::VertexBuffer* GridVertices = nullptr;
     filament::IndexBuffer* GridIndices = nullptr;
+    filament::Material* GridMaterial = nullptr;
     filament::MaterialInstance* GridInstance = nullptr;
     utils::Entity GridEntity{};
     filament::Scene* HelperScene = nullptr;
@@ -83,6 +85,19 @@ const std::uint8_t* GlbBinary(const std::uint8_t* bytes, std::size_t size) {
     const std::size_t binaryHeader = 20u + ReadU32(bytes + 12);
     return binaryHeader + 8 <= size ? bytes + binaryHeader + 8 : nullptr;
 }
+
+void ConfigureEditorFog(filament::View& view, float gridScale) {
+    filament::View::FogOptions fog;
+    fog.enabled = true;
+    // Keep the useful editing area clear, then blend distant scene geometry
+    // into the editor background before the adaptive grid can reach its edge.
+    fog.distance = 60.0f * gridScale;
+    fog.density = 0.025f / gridScale;
+    fog.maximumOpacity = 1.0f;
+    fog.heightFalloff = 0.0f;
+    fog.color = {0.055f, 0.065f, 0.085f};
+    view.setFogOptions(fog);
+}
 }
 
 RenderBackend::RenderBackend() = default;
@@ -100,6 +115,9 @@ bool RenderBackend::Initialize() {
     m_gizmo = std::make_unique<GizmoResource>();
     m_gizmo->Material = filament::Material::Builder()
         .package(Embedded::EditorGizmoFilamat, Embedded::EditorGizmoFilamatSize).build(*m_engine);
+    m_gizmo->GridMaterial = filament::Material::Builder()
+        .package(Embedded::EditorGridFilamat, Embedded::EditorGridFilamatSize).build(*m_engine);
+    if (!m_gizmo->Material || !m_gizmo->GridMaterial) { Shutdown(); return false; }
     struct Model { const std::uint8_t* Bytes; std::size_t Size; std::uint32_t Vertices, Indices, IndexOffset; };
     const Model models[] = {
         {Embedded::EditorTranslateGizmoGlb, Embedded::EditorTranslateGizmoGlbSize, 75, 198, 2400},
@@ -139,14 +157,14 @@ bool RenderBackend::Initialize() {
         }
     }
     constexpr int half=200;constexpr int lineCount=(half*2+1)*2;constexpr int vertexCount=lineCount*4;constexpr int indexCount=lineCount*6;constexpr float width=.0125f;
-    auto* grid=new float[vertexCount*3];auto* gridIndices=new std::uint16_t[indexCount];int vertexCursor=0,indexCursor=0,base=0;
-    const auto quad=[&](float x0,float y0,float x1,float y1){const float values[]={x0,y0,0,x1,y0,0,x1,y1,0,x0,y1,0};for(float v:values)grid[vertexCursor++]=v;const std::uint16_t ids[]={std::uint16_t(base),std::uint16_t(base+1),std::uint16_t(base+2),std::uint16_t(base),std::uint16_t(base+2),std::uint16_t(base+3)};for(auto v:ids)gridIndices[indexCursor++]=v;base+=4;};
+    auto* grid=new float[vertexCount*5];auto* gridIndices=new std::uint16_t[indexCount];int vertexCursor=0,indexCursor=0,base=0;
+    const auto quad=[&](float x0,float y0,float x1,float y1){const float values[]={x0,y0,0,x0,y0,x1,y0,0,x1,y0,x1,y1,0,x1,y1,x0,y1,0,x0,y1};for(float v:values)grid[vertexCursor++]=v;const std::uint16_t ids[]={std::uint16_t(base),std::uint16_t(base+1),std::uint16_t(base+2),std::uint16_t(base),std::uint16_t(base+2),std::uint16_t(base+3)};for(auto v:ids)gridIndices[indexCursor++]=v;base+=4;};
     for(int i=-half;i<=half;++i){quad(float(-half),float(i)-width,float(half),float(i)+width);quad(float(i)-width,float(-half),float(i)+width,float(half));}
-    m_gizmo->GridVertices=filament::VertexBuffer::Builder().vertexCount(vertexCount).bufferCount(1).attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3).build(*m_engine);
-    m_gizmo->GridVertices->setBufferAt(*m_engine,0,{grid,vertexCount*3*sizeof(float),[](void* b,size_t,void*){delete[] static_cast<float*>(b);}});
+    m_gizmo->GridVertices=filament::VertexBuffer::Builder().vertexCount(vertexCount).bufferCount(1).attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3,0,20).attribute(filament::VertexAttribute::UV0,0,filament::VertexBuffer::AttributeType::FLOAT2,12,20).build(*m_engine);
+    m_gizmo->GridVertices->setBufferAt(*m_engine,0,{grid,vertexCount*5*sizeof(float),[](void* b,size_t,void*){delete[] static_cast<float*>(b);}});
     m_gizmo->GridIndices=filament::IndexBuffer::Builder().indexCount(indexCount).bufferType(filament::IndexBuffer::IndexType::USHORT).build(*m_engine);
     m_gizmo->GridIndices->setBuffer(*m_engine,{gridIndices,indexCount*sizeof(std::uint16_t),[](void* b,size_t,void*){delete[] static_cast<std::uint16_t*>(b);}});
-    m_gizmo->GridInstance=m_gizmo->Material->createInstance();m_gizmo->GridInstance->setParameter("color",filament::math::float4{.32f,.34f,.38f,1.0f});m_gizmo->GridInstance->setDoubleSided(true);m_gizmo->GridInstance->setDepthWrite(true);m_gizmo->GridInstance->setDepthCulling(true);
+    m_gizmo->GridInstance=m_gizmo->GridMaterial->createInstance();m_gizmo->GridInstance->setParameter("color",filament::math::float4{.32f,.34f,.38f,1.0f});m_gizmo->GridInstance->setDoubleSided(true);m_gizmo->GridInstance->setDepthWrite(false);m_gizmo->GridInstance->setDepthCulling(true);
     m_gizmo->GridEntity=m_engine->getEntityManager().create();m_engine->getTransformManager().create(m_gizmo->GridEntity);filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{201,201,.1f}}).material(0,m_gizmo->GridInstance).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,m_gizmo->GridVertices,m_gizmo->GridIndices).culling(false).castShadows(false).receiveShadows(false).layerMask(0xff,0x80).priority(7).build(*m_engine,m_gizmo->GridEntity);
     m_engine->getRenderableManager().setLayerMask(m_engine->getRenderableManager().getInstance(m_gizmo->GridEntity),0xff,0x80);
     m_gizmo->HelperScene=m_engine->createScene();
@@ -196,6 +214,7 @@ bool RenderBackend::CreateViewport(std::uint64_t id, std::uintptr_t nativeWindow
     viewport->View->setPostProcessingEnabled(true);
     viewport->View->setVisibleLayers(0xff, kind == ViewportKind::Scene ? 0xff : 0x7f);
     if (kind == ViewportKind::Scene) {
+        ConfigureEditorFog(*viewport->View, m_gridScale);
         viewport->Camera->lookAt({6.0, 4.0, 8.0}, {0.0, 0.0, 0.0}, {0.0, 1.0, 0.0});
         viewport->HelperCameraEntity=m_engine->getEntityManager().create();viewport->HelperCamera=m_engine->createCamera(viewport->HelperCameraEntity);viewport->HelperView=m_engine->createView();viewport->HelperView->setScene(m_gizmo->HelperScene);viewport->HelperView->setCamera(viewport->HelperCamera);viewport->HelperView->setPostProcessingEnabled(false);viewport->HelperView->setBlendMode(filament::View::BlendMode::TRANSLUCENT);viewport->HelperView->setChannelDepthClearEnabled(0,true);viewport->HelperCamera->lookAt({2.1,1.4,2.8},{0,0,0},{0,1,0});viewport->HelperCamera->setProjection(38.0,1.0,0.1,10.0,filament::Camera::Fov::VERTICAL);
     } else {
@@ -258,6 +277,7 @@ void RenderBackend::SetSceneCamera(std::uint64_t id, float eyeX, float eyeY, flo
         m_gridCenterX=std::round(targetX/snap)*snap;
         m_gridCenterY=std::round(targetY/snap)*snap;
         m_gridCenterZ=std::round(targetZ/snap)*snap;
+        ConfigureEditorFog(*found->second->View, m_gridScale);
         SetEditorGrid(m_gridVisible,m_gridPlane);
         if(m_gizmoVisible)SetEditorGizmo(true,m_gizmoX,m_gizmoY,m_gizmoZ,m_gizmoMode);
     }
@@ -293,7 +313,7 @@ void RenderBackend::SetEditorGizmoHover(int axis) {
     for(int i=0;i<3;++i){auto color=colors[i];if(i==m_gizmoHover){color.x+=(1-color.x)*.42f;color.y+=(1-color.y)*.42f;color.z+=(1-color.z)*.42f;}m_gizmo->Instances[i]->setParameter("color",color);}
 }
 
-void RenderBackend::SetEditorGrid(bool visible,int plane){m_gridVisible=visible;m_gridPlane=std::clamp(plane,0,2);if(!m_gizmo||!m_engine)return;auto& tm=m_engine->getTransformManager();auto instance=tm.getInstance(m_gizmo->GridEntity);filament::math::mat4f rotation;if(m_gridPlane==1)rotation=filament::math::mat4f::rotation(1.5707963f,filament::math::float3{1,0,0});else if(m_gridPlane==2)rotation=filament::math::mat4f::rotation(1.5707963f,filament::math::float3{0,1,0});filament::math::float3 center;if(m_gridPlane==0)center={m_gridCenterX,m_gridCenterY,0};else if(m_gridPlane==1)center={m_gridCenterX,0,m_gridCenterZ};else center={0,m_gridCenterY,m_gridCenterZ};const auto scale=filament::math::mat4f::scaling(filament::math::float3{m_gridScale,m_gridScale,m_gridScale});tm.setTransform(instance,filament::math::mat4f::translation(center)*rotation*scale);if(visible)m_scene->addEntity(m_gizmo->GridEntity);else m_scene->remove(m_gizmo->GridEntity);}
+void RenderBackend::SetEditorGrid(bool visible,int plane){m_gridVisible=visible;m_gridPlane=std::clamp(plane,0,2);if(!m_gizmo||!m_engine)return;auto& tm=m_engine->getTransformManager();auto instance=tm.getInstance(m_gizmo->GridEntity);filament::math::mat4f rotation;if(m_gridPlane==1)rotation=filament::math::mat4f::rotation(1.5707963f,filament::math::float3{1,0,0});else if(m_gridPlane==2)rotation=filament::math::mat4f::rotation(1.5707963f,filament::math::float3{0,1,0});filament::math::float3 center;if(m_gridPlane==0)center={m_gridCenterX,m_gridCenterY,0};else if(m_gridPlane==1)center={m_gridCenterX,0,m_gridCenterZ};else center={0,m_gridCenterY,m_gridCenterZ};const auto scale=filament::math::mat4f::scaling(filament::math::float3{m_gridScale,m_gridScale,m_gridScale});tm.setTransform(instance,filament::math::mat4f::translation(center)*rotation*scale);if(m_gizmo->GridInstance){m_gizmo->GridInstance->setParameter("fogStart",125.0f);m_gizmo->GridInstance->setParameter("fogEnd",180.0f);}if(visible)m_scene->addEntity(m_gizmo->GridEntity);else m_scene->remove(m_gizmo->GridEntity);}
 
 void RenderBackend::SetEditorIcons(const std::vector<EditorIcon>& icons) {
     if(!m_gizmo||!m_engine)return;
@@ -350,7 +370,7 @@ void RenderBackend::Shutdown() {
             if (m_gizmo->Instances[axis]) m_engine->destroy(m_gizmo->Instances[axis]);
         }
         m_scene->remove(m_gizmo->GridEntity);m_engine->destroy(m_gizmo->GridEntity);m_engine->getEntityManager().destroy(m_gizmo->GridEntity);
-        if(m_gizmo->GridInstance)m_engine->destroy(m_gizmo->GridInstance);if(m_gizmo->GridVertices)m_engine->destroy(m_gizmo->GridVertices);if(m_gizmo->GridIndices)m_engine->destroy(m_gizmo->GridIndices);
+        if(m_gizmo->GridInstance)m_engine->destroy(m_gizmo->GridInstance);if(m_gizmo->GridVertices)m_engine->destroy(m_gizmo->GridVertices);if(m_gizmo->GridIndices)m_engine->destroy(m_gizmo->GridIndices);if(m_gizmo->GridMaterial)m_engine->destroy(m_gizmo->GridMaterial);
         for(int i=0;i<3;++i){if(m_gizmo->HelperScene)m_gizmo->HelperScene->remove(m_gizmo->HelperEntities[i]);m_engine->destroy(m_gizmo->HelperEntities[i]);m_engine->getEntityManager().destroy(m_gizmo->HelperEntities[i]);if(m_gizmo->HelperInstances[i])m_engine->destroy(m_gizmo->HelperInstances[i]);}
         for(auto& icon:m_gizmo->Icons){m_scene->remove(icon.Entity);m_engine->destroy(icon.Entity);m_engine->getEntityManager().destroy(icon.Entity);if(icon.Instance)m_engine->destroy(icon.Instance);}m_gizmo->Icons.clear();
         if(m_gizmo->IconVertices)m_engine->destroy(m_gizmo->IconVertices);if(m_gizmo->IconIndices)m_engine->destroy(m_gizmo->IconIndices);if(m_gizmo->CameraIconTexture)m_engine->destroy(m_gizmo->CameraIconTexture);if(m_gizmo->LightIconTexture)m_engine->destroy(m_gizmo->LightIconTexture);if(m_gizmo->IconMaterial)m_engine->destroy(m_gizmo->IconMaterial);

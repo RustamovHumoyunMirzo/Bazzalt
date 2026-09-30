@@ -24,11 +24,13 @@ if (-not $Native) { throw "Could not find the built _bazzalt_runtime module" }
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
 python -m nuitka --mode=standalone --assume-yes-for-downloads --enable-plugin=pyside6 `
     --include-data-file="$Root/Launcher/index.html=Launcher/index.html" `
+    --include-data-file="$Root/Launcher/BazzaltLogo.svg=Launcher/BazzaltLogo.svg" `
     --windows-console-mode=disable --output-filename=BazzaltHub.exe --output-dir=$Output "$Root/bazzalt_hub.py"
 if ($LASTEXITCODE -ne 0) { throw "BazzaltHub compilation failed" }
 
 python -m nuitka --mode=standalone --assume-yes-for-downloads --enable-plugin=pyside6 --windows-console-mode=disable `
     --include-data-dir="$Root/Editor/assets=Editor/assets" `
+    --include-data-file="$Root/Launcher/BazzaltLogo.svg=Launcher/BazzaltLogo.svg" `
     --output-filename=Bazzalt.exe --output-dir=$Output "$Root/bazzalt_editor.py"
 if ($LASTEXITCODE -ne 0) { throw "Bazzalt editor compilation failed" }
 

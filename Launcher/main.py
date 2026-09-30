@@ -14,6 +14,7 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QFileDialog, QMainWindow
 
 from bazzalt.settings import DataPaths
+from bazzalt.branding import LogoIcon
 from .catalog import CURRENT_EDITOR_VERSION, HubCatalog
 
 try:
@@ -106,7 +107,7 @@ class LocalPage(QWebEnginePage):
 
 class HubWindow(QMainWindow):
     def __init__(self) -> None:
-        super().__init__(); self.setWindowTitle("BAZZALT Hub"); self.resize(1180, 760)
+        super().__init__(); self.setWindowTitle("BAZZALT Hub");self.setWindowIcon(LogoIcon("#707070"));self.resize(1180, 760)
         self.Catalog = HubCatalog(); self.Catalog.DiscoverEditors()
         if not IS_COMPILED and not getattr(sys, "frozen", False) and os.environ.get("BAZZALT_PRODUCTION") != "1":
             self.Catalog.RegisterDevelopmentEditor(Path(__file__).resolve().parent.parent)
@@ -119,6 +120,7 @@ class HubWindow(QMainWindow):
 
 def main() -> int:
     app = QApplication(sys.argv); app.setOrganizationName("BAZZALT"); app.setApplicationName("BAZZALT Hub")
+    app.setWindowIcon(LogoIcon("#707070"))
     window = HubWindow(); window.show(); return app.exec()
 
 

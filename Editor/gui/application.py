@@ -12,6 +12,7 @@ from ..localization import LocalizationManager
 from ..resources import ResourceManager
 from ..runtime import RuntimeService
 from ..theme import ThemeManager
+from bazzalt.branding import LogoIcon
 from .docking import DockingSystem
 from .panels import (
     AssetBrowserPanel,
@@ -51,6 +52,8 @@ class Editor(QMainWindow):
         self.Resources = resources or ResourceManager()
         self.Localization = localization or LocalizationManager(self.Resources)
         self.Runtime = runtime or RuntimeService(self)
+        self._UpdateBrandIcon()
+        self.ThemeManager.ThemeChanged.connect(lambda _theme:self._UpdateBrandIcon())
         self._settings=settings if settings is not None else {"schema_version":2}
         self._settings_saver=settings_saver
         self._layout_save_timer=QTimer(self);self._layout_save_timer.setSingleShot(True);self._layout_save_timer.setInterval(400);self._layout_save_timer.timeout.connect(self._SaveWorkspace)
@@ -110,6 +113,12 @@ class Editor(QMainWindow):
 
         # Lower-case aliases preserve the original prototype's attributes.
         self.docking = self.Docking
+
+    def _UpdateBrandIcon(self)->None:
+        color="#202020" if self.ThemeManager.GetTheme().background=="#d4d4d4" else "#eeeeee"
+        icon=LogoIcon(color);self.setWindowIcon(icon)
+        application=QApplication.instance()
+        if application is not None:application.setWindowIcon(icon)
 
     def _PanelIcon(self, panel_id: str):
         theme_name = (

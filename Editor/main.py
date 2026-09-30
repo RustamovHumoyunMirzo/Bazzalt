@@ -18,6 +18,7 @@ else:
     from .runtime import RuntimeService
     from .theme import Theme, ThemeManager
 from bazzalt.settings import DataPaths, ReadProjectMetadata, SettingsStore, Version
+from bazzalt.branding import LogoIcon
 
 EDITOR_PROJECT_FORMAT_MAX = 1
 
@@ -74,6 +75,7 @@ class EditorSession(QObject):
         super().__init__();self.App=app;self.Project=project;self.Version=version;self.EditorWindow=None;self.Settings=settings;self.SettingsSaver=settings_saver
         self.Resources=ResourceManager();self.Localization=LocalizationManager(self.Resources)
         self.Themes=ThemeManager(app,Theme.light() if settings.get("theme")=="light" else Theme.dark())
+        app.setWindowIcon(LogoIcon("#202020" if settings.get("theme")=="light" else "#eeeeee"))
         self.Runtime=RuntimeService();self.Loading=LoadingWindow(project,version,self.Runtime)
         self.Loading.Loaded.connect(self.OpenEditor)
     def Start(self)->None:self.Loading.show();self.Loading.Start()

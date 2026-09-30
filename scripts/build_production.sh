@@ -13,10 +13,10 @@ NATIVE=$(find "$BUILD" -type f \( -name '_bazzalt_runtime*.so' -o -name '_bazzal
 [ -n "$NATIVE" ] || { echo 'Could not find _bazzalt_runtime' >&2; exit 1; }
 mkdir -p "$OUTPUT"
 python -m nuitka --mode=standalone --assume-yes-for-downloads --enable-plugin=pyside6 \
-  --include-data-file="$ROOT/Launcher/index.html=Launcher/index.html" --output-filename=BazzaltHub \
+  --include-data-file="$ROOT/Launcher/index.html=Launcher/index.html" --include-data-file="$ROOT/Launcher/BazzaltLogo.svg=Launcher/BazzaltLogo.svg" --output-filename=BazzaltHub \
   --output-dir="$OUTPUT" "$ROOT/bazzalt_hub.py"
 python -m nuitka --mode=standalone --assume-yes-for-downloads --enable-plugin=pyside6 \
-  --include-data-dir="$ROOT/Editor/assets=Editor/assets" --output-filename=Bazzalt \
+  --include-data-dir="$ROOT/Editor/assets=Editor/assets" --include-data-file="$ROOT/Launcher/BazzaltLogo.svg=Launcher/BazzaltLogo.svg" --output-filename=Bazzalt \
   --output-dir="$OUTPUT" "$ROOT/bazzalt_editor.py"
 HUB="$OUTPUT/bazzalt_hub.dist"
 TARGET="$HUB/versions/$VERSION_FOLDER"

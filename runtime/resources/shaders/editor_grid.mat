@@ -1,0 +1,22 @@
+material {
+    name : EditorGrid,
+    shadingModel : unlit,
+    blending : transparent,
+    depthWrite : false,
+    depthCulling : true,
+    doubleSided : true,
+    requires : [ uv0 ],
+    parameters : [
+        { type : float4, name : color },
+        { type : float, name : fogStart },
+        { type : float, name : fogEnd }
+    ]
+}
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        float distanceFromCenter = length(getUV0());
+        float visibility = 1.0 - smoothstep(materialParams.fogStart, materialParams.fogEnd, distanceFromCenter);
+        material.baseColor = vec4(materialParams.color.rgb, materialParams.color.a * visibility);
+    }
+}

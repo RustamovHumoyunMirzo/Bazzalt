@@ -53,6 +53,7 @@ class EditorShellTests(unittest.TestCase):
         self.assertEqual(self.Window.Docking.theme.background, Theme.light().background)
         light_icon=self.Window.Hierarchy.Tree.topLevelItem(0).icon(0).cacheKey()
         self.assertNotEqual(dark_icon,light_icon)
+        self.assertFalse(self.Window.windowIcon().isNull())
 
     def test_shortcuts_use_custom_menu_rendering(self) -> None:
         self.assertIsInstance(self.Window.MenuBar.FileMenu, EditorMenu)
