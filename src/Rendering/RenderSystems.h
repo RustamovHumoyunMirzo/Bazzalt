@@ -7,6 +7,7 @@
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Components/Light.h"
 #include "Bazzalt/Components/Mesh.h"
+#include "Bazzalt/Components/PrimitiveObject.h"
 #include "Bazzalt/Components/Transform.h"
 #include "Bazzalt/System.h"
 #include "Bazzalt/UUID.h"
@@ -61,6 +62,20 @@ private:
     void Destroy(UUID id);
     RenderBackend& m_backend;
     std::unordered_map<UUID, Resource> m_resources;
+};
+
+class PrimitiveSystem final : public ComponentSystem<Transform, PrimitiveObject> {
+public:
+    explicit PrimitiveSystem(RenderBackend& backend) : m_backend(backend) {}
+protected:
+    void OnCreate(Scene&) override;
+    void OnUpdate(Scene& scene, float deltaTime) override;
+    void OnDestroy(Scene&) override;
+private:
+    struct Resource { RenderAssets::Handle Handle=RenderAssets::InvalidHandle;std::size_t GeometryKey=0; };
+    void Destroy(UUID id);
+    RenderBackend& m_backend;
+    std::unordered_map<UUID,Resource> m_resources;
 };
 
 } // namespace Bazzalt::Runtime

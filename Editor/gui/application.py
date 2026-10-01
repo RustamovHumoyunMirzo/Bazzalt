@@ -76,8 +76,8 @@ class Editor(QMainWindow):
         self.ThemeManager.ThemeChanged.connect(self.Docking.set_theme)
 
         self.Console = ConsolePanel(self.Localization,self.Resources,self.ThemeManager)
-        self.Output = ViewportPanel(self.Runtime, False, self.Localization, self.Resources)
-        self.Scene = ViewportPanel(self.Runtime, True, self.Localization, self.Resources)
+        self.Output = ViewportPanel(self.Runtime, False, self.Localization, self.Resources,self.ThemeManager)
+        self.Scene = ViewportPanel(self.Runtime, True, self.Localization, self.Resources,self.ThemeManager)
         self.Hierarchy = HierarchyPanel(self.Localization)
         self.Properties = PropertiesPanel(self.Localization)
         self.AssetBrowser = AssetBrowserPanel(self.Localization, self.Resources)
@@ -142,7 +142,7 @@ class Editor(QMainWindow):
         if appearance["locale"]!=self.Localization.GetLocale():self.Localization.SetLocale(appearance["locale"])
         scene=value["scene"];self.Runtime.SetGrid(scene["grid_visible"],scene["grid_plane"])
         self.Scene.GridToggle.setChecked(bool(scene["grid_visible"]));self.Scene.GridPlane.setCurrentIndex(int(scene["grid_plane"]))
-        speeds=(1,2,5,10);nearest=min(range(len(speeds)),key=lambda index:abs(speeds[index]-float(scene["navigation_speed"])));self.Scene.NavigationSpeed.setCurrentIndex(nearest);self.Scene.Surface.SetMoveSpeed(scene["navigation_speed"])
+        self.Scene.Surface.SetMoveSpeed(scene["navigation_speed"])
         if save and self._settings_saver is not None:self._settings_saver(self._settings)
 
     def SetViewportMaximized(self,maximized:bool)->None:

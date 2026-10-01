@@ -1,0 +1,14 @@
+material {
+    name : BazzaltPrimitive,
+    shadingModel : lit,
+    parameters : [ { type : float4, name : baseColor } ],
+    requires : [ tangents ]
+}
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = materialParams.baseColor;
+        material.roughness = 0.72;
+        material.metallic = 0.0;
+    }
+}

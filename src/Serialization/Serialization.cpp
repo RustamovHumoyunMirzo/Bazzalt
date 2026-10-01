@@ -13,6 +13,7 @@
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Components/Light.h"
 #include "Bazzalt/Components/Mesh.h"
+#include "Bazzalt/Components/PrimitiveObject.h"
 #include "Bazzalt/Components/ModelInstance.h"
 #include "Bazzalt/Components/ModelNode.h"
 #include "Bazzalt/Components/Name.h"
@@ -53,6 +54,9 @@ m_components.Register<Light>("Bazzalt.Light",1,[](const Light&v,PropertyMap&o){o
 
 m_components.Register<Mesh>("Bazzalt.Mesh",2,[](const Mesh&v,PropertyMap&o){o["MeshAsset"]=v.MeshAsset.ToString();o["ModelNodeIndex"]=std::to_string(v.ModelNodeIndex);o["LayerMask"]=std::to_string(v.LayerMask);o["Visible"]=v.Visible?"true":"false";o["CastShadows"]=v.CastShadows?"true":"false";o["ReceiveShadows"]=v.ReceiveShadows?"true":"false";std::string materials;for(const UUID id:v.Materials){if(!materials.empty())materials+=',';materials+=id.ToString();}o["Materials"]=materials;},
 [](Mesh&v,const PropertyMap&i,std::uint32_t n){const auto*mesh=Property(i,"MeshAsset");const auto*materials=Property(i,"Materials");if((n!=1&&n!=2)||!mesh||!materials||!UUID::TryParse(*mesh,v.MeshAsset)||(n==2&&!Unsigned(i,"ModelNodeIndex",v.ModelNodeIndex))||!EnumRange(i,"LayerMask",v.LayerMask,0,255)||!Bool(i,"Visible",v.Visible)||!Bool(i,"CastShadows",v.CastShadows)||!Bool(i,"ReceiveShadows",v.ReceiveShadows))return false;if(!materials->empty())for(std::size_t b=0;b<materials->size();){const auto e=materials->find(',',b);UUID id;if(!UUID::TryParse(std::string_view(*materials).substr(b,e==std::string::npos?materials->size()-b:e-b),id))return false;v.Materials.push_back(id);if(e==std::string::npos)break;b=e+1;}return true;});
+
+m_components.Register<PrimitiveObject>("Bazzalt.PrimitiveObject",1,[](const PrimitiveObject&v,PropertyMap&o){o["Shape"]=std::to_string(static_cast<int>(v.Shape));o["Size.X"]=Float(v.Size.X);o["Size.Y"]=Float(v.Size.Y);o["Size.Z"]=Float(v.Size.Z);o["Radius"]=Float(v.Radius);o["Height"]=Float(v.Height);o["Width"]=Float(v.Width);o["Depth"]=Float(v.Depth);o["MajorRadius"]=Float(v.MajorRadius);o["MinorRadius"]=Float(v.MinorRadius);o["Segments"]=std::to_string(v.Segments);o["Rings"]=std::to_string(v.Rings);o["Color.R"]=Float(v.Color.X);o["Color.G"]=Float(v.Color.Y);o["Color.B"]=Float(v.Color.Z);o["Color.A"]=Float(v.Color.W);o["LayerMask"]=std::to_string(v.LayerMask);o["Visible"]=v.Visible?"true":"false";o["CastShadows"]=v.CastShadows?"true":"false";o["ReceiveShadows"]=v.ReceiveShadows?"true":"false";},
+[](PrimitiveObject&v,const PropertyMap&i,std::uint32_t n){return n==1&&EnumRange(i,"Shape",v.Shape,0,6)&&Float(i,"Size.X",v.Size.X)&&Float(i,"Size.Y",v.Size.Y)&&Float(i,"Size.Z",v.Size.Z)&&Float(i,"Radius",v.Radius)&&Float(i,"Height",v.Height)&&Float(i,"Width",v.Width)&&Float(i,"Depth",v.Depth)&&Float(i,"MajorRadius",v.MajorRadius)&&Float(i,"MinorRadius",v.MinorRadius)&&Unsigned(i,"Segments",v.Segments)&&Unsigned(i,"Rings",v.Rings)&&Float(i,"Color.R",v.Color.X)&&Float(i,"Color.G",v.Color.Y)&&Float(i,"Color.B",v.Color.Z)&&Float(i,"Color.A",v.Color.W)&&EnumRange(i,"LayerMask",v.LayerMask,0,255)&&Bool(i,"Visible",v.Visible)&&Bool(i,"CastShadows",v.CastShadows)&&Bool(i,"ReceiveShadows",v.ReceiveShadows)&&v.Size.X>0&&v.Size.Y>0&&v.Size.Z>0&&v.Radius>0&&v.Height>0&&v.Width>0&&v.Depth>0&&v.MajorRadius>0&&v.MinorRadius>0&&v.MinorRadius<=v.MajorRadius&&v.Segments>=3&&v.Segments<=128&&v.Rings>=2&&v.Rings<=128;});
 
 m_components.Register<ModelInstance>("Bazzalt.ModelInstance",1,
 [](const ModelInstance&v,PropertyMap&o){o["ModelAsset"]=v.ModelAsset.ToString();},

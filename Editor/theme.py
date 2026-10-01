@@ -167,6 +167,9 @@ def BuildStyleSheet(theme: Theme) -> str:
     #SceneViewControls QComboBox {{ min-height: 22px; max-height: 22px; min-width: 68px; font-size: 11px; padding-left: 7px; }}
     #SceneViewControls QToolButton {{ min-height: 22px; max-height: 22px; padding: 0 8px; background: {t.input_background}; border: 1px solid {t.border}; border-radius: 3px; }}
     #SceneViewControls QToolButton:hover {{ background: {t.surface_hover}; }}
+    #SceneViewControls QToolButton#SceneToolChip {{ min-width: 25px; max-width: 25px; padding: 0; }}
+    #SceneViewControls QToolButton#SceneToolChip:checked {{ background: {t.selection}; border-color: {t.border_focus}; }}
+    #SceneViewControls QComboBox#ScenePivotMode {{ min-width: 72px; max-width: 84px; }}
     #SceneViewControls QCheckBox, #SceneViewControls QLabel {{ min-height: 20px; max-height: 20px; font-size: 11px; }}
     #ComponentSection {{ background: {t.surface}; border: 1px solid {t.border}; border-radius: 2px; }}
     #ComponentHeader {{ background: {t.surface}; border: 0; border-bottom: 1px solid {t.border};

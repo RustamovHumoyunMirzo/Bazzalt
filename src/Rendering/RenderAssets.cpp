@@ -18,6 +18,8 @@
 #include <filament/Scene.h>
 #include <filament/Texture.h>
 #include <filament/TransformManager.h>
+#include <filament/VertexBuffer.h>
+#include <filament/IndexBuffer.h>
 #include <filameshio/MeshReader.h>
 #include <gltfio/AssetLoader.h>
 #include <gltfio/FilamentAsset.h>
@@ -31,10 +33,12 @@
 
 #include "Bazzalt/AssetManager.h"
 #include "Rendering/BuiltinPostProcess.h"
+#include "Rendering/PrimitiveGeometry.h"
 #include "editor_unlit_filamat.h"
 #include "editor_lighting_only_filamat.h"
 #include "editor_overdraw_filamat.h"
 #include "editor_wireframe_filamat.h"
+#include "primitive_lit_filamat.h"
 
 namespace Bazzalt::Runtime {
 namespace {
@@ -68,7 +72,7 @@ filament::math::mat4f ToFilamentMatrix(const Mat4& value) {
 } // namespace
 
 struct RenderAssets::Impl {
-    enum class Kind { Gltf, Filamesh };
+    enum class Kind { Gltf, Filamesh, Primitive };
     struct Instance {
         struct Original { utils::Entity Entity;std::size_t Primitive;filament::MaterialInstance* Material; };
         Kind Type = Kind::Gltf;
@@ -77,6 +81,10 @@ struct RenderAssets::Impl {
         filament::gltfio::FilamentAsset* Gltf = nullptr;
         utils::Entity SelectedGltfEntity{};
         filamesh::MeshReader::Mesh Filamesh{};
+        utils::Entity PrimitiveEntity{};
+        filament::VertexBuffer* PrimitiveVertices=nullptr;
+        filament::IndexBuffer* PrimitiveIndices=nullptr;
+        filament::MaterialInstance* PrimitiveMaterial=nullptr;
         std::vector<filament::MaterialInstance*> MaterialInstances;
         bool AddedToScene = false;
         bool DebugWireframeAdded = false;
@@ -94,6 +102,7 @@ struct RenderAssets::Impl {
     std::unordered_map<UUID, filament::Material*> Materials;
     std::unordered_map<UUID, filament::Texture*> Textures;
     filament::Material* DebugUnlit=nullptr;filament::Material* DebugLighting=nullptr;filament::Material* DebugOverdraw=nullptr;filament::Material* DebugWireframe=nullptr;
+    filament::Material* PrimitiveMaterial=nullptr;
     filament::MaterialInstance* DebugUnlitInstance=nullptr;filament::MaterialInstance* DebugLightingInstance=nullptr;filament::MaterialInstance* DebugOverdrawInstance=nullptr;filament::MaterialInstance* DebugWireframeInstance=nullptr;
     std::string DebugMode="lit";
 
@@ -104,6 +113,7 @@ struct RenderAssets::Impl {
         if (GltfMaterials) GltfLoader = filament::gltfio::AssetLoader::create({&Engine, GltfMaterials});
         DebugUnlit=filament::Material::Builder().package(Embedded::EditorUnlitFilamat,Embedded::EditorUnlitFilamatSize).build(Engine);DebugLighting=filament::Material::Builder().package(Embedded::EditorLightingOnlyFilamat,Embedded::EditorLightingOnlyFilamatSize).build(Engine);DebugOverdraw=filament::Material::Builder().package(Embedded::EditorOverdrawFilamat,Embedded::EditorOverdrawFilamatSize).build(Engine);DebugWireframe=filament::Material::Builder().package(Embedded::EditorWireframeFilamat,Embedded::EditorWireframeFilamatSize).build(Engine);
         if(DebugUnlit)DebugUnlitInstance=DebugUnlit->createInstance();if(DebugLighting)DebugLightingInstance=DebugLighting->createInstance();if(DebugOverdraw)DebugOverdrawInstance=DebugOverdraw->createInstance();if(DebugWireframe)DebugWireframeInstance=DebugWireframe->createInstance();
+        PrimitiveMaterial=filament::Material::Builder().package(Embedded::PrimitiveLitFilamat,Embedded::PrimitiveLitFilamatSize).build(Engine);
     }
 
     filament::Material* LoadMaterial(UUID id) {
@@ -148,7 +158,7 @@ struct RenderAssets::Impl {
         return Textures.contains(id) ? texture : nullptr;
     }
 
-    void ApplyRenderable(utils::Entity entity, const Mesh& component) {
+    template<class T> void ApplyRenderable(utils::Entity entity, const T& component) {
         auto& renderables = Engine.getRenderableManager();
         const auto instance = renderables.getInstance(entity);
         if (!instance) return;
@@ -157,7 +167,7 @@ struct RenderAssets::Impl {
         renderables.setReceiveShadows(instance, component.ReceiveShadows);
     }
     void Restore(Instance& value){if(value.DebugWireframeAdded){Scene.remove(value.Gltf->getWireframe());if(value.AddedToScene)Scene.addEntities(value.Gltf->getEntities(),value.Gltf->getEntityCount());value.DebugWireframeAdded=false;}auto& manager=Engine.getRenderableManager();for(const auto& original:value.Originals){auto instance=manager.getInstance(original.Entity);if(instance&&original.Primitive<manager.getPrimitiveCount(instance))manager.setMaterialInstanceAt(instance,original.Primitive,original.Material);}value.Originals.clear();}
-    void ApplyDebug(Instance& value){Restore(value);if(DebugMode=="wireframe"&&value.Type==Kind::Gltf&&!value.SelectedGltfEntity&&value.AddedToScene){Scene.removeEntities(value.Gltf->getEntities(),value.Gltf->getEntityCount());Scene.addEntity(value.Gltf->getWireframe());value.DebugWireframeAdded=true;return;}filament::MaterialInstance* material=DebugMode=="unlit"?DebugUnlitInstance:DebugMode=="lighting_only"?DebugLightingInstance:DebugMode=="overdraw"?DebugOverdrawInstance:DebugMode=="wireframe"?DebugWireframeInstance:nullptr;if(!material)return;auto& manager=Engine.getRenderableManager();const auto apply=[&](utils::Entity entity){auto instance=manager.getInstance(entity);if(!instance)return;for(std::size_t primitive=0;primitive<manager.getPrimitiveCount(instance);++primitive){value.Originals.push_back({entity,primitive,manager.getMaterialInstanceAt(instance,primitive)});manager.setMaterialInstanceAt(instance,primitive,material);}};if(value.Type==Kind::Gltf){if(value.SelectedGltfEntity)apply(value.SelectedGltfEntity);else for(std::size_t i=0;i<value.Gltf->getEntityCount();++i)apply(value.Gltf->getEntities()[i]);}else apply(value.Filamesh.renderable);}
+    void ApplyDebug(Instance& value){Restore(value);if(DebugMode=="wireframe"&&value.Type==Kind::Gltf&&!value.SelectedGltfEntity&&value.AddedToScene){Scene.removeEntities(value.Gltf->getEntities(),value.Gltf->getEntityCount());Scene.addEntity(value.Gltf->getWireframe());value.DebugWireframeAdded=true;return;}filament::MaterialInstance* material=DebugMode=="unlit"?DebugUnlitInstance:DebugMode=="lighting_only"?DebugLightingInstance:DebugMode=="overdraw"?DebugOverdrawInstance:DebugMode=="wireframe"?DebugWireframeInstance:nullptr;if(!material)return;auto& manager=Engine.getRenderableManager();const auto apply=[&](utils::Entity entity){auto instance=manager.getInstance(entity);if(!instance)return;for(std::size_t primitive=0;primitive<manager.getPrimitiveCount(instance);++primitive){value.Originals.push_back({entity,primitive,manager.getMaterialInstanceAt(instance,primitive)});manager.setMaterialInstanceAt(instance,primitive,material);}};if(value.Type==Kind::Gltf){if(value.SelectedGltfEntity)apply(value.SelectedGltfEntity);else for(std::size_t i=0;i<value.Gltf->getEntityCount();++i)apply(value.Gltf->getEntities()[i]);}else apply(value.Type==Kind::Primitive?value.PrimitiveEntity:value.Filamesh.renderable);}
 };
 
 RenderAssets::RenderAssets(filament::Engine& engine, filament::Scene& scene)
@@ -288,16 +298,31 @@ void RenderAssets::DestroyMesh(Handle handle) {
             else m_impl->Scene.removeEntities(instance.Gltf->getEntities(), instance.Gltf->getEntityCount());
         }
         m_impl->GltfLoader->destroyAsset(instance.Gltf);
-    } else {
+    } else if(instance.Type == Impl::Kind::Filamesh) {
         if (instance.AddedToScene) m_impl->Scene.remove(instance.Filamesh.renderable);
         m_impl->Engine.destroy(instance.Filamesh.renderable);
         m_impl->Engine.destroy(instance.Filamesh.vertexBuffer);
         m_impl->Engine.destroy(instance.Filamesh.indexBuffer);
         m_impl->Engine.getEntityManager().destroy(instance.Filamesh.renderable);
         for (auto* material : instance.MaterialInstances) m_impl->Engine.destroy(material);
+    } else {
+        if(instance.AddedToScene)m_impl->Scene.remove(instance.PrimitiveEntity);
+        m_impl->Engine.destroy(instance.PrimitiveEntity);m_impl->Engine.destroy(instance.PrimitiveVertices);m_impl->Engine.destroy(instance.PrimitiveIndices);m_impl->Engine.destroy(instance.PrimitiveMaterial);m_impl->Engine.getEntityManager().destroy(instance.PrimitiveEntity);
     }
     m_impl->Instances.erase(found);
 }
+
+RenderAssets::Handle RenderAssets::CreatePrimitive(const PrimitiveObject& component){
+    if(!m_impl||!m_impl->PrimitiveMaterial)return InvalidHandle;auto geometry=BuildPrimitiveGeometry(component);if(geometry.Vertices.empty()||geometry.Indices.empty())return InvalidHandle;
+    Impl::Instance instance;instance.Type=Impl::Kind::Primitive;instance.PrimitiveMaterial=m_impl->PrimitiveMaterial->createInstance();instance.PrimitiveMaterial->setParameter("baseColor",filament::math::float4{component.Color.X,component.Color.Y,component.Color.Z,component.Color.W});
+    instance.PrimitiveVertices=filament::VertexBuffer::Builder().vertexCount(static_cast<std::uint32_t>(geometry.Vertices.size())).bufferCount(1).attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3,0,sizeof(PrimitiveVertex)).attribute(filament::VertexAttribute::TANGENTS,0,filament::VertexBuffer::AttributeType::FLOAT4,12,sizeof(PrimitiveVertex)).build(m_impl->Engine);
+    auto* vertices=new std::vector<PrimitiveVertex>(std::move(geometry.Vertices));instance.PrimitiveVertices->setBufferAt(m_impl->Engine,0,{vertices->data(),vertices->size()*sizeof(PrimitiveVertex),[](void*,size_t,void* user){delete static_cast<std::vector<PrimitiveVertex>*>(user);},vertices});
+    instance.PrimitiveIndices=filament::IndexBuffer::Builder().indexCount(static_cast<std::uint32_t>(geometry.Indices.size())).bufferType(filament::IndexBuffer::IndexType::UINT).build(m_impl->Engine);auto* indices=new std::vector<std::uint32_t>(std::move(geometry.Indices));instance.PrimitiveIndices->setBuffer(m_impl->Engine,{indices->data(),indices->size()*sizeof(std::uint32_t),[](void*,size_t,void* user){delete static_cast<std::vector<std::uint32_t>*>(user);},indices});
+    instance.PrimitiveEntity=m_impl->Engine.getEntityManager().create();m_impl->Engine.getTransformManager().create(instance.PrimitiveEntity);filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{geometry.Extents.X,geometry.Extents.Y,geometry.Extents.Z}}).material(0,instance.PrimitiveMaterial).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,instance.PrimitiveVertices,instance.PrimitiveIndices).castShadows(component.CastShadows).receiveShadows(component.ReceiveShadows).build(m_impl->Engine,instance.PrimitiveEntity);m_impl->Scene.addEntity(instance.PrimitiveEntity);instance.AddedToScene=true;m_impl->ApplyRenderable(instance.PrimitiveEntity,component);
+    auto handle=m_impl->NextHandle++;auto [stored,_]=m_impl->Instances.emplace(handle,std::move(instance));m_impl->ApplyDebug(stored->second);return handle;
+}
+
+void RenderAssets::UpdatePrimitive(Handle handle,const Mat4& transform,const PrimitiveObject& component){if(!m_impl)return;auto found=m_impl->Instances.find(handle);if(found==m_impl->Instances.end()||found->second.Type!=Impl::Kind::Primitive)return;auto& value=found->second;auto ti=m_impl->Engine.getTransformManager().getInstance(value.PrimitiveEntity);if(ti)m_impl->Engine.getTransformManager().setTransform(ti,ToFilamentMatrix(transform));value.PrimitiveMaterial->setParameter("baseColor",filament::math::float4{component.Color.X,component.Color.Y,component.Color.Z,component.Color.W});if(component.Visible!=value.AddedToScene){if(component.Visible)m_impl->Scene.addEntity(value.PrimitiveEntity);else m_impl->Scene.remove(value.PrimitiveEntity);value.AddedToScene=component.Visible;}m_impl->ApplyRenderable(value.PrimitiveEntity,component);}
 
 void RenderAssets::Update() {
     if (m_impl && m_impl->GltfTextures) m_impl->GltfTextures->updateQueue();
@@ -313,6 +338,7 @@ void RenderAssets::Shutdown() {
     for (const auto& [id, material] : m_impl->Materials) m_impl->Engine.destroy(material);
     for(auto* instance:{m_impl->DebugUnlitInstance,m_impl->DebugLightingInstance,m_impl->DebugOverdrawInstance,m_impl->DebugWireframeInstance})if(instance)m_impl->Engine.destroy(instance);
     for(auto* material:{m_impl->DebugUnlit,m_impl->DebugLighting,m_impl->DebugOverdraw,m_impl->DebugWireframe})if(material)m_impl->Engine.destroy(material);
+    if(m_impl->PrimitiveMaterial)m_impl->Engine.destroy(m_impl->PrimitiveMaterial);
     m_impl->Textures.clear(); m_impl->Materials.clear();
     if (m_impl->GltfLoader) filament::gltfio::AssetLoader::destroy(&m_impl->GltfLoader);
     if (m_impl->GltfMaterials) { m_impl->GltfMaterials->destroyMaterials(); delete m_impl->GltfMaterials; }

@@ -5,6 +5,7 @@
 #include <string>
 
 #include "Bazzalt/Components/Mesh.h"
+#include "Bazzalt/Components/PrimitiveObject.h"
 #include "Bazzalt/PostProcessing.h"
 #include "Bazzalt/Math.h"
 
@@ -26,6 +27,9 @@ public:
     [[nodiscard]] Handle CreateMesh(const Mesh& component);
     void UpdateMesh(Handle handle, const Mat4& transform, const Mesh& component);
     void DestroyMesh(Handle handle);
+    [[nodiscard]] Handle CreatePrimitive(const PrimitiveObject& component);
+    void UpdatePrimitive(Handle handle, const Mat4& transform, const PrimitiveObject& component);
+    void DestroyPrimitive(Handle handle) { DestroyMesh(handle); }
     [[nodiscard]] bool PreparePostProcessEffect(const CustomPostProcessEffect& effect);
     void Update();
     bool SetDebugMode(const std::string& mode);

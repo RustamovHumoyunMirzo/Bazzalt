@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from math import cos, radians, sin, tan
 
-from PySide6.QtCore import QPoint, QPointF, QRect, Qt, QTimer, Signal
+from PySide6.QtCore import QPoint, QPointF, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QPainter, QPen, QWheelEvent
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel,
                                QStackedLayout, QToolButton,QVBoxLayout, QWidget)
-from ..widgets.fields import MultiSelectInput
 from ..gizmos import GizmoDrag, GizmoHandle, GizmoMode, PickAxis, PickRotationAxis, Ray, Vec3
 
 
@@ -34,11 +33,12 @@ class NativeRenderSurface(QWidget):
     GizmoDragFinished = Signal()
     CameraChanged = Signal(float, float)
     Attached = Signal()
-    EntityPicked = Signal(str)
+    EntityPicked = Signal(str, bool)
     EntitiesBoxSelected = Signal(object, bool)
     SelectionBoxStarted = Signal(bool)
     SelectionBoxFinished = Signal()
     GizmoDragStarted = Signal()
+    NavigationChanged = Signal(bool)
     _next_id = 1
 
     def __init__(self, runtime, scene: bool, parent: QWidget | None = None) -> None:
@@ -53,7 +53,8 @@ class NativeRenderSurface(QWidget):
         self._selection_box_start=None
         self._selection_box_additive=False;self._selection_band=None
         self._selection_box_preview=()
-        self._navigating=False;self._keys=set();self._move_speed=5.0
+        self._selection_box_dragging=False;self._pending_pick=""
+        self._navigating=False;self._fly_navigation=False;self._keys=set();self._move_speed=5.0
         self._fly_timer=QTimer(self);self._fly_timer.setInterval(16);self._fly_timer.timeout.connect(self._FlyTick);self._fly_timer.start()
         self.setAttribute(Qt.WidgetAttribute.WA_DontCreateNativeAncestors)
         self.setAttribute(Qt.WidgetAttribute.WA_PaintOnScreen)
@@ -141,7 +142,17 @@ class NativeRenderSurface(QWidget):
         selected=[]
         for entity in self.Runtime.Entities():
             projected=self._Project(entity.get("world_position",entity.get("position",(0,0,0))))
-            if projected and left<=projected[0]<=right and top<=projected[1]<=bottom:selected.append(str(entity.get("uuid","")))
+            if not projected:continue
+            radius=0.0;entity_id=str(entity.get("uuid","") or "")
+            details=self.Runtime.EntityDetails(entity_id) if entity_id else {};primitive=details.get("component_data",{}).get("Primitive Object")
+            if primitive:
+                scale=details.get("scale",(1,1,1));shape=int(primitive.get("Shape",0))
+                if shape==0:size=primitive.get("Size",(1,1,1));world_radius=.5*sum((float(size[i])*abs(float(scale[i])))**2 for i in range(3))**.5
+                elif shape==4:world_radius=.5*sum((float(primitive.get(name,1))*abs(float(scale[index])))**2 for name,index in (("Width",0),("Depth",2)))**.5
+                elif shape==6:world_radius=(float(primitive.get("Major Radius",.75))+float(primitive.get("Minor Radius",.25)))*max(abs(float(v)) for v in scale)
+                else:world_radius=max(float(primitive.get("Radius",.5))*max(abs(float(scale[0])),abs(float(scale[2]))),float(primitive.get("Height",1))*.5*abs(float(scale[1])))
+                radius=world_radius*self.height()/(2.0*tan(radians(30.0))*projected[2])
+            if projected[0]+radius>=left and projected[0]-radius<=right and projected[1]+radius>=top and projected[1]-radius<=bottom:selected.append(entity_id)
         return selected
 
     def _PreviewSelectionBox(self,current:QPoint)->list[str]:
@@ -175,6 +186,27 @@ class NativeRenderSurface(QWidget):
             if projected is None:continue
             x,y,depth=projected;distance=(x-point.x())**2+(y-point.y())**2
             if distance<=best_distance and depth<best_depth:best=str(entity.get("uuid",""));best_distance=distance;best_depth=depth
+        return best
+
+    def _PickSceneObject(self,point:QPoint)->str:
+        ray=self._Ray(point);best="";best_distance=float("inf")
+        try:entities=self.Runtime.Entities()
+        except Exception:return ""
+        for entity in entities:
+            entity_id=str(entity.get("uuid","") or "")
+            if not entity_id:continue
+            details=self.Runtime.EntityDetails(entity_id);primitive=details.get("component_data",{}).get("Primitive Object")
+            if not primitive or not details.get("component_enabled",{}).get("Primitive Object",True) or not primitive.get("Visible",True):continue
+            scale=details.get("scale",(1,1,1));shape=int(primitive.get("Shape",0))
+            if shape==0:size=primitive.get("Size",(1,1,1));radius=.5*sum((float(size[i])*abs(float(scale[i])))**2 for i in range(3))**.5
+            elif shape==4:radius=.5*sum((float(primitive.get(name,1))*abs(float(scale[index])))**2 for name,index in (("Width",0),("Depth",2)))**.5
+            elif shape==6:radius=(float(primitive.get("Major Radius",.75))+float(primitive.get("Minor Radius",.25)))*max(abs(float(scale[0])),abs(float(scale[1])),abs(float(scale[2])))
+            else:radius=max(float(primitive.get("Radius",.5))*max(abs(float(scale[0])),abs(float(scale[2]))),float(primitive.get("Height",1))*.5*abs(float(scale[1])))
+            center=Vec3(*details.get("world_position",details.get("position",(0,0,0))));offset=ray.Origin-center;b=offset.Dot(ray.Direction);c=offset.Dot(offset)-max(.05,radius)**2;discriminant=b*b-c
+            if discriminant<0:continue
+            distance=-b-discriminant**.5
+            if distance<0:distance=-b+discriminant**.5
+            if 0<=distance<best_distance:best=entity_id;best_distance=distance
         return best
 
     def _PickGizmo(self, point: QPoint):
@@ -215,7 +247,7 @@ class NativeRenderSurface(QWidget):
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         self._last = event.position().toPoint(); self.setFocus()
-        if self.IsScene and event.button()==Qt.MouseButton.RightButton:self._navigating=True;event.accept();return
+        if self.IsScene and event.button()==Qt.MouseButton.RightButton:self._keys.clear();self._fly_navigation=False;self._navigating=True;self.NavigationChanged.emit(True);event.accept();return
         if self.IsScene and event.button()==Qt.MouseButton.LeftButton and self._PickOrientation(self._last):event.accept();return
         if self.IsScene and event.button()==Qt.MouseButton.LeftButton and self._selection and self._mode is not GizmoMode.Select:
             ray=self._Ray(self._last);handle=self._PickGizmo(self._last)
@@ -224,18 +256,19 @@ class NativeRenderSurface(QWidget):
                 self.GizmoDragStarted.emit()
                 self._gizmo_drag=GizmoDrag(self._mode,handle,ray,self._selection,(Vec3(*self._target)-Vec3(*self._eye)).Normalized());self._last_delta=Vec3();self._last_angle=0.0;self._last_scale=Vec3(1,1,1);event.accept();return
         if self.IsScene and event.button()==Qt.MouseButton.LeftButton:
-            entity_id=self._PickSceneIcon(self._last)
-            if entity_id:self.EntityPicked.emit(entity_id)
-            else:
-                self._selection_box_start=self._last;self._selection_box_additive=bool(event.modifiers()&Qt.KeyboardModifier.ControlModifier)
-                self._selection_box_preview=()
-                self.SelectionBoxStarted.emit(self._selection_box_additive)
+            entity_id=self._PickSceneIcon(self._last) or self._PickSceneObject(self._last)
+            self._selection_box_start=self._last;self._selection_box_additive=bool(event.modifiers()&Qt.KeyboardModifier.ControlModifier)
+            self._selection_box_preview=();self._selection_box_dragging=False;self._pending_pick=entity_id
             event.accept();return
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         if not self.IsScene: return
         current = event.position().toPoint(); delta = current - self._last; self._last = current
         if self._selection_box_start is not None and event.buttons()&Qt.MouseButton.LeftButton:
+            distance=(current-self._selection_box_start).manhattanLength()
+            if distance<=4 and not self._selection_box_dragging:return
+            if not self._selection_box_dragging:
+                self._selection_box_dragging=True;self._pending_pick="";self.SelectionBoxStarted.emit(self._selection_box_additive)
             if self._selection_band is None:self._selection_band=SelectionMarquee()
             start_global=self.mapToGlobal(self._selection_box_start);current_global=self.mapToGlobal(current);geometry=QRect(start_global,current_global).normalized()
             if geometry.width()>2 or geometry.height()>2:self._selection_band.setGeometry(geometry);self._selection_band.show();self._selection_band.raise_()
@@ -259,7 +292,7 @@ class NativeRenderSurface(QWidget):
                 self._yaw-=delta.x()*.35;self._pitch=max(-89.0,min(89.0,self._pitch+delta.y()*.35))
                 # RMB alone is the usual editor orbit. Once fly keys are held,
                 # preserve the eye and turn like a first-person camera.
-                if self._keys.intersection(movement_keys):self._LookFromEye()
+                if self._fly_navigation and self._keys.intersection(movement_keys):self._LookFromEye()
                 else:self._UpdateCamera()
         elif event.buttons() & Qt.MouseButton.MiddleButton:
             scale = self._distance * .0015
@@ -274,28 +307,41 @@ class NativeRenderSurface(QWidget):
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if event.button()==Qt.MouseButton.LeftButton:
             if self._selection_box_start is not None:
-                start=self._selection_box_start;self._selection_box_start=None;end=event.position().toPoint()
+                start=self._selection_box_start;self._selection_box_start=None;end=event.position().toPoint();dragging=self._selection_box_dragging;pending=self._pending_pick
+                self._selection_box_dragging=False;self._pending_pick=""
                 self._DestroySelectionBand()
-                selected=self._EntitiesInSelectionBox(start,end)
-                if tuple(selected)!=self._selection_box_preview:self.EntitiesBoxSelected.emit(selected,self._selection_box_additive)
+                if dragging:
+                    selected=self._EntitiesInSelectionBox(start,end)
+                    if tuple(selected)!=self._selection_box_preview:self.EntitiesBoxSelected.emit(selected,self._selection_box_additive)
+                elif pending:
+                    self.EntityPicked.emit(pending,self._selection_box_additive)
+                else:self.SelectionBoxStarted.emit(False)
                 self._selection_box_preview=();self.SelectionBoxFinished.emit();event.accept();return
             dragged=self._gizmo_drag is not None;self._gizmo_drag=None
             if dragged:self.GizmoDragFinished.emit()
             self._hover_handle=None;self._SetHover(self._PickGizmo(event.position().toPoint()))
-        if event.button()==Qt.MouseButton.RightButton:self._navigating=False;self._keys.clear();event.accept()
+        if event.button()==Qt.MouseButton.RightButton:self._navigating=False;self._fly_navigation=False;self._keys.clear();self.NavigationChanged.emit(False);event.accept()
 
     def keyPressEvent(self,event:QKeyEvent)->None:
-        if self._navigating and event.key() in (Qt.Key.Key_W,Qt.Key.Key_A,Qt.Key.Key_S,Qt.Key.Key_D,Qt.Key.Key_Q,Qt.Key.Key_E,Qt.Key.Key_Shift):self._keys.add(event.key());event.accept();return
+        if self._navigating and event.key() in (Qt.Key.Key_W,Qt.Key.Key_A,Qt.Key.Key_S,Qt.Key.Key_D,Qt.Key.Key_Q,Qt.Key.Key_E,Qt.Key.Key_Shift):
+            self._keys.add(event.key())
+            if event.key()!=Qt.Key.Key_Shift:self._fly_navigation=True
+            event.accept();return
         super().keyPressEvent(event)
 
     def keyReleaseEvent(self,event:QKeyEvent)->None:
-        self._keys.discard(event.key());event.accept()
+        self._keys.discard(event.key())
+        movement_keys={Qt.Key.Key_W,Qt.Key.Key_A,Qt.Key.Key_S,Qt.Key.Key_D,Qt.Key.Key_Q,Qt.Key.Key_E}
+        if not self._keys.intersection(movement_keys):self._fly_navigation=False
+        event.accept()
 
     def focusOutEvent(self,event)->None:
-        self._keys.clear();self._navigating=False
+        was_navigating=self._navigating;self._keys.clear();self._navigating=False;self._fly_navigation=False
+        if was_navigating:self.NavigationChanged.emit(False)
         self._DestroySelectionBand()
         if self._selection_box_start is not None:self.SelectionBoxFinished.emit()
         self._selection_box_start=None;self._selection_box_preview=();super().focusOutEvent(event)
+        self._selection_box_dragging=False;self._pending_pick=""
 
     def leaveEvent(self,event)->None:
         if self._gizmo_drag is None:self._SetHover(None)
@@ -320,21 +366,26 @@ class NativeRenderSurface(QWidget):
 
 
 class ViewportPanel(QFrame):
-    def __init__(self, runtime, scene: bool, localization, resources=None, parent=None) -> None:
+    def __init__(self, runtime, scene: bool, localization, resources=None, themes=None, parent=None) -> None:
         super().__init__(parent); self.setObjectName("ViewportPanel")
         layout = QVBoxLayout(self); layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(0)
         if scene:
             controls=QFrame();controls.setObjectName("SceneViewControls");row=QHBoxLayout(controls);row.setContentsMargins(7,3,7,3);row.setSpacing(6)
-            self.TransformSpace=QComboBox();self.TransformSpace.addItems(("Local","Global"));self.PivotMode=QComboBox();self.PivotMode.addItems(("Pivot","Center"))
-            self.Snapping=MultiSelectInput("Snap");self.Snapping.SetOptions((("Move","move"),("Rotate","rotate"),("Scale","scale")))
+            self.LocalToggle=QToolButton();self.LocalToggle.setObjectName("SceneToolChip");self.LocalToggle.setCheckable(True);self.LocalToggle.setToolTip("Local transform space")
+            self.PivotMode=QComboBox();self.PivotMode.setObjectName("ScenePivotMode");self.PivotMode.addItems(("Pivot","Center"));self.PivotMode.setToolTip("Gizmo pivot position")
             self.ShadingMode=QComboBox();self.ShadingMode.addItems(("Lit","Unlit","Wireframe","Lighting Only","Overdraw"))
-            self.CameraPreset=QComboBox();self.CameraPreset.addItems(("Perspective","Top","Bottom","Left","Right","Front","Back"))
-            self.Overlays=MultiSelectInput("Overlays");self.Overlays.SetOptions((("Grid","grid"),("Icons","icons"),("Statistics","stats")));self.Overlays.SetValues(("grid","icons"))
-            grid=self.GridToggle=QCheckBox("Grid");grid.setChecked(True);grid.hide();plane=self.GridPlane=QComboBox();plane.addItems(("XY","XZ","YZ"));plane.setCurrentIndex(1);speed=self.NavigationSpeed=QComboBox();speed.addItems(("1×","2×","5×","10×"));speed.setCurrentIndex(2)
-            self.FocusButton=QToolButton();self.FocusButton.setText("Focus");self.FrameButton=QToolButton();self.FrameButton.setText("Frame All")
+            plane=self.GridPlane=QComboBox();plane.addItems(("XY","XZ","YZ"));plane.setCurrentIndex(1)
+            grid=self.GridToggle=QToolButton();self.GizmoToggle=QToolButton();self.StatsToggle=QToolButton()
+            for button,tooltip,checked in ((grid,"Grid",True),(self.GizmoToggle,"Gizmos",True),(self.StatsToggle,"Statistics",False)):
+                button.setObjectName("SceneToolChip");button.setCheckable(True);button.setChecked(checked);button.setToolTip(tooltip)
             self.StatsLabel=QLabel();self.StatsLabel.setObjectName("SceneStats");self.StatsLabel.hide()
-            for widget in (self.TransformSpace,self.PivotMode,self.Snapping,self.ShadingMode,self.CameraPreset,self.Overlays,self.FocusButton,self.FrameButton):row.addWidget(widget)
-            row.addWidget(plane);row.addWidget(self.StatsLabel);row.addStretch();row.addWidget(QLabel("Fly"));row.addWidget(speed);layout.addWidget(controls)
+            for widget in (self.LocalToggle,self.PivotMode,self.ShadingMode,plane,grid,self.GizmoToggle,self.StatsToggle):row.addWidget(widget)
+            row.addWidget(self.StatsLabel);row.addStretch();layout.addWidget(controls)
+            def update_icons(_theme=None):
+                theme="light" if themes and themes.GetTheme().background=="#d4d4d4" else "dark"
+                if resources:
+                    for button,name in ((self.LocalToggle,"localpos.svg"),(grid,"grid.svg"),(self.GizmoToggle,"gizmos.svg"),(self.StatsToggle,"stats.svg")):button.setIcon(resources.Icon(f"icons/stoolbar/{theme}/{name}"));button.setIconSize(QSize(16,16))
+            update_icons();themes.ThemeChanged.connect(update_icons) if themes else None
         self.Surface = NativeRenderSurface(runtime, scene)
         if scene:
             layout.addWidget(self.Surface, 1)
@@ -360,8 +411,7 @@ class ViewportPanel(QFrame):
         if scene:
             grid.toggled.connect(lambda checked:runtime.SetGrid(checked,plane.currentIndex()))
             plane.currentIndexChanged.connect(lambda index:runtime.SetGrid(grid.isChecked(),index))
-            speed.currentIndexChanged.connect(lambda index:self.Surface.SetMoveSpeed((1,2,5,10)[index]))
-            self.CameraPreset.currentIndexChanged.connect(lambda index:self.Surface.SetCameraPreset(("perspective","top","bottom","left","right","front","back")[index]))
+            self.StatsToggle.toggled.connect(self.StatsLabel.setVisible)
             self.Surface.SetMoveSpeed(5);runtime.SetGrid(True,1)
 
     def _UpdateNoCameraText(self) -> None:

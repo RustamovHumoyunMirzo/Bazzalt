@@ -216,6 +216,44 @@ class EditorShellTests(unittest.TestCase):
             entity_id, (3.0, 2.0, 1.0), (0.0, 0.0, 0.0, 1.0), (1.0, 1.0, 1.0)))
         self.assertEqual(self.Window.Runtime.EntityDetails(entity_id)["position"], (3.0, 2.0, 1.0))
 
+    def test_primitive_entity_creation_and_shape_specific_inspector(self) -> None:
+        if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")
+        before={item["uuid"] for item in self.Window.Runtime.Entities()}
+        self.Window.Controller.CreateTypedEntity("Primitive Object:6",None)
+        entity_id=next(item["uuid"] for item in self.Window.Runtime.Entities() if item["uuid"] not in before)
+        details=self.Window.Runtime.EntityDetails(entity_id)
+        self.assertIn("Primitive Object",details["components"])
+        fields=details["component_data"]["Primitive Object"]
+        self.assertEqual(fields["Shape"],6);self.assertIn("Major Radius",fields);self.assertIn("Minor Radius",fields);self.assertNotIn("Height",fields)
+        self.Window.Controller.SelectEntity(entity_id,force=True)
+        section=self.Window.Properties._sections["runtime.Primitive Object"]
+        self.assertIn("Shape",section._fields);self.assertIn("Major Radius",section._fields)
+
+    def test_scene_click_hit_tests_primitive_objects(self) -> None:
+        if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")
+        entity_id=self.Window.Runtime.CreateEntity("Pickable Cube");self.assertTrue(self.Window.Runtime.AddComponent(entity_id,"Primitive Object"))
+        surface=self.Window.Scene.Surface;surface.resize(640,480);projected=surface._Project((0,0,0));self.assertIsNotNone(projected)
+        self.assertEqual(surface._PickSceneObject(QPoint(round(projected[0]),round(projected[1]))),entity_id)
+
+    def test_primitive_drag_starts_marquee_and_gizmo_remains_pickable(self) -> None:
+        if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")
+        entity_id=self.Window.Runtime.CreateEntity("Interactive Cube");self.Window.Runtime.AddComponent(entity_id,"Primitive Object")
+        surface=self.Window.Scene.Surface;surface.resize(640,480);surface.SetGizmoMode(GizmoMode.Translate);self.Window.Controller.SelectEntity(entity_id)
+        projected=surface._Project((0,0,0));point=QPoint(round(projected[0]),round(projected[1]))
+        object_point=next((QPoint(x,y) for y in range(point.y()-45,point.y()+46,3) for x in range(point.x()-45,point.x()+46,3) if surface._PickSceneObject(QPoint(x,y))==entity_id and surface._PickGizmo(QPoint(x,y)) is None),None);self.assertIsNotNone(object_point)
+        surface.mousePressEvent(QMouseEvent(QMouseEvent.Type.MouseButtonPress,QPointF(object_point),Qt.MouseButton.LeftButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
+        destination=object_point+QPoint(120,80);surface.mouseMoveEvent(QMouseEvent(QMouseEvent.Type.MouseMove,QPointF(destination),Qt.MouseButton.NoButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
+        self.assertTrue(surface._selection_box_dragging);self.assertIsNotNone(surface._selection_band)
+        surface.mouseReleaseEvent(QMouseEvent(QMouseEvent.Type.MouseButtonRelease,QPointF(destination),Qt.MouseButton.LeftButton,Qt.MouseButton.NoButton,Qt.KeyboardModifier.NoModifier))
+        self.Window.Controller.SelectEntity(entity_id);surface.SetGizmoMode(GizmoMode.Translate)
+        handle=next((QPoint(x,y) for y in range(max(0,point.y()-120),min(surface.height(),point.y()+121),4) for x in range(max(0,point.x()-120),min(surface.width(),point.x()+121),4) if surface._PickGizmo(QPoint(x,y)) is not None),None)
+        self.assertIsNotNone(handle)
+        before=self.Window.Runtime.EntityDetails(entity_id)["position"]
+        surface.mousePressEvent(QMouseEvent(QMouseEvent.Type.MouseButtonPress,QPointF(handle),Qt.MouseButton.LeftButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
+        surface.mouseMoveEvent(QMouseEvent(QMouseEvent.Type.MouseMove,QPointF(handle+QPoint(48,24)),Qt.MouseButton.NoButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
+        surface.mouseReleaseEvent(QMouseEvent(QMouseEvent.Type.MouseButtonRelease,QPointF(handle+QPoint(48,24)),Qt.MouseButton.LeftButton,Qt.MouseButton.NoButton,Qt.KeyboardModifier.NoModifier))
+        self.assertNotEqual(self.Window.Runtime.EntityDetails(entity_id)["position"],before)
+
     def test_inspector_supports_many_components_and_structural_refresh(self) -> None:
         if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")
         entity_id=self.Window.Runtime.CreateEntity("Inspector Entity")
@@ -296,11 +334,27 @@ class EditorShellTests(unittest.TestCase):
         self.assertEqual(self.Window.Runtime.EntityDetails(second)["position"],(5.0,2.0,3.0))
         self.assertTrue(self.Window.Controller.ApplyGizmoRotation(Vec3(0,1,0),0.25))
 
+    def test_multi_selection_pivot_and_center_transform_semantics(self) -> None:
+        if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")
+        first=self.Window.Runtime.CreateEntity("Pivot First");second=self.Window.Runtime.CreateEntity("Pivot Second")
+        self.Window.Runtime.SetTransform(first,(0,0,0),(0,0,0,1),(1,1,1));self.Window.Runtime.SetTransform(second,(4,0,0),(0,0,0,1),(1,1,1))
+        self.Window.Controller.SelectEntities([first,second])
+        self.Window.Scene.PivotMode.setCurrentText("Pivot")
+        self.assertTrue(self.Window.Controller.ApplyGizmoRotation(Vec3(0,1,0),0.25))
+        self.assertEqual(self.Window.Runtime.EntityDetails(first)["position"],(0.0,0.0,0.0))
+        self.assertEqual(self.Window.Runtime.EntityDetails(second)["position"],(4.0,0.0,0.0))
+        self.assertTrue(self.Window.Controller.ApplyGizmoScale(Vec3(2,2,2)))
+        self.assertEqual(self.Window.Runtime.EntityDetails(first)["position"],(0.0,0.0,0.0))
+        self.assertEqual(self.Window.Runtime.EntityDetails(second)["position"],(4.0,0.0,0.0))
+        self.Window.Scene.PivotMode.setCurrentText("Center")
+        self.assertTrue(self.Window.Controller.ApplyGizmoScale(Vec3(2,1,1)))
+        self.assertEqual(self.Window.Runtime.EntityDetails(first)["position"],(-2.0,0.0,0.0))
+        self.assertEqual(self.Window.Runtime.EntityDetails(second)["position"],(6.0,0.0,0.0))
+
     def test_scene_box_selection_works_outside_select_tool(self) -> None:
         if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")
         entity=self.Window.Runtime.CreateEntity("Box selected");surface=self.Window.Scene.Surface;surface.resize(400,400);surface.SetGizmoMode(GizmoMode.Translate);self.Window.Controller.SelectEntity(entity)
         surface.mousePressEvent(QMouseEvent(QMouseEvent.Type.MouseButtonPress,QPointF(1,1),Qt.MouseButton.LeftButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
-        self.assertEqual(self.Window.Controller.SelectedEntities,[])
         surface.mouseMoveEvent(QMouseEvent(QMouseEvent.Type.MouseMove,QPointF(399,399),Qt.MouseButton.NoButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
         self.assertTrue(surface._selection_band.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground))
         self.assertIn(entity,self.Window.Controller.SelectedEntities)
@@ -501,6 +555,27 @@ class EditorShellTests(unittest.TestCase):
         surface.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress,Qt.Key.Key_W,Qt.KeyboardModifier.NoModifier))
         surface.mouseMoveEvent(QMouseEvent(QMouseEvent.Type.MouseMove,QPointF(130,115),Qt.MouseButton.NoButton,Qt.MouseButton.RightButton,Qt.KeyboardModifier.NoModifier))
         self.assertEqual(surface._eye,eye);self.assertNotEqual(tuple(surface._target),target)
+
+    def test_scene_returns_to_orbit_after_fly_navigation_ends(self) -> None:
+        surface=self.Window.Scene.Surface;surface._UpdateCamera()
+        surface.mousePressEvent(QMouseEvent(QMouseEvent.Type.MouseButtonPress,QPointF(100,100),Qt.MouseButton.RightButton,Qt.MouseButton.RightButton,Qt.KeyboardModifier.NoModifier))
+        surface.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress,Qt.Key.Key_W,Qt.KeyboardModifier.NoModifier));surface._FlyTick()
+        surface.mouseReleaseEvent(QMouseEvent(QMouseEvent.Type.MouseButtonRelease,QPointF(100,100),Qt.MouseButton.RightButton,Qt.MouseButton.NoButton,Qt.KeyboardModifier.NoModifier))
+        self.assertFalse(surface._fly_navigation);self.assertEqual(surface._keys,set())
+        focus=tuple(surface._target);eye=surface._eye
+        surface.mousePressEvent(QMouseEvent(QMouseEvent.Type.MouseButtonPress,QPointF(100,100),Qt.MouseButton.RightButton,Qt.MouseButton.RightButton,Qt.KeyboardModifier.NoModifier))
+        surface.mouseMoveEvent(QMouseEvent(QMouseEvent.Type.MouseMove,QPointF(140,120),Qt.MouseButton.NoButton,Qt.MouseButton.RightButton,Qt.KeyboardModifier.NoModifier))
+        self.assertEqual(tuple(surface._target),focus);self.assertNotEqual(surface._eye,eye)
+
+    def test_frame_all_shortcut_is_suspended_during_right_mouse_navigation(self) -> None:
+        surface=self.Window.Scene.Surface;action=self.Window.MenuBar.FrameAllAction
+        self.assertTrue(action.isEnabled())
+        surface.mousePressEvent(QMouseEvent(QMouseEvent.Type.MouseButtonPress,QPointF(100,100),Qt.MouseButton.RightButton,Qt.MouseButton.RightButton,Qt.KeyboardModifier.NoModifier))
+        self.assertFalse(action.isEnabled())
+        surface.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress,Qt.Key.Key_A,Qt.KeyboardModifier.NoModifier))
+        self.assertIn(Qt.Key.Key_A,surface._keys)
+        surface.mouseReleaseEvent(QMouseEvent(QMouseEvent.Type.MouseButtonRelease,QPointF(100,100),Qt.MouseButton.RightButton,Qt.MouseButton.NoButton,Qt.KeyboardModifier.NoModifier))
+        self.assertTrue(action.isEnabled())
 
     def test_shift_right_drag_pans_scene_camera(self) -> None:
         surface=self.Window.Scene.Surface;surface._UpdateCamera();eye=Vec3(*surface._eye);target=Vec3(*surface._target)

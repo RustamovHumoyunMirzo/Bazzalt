@@ -33,7 +33,7 @@ class EditorController(QObject):
         self._hierarchy_clipboard: list[dict] = []
         self._box_selection_base: list[str] = []
         self._gizmos_visible=True;self._stats_frames=0;self._stats_started=monotonic()
-        self._snap_modes=set();self._pivot_center=False
+        self._snap_modes=set();self._pivot_center=False;self._local_space=False
         self.ScriptCompiler=None;self.ScriptAttachments=None
         self.History=SceneHistory(runtime,self)
         self.Timer = QTimer(self)
@@ -51,13 +51,12 @@ class EditorController(QObject):
         window.MenuBar.GizmosToggled.connect(self.SetGizmosVisible)
         window.MenuBar.GridToggled.connect(window.Scene.GridToggle.setChecked)
         window.MenuBar.IconsToggled.connect(runtime.SetEditorIconsVisible)
-        window.MenuBar.StatsToggled.connect(window.Scene.StatsLabel.setVisible)
+        window.MenuBar.StatsToggled.connect(window.Scene.StatsToggle.setChecked)
         window.MenuBar.RenderModeRequested.connect(self.SetRenderMode)
-        window.Scene.FocusButton.clicked.connect(self.FocusSelected);window.Scene.FrameButton.clicked.connect(self.FrameAll)
         window.Scene.ShadingMode.currentIndexChanged.connect(lambda index:self.SetRenderMode(("lit","unlit","wireframe","lighting_only","overdraw")[index]))
-        window.Scene.Overlays.SelectionChanged.connect(self.SetOverlays)
-        window.Scene.Snapping.SelectionChanged.connect(lambda values:setattr(self,"_snap_modes",set(values)))
+        window.Scene.LocalToggle.toggled.connect(lambda checked:setattr(self,"_local_space",checked))
         window.Scene.PivotMode.currentIndexChanged.connect(lambda index:(setattr(self,"_pivot_center",index==1),self._UpdateGizmo()))
+        window.Scene.GizmoToggle.toggled.connect(self.SetGizmosVisible);window.Scene.StatsToggle.toggled.connect(window.Scene.StatsLabel.setVisible)
         window.Toolbar.PlayRequested.connect(self.Play)
         window.Toolbar.StopRequested.connect(self.Stop)
         window.Toolbar.PauseRequested.connect(runtime.Pause)
@@ -96,6 +95,7 @@ class EditorController(QObject):
         window.Scene.Surface.EntitiesBoxSelected.connect(self.SelectSceneBox)
         window.Scene.Surface.SelectionBoxStarted.connect(self.BeginSceneBoxSelection)
         window.Scene.Surface.SelectionBoxFinished.connect(lambda:self._box_selection_base.clear())
+        window.Scene.Surface.NavigationChanged.connect(lambda active:window.MenuBar.FrameAllAction.setEnabled(not active))
         window.Scene.Surface.Attached.connect(self._UpdateGizmo)
         # The toolbar selects Translate before this controller is constructed,
         # so its initial GizmoModeChanged signal has already been emitted.
@@ -343,11 +343,16 @@ class EditorController(QObject):
                         blocker=QSignalBlocker(editor);setter(value);del blocker
         finally:self._updating_inspector=False
 
-    def SelectSceneEntity(self,entity_id:str)->None:
-        self.SelectEntity(entity_id);self.RefreshHierarchy()
+    def SelectSceneEntity(self,entity_id:str,additive:bool=False)->None:
+        if additive:
+            selected=list(self.SelectedEntities)
+            if entity_id in selected:selected.remove(entity_id)
+            else:selected.append(entity_id)
+            self.SelectEntities(selected);self.Window.Hierarchy.SetSelectedData(selected)
+        else:self.SelectEntity(entity_id);self.RefreshHierarchy()
 
     def _ComponentIcon(self, component: str):
-        names={"Camera":"comp_cam.svg","Light":"comp_light.svg","Mesh":"comp_mesh.svg",
+        names={"Camera":"comp_cam.svg","Light":"comp_light.svg","Mesh":"comp_mesh.svg","Primitive Object":"comp_mesh.svg",
                "Scene Query Bounds":"comp_sqb.svg","Gaussian Blur":"comp_gblur.svg","Vignette":"comp_vign.svg"}
         filename=names.get(component)
         return self.Window.Resources.Icon(f"icons/{filename}") if filename else None
@@ -368,6 +373,8 @@ class EditorController(QObject):
                 editor=EnumInput();editor.SetOptions((("Linear",0),("Filmic",1),("ACES",2)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
             if component=="Scene Query Bounds" and name=="Shape":
                 editor=EnumInput();editor.SetOptions((("Box",0),("Sphere",1)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
+            if component=="Primitive Object" and name=="Shape":
+                editor=EnumInput();editor.SetOptions((("Cube",0),("Sphere",1),("Cylinder",2),("Capsule",3),("Plane",4),("Cone",5),("Torus",6)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitPrimitiveShape(entity_id,editor.GetValue()));return editor
             if value>2_147_483_647:
                 editor=UIntInput(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
             editor=IntInput(value=value);editor.valueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
@@ -427,6 +434,10 @@ class EditorController(QObject):
     def _CommitComponent(self, entity_id: str, component: str, name: str, value) -> None:  # type: ignore[no-untyped-def]
         if not self._updating_inspector and entity_id==self.SelectedEntity and self._Mutate(f"Edit {component}",lambda:self.Runtime.SetComponentProperty(entity_id,component,name,value)):self.SetDirty(True)
 
+    def _CommitPrimitiveShape(self,entity_id:str,value:int)->None:
+        self._CommitComponent(entity_id,"Primitive Object","Shape",value)
+        if entity_id==self.SelectedEntity:self.SelectEntity(entity_id,force=True)
+
     def _Rename(self, entity_id: str, name: str) -> None:
         if not self._updating_inspector and entity_id==self.SelectedEntity and name.strip() and self._Mutate("Rename entity",lambda:self.Runtime.Rename(entity_id,name.strip())):self.SetDirty(True);self.RefreshHierarchy()
 
@@ -466,7 +477,10 @@ class EditorController(QObject):
             if details:self.Window.Scene.Surface.SetSelection(details.get("world_position",details["position"]))
         self.Runtime.SetGizmo(self.SelectedEntity, modes[self.Window.Toolbar.GetGizmoMode()])
 
-    def SetGizmosVisible(self,visible:bool)->None:self._gizmos_visible=bool(visible);self._UpdateGizmo()
+    def SetGizmosVisible(self,visible:bool)->None:
+        self._gizmos_visible=bool(visible)
+        blocker=QSignalBlocker(self.Window.Scene.GizmoToggle);self.Window.Scene.GizmoToggle.setChecked(bool(visible));del blocker
+        self.Window.MenuBar.GizmosAction.setChecked(bool(visible));self._UpdateGizmo()
     def FocusSelected(self)->None:
         points=[]
         for entity in self.SelectedEntities or ([self.SelectedEntity] if self.SelectedEntity else []):
@@ -527,9 +541,14 @@ class EditorController(QObject):
         if self._Mutate("Create entity",lambda:bool(self.Runtime.CreateEntity(self.Window.Localization.Translate("entity.new"),str(parent or "")))):self.SetDirty(True,[self._SceneForParent(parent)])
 
     def CreateTypedEntity(self, component_type: str, parent) -> None:  # type: ignore[no-untyped-def]
-        self.History.Begin(f"Create {component_type}")
-        entity_id = self.Runtime.CreateEntity(component_type if component_type != "Entity" else self.Window.Localization.Translate("entity.new"), str(parent or ""))
-        if entity_id and component_type != "Entity": self.Runtime.AddComponent(entity_id, component_type)
+        component_name,_,shape_text=component_type.partition(":")
+        primitive_keys=("cube","sphere","cylinder","capsule","plane","cone","torus")
+        display_name=self.Window.Localization.Translate(f"primitive.{primitive_keys[int(shape_text)]}") if component_name=="Primitive Object" and shape_text else component_name
+        self.History.Begin(f"Create {display_name}")
+        entity_id = self.Runtime.CreateEntity(display_name if component_name != "Entity" else self.Window.Localization.Translate("entity.new"), str(parent or ""))
+        if entity_id and component_name != "Entity":
+            self.Runtime.AddComponent(entity_id, component_name)
+            if component_name=="Primitive Object" and shape_text:self.Runtime.SetComponentProperty(entity_id,component_name,"Shape",int(shape_text))
         if entity_id:self.History.Commit();self.SetDirty(True,[self._SceneForParent(parent)])
         else:self.History.Cancel()
 
@@ -685,7 +704,7 @@ class EditorController(QObject):
             details=[self.Runtime.EntityDetails(value) for value in self.SelectedEntities]
             center=Vec3(*(sum(item["position"][index] for item in details)/len(details) for index in range(3)));unit=axis.Normalized();sine,cosine=sin(angle),cos(angle);half_sine=sin(angle*.5);changed=False
             for entity,item in zip(self.SelectedEntities,details):
-                relative=Vec3(*item["position"])-center;rotated=relative*cosine+unit.Cross(relative)*sine+unit*(unit.Dot(relative)*(1-cosine));x,y,z,w=item["rotation"];dx,dy,dz,dw=unit.X*half_sine,unit.Y*half_sine,unit.Z*half_sine,cos(angle*.5);rotation=(dw*x+dx*w+dy*z-dz*y,dw*y-dx*z+dy*w+dz*x,dw*z+dx*y-dy*x+dz*w,dw*w-dx*x-dy*y-dz*z);position=(center.X+rotated.X,center.Y+rotated.Y,center.Z+rotated.Z);changed=self.Runtime.SetTransform(entity,position,rotation,item["scale"]) or changed
+                relative=Vec3(*item["position"])-center;rotated=relative*cosine+unit.Cross(relative)*sine+unit*(unit.Dot(relative)*(1-cosine));x,y,z,w=item["rotation"];dx,dy,dz,dw=unit.X*half_sine,unit.Y*half_sine,unit.Z*half_sine,cos(angle*.5);rotation=(dw*x+dx*w+dy*z-dz*y,dw*y-dx*z+dy*w+dz*x,dw*z+dx*y-dy*x+dz*w,dw*w-dx*x-dy*y-dz*z);position=(center.X+rotated.X,center.Y+rotated.Y,center.Z+rotated.Z) if self._pivot_center else item["position"];changed=self.Runtime.SetTransform(entity,position,rotation,item["scale"]) or changed
             if changed:self.SetDirty(True);self._UpdateGizmo()
             return changed
         details=self.Runtime.EntityDetails(self.SelectedEntity) if self.SelectedEntity else {}
@@ -701,7 +720,7 @@ class EditorController(QObject):
         if len(self.SelectedEntities)>1:
             details=[self.Runtime.EntityDetails(value) for value in self.SelectedEntities];center=tuple(sum(item["position"][i] for item in details)/len(details) for i in range(3));factors=(factor.X,factor.Y,factor.Z);changed=False
             for entity,item in zip(self.SelectedEntities,details):
-                position=tuple(center[i]+(item["position"][i]-center[i])*factors[i] for i in range(3));scale=tuple(item["scale"][i]*factors[i] for i in range(3));changed=self.Runtime.SetTransform(entity,position,item["rotation"],scale) or changed
+                position=tuple(center[i]+(item["position"][i]-center[i])*factors[i] for i in range(3)) if self._pivot_center else item["position"];scale=tuple(item["scale"][i]*factors[i] for i in range(3));changed=self.Runtime.SetTransform(entity,position,item["rotation"],scale) or changed
             if changed:self.SetDirty(True);self._UpdateGizmo()
             return changed
         details=self.Runtime.EntityDetails(self.SelectedEntity) if self.SelectedEntity else {}

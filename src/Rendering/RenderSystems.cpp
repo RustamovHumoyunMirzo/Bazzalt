@@ -359,4 +359,10 @@ void MeshSystem::Destroy(UUID id) {
     m_backend.GetAssets().DestroyMesh(found->second.Handle);m_resources.erase(found);
 }
 
+namespace { std::size_t PrimitiveGeometryKey(const PrimitiveObject&v){std::size_t h=static_cast<std::size_t>(v.Shape);const auto mix=[&](auto value){h^=std::hash<decltype(value)>{}(value)+0x9e3779b9+(h<<6)+(h>>2);};mix(v.Size.X);mix(v.Size.Y);mix(v.Size.Z);mix(v.Radius);mix(v.Height);mix(v.Width);mix(v.Depth);mix(v.MajorRadius);mix(v.MinorRadius);mix(v.Segments);mix(v.Rings);return h;} }
+void PrimitiveSystem::OnCreate(Scene&){}
+void PrimitiveSystem::OnUpdate(Scene&scene,float){auto& assets=m_backend.GetAssets();std::unordered_set<UUID> alive;auto view=GetView(scene.GetRegistry());for(auto handle:view){Entity entity=scene.GetEntity(static_cast<Entity::Id>(handle));const auto id=entity.GetUUID();const auto& primitive=view.get<PrimitiveObject>(handle);if(!primitive.IsEnabled())continue;alive.insert(id);const auto key=PrimitiveGeometryKey(primitive);auto found=m_resources.find(id);if(found!=m_resources.end()&&found->second.GeometryKey!=key){Destroy(id);found=m_resources.end();}if(found==m_resources.end())found=m_resources.emplace(id,Resource{assets.CreatePrimitive(primitive),key}).first;assets.UpdatePrimitive(found->second.Handle,entity.GetWorldMatrix(),primitive);}for(auto it=m_resources.begin();it!=m_resources.end();){if(!alive.contains(it->first)){auto id=it->first;++it;Destroy(id);}else ++it;}}
+void PrimitiveSystem::OnDestroy(Scene&){while(!m_resources.empty())Destroy(m_resources.begin()->first);}
+void PrimitiveSystem::Destroy(UUID id){auto found=m_resources.find(id);if(found==m_resources.end())return;m_backend.GetAssets().DestroyPrimitive(found->second.Handle);m_resources.erase(found);}
+
 } // namespace Bazzalt::Runtime

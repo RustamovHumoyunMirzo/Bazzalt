@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <array>
@@ -24,6 +25,7 @@
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Components/Light.h"
 #include "Bazzalt/Components/Mesh.h"
+#include "Bazzalt/Components/PrimitiveObject.h"
 #include "Bazzalt/Components/ModelInstance.h"
 #include "Bazzalt/Components/ModelNode.h"
 #include "Bazzalt/Components/GaussianBlur.h"
@@ -69,6 +71,7 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
     if (entity.HasComponent<Camera>()) components.append("Camera");
     if (entity.HasComponent<Light>()) components.append("Light");
     if (entity.HasComponent<Mesh>()) components.append("Mesh");
+    if (entity.HasComponent<PrimitiveObject>()) components.append("Primitive Object");
     if (entity.HasComponent<ModelInstance>()) components.append("Model Instance");
     if (entity.HasComponent<ModelNode>()) components.append("Model Node");
     if (entity.HasComponent<GaussianBlur>()) components.append("Gaussian Blur");
@@ -79,6 +82,7 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
     if (const auto* value=entity.TryGetComponent<Camera>()) enabled["Camera"]=value->IsEnabled();
     if (const auto* value=entity.TryGetComponent<Light>()) enabled["Light"]=value->IsEnabled();
     if (const auto* value=entity.TryGetComponent<Mesh>()) enabled["Mesh"]=value->IsEnabled();
+    if (const auto* value=entity.TryGetComponent<PrimitiveObject>()) enabled["Primitive Object"]=value->IsEnabled();
     if (const auto* value=entity.TryGetComponent<ModelInstance>()) enabled["Model Instance"]=value->IsEnabled();
     if (const auto* value=entity.TryGetComponent<ModelNode>()) enabled["Model Node"]=value->IsEnabled();
     if (const auto* value=entity.TryGetComponent<GaussianBlur>()) enabled["Gaussian Blur"]=value->IsEnabled();
@@ -93,6 +97,7 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
         py::dict v;v["Type"]=static_cast<int>(light->Type);v["Color"]=py::make_tuple(light->Color.X,light->Color.Y,light->Color.Z);v["Intensity"]=light->Intensity;v["Range"]=light->Range;v["Inner Cone"]=ToDegrees(light->InnerConeAngle);v["Outer Cone"]=ToDegrees(light->OuterConeAngle);v["Sun Angular Radius"]=light->SunAngularRadius;v["Sun Halo Size"]=light->SunHaloSize;v["Sun Halo Falloff"]=light->SunHaloFalloff;v["Cast Shadows"]=light->CastShadows;data["Light"]=v;
     }
     if (const auto* mesh=entity.TryGetComponent<Mesh>()) { py::dict v;v["Mesh Asset"]=mesh->MeshAsset.ToString();v["Model Node Index"]=mesh->ModelNodeIndex;v["Material Count"]=static_cast<int>(mesh->Materials.size());v["Layer Mask"]=mesh->LayerMask;v["Visible"]=mesh->Visible;v["Cast Shadows"]=mesh->CastShadows;v["Receive Shadows"]=mesh->ReceiveShadows;data["Mesh"]=v; }
+    if(const auto* primitive=entity.TryGetComponent<PrimitiveObject>()){py::dict v;v["Shape"]=static_cast<int>(primitive->Shape);switch(primitive->Shape){case PrimitiveShape::Cube:v["Size"]=py::make_tuple(primitive->Size.X,primitive->Size.Y,primitive->Size.Z);break;case PrimitiveShape::Sphere:v["Radius"]=primitive->Radius;v["Segments"]=primitive->Segments;v["Rings"]=primitive->Rings;break;case PrimitiveShape::Cylinder:v["Radius"]=primitive->Radius;v["Height"]=primitive->Height;v["Segments"]=primitive->Segments;break;case PrimitiveShape::Capsule:v["Radius"]=primitive->Radius;v["Height"]=primitive->Height;v["Segments"]=primitive->Segments;v["Rings"]=primitive->Rings;break;case PrimitiveShape::Plane:v["Width"]=primitive->Width;v["Depth"]=primitive->Depth;break;case PrimitiveShape::Cone:v["Radius"]=primitive->Radius;v["Height"]=primitive->Height;v["Segments"]=primitive->Segments;break;case PrimitiveShape::Torus:v["Major Radius"]=primitive->MajorRadius;v["Minor Radius"]=primitive->MinorRadius;v["Segments"]=primitive->Segments;v["Rings"]=primitive->Rings;break;}v["Color"]=py::make_tuple(primitive->Color.X,primitive->Color.Y,primitive->Color.Z,primitive->Color.W);v["Layer Mask"]=primitive->LayerMask;v["Visible"]=primitive->Visible;v["Cast Shadows"]=primitive->CastShadows;v["Receive Shadows"]=primitive->ReceiveShadows;data["Primitive Object"]=v;}
     if (const auto* model=entity.TryGetComponent<ModelInstance>()){py::dict v;v["Model Asset"]=model->ModelAsset.ToString();data["Model Instance"]=v;}
     if (const auto* node=entity.TryGetComponent<ModelNode>()){py::dict v;v["Model Asset"]=node->ModelAsset.ToString();v["Source Index"]=node->SourceIndex;v["Mesh Index"]=node->MeshIndex;v["Stable Path"]=node->StablePath;v["Has Mesh"]=node->HasMesh;data["Model Node"]=v;}
     if (const auto* blur=entity.TryGetComponent<GaussianBlur>()) { py::dict v;v["Size"]=blur->Size;data["Gaussian Blur"]=v; }
@@ -242,6 +247,7 @@ public:
         if (type == "Camera") { if (!entity.HasComponent<Camera>()) entity.AddComponent<Camera>(); }
         else if (type == "Light") { if (!entity.HasComponent<Light>()) entity.AddComponent<Light>(); }
         else if (type == "Mesh") { if (!entity.HasComponent<Mesh>()) entity.AddComponent<Mesh>(); }
+        else if (type == "Primitive Object") { if (!entity.HasComponent<PrimitiveObject>()) entity.AddComponent<PrimitiveObject>(); }
         else if (type == "Gaussian Blur") { if (!entity.HasComponent<GaussianBlur>()) entity.AddComponent<GaussianBlur>(); }
         else if (type == "Vignette") { if (!entity.HasComponent<Vignette>()) entity.AddComponent<Vignette>(); }
         else if (type == "Scene Query Bounds") { if (!entity.HasComponent<SceneQueryBounds>()) entity.AddComponent<SceneQueryBounds>(); }
@@ -253,6 +259,7 @@ public:
         if (type == "Camera" && entity.HasComponent<Camera>()) entity.RemoveComponent<Camera>();
         else if (type == "Light" && entity.HasComponent<Light>()) entity.RemoveComponent<Light>();
         else if (type == "Mesh" && entity.HasComponent<Mesh>()) entity.RemoveComponent<Mesh>();
+        else if (type == "Primitive Object" && entity.HasComponent<PrimitiveObject>()) entity.RemoveComponent<PrimitiveObject>();
         else if (type == "Gaussian Blur" && entity.HasComponent<GaussianBlur>()) entity.RemoveComponent<GaussianBlur>();
         else if (type == "Vignette" && entity.HasComponent<Vignette>()) entity.RemoveComponent<Vignette>();
         else if (type == "Scene Query Bounds" && entity.HasComponent<SceneQueryBounds>()) entity.RemoveComponent<SceneQueryBounds>();
@@ -264,6 +271,7 @@ public:
         if (type == "Camera" && entity.HasComponent<Camera>()) entity.SetComponentEnabled<Camera>(enabled);
         else if (type == "Light" && entity.HasComponent<Light>()) entity.SetComponentEnabled<Light>(enabled);
         else if (type == "Mesh" && entity.HasComponent<Mesh>()) entity.SetComponentEnabled<Mesh>(enabled);
+        else if (type == "Primitive Object" && entity.HasComponent<PrimitiveObject>()) entity.SetComponentEnabled<PrimitiveObject>(enabled);
         else if (type == "Model Instance" && entity.HasComponent<ModelInstance>()) entity.SetComponentEnabled<ModelInstance>(enabled);
         else if (type == "Model Node" && entity.HasComponent<ModelNode>()) entity.SetComponentEnabled<ModelNode>(enabled);
         else if (type == "Gaussian Blur" && entity.HasComponent<GaussianBlur>()) entity.SetComponentEnabled<GaussianBlur>(enabled);
@@ -274,7 +282,7 @@ public:
     }
     py::list ComponentTypes() const {
         py::list result;
-        for (const char* name : {"Camera", "Light", "Mesh", "Scene Query Bounds", "Gaussian Blur", "Vignette"})
+        for (const char* name : {"Camera", "Light", "Mesh", "Primitive Object", "Scene Query Bounds", "Gaussian Blur", "Vignette"})
             result.append(name);
         return result;
     }
@@ -304,6 +312,7 @@ public:
         if(type=="Camera"&&entity.HasComponent<Camera>()){auto&v=entity.GetComponent<Camera>();if(property=="Projection")v.Projection=static_cast<CameraProjection>(value.cast<int>());else if(property=="Field of View")v.VerticalFieldOfView=ToRadians(value.cast<float>());else if(property=="Orthographic Size")v.OrthographicSize=value.cast<float>();else if(property=="Near")v.NearPlane=value.cast<float>();else if(property=="Far")v.FarPlane=value.cast<float>();else if(property=="Aspect Ratio")v.AspectRatio=value.cast<float>();else if(property=="Aspect Mode")v.AspectMode=static_cast<CameraAspectMode>(value.cast<int>());else if(property=="Viewport"){auto a=value.cast<std::array<float,4>>();v.Viewport={a[0],a[1],a[2],a[3]};}else if(property=="Priority")v.Priority=value.cast<int>();else if(property=="Active")v.Active=value.cast<bool>();else if(property=="Clear Color"){auto a=value.cast<std::array<float,4>>();v.ClearColor={a[0],a[1],a[2],a[3]};}else if(property=="Post Processing")v.PostProcessing.Enabled=value.cast<bool>();else if(property=="Bloom")v.PostProcessing.Bloom=value.cast<bool>();else if(property=="Ambient Occlusion")v.PostProcessing.AmbientOcclusion=value.cast<bool>();else if(property=="Anti Aliasing")v.PostProcessing.AntiAliasingMode=static_cast<AntiAliasing>(value.cast<int>());else if(property=="Tone Mapping")v.PostProcessing.ToneMappingMode=static_cast<ToneMapping>(value.cast<int>());else if(property=="Exposure")v.PostProcessing.Exposure=value.cast<float>();else if(property=="Depth of Field")v.PostProcessing.DepthOfField.Enabled=value.cast<bool>();else if(property=="Focus Distance")v.PostProcessing.DepthOfField.FocusDistance=value.cast<float>();else if(property=="Aperture")v.PostProcessing.DepthOfField.Aperture=value.cast<float>();else if(property=="Shutter Speed")v.PostProcessing.DepthOfField.ShutterSpeed=value.cast<float>();else if(property=="Sensitivity")v.PostProcessing.DepthOfField.Sensitivity=value.cast<float>();else return false;return true;}
         if(type=="Light"&&entity.HasComponent<Light>()){auto&v=entity.GetComponent<Light>();if(property=="Type")v.Type=static_cast<LightType>(value.cast<int>());else if(property=="Color"){auto a=value.cast<std::array<float,3>>();v.Color={a[0],a[1],a[2]};}else if(property=="Intensity")v.Intensity=value.cast<float>();else if(property=="Range")v.Range=value.cast<float>();else if(property=="Inner Cone")v.InnerConeAngle=ToRadians(value.cast<float>());else if(property=="Outer Cone")v.OuterConeAngle=ToRadians(value.cast<float>());else if(property=="Sun Angular Radius")v.SunAngularRadius=value.cast<float>();else if(property=="Sun Halo Size")v.SunHaloSize=value.cast<float>();else if(property=="Sun Halo Falloff")v.SunHaloFalloff=value.cast<float>();else if(property=="Cast Shadows")v.CastShadows=value.cast<bool>();else if(property=="Enabled")v.Enabled=value.cast<bool>();else return false;return true;}
         if(type=="Mesh"&&entity.HasComponent<Mesh>()){auto&v=entity.GetComponent<Mesh>();if(property=="Mesh Asset"){const auto text=value.cast<std::string>();UUID id;if(!UUID::TryParse(text,id)){const auto asset=AssetManager::GetAsset(std::filesystem::u8path(text));if(!asset)return false;id=asset->Id;}v.MeshAsset=id;}else if(property=="Model Node Index")v.ModelNodeIndex=value.cast<std::uint32_t>();else if(property=="Visible")v.Visible=value.cast<bool>();else if(property=="Cast Shadows")v.CastShadows=value.cast<bool>();else if(property=="Receive Shadows")v.ReceiveShadows=value.cast<bool>();else if(property=="Layer Mask")v.LayerMask=static_cast<std::uint8_t>(value.cast<int>());else return false;return true;}
+        if(type=="Primitive Object"&&entity.HasComponent<PrimitiveObject>()){auto&v=entity.GetComponent<PrimitiveObject>();if(property=="Shape")v.Shape=static_cast<PrimitiveShape>(value.cast<int>());else if(property=="Size"){auto a=value.cast<std::array<float,3>>();v.Size={a[0],a[1],a[2]};}else if(property=="Radius")v.Radius=std::max(.001f,value.cast<float>());else if(property=="Height")v.Height=std::max(.001f,value.cast<float>());else if(property=="Width")v.Width=std::max(.001f,value.cast<float>());else if(property=="Depth")v.Depth=std::max(.001f,value.cast<float>());else if(property=="Major Radius")v.MajorRadius=std::max(.001f,value.cast<float>());else if(property=="Minor Radius")v.MinorRadius=std::clamp(value.cast<float>(),.001f,v.MajorRadius);else if(property=="Segments")v.Segments=std::clamp(value.cast<std::uint32_t>(),3u,128u);else if(property=="Rings")v.Rings=std::clamp(value.cast<std::uint32_t>(),2u,128u);else if(property=="Color"){auto a=value.cast<std::array<float,4>>();v.Color={a[0],a[1],a[2],a[3]};}else if(property=="Layer Mask")v.LayerMask=static_cast<std::uint8_t>(value.cast<int>());else if(property=="Visible")v.Visible=value.cast<bool>();else if(property=="Cast Shadows")v.CastShadows=value.cast<bool>();else if(property=="Receive Shadows")v.ReceiveShadows=value.cast<bool>();else return false;return true;}
         if(type=="Gaussian Blur"&&entity.HasComponent<GaussianBlur>()){auto&v=entity.GetComponent<GaussianBlur>();if(property=="Enabled")v.Enabled=value.cast<bool>();else if(property=="Size")v.Size=value.cast<float>();else return false;return true;}
         if(type=="Vignette"&&entity.HasComponent<Vignette>()){auto&v=entity.GetComponent<Vignette>();if(property=="Enabled")v.Enabled=value.cast<bool>();else if(property=="Color"){auto a=value.cast<std::array<float,4>>();v.Color={a[0],a[1],a[2],a[3]};}else if(property=="Intensity")v.Intensity=value.cast<float>();else if(property=="Smoothness")v.Smoothness=value.cast<float>();else if(property=="Roundness")v.Roundness=value.cast<float>();else return false;return true;}
         if(type=="Scene Query Bounds"&&entity.HasComponent<SceneQueryBounds>()){auto&v=entity.GetComponent<SceneQueryBounds>();if(property=="Shape")v.Shape=static_cast<SceneQueryShape>(value.cast<int>());else if(property=="Center"){auto a=value.cast<std::array<float,3>>();v.Center={a[0],a[1],a[2]};}else if(property=="Extents"){auto a=value.cast<std::array<float,3>>();v.Extents={a[0],a[1],a[2]};}else if(property=="Radius")v.Radius=value.cast<float>();else if(property=="Layer Mask")v.LayerMask=value.cast<std::uint32_t>();else if(property=="Enabled")v.Enabled=value.cast<bool>();else return false;return true;}
