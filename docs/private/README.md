@@ -1,4 +1,4 @@
-# BAZZALT documentation
+# BAZZALT private documentation
 
 This handbook documents the engine as it exists in the repository. It explains
 the public game-facing API, private editor/runtime boundary, persistent formats,
