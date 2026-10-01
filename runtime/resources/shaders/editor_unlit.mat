@@ -1,0 +1,2 @@
+material { name : EditorUnlit, shadingModel : unlit }
+fragment { void material(inout MaterialInputs material) { prepareMaterial(material); material.baseColor = vec4(0.72, 0.74, 0.78, 1.0); } }

@@ -1,0 +1,2 @@
+material { name : EditorLightingOnly, shadingModel : lit }
+fragment { void material(inout MaterialInputs material) { prepareMaterial(material); material.baseColor = vec4(0.72, 0.72, 0.72, 1.0); material.metallic = 0.0; material.roughness = 0.72; material.reflectance = 0.35; } }

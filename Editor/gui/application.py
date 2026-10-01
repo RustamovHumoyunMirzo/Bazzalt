@@ -11,7 +11,8 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox
 from ..localization import LocalizationManager
 from ..resources import ResourceManager
 from ..runtime import RuntimeService
-from ..theme import ThemeManager
+from ..theme import Theme, ThemeManager
+from .preferences import MergePreferences,PreferencesDialog
 from bazzalt.branding import LogoIcon
 from .docking import DockingSystem
 from .panels import (
@@ -56,6 +57,7 @@ class Editor(QMainWindow):
         self.ThemeManager.ThemeChanged.connect(lambda _theme:self._UpdateBrandIcon())
         self._settings=settings if settings is not None else {"schema_version":2}
         self._settings_saver=settings_saver
+        self.ThemeManager.ThemeChanged.connect(self._RememberTheme)
         self._layout_save_timer=QTimer(self);self._layout_save_timer.setSingleShot(True);self._layout_save_timer.setInterval(400);self._layout_save_timer.timeout.connect(self._SaveWorkspace)
         self.setWindowTitle(self.Localization.Translate("app.title"))
         self.Localization.LocaleChanged.connect(
@@ -93,6 +95,9 @@ class Editor(QMainWindow):
         if not self.Docking.restore_layout(saved_layout if isinstance(saved_layout,dict) else self._default_layout):self.Docking.restore_layout(self._default_layout)
         self.Docking.layout_changed.connect(lambda:self._layout_save_timer.start())
         self.MenuBar.ResetWorkspaceRequested.connect(self._ResetWorkspace)
+        self.MenuBar.PreferencesRequested.connect(self.OpenPreferences)
+        self.MenuBar.MaximizeViewportRequested.connect(self.SetViewportMaximized)
+        self.Scene.GridToggle.toggled.connect(self.MenuBar.GridAction.setChecked)
         self.ThemeManager.ThemeChanged.connect(
             lambda _: self._UpdatePanelPresentation()
         )
@@ -113,6 +118,39 @@ class Editor(QMainWindow):
 
         # Lower-case aliases preserve the original prototype's attributes.
         self.docking = self.Docking
+        self._pre_maximize_layout=None
+        initial=self._settings.get("preferences")
+        if not isinstance(initial,dict):initial=MergePreferences(None);initial["appearance"]["theme"]=str(self._settings.get("theme","dark"))
+        self.ApplyPreferences(initial,save=False)
+
+    def GetPreferences(self)->dict:
+        value=MergePreferences(self._settings.get("preferences"));value["appearance"]["theme"]="light" if self.ThemeManager.GetTheme().background==Theme.light().background else "dark";return value
+
+    def _RememberTheme(self,theme:Theme)->None:
+        value=MergePreferences(self._settings.get("preferences"));name="light" if theme.background==Theme.light().background else "dark";value["appearance"]["theme"]=name;self._settings["preferences"]=value;self._settings["theme"]=name
+
+    def PreferenceValue(self,section:str,key:str,default=None):
+        return self.GetPreferences().get(section,{}).get(key,default)
+
+    def OpenPreferences(self)->None:
+        PreferencesDialog(self).exec()
+
+    def ApplyPreferences(self,preferences:dict,save:bool=True)->None:
+        value=MergePreferences(preferences);self._settings["preferences"]=value
+        appearance=value["appearance"]
+        self.ThemeManager.SetTheme(Theme.light() if appearance["theme"]=="light" else Theme.dark())
+        if appearance["locale"]!=self.Localization.GetLocale():self.Localization.SetLocale(appearance["locale"])
+        scene=value["scene"];self.Runtime.SetGrid(scene["grid_visible"],scene["grid_plane"])
+        self.Scene.GridToggle.setChecked(bool(scene["grid_visible"]));self.Scene.GridPlane.setCurrentIndex(int(scene["grid_plane"]))
+        speeds=(1,2,5,10);nearest=min(range(len(speeds)),key=lambda index:abs(speeds[index]-float(scene["navigation_speed"])));self.Scene.NavigationSpeed.setCurrentIndex(nearest);self.Scene.Surface.SetMoveSpeed(scene["navigation_speed"])
+        if save and self._settings_saver is not None:self._settings_saver(self._settings)
+
+    def SetViewportMaximized(self,maximized:bool)->None:
+        if maximized:
+            if self._pre_maximize_layout is None:self._pre_maximize_layout=self.Docking.save_layout()
+            self.Docking.restore_layout({"version":1,"root":{"type":"tabs","panels":["scene"],"current":0},"pinned":[],"floating":[]})
+        elif self._pre_maximize_layout is not None:
+            layout=self._pre_maximize_layout;self._pre_maximize_layout=None;self.Docking.restore_layout(layout)
 
     def _UpdateBrandIcon(self)->None:
         color="#202020" if self.ThemeManager.GetTheme().background=="#d4d4d4" else "#eeeeee"
@@ -207,13 +245,14 @@ class Editor(QMainWindow):
         root=convert(source.get("rootNode"));return {"version":1,"root":root,"pinned":[],"floating":[]}
 
     def _SaveWorkspace(self)->None:
+        if not self.PreferenceValue("general","save_workspace",True) or self._pre_maximize_layout is not None:return
         self._settings["panel_layout"]=self.Docking.save_layout()
         if self._settings_saver is not None:
             try:self._settings_saver(self._settings)
             except (OSError,ValueError):pass
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        if self.Controller.IsDirty and self.isVisible():
+        if self.Controller.IsDirty and self.isVisible() and self.PreferenceValue("general","confirm_unsaved",True):
             tr=self.Localization.Translate;dialog=QMessageBox(self)
             dialog.setWindowTitle(tr("dialog.unsaved_title"));dialog.setText(tr("dialog.unsaved_message"));dialog.setIcon(QMessageBox.Icon.Warning)
             save=dialog.addButton(tr("dialog.save_and_close"),QMessageBox.ButtonRole.AcceptRole)

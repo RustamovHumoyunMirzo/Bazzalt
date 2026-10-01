@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 
 #include "Bazzalt/Components/Mesh.h"
 #include "Bazzalt/PostProcessing.h"
@@ -27,6 +28,7 @@ public:
     void DestroyMesh(Handle handle);
     [[nodiscard]] bool PreparePostProcessEffect(const CustomPostProcessEffect& effect);
     void Update();
+    bool SetDebugMode(const std::string& mode);
     void Shutdown();
 
 private:

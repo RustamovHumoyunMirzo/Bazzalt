@@ -3,6 +3,7 @@
 #include "Runtime/NativeScriptRuntime.h"
 #include "Rendering/RenderBackend.h"
 #include "Rendering/RenderSystems.h"
+#include "Rendering/RenderAssets.h"
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Components/Light.h"
 #include <algorithm>
@@ -92,7 +93,7 @@ void Engine::RenderEditorFrame()
     for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));const Vec3 p=entity.GetWorldMatrix().TransformPoint({});icons.push_back({p.X,p.Y,p.Z,true});}
     auto lights=m_scene->GetRegistry().view<Light>();
     for(auto handle:lights){Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));const Vec3 p=entity.GetWorldMatrix().TransformPoint({});icons.push_back({p.X,p.Y,p.Z,false});}
-    m_renderBackend->SetEditorIcons(icons);
+    m_renderBackend->SetEditorIcons(m_editorIconsVisible?icons:std::vector<RenderBackend::EditorIcon>{});
     m_renderBackend->Render();
 }
 
@@ -129,6 +130,10 @@ void Engine::SetEditorGizmoHover(int axis) {
 
 void Engine::SetEditorGrid(bool visible, int plane) {
     m_renderBackend->SetEditorGrid(visible, plane);
+}
+
+bool Engine::SetSceneRenderMode(const std::string& mode) {
+    return m_renderBackend&&m_renderBackend->IsInitialized()&&m_renderBackend->GetAssets().SetDebugMode(mode);
 }
 
 void Engine::Shutdown()

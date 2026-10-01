@@ -125,6 +125,11 @@ def BuildStyleSheet(theme: Theme) -> str:
     QListWidget#ConsoleMessageList::item {{ padding: 3px 7px; border-bottom: 1px solid {t.border}; }}
     QListWidget#ConsoleMessageList::item:hover {{ background: {t.surface_hover}; }}
     QListWidget#ConsoleMessageList::item:selected {{ background: {t.selection}; }}
+    QDialog#PreferencesDialog {{ background: {t.background}; }}
+    QListWidget#PreferencesSections {{ background: {t.surface_alt}; border: 1px solid {t.border}; border-radius: {t.radius}px; padding: 4px; }}
+    QListWidget#PreferencesSections::item {{ padding: 7px 9px; margin: 1px; border-radius: {t.radius}px; }}
+    QListWidget#PreferencesSections::item:selected {{ background: {t.selection}; color: {t.text}; }}
+    QLabel#PreferencesHint {{ color: {t.text_muted}; padding-top: 8px; }}
     QToolButton#ConsoleLevelFilter {{ background: transparent; border: 0; padding: 3px 25px 3px 6px; }}
     QToolButton#ConsoleLevelFilter:hover {{ background: {t.surface_hover}; }}
     QToolButton#ConsoleLevelFilter::menu-indicator {{ image: url({combo_arrow});
@@ -158,7 +163,10 @@ def BuildStyleSheet(theme: Theme) -> str:
     QCheckBox::indicator:checked {{ background: {t.accent}; image: url({check_icon}); }}
     #ViewportPlaceholderLabel {{ color: {t.text_muted}; }}
     #SceneViewControls {{ background: {t.surface_alt}; border-bottom: 1px solid {t.border}; }}
-    #SceneViewControls QComboBox {{ min-height: 20px; max-height: 20px; min-width: 58px; font-size: 11px; }}
+    #SceneViewControls {{ background: {t.surface_alt}; border-bottom: 1px solid {t.border}; }}
+    #SceneViewControls QComboBox {{ min-height: 22px; max-height: 22px; min-width: 68px; font-size: 11px; padding-left: 7px; }}
+    #SceneViewControls QToolButton {{ min-height: 22px; max-height: 22px; padding: 0 8px; background: {t.input_background}; border: 1px solid {t.border}; border-radius: 3px; }}
+    #SceneViewControls QToolButton:hover {{ background: {t.surface_hover}; }}
     #SceneViewControls QCheckBox, #SceneViewControls QLabel {{ min-height: 20px; max-height: 20px; font-size: 11px; }}
     #ComponentSection {{ background: {t.surface}; border: 1px solid {t.border}; border-radius: 2px; }}
     #ComponentHeader {{ background: {t.surface}; border: 0; border-bottom: 1px solid {t.border};

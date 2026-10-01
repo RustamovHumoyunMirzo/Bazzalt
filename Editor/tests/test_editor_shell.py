@@ -30,6 +30,7 @@ from Editor.gui.widgets import (
 )
 from Editor.gui.gizmos import GizmoHandle, GizmoMode, Vec3
 from Editor.gui.widgets import EditorMenu
+from Editor.gui.preferences import PreferencesDialog
 from Editor.localization import LocalizationManager
 from Editor.resources import ResourceManager
 from Editor.theme import BuildStyleSheet, Theme, ThemeManager
@@ -55,6 +56,18 @@ class EditorShellTests(unittest.TestCase):
         light_icon=self.Window.Hierarchy.Tree.topLevelItem(0).icon(0).cacheKey()
         self.assertNotEqual(dark_icon,light_icon)
         self.assertFalse(self.Window.windowIcon().isNull())
+
+    def test_preferences_are_modal_persistent_and_applied(self) -> None:
+        dialog=PreferencesDialog(self.Window)
+        self.assertIs(dialog.parent(),self.Window);self.assertTrue(dialog.isModal())
+        self.assertEqual(dialog.Sections.count(),5)
+        dialog.Controls["theme"].setCurrentIndex(dialog.Controls["theme"].findData("light"))
+        dialog.Controls["navigation_speed"].setValue(10.0);dialog.Controls["clear_on_play"].setChecked(True)
+        dialog._Apply()
+        self.assertEqual(self.Window.GetPreferences()["appearance"]["theme"],"light")
+        self.assertEqual(self.Window.Scene.Surface._move_speed,10.0)
+        self.assertTrue(self.Window.PreferenceValue("console","clear_on_play"))
+        self.assertEqual(self.Window.MenuBar.PreferencesAction.text(),"Preferences…")
 
     def test_hierarchy_scene_shows_per_scene_dirty_marker(self) -> None:
         self.Window.Controller.RefreshHierarchy()
@@ -89,12 +102,24 @@ class EditorShellTests(unittest.TestCase):
 
     def test_nested_menus_fit_their_native_action_rows(self) -> None:
         view = self.Window.MenuBar.ViewMenu
-        theme = view.actions()[0].menu()
-        self.assertIsNotNone(theme)
-        for menu in (view, theme):
+        camera = self.Window.MenuBar.CameraMenu
+        self.assertIsNotNone(camera)
+        for menu in (view, camera):
             menu.resize(menu.sizeHint())
             self.assertTrue(all(menu.actionGeometry(action).right() <= menu.width()
-                                for action in menu.actions()))
+                            for action in menu.actions()))
+
+    def test_view_menu_owns_viewport_controls_not_the_theme(self) -> None:
+        menu=self.Window.MenuBar
+        self.assertFalse(hasattr(menu,"ThemeMenu"));self.assertEqual(menu.FocusSelectedAction.shortcut().toString(),"F")
+        self.assertEqual(tuple(menu.CameraActions),("perspective","top","bottom","left","right","front","back"))
+        menu.CameraPresetRequested.emit("top");self.assertEqual(self.Window.Scene.Surface._pitch,89.0)
+        menu.GridAction.setChecked(False);self.assertFalse(self.Window.Scene.GridToggle.isChecked())
+
+    def test_viewport_maximize_restores_workspace(self) -> None:
+        before=self.Window.Docking.save_layout();self.Window.SetViewportMaximized(True)
+        self.assertIsNotNone(self.Window._pre_maximize_layout);self.Window.SetViewportMaximized(False)
+        self.assertIsNone(self.Window._pre_maximize_layout);self.assertEqual(self.Window.Docking.save_layout()["root"],before["root"])
 
     def test_resources_and_localization_are_shared_services(self) -> None:
         self.assertIsInstance(self.Window.Resources, ResourceManager)

@@ -71,7 +71,17 @@ class EditorMenuBar(QMenuBar):
     SaveSceneAsRequested = Signal()
     UndoRequested = Signal()
     RedoRequested = Signal()
+    PreferencesRequested = Signal()
     ResetWorkspaceRequested = Signal()
+    MaximizeViewportRequested = Signal(bool)
+    CameraPresetRequested = Signal(str)
+    FocusSelectedRequested = Signal()
+    FrameAllRequested = Signal()
+    GizmosToggled = Signal(bool)
+    GridToggled = Signal(bool)
+    IconsToggled = Signal(bool)
+    StatsToggled = Signal(bool)
+    RenderModeRequested = Signal(str)
 
     def __init__(
         self,
@@ -139,27 +149,27 @@ class EditorMenuBar(QMenuBar):
         self.RedoAction = action = self.EditMenu.addAction("")
         action.setShortcut(QKeySequence.StandardKey.Redo)
         action.triggered.connect(self.RedoRequested)
+        self.EditMenu.addSeparator()
+        self.PreferencesAction=action=self.EditMenu.addAction("")
+        action.triggered.connect(self.PreferencesRequested)
 
     def _BuildViewMenu(self) -> None:
-        self.ThemeMenu = theme_menu = self.ViewMenu.AddSubMenu("")
-        group = QActionGroup(self)
-        group.setExclusive(True)
-
-        self.DarkThemeAction = dark = theme_menu.addAction("")
-        self.LightThemeAction = light = theme_menu.addAction("")
-        for action in (dark, light):
-            action.setCheckable(True)
-            group.addAction(action)
-        dark.setChecked(True)
-        dark.triggered.connect(lambda checked: checked and self._theme_manager.SetTheme(Theme.dark()))
-        light.triggered.connect(lambda checked: checked and self._theme_manager.SetTheme(Theme.light()))
-
-        def SyncTheme(theme: Theme) -> None:
-            dark.setChecked(theme.background == Theme.dark().background)
-            light.setChecked(theme.background == Theme.light().background)
-
-        self._theme_manager.ThemeChanged.connect(SyncTheme)
-        SyncTheme(self._theme_manager.GetTheme())
+        self.MaximizeViewportAction=self.ViewMenu.addAction("");self.MaximizeViewportAction.setCheckable(True);self.MaximizeViewportAction.setShortcut(QKeySequence("Shift+Space"));self.MaximizeViewportAction.toggled.connect(self.MaximizeViewportRequested)
+        self.CameraMenu=self.ViewMenu.AddSubMenu("");self.CameraActions={}
+        for key in ("perspective","top","bottom","left","right","front","back"):
+            action=self.CameraMenu.addAction("");action.triggered.connect(lambda _=False,value=key:self.CameraPresetRequested.emit(value));self.CameraActions[key]=action
+        self.ViewMenu.addSeparator();self.FocusSelectedAction=self.ViewMenu.addAction("");self.FocusSelectedAction.setShortcut(QKeySequence("F"));self.FocusSelectedAction.triggered.connect(self.FocusSelectedRequested)
+        self.FrameAllAction=self.ViewMenu.addAction("");self.FrameAllAction.setShortcut(QKeySequence("A"));self.FrameAllAction.triggered.connect(self.FrameAllRequested)
+        self.ViewMenu.addSeparator();self.GizmosAction=self.ViewMenu.addAction("");self.GizmosAction.setCheckable(True);self.GizmosAction.setChecked(True);self.GizmosAction.toggled.connect(self.GizmosToggled)
+        self.OverlaysMenu=self.ViewMenu.AddSubMenu("")
+        self.GridAction=self.OverlaysMenu.addAction("");self.IconsAction=self.OverlaysMenu.addAction("");self.StatsAction=self.OverlaysMenu.addAction("");self.NavMeshAction=self.OverlaysMenu.addAction("")
+        for action in (self.GridAction,self.IconsAction,self.StatsAction):action.setCheckable(True)
+        self.GridAction.setChecked(True);self.IconsAction.setChecked(True);self.NavMeshAction.setCheckable(True);self.NavMeshAction.setEnabled(False)
+        self.GridAction.toggled.connect(self.GridToggled);self.IconsAction.toggled.connect(self.IconsToggled);self.StatsAction.toggled.connect(self.StatsToggled)
+        self.ShadingMenu=self.ViewMenu.AddSubMenu("");self.ShadingActions={};group=QActionGroup(self);group.setExclusive(True)
+        for key in ("lit","unlit","wireframe","lighting_only","overdraw"):
+            action=self.ShadingMenu.addAction("");action.setCheckable(True);group.addAction(action);action.triggered.connect(lambda checked,value=key:checked and self.RenderModeRequested.emit(value));self.ShadingActions[key]=action
+        self.ShadingActions["lit"].setChecked(True)
 
     def _BuildWindowMenu(self) -> None:
         self.WindowMenu.aboutToShow.connect(self._RefreshWindowMenu)
@@ -206,9 +216,11 @@ class EditorMenuBar(QMenuBar):
         self.ExitAction.setText(tr("action.exit"))
         self.UndoAction.setText(tr("action.undo"))
         self.RedoAction.setText(tr("action.redo"))
-        self.ThemeMenu.setTitle(tr("action.theme"))
-        self.DarkThemeAction.setText(tr("action.theme_dark"))
-        self.LightThemeAction.setText(tr("action.theme_light"))
+        self.PreferencesAction.setText(tr("action.preferences"))
+        self.MaximizeViewportAction.setText(tr("view.maximize"));self.CameraMenu.setTitle(tr("view.camera_presets"))
+        for key,action in self.CameraActions.items():action.setText(tr(f"view.camera.{key}"))
+        self.FocusSelectedAction.setText(tr("view.focus_selected"));self.FrameAllAction.setText(tr("view.frame_all"));self.GizmosAction.setText(tr("view.gizmos"));self.OverlaysMenu.setTitle(tr("view.overlays"));self.GridAction.setText(tr("view.grid"));self.IconsAction.setText(tr("view.icons"));self.StatsAction.setText(tr("view.stats"));self.NavMeshAction.setText(tr("view.navmesh"));self.ShadingMenu.setTitle(tr("view.shading"))
+        for key,action in self.ShadingActions.items():action.setText(tr(f"view.shading.{key}"))
         self.AboutAction.setText(tr("action.about"))
 
     def _SetPanelVisible(self, panel_id: str, visible: bool) -> None:

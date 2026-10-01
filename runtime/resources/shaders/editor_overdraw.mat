@@ -1,0 +1,2 @@
+material { name : EditorOverdraw, shadingModel : unlit, blending : add, depthWrite : false, depthCulling : false, doubleSided : true }
+fragment { void material(inout MaterialInputs material) { prepareMaterial(material); material.baseColor = vec4(0.08, 0.015, 0.0, 1.0); } }

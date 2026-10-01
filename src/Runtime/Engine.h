@@ -67,6 +67,8 @@ public:
     void SetEditorGizmo(bool visible, float x, float y, float z, int mode);
     void SetEditorGizmoHover(int axis);
     void SetEditorGrid(bool visible, int plane);
+    void SetEditorIconsVisible(bool visible) { m_editorIconsVisible=visible; }
+    bool SetSceneRenderMode(const std::string& mode);
     bool ConfigureScripts(std::vector<ScriptBinding> bindings);
     bool StartScripts();
     void StopScripts();
@@ -98,6 +100,7 @@ private:
     std::unique_ptr<AssetDatabase> m_assetDatabase;
     std::unique_ptr<RenderBackend> m_renderBackend;
     std::unique_ptr<NativeScriptRuntime> m_scriptRuntime;
+    bool m_editorIconsVisible=true;
 };
 
 } // namespace Bazzalt::Runtime

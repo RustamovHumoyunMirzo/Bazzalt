@@ -31,6 +31,10 @@
 
 #include "Bazzalt/AssetManager.h"
 #include "Rendering/BuiltinPostProcess.h"
+#include "editor_unlit_filamat.h"
+#include "editor_lighting_only_filamat.h"
+#include "editor_overdraw_filamat.h"
+#include "editor_wireframe_filamat.h"
 
 namespace Bazzalt::Runtime {
 namespace {
@@ -66,6 +70,7 @@ filament::math::mat4f ToFilamentMatrix(const Mat4& value) {
 struct RenderAssets::Impl {
     enum class Kind { Gltf, Filamesh };
     struct Instance {
+        struct Original { utils::Entity Entity;std::size_t Primitive;filament::MaterialInstance* Material; };
         Kind Type = Kind::Gltf;
         UUID Asset{};
         std::vector<UUID> Materials;
@@ -74,6 +79,8 @@ struct RenderAssets::Impl {
         filamesh::MeshReader::Mesh Filamesh{};
         std::vector<filament::MaterialInstance*> MaterialInstances;
         bool AddedToScene = false;
+        bool DebugWireframeAdded = false;
+        std::vector<Original> Originals;
     };
 
     filament::Engine& Engine;
@@ -86,12 +93,17 @@ struct RenderAssets::Impl {
     std::unordered_map<Handle, Instance> Instances;
     std::unordered_map<UUID, filament::Material*> Materials;
     std::unordered_map<UUID, filament::Texture*> Textures;
+    filament::Material* DebugUnlit=nullptr;filament::Material* DebugLighting=nullptr;filament::Material* DebugOverdraw=nullptr;filament::Material* DebugWireframe=nullptr;
+    filament::MaterialInstance* DebugUnlitInstance=nullptr;filament::MaterialInstance* DebugLightingInstance=nullptr;filament::MaterialInstance* DebugOverdrawInstance=nullptr;filament::MaterialInstance* DebugWireframeInstance=nullptr;
+    std::string DebugMode="lit";
 
     Impl(filament::Engine& engine, filament::Scene& scene) : Engine(engine), Scene(scene) {
         GltfMaterials = filament::gltfio::createJitShaderProvider(&Engine);
         GltfTextures = filament::gltfio::createStbProvider(&Engine);
         StandaloneTextures = filament::gltfio::createStbProvider(&Engine);
         if (GltfMaterials) GltfLoader = filament::gltfio::AssetLoader::create({&Engine, GltfMaterials});
+        DebugUnlit=filament::Material::Builder().package(Embedded::EditorUnlitFilamat,Embedded::EditorUnlitFilamatSize).build(Engine);DebugLighting=filament::Material::Builder().package(Embedded::EditorLightingOnlyFilamat,Embedded::EditorLightingOnlyFilamatSize).build(Engine);DebugOverdraw=filament::Material::Builder().package(Embedded::EditorOverdrawFilamat,Embedded::EditorOverdrawFilamatSize).build(Engine);DebugWireframe=filament::Material::Builder().package(Embedded::EditorWireframeFilamat,Embedded::EditorWireframeFilamatSize).build(Engine);
+        if(DebugUnlit)DebugUnlitInstance=DebugUnlit->createInstance();if(DebugLighting)DebugLightingInstance=DebugLighting->createInstance();if(DebugOverdraw)DebugOverdrawInstance=DebugOverdraw->createInstance();if(DebugWireframe)DebugWireframeInstance=DebugWireframe->createInstance();
     }
 
     filament::Material* LoadMaterial(UUID id) {
@@ -144,6 +156,8 @@ struct RenderAssets::Impl {
         renderables.setCastShadows(instance, component.CastShadows);
         renderables.setReceiveShadows(instance, component.ReceiveShadows);
     }
+    void Restore(Instance& value){if(value.DebugWireframeAdded){Scene.remove(value.Gltf->getWireframe());if(value.AddedToScene)Scene.addEntities(value.Gltf->getEntities(),value.Gltf->getEntityCount());value.DebugWireframeAdded=false;}auto& manager=Engine.getRenderableManager();for(const auto& original:value.Originals){auto instance=manager.getInstance(original.Entity);if(instance&&original.Primitive<manager.getPrimitiveCount(instance))manager.setMaterialInstanceAt(instance,original.Primitive,original.Material);}value.Originals.clear();}
+    void ApplyDebug(Instance& value){Restore(value);if(DebugMode=="wireframe"&&value.Type==Kind::Gltf&&!value.SelectedGltfEntity&&value.AddedToScene){Scene.removeEntities(value.Gltf->getEntities(),value.Gltf->getEntityCount());Scene.addEntity(value.Gltf->getWireframe());value.DebugWireframeAdded=true;return;}filament::MaterialInstance* material=DebugMode=="unlit"?DebugUnlitInstance:DebugMode=="lighting_only"?DebugLightingInstance:DebugMode=="overdraw"?DebugOverdrawInstance:DebugMode=="wireframe"?DebugWireframeInstance:nullptr;if(!material)return;auto& manager=Engine.getRenderableManager();const auto apply=[&](utils::Entity entity){auto instance=manager.getInstance(entity);if(!instance)return;for(std::size_t primitive=0;primitive<manager.getPrimitiveCount(instance);++primitive){value.Originals.push_back({entity,primitive,manager.getMaterialInstanceAt(instance,primitive)});manager.setMaterialInstanceAt(instance,primitive,material);}};if(value.Type==Kind::Gltf){if(value.SelectedGltfEntity)apply(value.SelectedGltfEntity);else for(std::size_t i=0;i<value.Gltf->getEntityCount();++i)apply(value.Gltf->getEntities()[i]);}else apply(value.Filamesh.renderable);}
 };
 
 RenderAssets::RenderAssets(filament::Engine& engine, filament::Scene& scene)
@@ -226,7 +240,7 @@ RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component) {
     } else return InvalidHandle;
 
     const Handle handle = m_impl->NextHandle++;
-    m_impl->Instances.emplace(handle, std::move(instance));
+    auto [stored,_]=m_impl->Instances.emplace(handle, std::move(instance));m_impl->ApplyDebug(stored->second);
     return handle;
 }
 
@@ -240,7 +254,8 @@ void RenderAssets::UpdateMesh(Handle handle, const Mat4& transform, const Mesh& 
     auto& transforms = m_impl->Engine.getTransformManager();
     const auto transformInstance = transforms.getInstance(root);
     if (transformInstance) transforms.setTransform(transformInstance, ToFilamentMatrix(transform));
-    if (component.Visible != instance.AddedToScene) {
+    const bool visibilityChanged=component.Visible != instance.AddedToScene;
+    if (visibilityChanged) {
         if (instance.Type == Impl::Kind::Gltf) {
             if (instance.SelectedGltfEntity) {
                 if (component.Visible) m_impl->Scene.addEntity(instance.SelectedGltfEntity);
@@ -259,12 +274,14 @@ void RenderAssets::UpdateMesh(Handle handle, const Mat4& transform, const Mesh& 
         else for (std::size_t index = 0; index < instance.Gltf->getEntityCount(); ++index)
             m_impl->ApplyRenderable(instance.Gltf->getEntities()[index], component);
     } else m_impl->ApplyRenderable(root, component);
+    if(visibilityChanged&&m_impl->DebugMode!="lit")m_impl->ApplyDebug(instance);
 }
 
 void RenderAssets::DestroyMesh(Handle handle) {
     if (!m_impl) return;
     const auto found = m_impl->Instances.find(handle); if (found == m_impl->Instances.end()) return;
     auto& instance = found->second;
+    m_impl->Restore(instance);
     if (instance.Type == Impl::Kind::Gltf) {
         if (instance.AddedToScene) {
             if (instance.SelectedGltfEntity) m_impl->Scene.remove(instance.SelectedGltfEntity);
@@ -287,11 +304,15 @@ void RenderAssets::Update() {
     if (m_impl && m_impl->StandaloneTextures) m_impl->StandaloneTextures->updateQueue();
 }
 
+bool RenderAssets::SetDebugMode(const std::string& mode){if(!m_impl||mode!="lit"&&mode!="unlit"&&mode!="wireframe"&&mode!="lighting_only"&&mode!="overdraw")return false;m_impl->DebugMode=mode;for(auto& [_,instance]:m_impl->Instances)m_impl->ApplyDebug(instance);return true;}
+
 void RenderAssets::Shutdown() {
     if (!m_impl) return;
     while (!m_impl->Instances.empty()) DestroyMesh(m_impl->Instances.begin()->first);
     for (const auto& [id, texture] : m_impl->Textures) m_impl->Engine.destroy(texture);
     for (const auto& [id, material] : m_impl->Materials) m_impl->Engine.destroy(material);
+    for(auto* instance:{m_impl->DebugUnlitInstance,m_impl->DebugLightingInstance,m_impl->DebugOverdrawInstance,m_impl->DebugWireframeInstance})if(instance)m_impl->Engine.destroy(instance);
+    for(auto* material:{m_impl->DebugUnlit,m_impl->DebugLighting,m_impl->DebugOverdraw,m_impl->DebugWireframe})if(material)m_impl->Engine.destroy(material);
     m_impl->Textures.clear(); m_impl->Materials.clear();
     if (m_impl->GltfLoader) filament::gltfio::AssetLoader::destroy(&m_impl->GltfLoader);
     if (m_impl->GltfMaterials) { m_impl->GltfMaterials->destroyMaterials(); delete m_impl->GltfMaterials; }

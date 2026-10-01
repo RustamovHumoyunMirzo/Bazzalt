@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from math import cos, sin
+from time import monotonic
 
 from PySide6.QtCore import QObject, QSignalBlocker, QTimer, Qt
 from PySide6.QtWidgets import QApplication, QFileDialog, QLabel, QMenu, QProgressDialog
@@ -31,6 +32,8 @@ class EditorController(QObject):
         self._dirty_scenes:set[str]=set()
         self._hierarchy_clipboard: list[dict] = []
         self._box_selection_base: list[str] = []
+        self._gizmos_visible=True;self._stats_frames=0;self._stats_started=monotonic()
+        self._snap_modes=set();self._pivot_center=False
         self.ScriptCompiler=None;self.ScriptAttachments=None
         self.History=SceneHistory(runtime,self)
         self.Timer = QTimer(self)
@@ -42,6 +45,19 @@ class EditorController(QObject):
         window.MenuBar.SaveSceneAsRequested.connect(self.SaveSceneAsDialog)
         window.MenuBar.UndoRequested.connect(self.Undo)
         window.MenuBar.RedoRequested.connect(self.Redo)
+        window.MenuBar.CameraPresetRequested.connect(window.Scene.Surface.SetCameraPreset)
+        window.MenuBar.FocusSelectedRequested.connect(self.FocusSelected)
+        window.MenuBar.FrameAllRequested.connect(self.FrameAll)
+        window.MenuBar.GizmosToggled.connect(self.SetGizmosVisible)
+        window.MenuBar.GridToggled.connect(window.Scene.GridToggle.setChecked)
+        window.MenuBar.IconsToggled.connect(runtime.SetEditorIconsVisible)
+        window.MenuBar.StatsToggled.connect(window.Scene.StatsLabel.setVisible)
+        window.MenuBar.RenderModeRequested.connect(self.SetRenderMode)
+        window.Scene.FocusButton.clicked.connect(self.FocusSelected);window.Scene.FrameButton.clicked.connect(self.FrameAll)
+        window.Scene.ShadingMode.currentIndexChanged.connect(lambda index:self.SetRenderMode(("lit","unlit","wireframe","lighting_only","overdraw")[index]))
+        window.Scene.Overlays.SelectionChanged.connect(self.SetOverlays)
+        window.Scene.Snapping.SelectionChanged.connect(lambda values:setattr(self,"_snap_modes",set(values)))
+        window.Scene.PivotMode.currentIndexChanged.connect(lambda index:(setattr(self,"_pivot_center",index==1),self._UpdateGizmo()))
         window.Toolbar.PlayRequested.connect(self.Play)
         window.Toolbar.StopRequested.connect(self.Stop)
         window.Toolbar.PauseRequested.connect(runtime.Pause)
@@ -98,6 +114,9 @@ class EditorController(QObject):
 
     def _Tick(self) -> None:
         self.Runtime.Tick()
+        self._stats_frames+=1;now=monotonic()
+        if now-self._stats_started>=1.0:
+            self.Window.Scene.StatsLabel.setText(self.Window.Localization.Translate("viewport.stats",fps=round(self._stats_frames/(now-self._stats_started)),objects=len(self.Runtime.Entities())));self._stats_frames=0;self._stats_started=now
         self.Window.Output.SetGameCameraAvailable(self.Runtime.HasActiveCamera())
         # Editor gizmos follow the authoritative world transform every frame.
         # This also covers transforms changed by systems or native user code.
@@ -432,6 +451,7 @@ class EditorController(QObject):
     def _GizmoModeChanged(self, mode) -> None: self.Window.Scene.Surface.SetGizmoMode(mode);self._UpdateGizmo()
     def _UpdateGizmo(self) -> None:
         modes={GizmoMode.Select:0,GizmoMode.Translate:1,GizmoMode.Rotate:2,GizmoMode.Scale:3}
+        if not self._gizmos_visible:self.Runtime.SetGizmo("",0);return
         if len(self.SelectedEntities)>1:
             positions=[]
             for value in self.SelectedEntities:
@@ -439,12 +459,33 @@ class EditorController(QObject):
                 if details.get("scene_active",True):positions.append(details.get("world_position",details.get("position")))
             positions=[value for value in positions if value]
             if positions:
-                center=tuple(sum(value[axis] for value in positions)/len(positions) for axis in range(3));self.Window.Scene.Surface.SetSelection(center);self.Runtime.SetGizmoPosition(center,modes[self.Window.Toolbar.GetGizmoMode()]);return
+                center=tuple(sum(value[axis] for value in positions)/len(positions) for axis in range(3)) if self._pivot_center else tuple(positions[0]);self.Window.Scene.Surface.SetSelection(center);self.Runtime.SetGizmoPosition(center,modes[self.Window.Toolbar.GetGizmoMode()]);return
         if self.SelectedEntity:
             details=self.Runtime.EntityDetails(self.SelectedEntity)
             if details and not details.get("scene_active",True):self.Window.Scene.Surface.SetSelection(None);self.Runtime.SetGizmo("",modes[self.Window.Toolbar.GetGizmoMode()]);return
             if details:self.Window.Scene.Surface.SetSelection(details.get("world_position",details["position"]))
         self.Runtime.SetGizmo(self.SelectedEntity, modes[self.Window.Toolbar.GetGizmoMode()])
+
+    def SetGizmosVisible(self,visible:bool)->None:self._gizmos_visible=bool(visible);self._UpdateGizmo()
+    def FocusSelected(self)->None:
+        points=[]
+        for entity in self.SelectedEntities or ([self.SelectedEntity] if self.SelectedEntity else []):
+            details=self.Runtime.EntityDetails(entity)
+            if details:points.append(details.get("world_position",details.get("position")))
+        if points:
+            center=tuple(sum(value[i] for value in points)/len(points) for i in range(3));self.Window.Scene.Surface.Frame(center,max(1.,max((sum((value[i]-center[i])**2 for i in range(3)))**.5 for value in points)))
+    def FrameAll(self)->None:
+        points=[value.get("world_position",value.get("position")) for value in self.Runtime.Entities()];points=[value for value in points if value]
+        if not points:return
+        center=tuple((min(value[i] for value in points)+max(value[i] for value in points))*.5 for i in range(3));radius=max(1.,max((sum((value[i]-center[i])**2 for i in range(3)))**.5 for value in points));self.Window.Scene.Surface.Frame(center,radius)
+    def SetRenderMode(self,mode:str)->None:
+        modes=("lit","unlit","wireframe","lighting_only","overdraw");success=self.Runtime.SetSceneRenderMode(mode);selected=mode if success else "lit"
+        blocker=QSignalBlocker(self.Window.Scene.ShadingMode);self.Window.Scene.ShadingMode.setCurrentIndex(modes.index(selected));del blocker
+        self.Window.MenuBar.ShadingActions[selected].setChecked(True)
+        if not success:self.Window.Console.AddMessage(self.Window.Localization.Translate("renderer.mode_unavailable",mode=mode),ConsoleLevel.Warning,True,self.Window.Localization.Translate("renderer.source"))
+    def SetOverlays(self,values)->None:
+        values=set(values);self.Window.Scene.GridToggle.setChecked("grid" in values);self.Runtime.SetEditorIconsVisible("icons" in values);self.Window.Scene.StatsLabel.setVisible("stats" in values)
+        self.Window.MenuBar.GridAction.setChecked("grid" in values);self.Window.MenuBar.IconsAction.setChecked("icons" in values);self.Window.MenuBar.StatsAction.setChecked("stats" in values)
 
     def ActivateAsset(self,path)->None:
         path=Path(path)
@@ -591,6 +632,7 @@ class EditorController(QObject):
             if entity_id==self.SelectedEntity:self.SelectEntity(entity_id,force=True)
 
     def Play(self) -> None:
+        if self.Window.PreferenceValue("console","clear_on_play",False):self.Window.Console.Clear()
         if self.ScriptCompiler and self.ScriptAttachments:
             tr=self.Window.Localization.Translate
             progress=QProgressDialog(tr("scripting.compiling"),None,0,0,self.Window);progress.setWindowModality(Qt.WindowModality.WindowModal);progress.setCancelButton(None);progress.show();QApplication.processEvents()
@@ -601,7 +643,7 @@ class EditorController(QObject):
                 message=tr(diagnostic.localization_key) if diagnostic.localization_key else diagnostic.message
                 self.Window.Console.AddMessage(message,level,True,tr("scripting.compiler_source"))
             if not result.success:self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
-            if result.outputs:self.Window.Console.AddMessage(tr("scripting.compile_success",count=len(result.outputs)),ConsoleLevel.Info,True,tr("scripting.compiler_source"))
+            if result.outputs and self.Window.PreferenceValue("scripting","show_compile_success",True):self.Window.Console.AddMessage(tr("scripting.compile_success",count=len(result.outputs)),ConsoleLevel.Info,True,tr("scripting.compiler_source"))
             if not self.Runtime.ConfigureScripts(self.ScriptAttachments.RuntimeBindings(result.outputs)):
                 self.Window.Console.AddMessage(self.Runtime.LastError(),ConsoleLevel.Error,True,tr("scripting.runtime_source"));self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
         if not self.Runtime.Play():self.Window.Toolbar.SetPlayState(PlayState.Stopped)
@@ -631,12 +673,14 @@ class EditorController(QObject):
         return str(active.get("uuid",""))
 
     def ApplyGizmoTranslation(self, delta) -> bool:  # type: ignore[no-untyped-def]
+        if "move" in self._snap_modes:delta=Vec3(*(round(value/.5)*.5 for value in (delta.X,delta.Y,delta.Z)))
         targets=self.SelectedEntities or ([self.SelectedEntity] if self.SelectedEntity else [])
         results=[self.Runtime.Translate(entity,(delta.X,delta.Y,delta.Z)) for entity in targets];changed=any(results)
         if changed:self.SetDirty(True)
         self._UpdateGizmo();return changed
 
     def ApplyGizmoRotation(self, axis, angle: float) -> bool:  # type: ignore[no-untyped-def]
+        if "rotate" in self._snap_modes:angle=round(angle/(3.141592653589793/12))*(3.141592653589793/12)
         if len(self.SelectedEntities)>1:
             details=[self.Runtime.EntityDetails(value) for value in self.SelectedEntities]
             center=Vec3(*(sum(item["position"][index] for item in details)/len(details) for index in range(3)));unit=axis.Normalized();sine,cosine=sin(angle),cos(angle);half_sine=sin(angle*.5);changed=False
@@ -653,6 +697,7 @@ class EditorController(QObject):
         return changed
 
     def ApplyGizmoScale(self, factor) -> bool:  # type: ignore[no-untyped-def]
+        if "scale" in self._snap_modes:factor=Vec3(*(max(.1,round(value/.1)*.1) for value in (factor.X,factor.Y,factor.Z)))
         if len(self.SelectedEntities)>1:
             details=[self.Runtime.EntityDetails(value) for value in self.SelectedEntities];center=tuple(sum(item["position"][i] for item in details)/len(details) for i in range(3));factors=(factor.X,factor.Y,factor.Z);changed=False
             for entity,item in zip(self.SelectedEntities,details):

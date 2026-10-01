@@ -1,0 +1,2 @@
+material { name : EditorWireframeFallback, shadingModel : unlit, doubleSided : true }
+fragment { void material(inout MaterialInputs material) { prepareMaterial(material); material.baseColor = vec4(0.08, 0.55, 0.82, 1.0); } }

@@ -67,7 +67,8 @@ class LoadingWindow(QWidget):
     def _Failed(self,message:str)->None:QMessageBox.critical(self,"Project Could Not Be Loaded",message);QApplication.instance().quit()
 
 def _EditorSettings()->SettingsStore:
-    return SettingsStore("editor",2,lambda:{"schema_version":2,"theme":"dark","recent_scene":"","panel_layout":None},{0:lambda value:{"theme":value.get("theme","dark"),"recent_scene":""},1:lambda value:{**value,"panel_layout":None}})
+    defaults=lambda:{"schema_version":3,"theme":"dark","recent_scene":"","panel_layout":None,"preferences":None}
+    return SettingsStore("editor",3,defaults,{0:lambda value:{"theme":value.get("theme","dark"),"recent_scene":""},1:lambda value:{**value,"panel_layout":None},2:lambda value:{**value,"preferences":{"appearance":{"theme":value.get("theme","dark")}}}})
 
 class EditorSession(QObject):
     """Owns the complete loader-to-editor transition for the process lifetime."""

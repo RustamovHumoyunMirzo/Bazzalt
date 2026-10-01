@@ -320,6 +320,8 @@ public:
     }
     void SetGizmoHover(int axis) { m_engine->SetEditorGizmoHover(axis); }
     void SetGrid(bool visible, int plane) { m_engine->SetEditorGrid(visible, plane); }
+    void SetEditorIconsVisible(bool visible){m_engine->SetEditorIconsVisible(visible);}
+    bool SetSceneRenderMode(const std::string& mode){return m_engine->SetSceneRenderMode(mode);}
     bool CreateViewport(std::uint64_t id, std::uintptr_t handle, bool scene,
                         std::uint32_t width, std::uint32_t height, float pixelRatio) {
         return m_engine->CreateEditorViewport(id, handle, scene, width, height, pixelRatio);
@@ -463,6 +465,8 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("set_gizmo_position", &Bazzalt::EditorBridge::EditorHost::SetGizmoPosition)
         .def("set_gizmo_hover", &Bazzalt::EditorBridge::EditorHost::SetGizmoHover)
         .def("set_grid", &Bazzalt::EditorBridge::EditorHost::SetGrid)
+        .def("set_editor_icons_visible", &Bazzalt::EditorBridge::EditorHost::SetEditorIconsVisible)
+        .def("set_scene_render_mode", &Bazzalt::EditorBridge::EditorHost::SetSceneRenderMode)
         .def("configure_scripts", &Bazzalt::EditorBridge::EditorHost::ConfigureScripts)
         .def("play", &Bazzalt::EditorBridge::EditorHost::Play)
         .def("pause", &Bazzalt::EditorBridge::EditorHost::Pause)

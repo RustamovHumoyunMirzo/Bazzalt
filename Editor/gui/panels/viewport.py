@@ -7,7 +7,8 @@ from math import cos, radians, sin, tan
 from PySide6.QtCore import QPoint, QPointF, QRect, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QPainter, QPen, QWheelEvent
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel,
-                               QStackedLayout, QVBoxLayout, QWidget)
+                               QStackedLayout, QToolButton,QVBoxLayout, QWidget)
+from ..widgets.fields import MultiSelectInput
 from ..gizmos import GizmoDrag, GizmoHandle, GizmoMode, PickAxis, PickRotationAxis, Ray, Vec3
 
 
@@ -125,6 +126,11 @@ class NativeRenderSurface(QWidget):
     def SetGizmoMode(self, mode: GizmoMode) -> None:
         self._mode = mode; self._SetHover(None)
     def SetMoveSpeed(self,speed:float)->None:self._move_speed=max(.1,float(speed))
+    def SetCameraPreset(self,preset:str)->None:
+        values={"perspective":(36.,20.),"top":(0.,89.),"bottom":(0.,-89.),"left":(-90.,0.),"right":(90.,0.),"front":(0.,0.),"back":(180.,0.)}
+        if preset in values:self._yaw,self._pitch=values[preset];self._UpdateCamera()
+    def Frame(self,center,radius:float=2.0)->None:
+        self._target=[float(value) for value in center];self._distance=max(1.0,float(radius)*2.2);self._UpdateCamera()
 
     def _DestroySelectionBand(self)->None:
         if self._selection_band is not None:self._selection_band.hide();self._selection_band.deleteLater();self._selection_band=None
@@ -319,8 +325,16 @@ class ViewportPanel(QFrame):
         layout = QVBoxLayout(self); layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(0)
         if scene:
             controls=QFrame();controls.setObjectName("SceneViewControls");row=QHBoxLayout(controls);row.setContentsMargins(7,3,7,3);row.setSpacing(6)
-            grid=QCheckBox("Grid");grid.setChecked(True);plane=QComboBox();plane.addItems(("XY","XZ","YZ"));plane.setCurrentIndex(1);speed=QComboBox();speed.addItems(("1×","2×","5×","10×"));speed.setCurrentIndex(2)
-            row.addWidget(grid);row.addWidget(QLabel("Plane"));row.addWidget(plane);row.addStretch();row.addWidget(QLabel("Fly"));row.addWidget(speed);layout.addWidget(controls)
+            self.TransformSpace=QComboBox();self.TransformSpace.addItems(("Local","Global"));self.PivotMode=QComboBox();self.PivotMode.addItems(("Pivot","Center"))
+            self.Snapping=MultiSelectInput("Snap");self.Snapping.SetOptions((("Move","move"),("Rotate","rotate"),("Scale","scale")))
+            self.ShadingMode=QComboBox();self.ShadingMode.addItems(("Lit","Unlit","Wireframe","Lighting Only","Overdraw"))
+            self.CameraPreset=QComboBox();self.CameraPreset.addItems(("Perspective","Top","Bottom","Left","Right","Front","Back"))
+            self.Overlays=MultiSelectInput("Overlays");self.Overlays.SetOptions((("Grid","grid"),("Icons","icons"),("Statistics","stats")));self.Overlays.SetValues(("grid","icons"))
+            grid=self.GridToggle=QCheckBox("Grid");grid.setChecked(True);grid.hide();plane=self.GridPlane=QComboBox();plane.addItems(("XY","XZ","YZ"));plane.setCurrentIndex(1);speed=self.NavigationSpeed=QComboBox();speed.addItems(("1×","2×","5×","10×"));speed.setCurrentIndex(2)
+            self.FocusButton=QToolButton();self.FocusButton.setText("Focus");self.FrameButton=QToolButton();self.FrameButton.setText("Frame All")
+            self.StatsLabel=QLabel();self.StatsLabel.setObjectName("SceneStats");self.StatsLabel.hide()
+            for widget in (self.TransformSpace,self.PivotMode,self.Snapping,self.ShadingMode,self.CameraPreset,self.Overlays,self.FocusButton,self.FrameButton):row.addWidget(widget)
+            row.addWidget(plane);row.addWidget(self.StatsLabel);row.addStretch();row.addWidget(QLabel("Fly"));row.addWidget(speed);layout.addWidget(controls)
         self.Surface = NativeRenderSurface(runtime, scene)
         if scene:
             layout.addWidget(self.Surface, 1)
@@ -347,6 +361,7 @@ class ViewportPanel(QFrame):
             grid.toggled.connect(lambda checked:runtime.SetGrid(checked,plane.currentIndex()))
             plane.currentIndexChanged.connect(lambda index:runtime.SetGrid(grid.isChecked(),index))
             speed.currentIndexChanged.connect(lambda index:self.Surface.SetMoveSpeed((1,2,5,10)[index]))
+            self.CameraPreset.currentIndexChanged.connect(lambda index:self.Surface.SetCameraPreset(("perspective","top","bottom","left","right","front","back")[index]))
             self.Surface.SetMoveSpeed(5);runtime.SetGrid(True,1)
 
     def _UpdateNoCameraText(self) -> None:

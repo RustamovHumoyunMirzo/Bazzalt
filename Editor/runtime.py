@@ -220,6 +220,12 @@ class RuntimeService(QObject):
         if self._host is not None and hasattr(self._host, "set_grid"):
             self._host.set_grid(visible, plane)
 
+    def SetEditorIconsVisible(self,visible:bool)->None:
+        if self._host is not None and hasattr(self._host,"set_editor_icons_visible"):self._host.set_editor_icons_visible(visible)
+
+    def SetSceneRenderMode(self,mode:str)->bool:
+        return bool(self._host and hasattr(self._host,"set_scene_render_mode") and self._host.set_scene_render_mode(mode))
+
     def Play(self) -> bool:
         result=bool(self._host and self._host.play())
         if not result:self.ErrorOccurred.emit(self.LastError())
