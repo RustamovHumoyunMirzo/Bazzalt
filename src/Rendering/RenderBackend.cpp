@@ -331,7 +331,28 @@ void RenderBackend::SetEditorGuides(const std::vector<EditorGuide>& guides){
     if(!m_gizmo||!m_engine)return;
     while(m_gizmo->Guides.size()>guides.size()){auto value=m_gizmo->Guides.back();m_scene->remove(value.Entity);m_engine->destroy(value.Entity);m_engine->getEntityManager().destroy(value.Entity);if(value.Instance)m_engine->destroy(value.Instance);m_gizmo->Guides.pop_back();}
     while(m_gizmo->Guides.size()<guides.size()){GizmoResource::Guide value;value.Instance=m_gizmo->Material->createInstance();value.Instance->setDepthWrite(false);value.Instance->setDepthCulling(true);value.Entity=m_engine->getEntityManager().create();m_engine->getTransformManager().create(value.Entity);filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{1,1,1}}).material(0,value.Instance).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,m_gizmo->HelperVertices,m_gizmo->HelperIndices).culling(false).castShadows(false).receiveShadows(false).layerMask(0xff,0x80).priority(6).build(*m_engine,value.Entity);m_scene->addEntity(value.Entity);m_gizmo->Guides.push_back(value);}
-    auto& transforms=m_engine->getTransformManager();for(std::size_t i=0;i<guides.size();++i){const auto& line=guides[i];auto& value=m_gizmo->Guides[i];value.Instance->setParameter("color",filament::math::float4{line.R,line.G,line.B,line.A});filament::math::float3 a{line.AX,line.AY,line.AZ},b{line.BX,line.BY,line.BZ},delta=b-a;float lengthValue=length(delta);if(lengthValue<.0001f){m_scene->remove(value.Entity);continue;}m_scene->addEntity(value.Entity);auto x=normalize(delta);auto helper=std::abs(x.y)<.99f?filament::math::float3{0,1,0}:filament::math::float3{1,0,0};auto z=normalize(cross(x,helper));auto y=normalize(cross(z,x));constexpr float thickness=.0125f;filament::math::mat4f matrix{filament::math::float4{x*(lengthValue*.5f),0},filament::math::float4{y*thickness,0},filament::math::float4{z*thickness,0},filament::math::float4{(a+b)*.5f,1}};transforms.setTransform(transforms.getInstance(value.Entity),matrix);}
+    auto& transforms=m_engine->getTransformManager();
+    for(std::size_t i=0;i<guides.size();++i){
+        const auto& line=guides[i];auto& value=m_gizmo->Guides[i];
+        value.Instance->setParameter("color",filament::math::float4{line.R,line.G,line.B,line.A});
+        // Selection outlines sit above their own surface, avoiding coplanar
+        // depth rejection on thin planes. Other camera/light guides use depth.
+        value.Instance->setDepthCulling(!line.Outline);
+        auto instance=m_engine->getRenderableManager().getInstance(value.Entity);
+        m_engine->getRenderableManager().setLayerMask(instance,0xff,0x80);
+        filament::math::float3 a{line.AX,line.AY,line.AZ},b{line.BX,line.BY,line.BZ},delta=b-a;
+        float lengthValue=length(delta);if(lengthValue<.0001f){m_scene->remove(value.Entity);continue;}
+        m_scene->addEntity(value.Entity);auto x=normalize(delta);
+        auto helper=std::abs(x.y)<.99f?filament::math::float3{0,1,0}:filament::math::float3{1,0,0};
+        auto z=normalize(cross(x,helper));auto y=normalize(cross(z,x));float thickness=.0125f;
+        if(line.Outline)for(const auto& [_,viewport]:m_viewports)if(viewport->Kind==ViewportKind::Scene){
+            const float depth=std::max(.05f,length(viewport->Eye-(a+b)*.5f));
+            // Half-width of a three-logical-pixel stroke at the editor's 60° FOV.
+            thickness=depth*2.0f*std::tan(.5235988f)*1.5f*viewport->PixelRatio/std::max(1u,viewport->Height);break;
+        }
+        filament::math::mat4f matrix{filament::math::float4{x*(lengthValue*.5f),0},filament::math::float4{y*thickness,0},filament::math::float4{z*thickness,0},filament::math::float4{(a+b)*.5f,1}};
+        transforms.setTransform(transforms.getInstance(value.Entity),matrix);
+    }
 }
 
 void RenderBackend::Render() {

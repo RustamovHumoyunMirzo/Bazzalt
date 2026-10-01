@@ -4,6 +4,10 @@
 #include "Rendering/RenderBackend.h"
 #include "Rendering/RenderSystems.h"
 #include "Rendering/RenderAssets.h"
+#include "Rendering/PrimitiveGeometry.h"
+#include <map>
+#include <tuple>
+#include <limits>
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Components/Light.h"
 #include <algorithm>
@@ -100,8 +104,32 @@ void Engine::RenderEditorFrame()
     auto lights=m_scene->GetRegistry().view<Light>();
     for(auto handle:lights){Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));const auto& light=lights.get<Light>(handle);if(!light.IsEnabled())continue;const Mat4 world=entity.GetWorldMatrix();const Vec3 p=world.TransformPoint({}),forward=world.TransformDirection({0,0,-1}).Normalized(),right=world.TransformDirection({1,0,0}).Normalized(),up=world.TransformDirection({0,1,0}).Normalized();icons.push_back({p.X,p.Y,p.Z,false});const Vec4 color{light.Color.X,light.Color.Y,light.Color.Z,.82f};if(light.Type==LightType::Point){ring(p,right,up,light.Range,color);ring(p,right,forward,light.Range,color);ring(p,up,forward,light.Range,color);}else if(light.Type==LightType::Spot){const float length=std::max(.001f,light.Range),outer=std::tan(light.OuterConeAngle)*length,inner=std::tan(light.InnerConeAngle)*length;Vec3 end=p+forward*length;ring(end,right,up,outer,color);ring(end,right,up,inner,{color.X,color.Y,color.Z,.45f});for(const Vec3 offset:{right*outer,-right*outer,up*outer,-up*outer})line(p,end+offset,color);}else{const float length=std::max(3.0f,std::sqrt(std::max(0.0f,light.Intensity))*.1f),radius=std::tan(light.Type==LightType::Sun?light.SunAngularRadius:.03f)*length;Vec3 end=p+forward*length;ring(end,right,up,radius,color);line(p,end+right*radius,color);line(p,end-right*radius,color);line(p,end+up*radius,color);line(p,end-up*radius,color);}}
     m_renderBackend->SetEditorIcons(m_editorIconsVisible?icons:std::vector<RenderBackend::EditorIcon>{});
-    m_renderBackend->SetEditorGuides(m_editorIconsVisible?guides:std::vector<RenderBackend::EditorGuide>{});
+    if(!m_editorIconsVisible)guides.clear();
+    auto outlined=m_selectedObjects;
+    if(!m_hoveredObject.IsRoot()&&std::find(outlined.begin(),outlined.end(),m_hoveredObject)==outlined.end())outlined.push_back(m_hoveredObject);
+    for(UUID outlineId:outlined){
+    const bool selected=std::find(m_selectedObjects.begin(),m_selectedObjects.end(),outlineId)!=m_selectedObjects.end();
+    const Vec4 outlineColor=selected?Vec4{.12f,.38f,1.0f,1.0f}:Vec4{.45f,.8f,1.0f,1.0f};
+    Entity hovered=m_scene->GetEntity(outlineId);
+    if(hovered)if(const auto* primitive=hovered.TryGetComponent<PrimitiveObject>();primitive&&primitive->IsEnabled()&&primitive->Visible){
+        const auto geometry=BuildPrimitiveGeometry(*primitive);const auto world=hovered.GetWorldMatrix();
+        using Point=std::tuple<int,int,int>;using Key=std::pair<Point,Point>;
+        struct Edge{Vec3 A,B;bool Front=false,Back=false;int Count=0;};std::map<Key,Edge> edges;
+        const auto point=[](Vec3 p){return Point{int(std::round(p.X*10000)),int(std::round(p.Y*10000)),int(std::round(p.Z*10000))};};
+        for(std::size_t i=0;i+2<geometry.Indices.size();i+=3){Vec3 vertices[3];for(int j=0;j<3;++j){const auto& v=geometry.Vertices[geometry.Indices[i+j]];vertices[j]=world.TransformPoint({v.Position[0],v.Position[1],v.Position[2]});}const auto normal=Vec3::Cross(vertices[1]-vertices[0],vertices[2]-vertices[0]);if(normal.LengthSquared()<1e-12f)continue;bool front=Vec3::Dot(normal,m_hoverEye-vertices[0])>=0;for(int j=0;j<3;++j){Vec3 a=vertices[j],b=vertices[(j+1)%3];auto pa=point(a),pb=point(b);if(pb<pa){std::swap(pa,pb);std::swap(a,b);}auto& edge=edges[{pa,pb}];edge.A=a;edge.B=b;edge.Front|=front;edge.Back|=!front;++edge.Count;}}
+        for(const auto& [_,edge]:edges)if(edge.Count==1||(edge.Front&&edge.Back)){line(edge.A,edge.B,outlineColor);guides.back().Outline=true;}
+    }
+    }
+    m_renderBackend->SetEditorGuides(guides);
     m_renderBackend->Render();
+}
+
+UUID Engine::PickEditorPrimitive(Vec3 origin,Vec3 direction){
+    direction=direction.Normalized();float nearest=std::numeric_limits<float>::max();UUID result{};
+    auto view=m_scene->GetRegistry().view<PrimitiveObject>();
+    for(auto handle:view){const auto& primitive=view.get<PrimitiveObject>(handle);if(!primitive.IsEnabled()||!primitive.Visible)continue;Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));Mat4 inverse;if(!entity.GetWorldMatrix().TryInverse(inverse))continue;Vec3 o=inverse.TransformPoint(origin),d=inverse.TransformDirection(direction);const auto geometry=BuildPrimitiveGeometry(primitive);
+        for(std::size_t i=0;i+2<geometry.Indices.size();i+=3){Vec3 v[3];for(int j=0;j<3;++j){const auto& p=geometry.Vertices[geometry.Indices[i+j]];v[j]={p.Position[0],p.Position[1],p.Position[2]};}Vec3 e1=v[1]-v[0],e2=v[2]-v[0],p=Vec3::Cross(d,e2);float determinant=Vec3::Dot(e1,p);if(std::abs(determinant)<1e-8f)continue;float reciprocal=1/determinant;Vec3 offset=o-v[0];float u=Vec3::Dot(offset,p)*reciprocal;if(u<0||u>1)continue;Vec3 q=Vec3::Cross(offset,e1);float vcoord=Vec3::Dot(d,q)*reciprocal;if(vcoord<0||u+vcoord>1)continue;float t=Vec3::Dot(e2,q)*reciprocal;if(t>=0&&t<nearest){nearest=t;result=entity.GetUUID();}}
+    }return result;
 }
 
 bool Engine::CreateEditorViewport(std::uint64_t id, std::uintptr_t nativeWindow, bool scene,
@@ -123,6 +151,7 @@ void Engine::DestroyEditorViewport(std::uint64_t id) {
 
 void Engine::SetEditorCamera(std::uint64_t id, float eyeX, float eyeY, float eyeZ,
                              float targetX, float targetY, float targetZ) {
+    m_hoverEye={eyeX,eyeY,eyeZ};
     if (m_isInitialized) m_renderBackend->SetSceneCamera(id, eyeX, eyeY, eyeZ,
                                                          targetX, targetY, targetZ);
 }

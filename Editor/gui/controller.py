@@ -150,6 +150,8 @@ class EditorController(QObject):
     def RefreshHierarchy(self) -> None:
         self.Window.Output.SetGameCameraAvailable(self.Runtime.HasActiveCamera())
         selected = list(self.SelectedEntities)
+        hierarchy_blocker=QSignalBlocker(self.Window.Hierarchy.Tree)
+        self.Window.Hierarchy.Tree.setUpdatesEnabled(False)
         self.Window.Hierarchy.Clear()
         items = {}
         theme = "light" if self.Window.ThemeManager.GetTheme().background == "#d4d4d4" else "dark"
@@ -169,14 +171,10 @@ class EditorController(QObject):
                     break
         self.Window.Hierarchy.ApplyExpansionState(items)
         self.Window.Hierarchy.SetDirtyScenes(self._dirty_scenes)
-        if selected:
-            blocker=QSignalBlocker(self.Window.Hierarchy.Tree)
-            for value in selected:
-                if value in items:items[value].setSelected(True)
-            if selected[0] in items:self.Window.Hierarchy.Tree.setCurrentItem(items[selected[0]])
-            del blocker
-        elif self.SelectedEntity:
-            self.SelectEntity(None)
+        self.Window.Hierarchy.SetSelectedData(selected)
+        self.Window.Hierarchy.Tree.setUpdatesEnabled(True)
+        del hierarchy_blocker
+        if self.SelectedEntity and self.SelectedEntity not in items:self.SelectEntity(None)
 
     def SelectEntity(self, entity_id, force: bool = False) -> None:  # type: ignore[no-untyped-def]
         if isinstance(entity_id,(list,tuple)):
@@ -349,7 +347,7 @@ class EditorController(QObject):
             if entity_id in selected:selected.remove(entity_id)
             else:selected.append(entity_id)
             self.SelectEntities(selected);self.Window.Hierarchy.SetSelectedData(selected)
-        else:self.SelectEntity(entity_id);self.RefreshHierarchy()
+        else:self.SelectEntity(entity_id);self.Window.Hierarchy.SetSelectedData([entity_id])
 
     def _ComponentIcon(self, component: str):
         names={"Camera":"comp_cam.svg","Light":"comp_light.svg","Mesh":"comp_mesh.svg","Primitive Object":"comp_mesh.svg",
@@ -461,6 +459,8 @@ class EditorController(QObject):
 
     def _GizmoModeChanged(self, mode) -> None: self.Window.Scene.Surface.SetGizmoMode(mode);self._UpdateGizmo()
     def _UpdateGizmo(self) -> None:
+        self.Window.Scene.Surface._selected_entity_ids=set(self.SelectedEntities)
+        self.Runtime.SetSelectionOutline(self.SelectedEntities)
         modes={GizmoMode.Select:0,GizmoMode.Translate:1,GizmoMode.Rotate:2,GizmoMode.Scale:3}
         if not self._gizmos_visible:self.Runtime.SetGizmo("",0);return
         if len(self.SelectedEntities)>1:

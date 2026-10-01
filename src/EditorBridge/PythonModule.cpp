@@ -328,6 +328,9 @@ public:
         m_engine->SetEditorGizmo(mode!=0,position[0],position[1],position[2],mode);
     }
     void SetGizmoHover(int axis) { m_engine->SetEditorGizmoHover(axis); }
+    std::string PickPrimitive(const std::array<float,3>& origin,const std::array<float,3>& direction){auto id=m_engine->PickEditorPrimitive({origin[0],origin[1],origin[2]},{direction[0],direction[1],direction[2]});return id.IsRoot()?std::string{}:id.ToString();}
+    void SetObjectHover(const std::string& id,const std::array<float,3>& eye){m_engine->SetEditorObjectHover(id.empty()?UUID{}:ParseUuid(id),{eye[0],eye[1],eye[2]});}
+    void SetSelectionOutline(const std::vector<std::string>& ids){std::vector<UUID> selected;for(const auto& id:ids)if(!id.empty())selected.push_back(ParseUuid(id));m_engine->SetEditorSelection(std::move(selected));}
     void SetGrid(bool visible, int plane) { m_engine->SetEditorGrid(visible, plane); }
     void SetEditorIconsVisible(bool visible){m_engine->SetEditorIconsVisible(visible);}
     bool SetSceneRenderMode(const std::string& mode){return m_engine->SetSceneRenderMode(mode);}
@@ -473,6 +476,9 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("set_gizmo", &Bazzalt::EditorBridge::EditorHost::SetGizmo)
         .def("set_gizmo_position", &Bazzalt::EditorBridge::EditorHost::SetGizmoPosition)
         .def("set_gizmo_hover", &Bazzalt::EditorBridge::EditorHost::SetGizmoHover)
+        .def("pick_primitive", &Bazzalt::EditorBridge::EditorHost::PickPrimitive)
+        .def("set_object_hover", &Bazzalt::EditorBridge::EditorHost::SetObjectHover)
+        .def("set_selection_outline", &Bazzalt::EditorBridge::EditorHost::SetSelectionOutline)
         .def("set_grid", &Bazzalt::EditorBridge::EditorHost::SetGrid)
         .def("set_editor_icons_visible", &Bazzalt::EditorBridge::EditorHost::SetEditorIconsVisible)
         .def("set_scene_render_mode", &Bazzalt::EditorBridge::EditorHost::SetSceneRenderMode)

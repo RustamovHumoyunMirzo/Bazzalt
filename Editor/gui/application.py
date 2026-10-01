@@ -122,6 +122,13 @@ class Editor(QMainWindow):
         initial=self._settings.get("preferences")
         if not isinstance(initial,dict):initial=MergePreferences(None);initial["appearance"]["theme"]=str(self._settings.get("theme","dark"))
         self.ApplyPreferences(initial,save=False)
+        for control,signal,key in ((self.Scene.PivotMode,"currentIndexChanged","pivot_center"),(self.Scene.LocalToggle,"toggled","local_space"),(self.Scene.GridToggle,"toggled","grid_visible"),(self.Scene.GridPlane,"currentIndexChanged","grid_plane"),(self.Scene.GizmoToggle,"toggled","gizmos_visible"),(self.Scene.StatsToggle,"toggled","stats_visible"),(self.Scene.ShadingMode,"currentIndexChanged","shading_mode"),(self.MenuBar.IconsAction,"toggled","icons_visible")):
+            getattr(control,signal).connect(lambda value,k=key:self._SaveScenePreference(k,bool(value) if k=="pivot_center" else value))
+
+    def _SaveScenePreference(self,key,value)->None:
+        if getattr(self,"_applying_preferences",False):return
+        preferences=self.GetPreferences();preferences["scene"][key]=value;self._settings["preferences"]=preferences
+        if self._settings_saver is not None:self._settings_saver(self._settings)
 
     def GetPreferences(self)->dict:
         value=MergePreferences(self._settings.get("preferences"));value["appearance"]["theme"]="light" if self.ThemeManager.GetTheme().background==Theme.light().background else "dark";return value
@@ -136,6 +143,7 @@ class Editor(QMainWindow):
         PreferencesDialog(self).exec()
 
     def ApplyPreferences(self,preferences:dict,save:bool=True)->None:
+        self._applying_preferences=True
         value=MergePreferences(preferences);self._settings["preferences"]=value
         appearance=value["appearance"]
         self.ThemeManager.SetTheme(Theme.light() if appearance["theme"]=="light" else Theme.dark())
@@ -143,6 +151,13 @@ class Editor(QMainWindow):
         scene=value["scene"];self.Runtime.SetGrid(scene["grid_visible"],scene["grid_plane"])
         self.Scene.GridToggle.setChecked(bool(scene["grid_visible"]));self.Scene.GridPlane.setCurrentIndex(int(scene["grid_plane"]))
         self.Scene.Surface.SetMoveSpeed(scene["navigation_speed"])
+        self.Scene.PivotMode.setCurrentIndex(1 if scene["pivot_center"] else 0);self.Scene.LocalToggle.setChecked(bool(scene["local_space"]))
+        self.Scene.GizmoToggle.setChecked(bool(scene["gizmos_visible"]));self.Scene.StatsToggle.setChecked(bool(scene["stats_visible"]))
+        self.MenuBar.IconsAction.setChecked(bool(scene["icons_visible"]));self.Runtime.SetEditorIconsVisible(bool(scene["icons_visible"]))
+        self.Scene.ShadingMode.setCurrentIndex(int(scene["shading_mode"]))
+        self.Scene.Surface._look_sensitivity=float(scene["look_sensitivity"]);self.Scene.Surface._fly_boost=float(scene["fly_boost"])
+        self.Controller.History.Configure(value["history"]["command_limit"],int(value["history"]["memory_mb"])*1024*1024)
+        self._applying_preferences=False
         if save and self._settings_saver is not None:self._settings_saver(self._settings)
 
     def SetViewportMaximized(self,maximized:bool)->None:

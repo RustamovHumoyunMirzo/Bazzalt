@@ -216,6 +216,15 @@ class RuntimeService(QObject):
         if self._host is not None and hasattr(self._host, "set_gizmo_hover"):
             self._host.set_gizmo_hover(axis)
 
+    def PickPrimitive(self,origin,direction)->str:
+        return self._host.pick_primitive(origin,direction) if self._host is not None and hasattr(self._host,"pick_primitive") else ""
+
+    def SetObjectHover(self,entity_id:str,eye)->None:
+        if self._host is not None and hasattr(self._host,"set_object_hover"):self._host.set_object_hover(entity_id,eye)
+
+    def SetSelectionOutline(self,entity_ids)->None:
+        if self._host is not None and hasattr(self._host,"set_selection_outline"):self._host.set_selection_outline(entity_ids)
+
     def SetGrid(self, visible: bool, plane: int = 1) -> None:
         if self._host is not None and hasattr(self._host, "set_grid"):
             self._host.set_grid(visible, plane)

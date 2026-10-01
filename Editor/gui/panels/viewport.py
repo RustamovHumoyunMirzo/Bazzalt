@@ -54,7 +54,9 @@ class NativeRenderSurface(QWidget):
         self._selection_box_additive=False;self._selection_band=None
         self._selection_box_preview=()
         self._selection_box_dragging=False;self._pending_pick=""
+        self._selected_entity_ids=set()
         self._navigating=False;self._fly_navigation=False;self._keys=set();self._move_speed=5.0
+        self._look_sensitivity=.35;self._fly_boost=3.0
         self._fly_timer=QTimer(self);self._fly_timer.setInterval(16);self._fly_timer.timeout.connect(self._FlyTick);self._fly_timer.start()
         self.setAttribute(Qt.WidgetAttribute.WA_DontCreateNativeAncestors)
         self.setAttribute(Qt.WidgetAttribute.WA_PaintOnScreen)
@@ -189,31 +191,28 @@ class NativeRenderSurface(QWidget):
         return best
 
     def _PickSceneObject(self,point:QPoint)->str:
-        ray=self._Ray(point);best="";best_distance=float("inf")
-        try:entities=self.Runtime.Entities()
-        except Exception:return ""
-        for entity in entities:
-            entity_id=str(entity.get("uuid","") or "")
-            if not entity_id:continue
-            details=self.Runtime.EntityDetails(entity_id);primitive=details.get("component_data",{}).get("Primitive Object")
-            if not primitive or not details.get("component_enabled",{}).get("Primitive Object",True) or not primitive.get("Visible",True):continue
-            scale=details.get("scale",(1,1,1));shape=int(primitive.get("Shape",0))
-            if shape==0:size=primitive.get("Size",(1,1,1));radius=.5*sum((float(size[i])*abs(float(scale[i])))**2 for i in range(3))**.5
-            elif shape==4:radius=.5*sum((float(primitive.get(name,1))*abs(float(scale[index])))**2 for name,index in (("Width",0),("Depth",2)))**.5
-            elif shape==6:radius=(float(primitive.get("Major Radius",.75))+float(primitive.get("Minor Radius",.25)))*max(abs(float(scale[0])),abs(float(scale[1])),abs(float(scale[2])))
-            else:radius=max(float(primitive.get("Radius",.5))*max(abs(float(scale[0])),abs(float(scale[2]))),float(primitive.get("Height",1))*.5*abs(float(scale[1])))
-            center=Vec3(*details.get("world_position",details.get("position",(0,0,0))));offset=ray.Origin-center;b=offset.Dot(ray.Direction);c=offset.Dot(offset)-max(.05,radius)**2;discriminant=b*b-c
-            if discriminant<0:continue
-            distance=-b-discriminant**.5
-            if distance<0:distance=-b+discriminant**.5
-            if 0<=distance<best_distance:best=entity_id;best_distance=distance
-        return best
+        ray=self._Ray(point)
+        return self.Runtime.PickPrimitive((ray.Origin.X,ray.Origin.Y,ray.Origin.Z),(ray.Direction.X,ray.Direction.Y,ray.Direction.Z))
 
     def _PickGizmo(self, point: QPoint):
         if self._selection is None or self._mode is GizmoMode.Select:return None
         ray=self._Ray(point);depth=(Vec3(*self._eye)-self._selection).Length();world_per_pixel=depth*2.*tan(radians(30.))/max(1,self.height());length=world_per_pixel*96.;tolerance=world_per_pixel*11.
         if self._mode is GizmoMode.Rotate:return PickRotationAxis(ray,self._selection,length/.9,tolerance)
-        return PickAxis(ray,self._selection,length,tolerance)
+        # Match the visible arrow shafts in screen space; a ray near the common
+        # origin must not turn ordinary object clicks into accidental drags.
+        origin=self._Project((self._selection.X,self._selection.Y,self._selection.Z))
+        if origin is None:return None
+        candidates=[]
+        for handle,axis in ((GizmoHandle.X,Vec3(1,0,0)),(GizmoHandle.Y,Vec3(0,1,0)),(GizmoHandle.Z,Vec3(0,0,1))):
+            end=self._selection+axis*length;projected=self._Project((end.X,end.Y,end.Z))
+            if projected is None:continue
+            dx,dy=projected[0]-origin[0],projected[1]-origin[1];squared=dx*dx+dy*dy
+            if squared<16:continue
+            t=((point.x()-origin[0])*dx+(point.y()-origin[1])*dy)/squared
+            if not .18<=t<=1.12:continue
+            distance=((point.x()-origin[0]-t*dx)**2+(point.y()-origin[1]-t*dy)**2)**.5
+            if distance<=7:candidates.append((distance,handle))
+        return min(candidates,key=lambda value:value[0])[1] if candidates else None
 
     def _SetHover(self, handle) -> None:
         if handle is self._hover_handle:return
@@ -247,16 +246,19 @@ class NativeRenderSurface(QWidget):
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         self._last = event.position().toPoint(); self.setFocus()
+        if self.IsScene:self.Runtime.SetObjectHover("",self._eye)
         if self.IsScene and event.button()==Qt.MouseButton.RightButton:self._keys.clear();self._fly_navigation=False;self._navigating=True;self.NavigationChanged.emit(True);event.accept();return
         if self.IsScene and event.button()==Qt.MouseButton.LeftButton and self._PickOrientation(self._last):event.accept();return
-        if self.IsScene and event.button()==Qt.MouseButton.LeftButton and self._selection and self._mode is not GizmoMode.Select:
+        picked=self._PickSceneObject(self._last) or self._PickSceneIcon(self._last) if self.IsScene and event.button()==Qt.MouseButton.LeftButton else ""
+        different_object=bool(picked and picked not in self._selected_entity_ids)
+        if self.IsScene and event.button()==Qt.MouseButton.LeftButton and not different_object and self._selection and self._mode is not GizmoMode.Select:
             ray=self._Ray(self._last);handle=self._PickGizmo(self._last)
             if handle is not None:
                 self._SetHover(handle)
                 self.GizmoDragStarted.emit()
                 self._gizmo_drag=GizmoDrag(self._mode,handle,ray,self._selection,(Vec3(*self._target)-Vec3(*self._eye)).Normalized());self._last_delta=Vec3();self._last_angle=0.0;self._last_scale=Vec3(1,1,1);event.accept();return
         if self.IsScene and event.button()==Qt.MouseButton.LeftButton:
-            entity_id=self._PickSceneIcon(self._last) or self._PickSceneObject(self._last)
+            entity_id=picked
             self._selection_box_start=self._last;self._selection_box_additive=bool(event.modifiers()&Qt.KeyboardModifier.ControlModifier)
             self._selection_box_preview=();self._selection_box_dragging=False;self._pending_pick=entity_id
             event.accept();return
@@ -289,7 +291,7 @@ class NativeRenderSurface(QWidget):
             if event.modifiers()&Qt.KeyboardModifier.ShiftModifier and not self._keys.intersection(movement_keys):
                 self._PanCamera(delta)
             else:
-                self._yaw-=delta.x()*.35;self._pitch=max(-89.0,min(89.0,self._pitch+delta.y()*.35))
+                self._yaw-=delta.x()*self._look_sensitivity;self._pitch=max(-89.0,min(89.0,self._pitch+delta.y()*self._look_sensitivity))
                 # RMB alone is the usual editor orbit. Once fly keys are held,
                 # preserve the eye and turn like a first-person camera.
                 if self._fly_navigation and self._keys.intersection(movement_keys):self._LookFromEye()
@@ -297,7 +299,9 @@ class NativeRenderSurface(QWidget):
         elif event.buttons() & Qt.MouseButton.MiddleButton:
             scale = self._distance * .0015
             self._target[0] += delta.x() * scale; self._target[1] -= delta.y() * scale; self._UpdateCamera()
-        elif not event.buttons():self._SetHover(self._PickGizmo(current))
+        elif not event.buttons():
+            handle=self._PickGizmo(current);self._SetHover(handle)
+            self.Runtime.SetObjectHover(self._PickSceneObject(current) if handle is None else "",self._eye)
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         if self.IsScene:
@@ -336,6 +340,7 @@ class NativeRenderSurface(QWidget):
         event.accept()
 
     def focusOutEvent(self,event)->None:
+        self.Runtime.SetObjectHover("",self._eye)
         was_navigating=self._navigating;self._keys.clear();self._navigating=False;self._fly_navigation=False
         if was_navigating:self.NavigationChanged.emit(False)
         self._DestroySelectionBand()
@@ -344,6 +349,7 @@ class NativeRenderSurface(QWidget):
         self._selection_box_dragging=False;self._pending_pick=""
 
     def leaveEvent(self,event)->None:
+        self.Runtime.SetObjectHover("",self._eye)
         if self._gizmo_drag is None:self._SetHover(None)
         super().leaveEvent(event)
 
@@ -361,7 +367,7 @@ class NativeRenderSurface(QWidget):
         if Qt.Key.Key_E in self._keys:direction+=up
         if Qt.Key.Key_Q in self._keys:direction-=up
         if direction.Dot(direction)<=0:return
-        speed=self._move_speed*(3.0 if Qt.Key.Key_Shift in self._keys else 1.0)*.016
+        speed=self._move_speed*(self._fly_boost if Qt.Key.Key_Shift in self._keys else 1.0)*.016
         step=direction.Normalized()*speed;self._target[0]+=step.X;self._target[1]+=step.Y;self._target[2]+=step.Z;self._UpdateCamera()
 
 

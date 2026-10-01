@@ -60,7 +60,7 @@ class EditorShellTests(unittest.TestCase):
     def test_preferences_are_modal_persistent_and_applied(self) -> None:
         dialog=PreferencesDialog(self.Window)
         self.assertIs(dialog.parent(),self.Window);self.assertTrue(dialog.isModal())
-        self.assertEqual(dialog.Sections.count(),5)
+        self.assertEqual(dialog.Sections.count(),6)
         dialog.Controls["theme"].setCurrentIndex(dialog.Controls["theme"].findData("light"))
         dialog.Controls["navigation_speed"].setValue(10.0);dialog.Controls["clear_on_play"].setChecked(True)
         dialog._Apply()
@@ -68,6 +68,18 @@ class EditorShellTests(unittest.TestCase):
         self.assertEqual(self.Window.Scene.Surface._move_speed,10.0)
         self.assertTrue(self.Window.PreferenceValue("console","clear_on_play"))
         self.assertEqual(self.Window.MenuBar.PreferencesAction.text(),"Preferences…")
+
+    def test_scene_toolbar_autosaves_and_preferences_restore_history_limits(self) -> None:
+        from copy import deepcopy
+        saved=[];self.Window._settings_saver=lambda value:saved.append(deepcopy(value))
+        self.Window.Scene.PivotMode.setCurrentIndex(1);self.Window.Scene.LocalToggle.setChecked(True);self.Window.Scene.StatsToggle.setChecked(True)
+        self.assertTrue(saved[-1]["preferences"]["scene"]["pivot_center"])
+        self.assertTrue(saved[-1]["preferences"]["scene"]["local_space"])
+        preferences=deepcopy(saved[-1]["preferences"]);preferences["history"]={"command_limit":12,"memory_mb":8}
+        self.Window.Scene.PivotMode.setCurrentIndex(0);self.Window.ApplyPreferences(preferences)
+        self.assertEqual(self.Window.Scene.PivotMode.currentIndex(),1)
+        self.assertTrue(self.Window.Scene.StatsToggle.isChecked())
+        self.assertEqual(self.Window.Controller.History.Limit,12);self.assertEqual(self.Window.Controller.History.ByteLimit,8*1024*1024)
 
     def test_hierarchy_scene_shows_per_scene_dirty_marker(self) -> None:
         self.Window.Controller.RefreshHierarchy()
@@ -234,6 +246,40 @@ class EditorShellTests(unittest.TestCase):
         entity_id=self.Window.Runtime.CreateEntity("Pickable Cube");self.assertTrue(self.Window.Runtime.AddComponent(entity_id,"Primitive Object"))
         surface=self.Window.Scene.Surface;surface.resize(640,480);projected=surface._Project((0,0,0));self.assertIsNotNone(projected)
         self.assertEqual(surface._PickSceneObject(QPoint(round(projected[0]),round(projected[1]))),entity_id)
+
+    def test_primitive_picking_rejects_space_above_plane_and_torus_hole(self) -> None:
+        if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")
+        plane=self.Window.Runtime.CreateEntity("Precise Plane");self.Window.Runtime.AddComponent(plane,"Primitive Object");self.Window.Runtime.SetComponentProperty(plane,"Primitive Object","Shape",4)
+        self.assertEqual(self.Window.Runtime.PickPrimitive((0,1,2),(0,0,-1)),"")
+        self.assertEqual(self.Window.Runtime.PickPrimitive((0,2,0),(0,-1,0)),plane)
+        cube=self.Window.Runtime.CreateEntity("Cube above plane");self.Window.Runtime.AddComponent(cube,"Primitive Object");self.Window.Runtime.SetTransform(cube,(0,1,0),(0,0,0,1),(1,1,1))
+        self.assertEqual(self.Window.Runtime.PickPrimitive((0,3,0),(0,-1,0)),cube)
+        self.Window.Runtime.DestroyEntity(cube);self.Window.Runtime.DestroyEntity(plane)
+        torus=self.Window.Runtime.CreateEntity("Torus hole");self.Window.Runtime.AddComponent(torus,"Primitive Object");self.Window.Runtime.SetComponentProperty(torus,"Primitive Object","Shape",6)
+        self.assertEqual(self.Window.Runtime.PickPrimitive((0,2,0),(0,-1,0)),"")
+
+    def test_plane_is_selected_by_scene_mouse_click(self) -> None:
+        if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")
+        plane=self.Window.Runtime.CreateEntity("Clickable plane");self.Window.Runtime.AddComponent(plane,"Primitive Object");self.Window.Runtime.SetComponentProperty(plane,"Primitive Object","Shape",4)
+        surface=self.Window.Scene.Surface;surface.resize(640,480);surface._UpdateCamera();surface.SetGizmoMode(GizmoMode.Select)
+        projected=surface._Project((0,0,0));point=QPointF(round(projected[0]),round(projected[1]))
+        surface.mousePressEvent(QMouseEvent(QMouseEvent.Type.MouseButtonPress,point,Qt.MouseButton.LeftButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
+        surface.mouseReleaseEvent(QMouseEvent(QMouseEvent.Type.MouseButtonRelease,point,Qt.MouseButton.LeftButton,Qt.MouseButton.NoButton,Qt.KeyboardModifier.NoModifier))
+        self.assertEqual(self.Window.Controller.SelectedEntity,plane)
+
+    def test_switching_selected_primitives_and_hierarchy_refresh_is_stable(self) -> None:
+        if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")
+        first=self.Window.Runtime.CreateEntity("First clickable");second=self.Window.Runtime.CreateEntity("Second clickable")
+        for entity in (first,second):self.Window.Runtime.AddComponent(entity,"Primitive Object")
+        self.Window.Runtime.SetTransform(second,(2,0,0),(0,0,0,1),(1,1,1))
+        surface=self.Window.Scene.Surface;surface.resize(640,480);surface._UpdateCamera();surface.SetGizmoMode(GizmoMode.Translate)
+        self.Window.Controller.SelectSceneEntity(first)
+        projected=surface._Project((2,0,0));point=QPointF(round(projected[0]),round(projected[1]))
+        surface.mousePressEvent(QMouseEvent(QMouseEvent.Type.MouseButtonPress,point,Qt.MouseButton.LeftButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
+        surface.mouseReleaseEvent(QMouseEvent(QMouseEvent.Type.MouseButtonRelease,point,Qt.MouseButton.LeftButton,Qt.MouseButton.NoButton,Qt.KeyboardModifier.NoModifier))
+        self.assertEqual(self.Window.Controller.SelectedEntity,second)
+        self.Window.Controller.SelectEntities([first,second]);self.Window.Controller.RefreshHierarchy()
+        self.assertEqual(self.Window.Controller.SelectedEntities,[first,second]);self.assertEqual(set(self.Window.Hierarchy.GetSelectedData()),{first,second})
 
     def test_primitive_drag_starts_marquee_and_gizmo_remains_pickable(self) -> None:
         if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")

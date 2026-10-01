@@ -66,6 +66,9 @@ public:
                          float targetX, float targetY, float targetZ);
     void SetEditorGizmo(bool visible, float x, float y, float z, int mode);
     void SetEditorGizmoHover(int axis);
+    UUID PickEditorPrimitive(Vec3 origin, Vec3 direction);
+    void SetEditorObjectHover(UUID id, Vec3 eye) { m_hoveredObject=id; m_hoverEye=eye; }
+    void SetEditorSelection(std::vector<UUID> ids) { m_selectedObjects=std::move(ids); }
     void SetEditorGrid(bool visible, int plane);
     void SetEditorIconsVisible(bool visible) { m_editorIconsVisible=visible; }
     bool SetSceneRenderMode(const std::string& mode);
@@ -101,6 +104,9 @@ private:
     std::unique_ptr<RenderBackend> m_renderBackend;
     std::unique_ptr<NativeScriptRuntime> m_scriptRuntime;
     bool m_editorIconsVisible=true;
+    UUID m_hoveredObject{};
+    std::vector<UUID> m_selectedObjects;
+    Vec3 m_hoverEye{};
 };
 
 } // namespace Bazzalt::Runtime

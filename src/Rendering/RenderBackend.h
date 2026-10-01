@@ -25,7 +25,7 @@ class RenderBackend final {
 public:
     enum class ViewportKind { Scene, Game };
     struct EditorIcon { float X, Y, Z; bool Camera; };
-    struct EditorGuide { float AX,AY,AZ,BX,BY,BZ,R,G,B,A; };
+    struct EditorGuide { float AX,AY,AZ,BX,BY,BZ,R,G,B,A; bool Outline=false; };
     RenderBackend();
     ~RenderBackend();
     RenderBackend(const RenderBackend&) = delete;

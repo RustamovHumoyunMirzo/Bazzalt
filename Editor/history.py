@@ -15,12 +15,20 @@ class SceneHistory(QObject):
         super().__init__(parent);self.Runtime=runtime;self.Limit=limit;self.ByteLimit=byte_limit;self._undo=[];self._redo=[];self._pending=None;self._restoring=False
     def Begin(self,label:str)->None:
         if self._pending is None and not self._restoring:self._pending=(label,self.Runtime.CaptureScene())
+    def Configure(self,limit:int,byte_limit:int)->None:
+        self.Limit=max(1,int(limit));self.ByteLimit=max(1024,int(byte_limit));self._Trim();self.Changed.emit()
+    def _Trim(self)->None:
+        while self._undo or self._redo:
+            commands=self._undo+self._redo
+            if len(commands)<=self.Limit and sum(len(c.Before)+len(c.After) for c in commands)<=self.ByteLimit:break
+            if self._undo:self._undo.pop(0)
+            else:self._redo.pop(0)
     def Commit(self)->bool:
         if self._pending is None:return False
         label,before=self._pending;self._pending=None;after=self.Runtime.CaptureScene()
         if not before or not after or before==after:return False
         self._undo.append(SceneCommand(label,before,after));self._redo.clear()
-        while len(self._undo)>self.Limit or sum(len(c.Before)+len(c.After) for c in self._undo)>self.ByteLimit:self._undo.pop(0)
+        self._Trim()
         self.Changed.emit();return True
     def Cancel(self)->None:self._pending=None
     def Undo(self)->bool:
