@@ -150,6 +150,8 @@ def BuildStyleSheet(theme: Theme) -> str:
     QComboBox QAbstractItemView {{ border: 1px solid {t.border}; padding: 3px; }}
     QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{
         border-color: {t.border_focus}; }}
+    QLineEdit#HierarchySearch, QLineEdit#AssetBrowserSearch,
+    QLineEdit#HierarchySearch:focus, QLineEdit#AssetBrowserSearch:focus {{ border-radius: 0; }}
     QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled,
     QComboBox:disabled {{ background: {t.surface_alt}; color: {t.text_disabled}; }}
     QWidget[fieldState="modified"] {{ border-color: {t.modified}; }}
