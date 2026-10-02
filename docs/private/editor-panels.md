@@ -56,6 +56,12 @@ and asset database `.meta` sidecars are hidden from the content view. `Refresh()
 tree, `AssetActivated(path)` reports double-clicks, and `ContextMenuRequested` supports custom
 asset commands.
 
+Show in File Explorer (Reveal in Finder on macOS) reveals selected assets in the
+desktop file manager. Windows uses [native multi-item selection](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shopenfolderandselectitems), grouping files by containing folder.
+Linux uses the file manager's D-Bus ShowItems interface, falling back to opening
+containing folders when that desktop does not support selection. Filenames are
+passed without shell interpolation; Unicode names are supported.
+
 The `Search` field searches the whole project asset root by relative path,
 filename, and extension, not only the current folder. Search is debounced to
 avoid rescanning on every keystroke. Results keep the normal icons, drag/drop

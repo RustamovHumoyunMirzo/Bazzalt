@@ -2,12 +2,14 @@
 from __future__ import annotations
 import shutil
 import os
+import sys
 import uuid
 from pathlib import Path
 from PySide6.QtCore import QFile,QFileSystemWatcher,QMimeData,QSize,Qt,Signal,QTimer
 from PySide6.QtGui import QColor,QIcon,QLinearGradient,QPainter,QPixmap,QRadialGradient
 from PySide6.QtWidgets import (QAbstractItemView,QFileDialog,QLineEdit,QListWidget,QListWidgetItem,QMenu,QSplitter,QStyledItemDelegate,QTreeWidget,QTreeWidgetItem,QVBoxLayout,QWidget)
 from ...localization import LocalizationManager
+from ...platform_services import RevealFiles
 
 IMAGE_EXTENSIONS={".png",".jpg",".jpeg",".bmp",".gif",".webp"}
 MODEL_EXTENSIONS={".gltf",".glb",".obj",".fbx",".dae",".filamesh"}
@@ -200,6 +202,9 @@ class AssetBrowserPanel(QWidget):
             except OSError:pass
         self.Refresh(created)
     def _ShowContextMenu(self,widget,position)->None:
+        target=widget.itemAt(position)
+        if target is not None and widget is self.Browser and not target.isSelected():self.Browser.setCurrentItem(target)
+        reveal_paths=[Path(target.data(0,Qt.ItemDataRole.UserRole))] if widget is self.Tree and target is not None else [Path(item.data(Qt.ItemDataRole.UserRole)) for item in self.Browser.selectedItems()]
         tr=self._localization.Translate;menu=QMenu(self);create=menu.addMenu(tr("assets.create"))
         for key,label in (("folder","assets.folder"),("scene","assets.scene"),("cpp","assets.native_cpp"),("shader","assets.shader"),("material","assets.material")):
             action=create.addAction(tr(label));action.triggered.connect(lambda _=False,k=key:self._Create(k))
@@ -207,6 +212,12 @@ class AssetBrowserPanel(QWidget):
         current=Path(self.Browser.currentItem().data(Qt.ItemDataRole.UserRole)) if widget is self.Browser and self.Browser.currentItem() else None
         load=menu.addAction(tr("assets.load_scene"));is_scene=bool(current and current.suffix.lower()==".bscene");load.setVisible(is_scene);load.setEnabled(bool(is_scene and not (callable(self.SceneLoadedChecker) and self.SceneLoadedChecker(current))));load.triggered.connect(lambda:self.LoadSceneRequested.emit(current) if current else None)
         rename=menu.addAction(tr("assets.rename"));rename.setEnabled(len(self.Browser.selectedItems())==1);rename.triggered.connect(lambda:self.Browser.editItem(self.Browser.currentItem()));copy=menu.addAction(tr("assets.copy"));copy.setEnabled(selected);copy.triggered.connect(self._Copy);paste=menu.addAction(tr("assets.paste"));paste.setEnabled(bool(self._clipboard));paste.triggered.connect(self._Paste);delete=menu.addAction(tr("assets.delete"));delete.setEnabled(selected);delete.triggered.connect(self._Delete);menu.addSeparator();menu.addAction(tr("assets.refresh"),self.Refresh)
+        reveal_key="assets.reveal" if sys.platform=="win32" else "assets.reveal_finder" if sys.platform=="darwin" else "assets.reveal_manager"
+        reveal=menu.addAction(tr(reveal_key));reveal.setEnabled(bool(reveal_paths));reveal.triggered.connect(lambda _=False:self._Reveal(reveal_paths))
         self.ContextMenuRequested.emit(menu,widget.mapToGlobal(position));menu.exec(widget.mapToGlobal(position))
+
+    def _Reveal(self,paths)->None:
+        try:RevealFiles([path for path in paths if self._InsideRoot(path)])
+        except OSError as error:self.AssetOperationFailed.emit(self._localization.Translate("assets.reveal_failed",error=str(error)))
 
 __all__=["AssetBrowserPanel","IMAGE_EXTENSIONS","MODEL_EXTENSIONS","SHADER_EXTENSIONS","ENVIRONMENT_EXTENSIONS"]
