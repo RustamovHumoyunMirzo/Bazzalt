@@ -397,6 +397,18 @@ class EditorShellTests(unittest.TestCase):
         self.assertTrue(self.Window.Runtime.SetParent(child,""))
         self.assertEqual(self.Window.Runtime.EntityDetails(child)["position"],(13.0,2.0,1.0))
 
+    def test_hierarchy_search_survives_controller_refresh(self) -> None:
+        if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")
+        camera=self.Window.Runtime.CreateEntity("Search Camera");other=self.Window.Runtime.CreateEntity("Unrelated")
+        self.Window.Controller.RefreshHierarchy();panel=self.Window.Hierarchy
+        panel.Search.setText("camera");self.Window.Controller.RefreshHierarchy()
+        from PySide6.QtWidgets import QTreeWidgetItemIterator
+        items={};iterator=QTreeWidgetItemIterator(panel.Tree)
+        while iterator.value() is not None:
+            item=iterator.value();items[str(item.data(0,Qt.ItemDataRole.UserRole))]=item;iterator+=1
+        self.assertFalse(items[camera].isHidden());self.assertTrue(items[other].isHidden())
+        self.assertEqual(panel.Search.text(),"camera")
+
     def test_asset_browser_creates_types_renames_and_populates_inspector(self) -> None:
         root=Path("Editor/tests/fixtures/assets").resolve();browser=self.Window.AssetBrowser;browser.SetProjectRoot(root)
         self.assertGreater(browser.Browser.count(),0)

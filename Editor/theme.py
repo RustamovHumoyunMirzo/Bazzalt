@@ -44,7 +44,7 @@ class Theme:
     spacing: int = 6
     splitter_width: int = 3
     minimum_panel_size: int = 120
-    control_height: int = 24
+    control_height: int = 20
     row_height: int = 24
 
     @classmethod
@@ -141,7 +141,7 @@ def BuildStyleSheet(theme: Theme) -> str:
     QTextEdit, QPlainTextEdit {{ background: {t.input_background}; color: {t.text};
                                 border: 1px solid {t.border}; border-radius: {t.radius}px; }}
     QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{ background: {t.input_background};
-        color: {t.text}; min-height: {t.control_height}px; padding: 0 6px;
+        color: {t.text}; min-height: {t.control_height}px; max-height: {t.control_height}px; padding: 0 6px;
         border: 1px solid {t.border}; border-radius: {t.radius}px; }}
     QComboBox {{ padding-right: 26px; }}
     QComboBox::drop-down {{ subcontrol-origin: padding; subcontrol-position: top right;
@@ -164,7 +164,7 @@ def BuildStyleSheet(theme: Theme) -> str:
     #ViewportPlaceholderLabel {{ color: {t.text_muted}; }}
     #SceneViewControls {{ background: {t.surface_alt}; border-bottom: 1px solid {t.border}; }}
     #SceneViewControls {{ background: {t.surface_alt}; border-bottom: 1px solid {t.border}; }}
-    #SceneViewControls QComboBox {{ min-height: 22px; max-height: 22px; min-width: 68px; font-size: 11px; padding-left: 7px; }}
+    #SceneViewControls QComboBox {{ min-height: 20px; max-height: 20px; min-width: 68px; font-size: 11px; padding-left: 7px; }}
     #SceneViewControls QToolButton {{ min-height: 22px; max-height: 22px; padding: 0 8px; background: {t.input_background}; border: 1px solid {t.border}; border-radius: 3px; }}
     #SceneViewControls QToolButton:hover {{ background: {t.surface_hover}; }}
     #SceneViewControls QToolButton#SceneToolChip {{ min-width: 25px; max-width: 25px; padding: 0; }}
@@ -182,7 +182,7 @@ def BuildStyleSheet(theme: Theme) -> str:
     #ComponentOptionsButton:hover {{ color: {t.text}; background: {t.surface_hover}; }}
     #PropertiesPanel #InspectorFieldLabel {{ color: {t.text_muted}; font-size: 11px; }}
     #PropertiesPanel QLineEdit, #PropertiesPanel QSpinBox, #PropertiesPanel QDoubleSpinBox,
-    #PropertiesPanel QComboBox, #PropertiesPanel QPushButton {{ min-height: 20px; max-height: 20px;
+    #PropertiesPanel QComboBox, #PropertiesPanel QPushButton {{ min-height: 18px; max-height: 18px;
         padding-top: 0; padding-bottom: 0; font-size: 11px; border-radius: 2px; }}
     #PropertiesPanel #VectorAxisLabel {{ color: {t.text_muted}; font-size: 10px; font-weight: 400; }}
     QPushButton {{ background: {t.surface_alt}; color: {t.text};

@@ -172,6 +172,7 @@ class EditorController(QObject):
         self.Window.Hierarchy.ApplyExpansionState(items)
         self.Window.Hierarchy.SetDirtyScenes(self._dirty_scenes)
         self.Window.Hierarchy.SetSelectedData(selected)
+        self.Window.Hierarchy.ApplySearch()
         self.Window.Hierarchy.Tree.setUpdatesEnabled(True)
         del hierarchy_blocker
         if self.SelectedEntity and self.SelectedEntity not in items:self.SelectEntity(None)

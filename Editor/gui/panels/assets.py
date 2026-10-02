@@ -1,9 +1,10 @@
 """Project asset browser with safe filesystem editing and typed drag payloads."""
 from __future__ import annotations
 import shutil
+import os
 import uuid
 from pathlib import Path
-from PySide6.QtCore import QFile,QFileSystemWatcher,QMimeData,QSize,Qt,Signal
+from PySide6.QtCore import QFile,QFileSystemWatcher,QMimeData,QSize,Qt,Signal,QTimer
 from PySide6.QtGui import QColor,QIcon,QLinearGradient,QPainter,QPixmap,QRadialGradient
 from PySide6.QtWidgets import (QAbstractItemView,QFileDialog,QLineEdit,QListWidget,QListWidgetItem,QMenu,QSplitter,QStyledItemDelegate,QTreeWidget,QTreeWidgetItem,QVBoxLayout,QWidget)
 from ...localization import LocalizationManager
@@ -36,7 +37,12 @@ class AssetBrowserPanel(QWidget):
     def __init__(self,localization:LocalizationManager,resources=None)->None:
         super().__init__();self._localization=localization;self._resources=resources;self._root=None;self._folder=None;self._clipboard=[];self.SceneRenameHandler=None;self.SceneLoadedChecker=None
         self._watcher=QFileSystemWatcher(self);self._watcher.directoryChanged.connect(lambda _path:self.Refresh())
-        layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0);splitter=QSplitter(Qt.Orientation.Horizontal);splitter.setChildrenCollapsible(False)
+        layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0)
+        self.Search=QLineEdit();self.Search.setObjectName("AssetBrowserSearch");self.Search.setClearButtonEnabled(True);layout.addWidget(self.Search)
+        self._search_timer=QTimer(self);self._search_timer.setSingleShot(True);self._search_timer.setInterval(150);self._search_timer.timeout.connect(self._PopulateBrowser)
+        self.Search.textChanged.connect(lambda _:self._search_timer.start())
+        localization.LocaleChanged.connect(lambda _:self._RetranslateSearch());self._RetranslateSearch()
+        splitter=QSplitter(Qt.Orientation.Horizontal);splitter.setChildrenCollapsible(False)
         self.Tree=QTreeWidget();self.Tree.setHeaderHidden(True);self.Tree.currentItemChanged.connect(self._FolderSelected)
         self.Browser=AssetList();self.Browser.setItemDelegate(AssetNameDelegate(self.Browser));self.Browser.setViewMode(QListWidget.ViewMode.IconMode);self.Browser.setIconSize(QSize(48,48));self.Browser.setGridSize(QSize(104,86));self.Browser.setResizeMode(QListWidget.ResizeMode.Adjust);self.Browser.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.Browser.setUniformItemSizes(True);self.Browser.setWordWrap(False);self.Browser.setTextElideMode(Qt.TextElideMode.ElideMiddle);self.Browser.setSpacing(2);self.Browser.setMovement(QListWidget.Movement.Static)
@@ -52,6 +58,8 @@ class AssetBrowserPanel(QWidget):
         if self._root and self._root.is_dir():self._watcher.addPath(str(self._root))
         self.Refresh()
     def CurrentFolder(self):return self._folder
+    def _RetranslateSearch(self)->None:
+        self.Search.setPlaceholderText(self._localization.Translate("assets.search"));self.Search.setToolTip(self._localization.Translate("assets.search_hint"))
     def _InsideRoot(self,path):
         if self._root is None:return False
         try:Path(path).resolve().relative_to(self._root);return True
@@ -69,6 +77,10 @@ class AssetBrowserPanel(QWidget):
         return self._resources.Icon(f"icons/abrowser/{name}") if self._resources else QIcon()
     def Refresh(self,select=None)->None:
         previous_folder=self._folder if self._folder is not None and self._InsideRoot(self._folder) else self._root
+        if select and self._InsideRoot(select):
+            # Newly created/renamed assets must remain visible and editable,
+            # even when their name no longer matches the search query.
+            self.Search.clear();self._search_timer.stop();previous_folder=Path(select).parent
         self.Tree.clear();self.Browser.clear();self._folder=None
         if self._root is None or not self._root.is_dir():return
         root=QTreeWidgetItem([self._root.name]);root.setData(0,Qt.ItemDataRole.UserRole,self._root);root.setIcon(0,self._Icon(self._root));self.Tree.addTopLevelItem(root);self._PopulateDirectories(root,self._root);root.setExpanded(True)
@@ -89,17 +101,35 @@ class AssetBrowserPanel(QWidget):
         for directory in entries:
             item=QTreeWidgetItem([directory.name]);item.setData(0,Qt.ItemDataRole.UserRole,directory);item.setIcon(0,self._Icon(directory));parent.addChild(item);self._PopulateDirectories(item,directory)
     def _FolderSelected(self,item,_previous)->None:
-        self.Browser.blockSignals(True);self.Browser.clear();self.Browser.blockSignals(False);self._folder=Path(item.data(0,Qt.ItemDataRole.UserRole)) if item else None
+        self._folder=Path(item.data(0,Qt.ItemDataRole.UserRole)) if item else None
         if self._folder is None:return
         watched=self._watcher.directories()
         for value in watched:
             if self._root is None or Path(value)!=self._root:self._watcher.removePath(value)
         if str(self._folder) not in self._watcher.directories():self._watcher.addPath(str(self._folder))
-        try:entries=sorted(self._folder.iterdir(),key=lambda p:(not p.is_dir(),p.name.lower()))
-        except OSError:return
+        self._PopulateBrowser()
+
+    def _PopulateBrowser(self)->None:
+        self._search_timer.stop();selected={str(item.data(Qt.ItemDataRole.UserRole)) for item in self.Browser.selectedItems()}
+        blocked=self.Browser.blockSignals(True);self.Browser.clear()
+        if self._folder is None:self.Browser.blockSignals(blocked);return
+        terms=self.Search.text().casefold().split()
+        def candidates():
+            if not terms:yield from self._folder.iterdir();return
+            if self._root is None:return
+            for directory,folders,files in os.walk(self._root,followlinks=False):
+                folders[:]=[name for name in folders if not (Path(directory)/name).is_symlink()]
+                for name in folders+files:
+                    path=Path(directory)/name
+                    if not path.is_symlink() and all(term in str(path.relative_to(self._root)).casefold() for term in terms):yield path
+        try:entries=sorted(candidates(),key=lambda p:(not p.is_dir(),p.name.casefold(),str(p)))
+        except OSError:self.Browser.blockSignals(blocked);return
         for entry in entries:
-            if entry.name.endswith(".meta"):continue
+            if entry.suffix.casefold()==".meta":continue
             asset=QListWidgetItem(self._Icon(entry),self._DisplayName(entry));asset.setSizeHint(QSize(104,86));asset.setTextAlignment(Qt.AlignmentFlag.AlignHCenter|Qt.AlignmentFlag.AlignBottom);asset.setData(Qt.ItemDataRole.UserRole,entry);asset.setData(Qt.ItemDataRole.UserRole+1,entry.name);asset.setFlags(asset.flags()|Qt.ItemFlag.ItemIsEditable|Qt.ItemFlag.ItemIsDragEnabled);self.Browser.addItem(asset)
+            asset.setToolTip(str(entry.relative_to(self._root)) if self._root else str(entry))
+            if str(entry) in selected:asset.setSelected(True)
+        self.Browser.blockSignals(blocked)
     @staticmethod
     def _DisplayName(path)->str:
         path=Path(path);return path.name if path.is_dir() else path.stem
@@ -112,6 +142,7 @@ class AssetBrowserPanel(QWidget):
     def _Activate(self,item)->None:
         path=Path(item.data(Qt.ItemDataRole.UserRole))
         if path.is_dir():
+            self.Search.clear()
             for match in self.Tree.findItems(path.name,Qt.MatchFlag.MatchExactly|Qt.MatchFlag.MatchRecursive):
                 if Path(match.data(0,Qt.ItemDataRole.UserRole))==path:self.Tree.setCurrentItem(match);return
         if path.suffix.lower()==".bscene" and callable(self.SceneLoadedChecker) and self.SceneLoadedChecker(path):return

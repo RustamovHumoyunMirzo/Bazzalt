@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QMimeData, Qt, Signal
+from PySide6.QtCore import QMimeData, Qt, Signal, QTimer
 from PySide6.QtGui import QAction, QColor, QIcon, QKeySequence, QPainter, QPen
-from PySide6.QtWidgets import QAbstractItemView, QMenu, QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QAbstractItemView, QLineEdit, QMenu, QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator, QVBoxLayout, QWidget
 
 from ...localization import LocalizationManager
 
@@ -88,6 +88,8 @@ class HierarchyPanel(QWidget):
     def __init__(self, localization: LocalizationManager, install_shortcuts: bool = True) -> None:
         super().__init__(); self._localization = localization;self._collapsed_ids:set[str]=set()
         layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0)
+        self.Search=QLineEdit();self.Search.setObjectName("HierarchySearch");self.Search.setClearButtonEnabled(True);layout.addWidget(self.Search)
+        self._search_expansion=None;self._filter_timer=QTimer(self);self._filter_timer.setSingleShot(True);self._filter_timer.timeout.connect(self.ApplySearch)
         self.Tree=HierarchyTree();self.Tree.setHeaderHidden(True);self.Tree.setRootIsDecorated(True);self.Tree.setItemsExpandable(True);self.Tree.setIndentation(14);self.Tree.setUniformRowHeights(True);self.Tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);self.Tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.Tree.setDragEnabled(True);self.Tree.setAcceptDrops(True);self.Tree.setDropIndicatorShown(True);self.Tree.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop);self.Tree.setDefaultDropAction(Qt.DropAction.CopyAction);self.Tree.setSupportedDragActions(Qt.DropAction.CopyAction)
         self.Tree.ReparentRequested.connect(self.ReparentRequested)
@@ -99,6 +101,28 @@ class HierarchyPanel(QWidget):
         self.Tree.itemCollapsed.connect(self._RememberCollapsed);self.Tree.itemExpanded.connect(self._RememberExpanded)
         if install_shortcuts:self._InstallActions()
         layout.addWidget(self.Tree)
+        self.Search.textChanged.connect(self.ApplySearch)
+        localization.LocaleChanged.connect(lambda _:self._RetranslateSearch());self._RetranslateSearch()
+
+    def _RetranslateSearch(self)->None:
+        self.Search.setPlaceholderText(self._localization.Translate("hierarchy.search"));self.Search.setToolTip(self._localization.Translate("hierarchy.search_hint"))
+
+    def ApplySearch(self,*_args)->None:
+        terms=self.Search.text().casefold().split();items=[];iterator=QTreeWidgetItemIterator(self.Tree)
+        while iterator.value() is not None:items.append(iterator.value());iterator+=1
+        if terms and self._search_expansion is None:self._search_expansion={str(item.data(0,Qt.ItemDataRole.UserRole)):item.isExpanded() for item in items}
+        blocked=self.Tree.blockSignals(True)
+        def visit(item,ancestor_matches=False):
+            own=bool(terms) and all(term in item.text(0).casefold() for term in terms)
+            children=[visit(item.child(index),ancestor_matches or own) for index in range(item.childCount())]
+            visible=not terms or own or ancestor_matches or any(children);item.setHidden(not visible)
+            if terms and any(children):item.setExpanded(True)
+            elif not terms and self._search_expansion is not None:
+                value=str(item.data(0,Qt.ItemDataRole.UserRole));item.setExpanded(self._search_expansion.get(value,item.data(0,Qt.ItemDataRole.UserRole+1)=="scene" or value not in self._collapsed_ids))
+            return visible
+        for index in range(self.Tree.topLevelItemCount()):visit(self.Tree.topLevelItem(index))
+        if not terms:self._search_expansion=None
+        self.Tree.blockSignals(blocked)
 
     def AddItem(self, name: str, data=None, parent: QTreeWidgetItem | None = None,
                 icon: QIcon | None = None, kind: str = "entity", active: bool = False) -> QTreeWidgetItem:
@@ -110,7 +134,9 @@ class HierarchyPanel(QWidget):
         if kind=="scene" and active:
             font=item.font(0);font.setBold(True);item.setFont(0,font);item.setData(0,Qt.ItemDataRole.UserRole+3,True)
         if icon is not None:item.setIcon(0,icon)
-        (parent.addChild(item) if parent else self.Tree.addTopLevelItem(item));return item
+        (parent.addChild(item) if parent else self.Tree.addTopLevelItem(item))
+        if self.Search.text().strip():self._filter_timer.start(0)
+        return item
 
     def Clear(self) -> None: self.Tree.clear()
     def SetDirtyScenes(self,scene_ids)->None:
@@ -139,8 +165,10 @@ class HierarchyPanel(QWidget):
         for value,item in items.items():
             if item.childCount():item.setExpanded(str(value) not in self._collapsed_ids)
     def _RememberCollapsed(self,item)->None:
+        if self.Search.text().strip():return
         if item.data(0,Qt.ItemDataRole.UserRole+1)=="entity":self._collapsed_ids.add(str(item.data(0,Qt.ItemDataRole.UserRole)))
     def _RememberExpanded(self,item)->None:
+        if self.Search.text().strip():return
         self._collapsed_ids.discard(str(item.data(0,Qt.ItemDataRole.UserRole) or ""))
     def GetSelectedData(self):
         values=[item.data(0,Qt.ItemDataRole.UserRole) for item in self.Tree.selectedItems() if item.data(0,Qt.ItemDataRole.UserRole+1)=="entity"]

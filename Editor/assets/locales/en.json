@@ -223,5 +223,9 @@
   "action.rename": "Rename",
   "action.delete": "Delete",
   "action.select_all": "Select All",
-  "action.deselect_all": "Deselect All"
+  "action.deselect_all": "Deselect All",
+  "hierarchy.search": "Search entities…",
+  "hierarchy.search_hint": "Search names across all loaded scenes. Matching descendants keep their parents visible.",
+  "assets.search": "Search project assets…",
+  "assets.search_hint": "Search all project assets by name, type extension, or relative path. Clear to return to the current folder."
 }

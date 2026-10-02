@@ -33,6 +33,12 @@ keeping arbitrary project/scene data attached to it. `GetSelectedData()` returns
 `Clear()` empties the tree. Listen to `SelectionChanged`, `CreateRequested`, and
 `DeleteRequested`. `ContextMenuRequested` allows extensions to append commands.
 
+The `Search` field filters names across all loaded scenes, case-insensitively.
+Space-separated terms must all match. Matching child rows retain and expand
+their ancestor branches; a matching parent keeps its children visible. Search
+does not change scene/entity selection, and clearing it restores the previous
+expansion state. Filters survive hierarchy rebuilds, renames, and theme updates.
+
 ## Properties
 
 `PropertiesPanel.AddComponentSection(component_id, title, expanded=True)` returns a reusable
@@ -49,6 +55,22 @@ the left and the selected directory on the right. Symbolic-link directories are 
 and asset database `.meta` sidecars are hidden from the content view. `Refresh()` rescans the
 tree, `AssetActivated(path)` reports double-clicks, and `ContextMenuRequested` supports custom
 asset commands.
+
+The `Search` field searches the whole project asset root by relative path,
+filename, and extension, not only the current folder. Search is debounced to
+avoid rescanning on every keystroke. Results keep the normal icons, drag/drop
+payloads, activation, and context actions; tooltips disambiguate identical names
+using relative paths. Metadata sidecars and symlinks are excluded. Clearing the
+query restores the current folder. Refreshing with a newly created or renamed
+asset exits search and reveals/selects that asset in its containing folder.
+
+## Compact field sizing
+
+Single-line text, numeric, and dropdown inputs use the shared theme's
+`control_height` of 20 logical pixels, with matching maximum heights. Inspector
+fields use an 18-pixel content height; borders add to the final widget height.
+Multiline editors, tree/list rows, and component headers retain their own
+layout rules. Both dark and light themes use the same sizing tokens.
 
 ## Icons, themes, and localization
 
