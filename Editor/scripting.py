@@ -54,7 +54,7 @@ class ScriptCompiler:
         except (OSError,json.JSONDecodeError):state={}
         outputs=[];diagnostics=[]
         for descriptor in descriptors:
-            digest=hashlib.sha256(descriptor.path.read_bytes()+b"\0bazzalt-script-abi-1-wrapper-1").hexdigest()
+            digest=hashlib.sha256(descriptor.path.read_bytes()+b"\0bazzalt-script-abi-1-wrapper-3-time-1"+(self.engine_root/"include/Bazzalt/Time.h").read_bytes()).hexdigest()
             suffix=".dll" if os.name=="nt" else ".dylib" if os.sys.platform=="darwin" else ".so"
             output=self.cache/f"{descriptor.name}-{digest[:12]}{suffix}";outputs.append(output)
             if state.get(str(descriptor.path))==digest and output.exists():continue
@@ -84,6 +84,8 @@ class ScriptCompiler:
         source=str(descriptor.path).replace("\\","/").replace('"','\\"')
         name=descriptor.name;setter="".join(setters)
         wrapper=f'''#include <Bazzalt/Script.h>\n#include <cstdio>\n#include <cstring>\n#include <sstream>\n#include <string>\n#include "{source}"\n#if defined(_WIN32)\n#define BAZZALT_SCRIPT_EXPORT __declspec(dllexport)\n#else\n#define BAZZALT_SCRIPT_EXPORT __attribute__((visibility("default")))\n#endif\nnamespace {{\nvoid* Create(){{return new {name}();}}\nvoid Destroy(void* p){{delete static_cast<{name}*>(p);}}\nvoid OnCreate(void* p){{static_cast<{name}*>(p)->OnCreate();}}\nvoid OnUpdate(void* p,float dt){{static_cast<{name}*>(p)->OnUpdate(dt);}}\nvoid OnDestroy(void* p){{static_cast<{name}*>(p)->OnDestroy();}}\nbool SetProperty(void* p,const char* name,const char* value){{auto* self=static_cast<{name}*>(p);{setter}return false;}}\nconst Bazzalt::ScriptModuleApi Api{{Bazzalt::ScriptAbiVersion,"{name}",&Create,&Destroy,&OnCreate,&OnUpdate,&OnDestroy,&SetProperty}};\n}}\nextern "C" BAZZALT_SCRIPT_EXPORT const Bazzalt::ScriptModuleApi* BazzaltGetScriptModuleV1(){{return &Api;}}\n'''
+        wrapper += '\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltBindTimeV1(Bazzalt::Detail::TimeState* state){Bazzalt::ScriptRuntimeAccess::BindTime(state);}\n'
+        wrapper += f'\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltFixedUpdateV1(void* p,float dt){{static_cast<{name}*>(p)->OnFixedUpdate(dt);}}\n'
         return wrapper.replace(f"void* Create(){{return new {name}();}}",f"void* Create(const char* entity){{auto* value=new {name}();Bazzalt::ScriptRuntimeAccess::Bind(*value,entity);return value;}}")
 
 class ScriptAttachments:

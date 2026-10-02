@@ -23,15 +23,16 @@ class ConsoleList(QListWidget):
 
 class ConsolePanel(QWidget):
     ContextMenuRequested=Signal(object,object)
-    def __init__(self,localization:LocalizationManager,resources=None,themes=None)->None:
+    def __init__(self,localization:LocalizationManager,resources=None,themes=None,install_shortcuts=True)->None:
         super().__init__();self._localization=localization;self._resources=resources;self._themes=themes;self._messages:list[ConsoleMessage]=[];self._visible_levels=set(ConsoleLevel)
         layout=QVBoxLayout(self);layout.setContentsMargins(4,4,4,4);layout.setSpacing(4)
         filters=QHBoxLayout();filters.setSpacing(4);self.Search=QLineEdit();self.Search.setObjectName("ConsoleSearch");self.Search.setClearButtonEnabled(True);self.Search.textChanged.connect(self._Refresh);self.SourceFilter=QComboBox();self.SourceFilter.setObjectName("ConsoleSourceFilter");self.SourceFilter.currentIndexChanged.connect(self._Refresh);filters.addWidget(self.Search,1);filters.addWidget(self.SourceFilter)
         self.LevelFilter=MultiSelectInput();self.LevelFilter.setObjectName("ConsoleLevelFilter");self.LevelFilter.SelectionChanged.connect(self._LevelsChanged);filters.addWidget(self.LevelFilter)
         actions=QHBoxLayout();actions.setSpacing(4);self.ClearButton=QPushButton();self.ClearFilteredButton=QPushButton();self.RemoveButton=QPushButton();self.ClearButton.clicked.connect(self.Clear);self.ClearFilteredButton.clicked.connect(self.ClearFiltered);self.RemoveButton.clicked.connect(self.RemoveSelected);actions.addWidget(self.ClearButton);actions.addWidget(self.ClearFilteredButton);actions.addWidget(self.RemoveButton);actions.addStretch()
         self.View=ConsoleList();self.View.setObjectName("ConsoleMessageList");self.View.setIconSize(QSize(16,16));self.View.setUniformItemSizes(True);self.View.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection);self.View.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff);self.View.setWordWrap(True);self.View.setTextElideMode(Qt.TextElideMode.ElideRight);self.View.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);self.View.customContextMenuRequested.connect(self._ShowContextMenu);self.View.itemSelectionChanged.connect(lambda:self.RemoveButton.setEnabled(bool(self.View.selectedItems())))
-        copyAction=QAction(self);copyAction.setShortcut(QKeySequence.StandardKey.Copy);copyAction.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut);copyAction.triggered.connect(self._CopySelected);self.View.addAction(copyAction)
-        deleteAction=QAction(self);deleteAction.setShortcut(QKeySequence.StandardKey.Delete);deleteAction.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut);deleteAction.triggered.connect(self.RemoveSelected);self.View.addAction(deleteAction)
+        if install_shortcuts:
+            copyAction=QAction(self);copyAction.setShortcut(QKeySequence.StandardKey.Copy);copyAction.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut);copyAction.triggered.connect(self._CopySelected);self.View.addAction(copyAction)
+            deleteAction=QAction(self);deleteAction.setShortcut(QKeySequence.StandardKey.Delete);deleteAction.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut);deleteAction.triggered.connect(self.RemoveSelected);self.View.addAction(deleteAction)
         layout.addLayout(filters);layout.addLayout(actions);layout.addWidget(self.View,1);localization.LocaleChanged.connect(lambda _:self._Retranslate())
         if themes is not None:themes.ThemeChanged.connect(lambda _theme:self._Refresh())
         self._SyncSources();self._Retranslate();self.RemoveButton.setEnabled(False)

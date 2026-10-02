@@ -78,6 +78,24 @@ class RuntimeService(QObject):
             self.ErrorOccurred.emit(self.LastError()); return False
         self.SceneChanged.emit(); return True
 
+    def ProjectInfo(self) -> dict:
+        return dict(self._host.project_info()) if self._host and hasattr(self._host, "project_info") else {}
+
+    def SupportedRenderingBackends(self) -> list[str]:
+        return list(self._host.supported_rendering_backends()) if self._host and hasattr(self._host, "supported_rendering_backends") else ["automatic"]
+
+    def SetEditorOrientationVisible(self, visible: bool)->None:
+        if self._host and hasattr(self._host,"set_editor_orientation_visible"):self._host.set_editor_orientation_visible(visible)
+
+    def ConfigureRenderingBackend(self, backend: str) -> bool:
+        return bool(self._host and hasattr(self._host, "configure_rendering_backend") and self._host.configure_rendering_backend(backend))
+
+    def Release(self) -> None:
+        self._host = None
+
+    def UpdateProjectInfo(self, name: str, properties: dict) -> bool:
+        return bool(self._host and hasattr(self._host, "update_project_info") and self._host.update_project_info(name, properties))
+
     def LoadSceneAdditive(self, path: str | Path) -> bool:
         if self._host is None or not hasattr(self._host,"load_scene_additive") or not self._host.load_scene_additive(str(path)):
             self.ErrorOccurred.emit(self.LastError());return False

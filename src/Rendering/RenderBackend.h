@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <utility>
 #include <vector>
+#include <string>
 #include <unordered_map>
 
 #include "Bazzalt/PostProcessing.h"
@@ -32,6 +33,8 @@ public:
     RenderBackend& operator=(const RenderBackend&) = delete;
 
     bool Initialize();
+    static std::vector<std::string> SupportedBackends();
+    bool ConfigureBackend(const std::string& backend);
     void Shutdown();
     bool CreateViewport(std::uint64_t id, std::uintptr_t nativeWindow,
                         ViewportKind kind, std::uint32_t width, std::uint32_t height,
@@ -45,6 +48,7 @@ public:
     void SetEditorGizmoHover(int axis);
     void SetEditorGrid(bool visible, int plane);
     void SetEditorIcons(const std::vector<EditorIcon>& icons);
+    void SetEditorOrientationVisible(bool visible) { m_orientationVisible=visible; }
     void SetEditorGuides(const std::vector<EditorGuide>& guides);
     void Render();
     [[nodiscard]] bool IsInitialized() const { return m_engine != nullptr; }
@@ -76,6 +80,7 @@ private:
     struct ViewportResource;
     struct GizmoResource;
     filament::Engine* m_engine = nullptr;
+    std::string m_backend = "automatic";
     filament::Renderer* m_renderer = nullptr;
     filament::Scene* m_scene = nullptr;
     std::vector<filament::View*> m_activeViews;
@@ -91,6 +96,7 @@ private:
     float m_gizmoScale = 1;
     int m_gizmoHover = -1;
     bool m_gridVisible = true;
+    bool m_orientationVisible = true;
     int m_gridPlane = 1;
     float m_gridCenterX = 0, m_gridCenterY = 0, m_gridCenterZ = 0;
     float m_gridScale = 1;

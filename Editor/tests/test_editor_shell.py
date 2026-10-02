@@ -60,7 +60,7 @@ class EditorShellTests(unittest.TestCase):
     def test_preferences_are_modal_persistent_and_applied(self) -> None:
         dialog=PreferencesDialog(self.Window)
         self.assertIs(dialog.parent(),self.Window);self.assertTrue(dialog.isModal())
-        self.assertEqual(dialog.Sections.count(),6)
+        self.assertEqual(dialog.Sections.count(),7)
         dialog.Controls["theme"].setCurrentIndex(dialog.Controls["theme"].findData("light"))
         dialog.Controls["navigation_speed"].setValue(10.0);dialog.Controls["clear_on_play"].setChecked(True)
         dialog._Apply()
@@ -90,6 +90,46 @@ class EditorShellTests(unittest.TestCase):
         self.Window.Controller.SetDirty(False)
         self.assertFalse(scene.text(0).endswith(" *"))
         self.assertFalse(self.Window.Controller.IsDirty)
+
+    def test_orientation_preference_is_saved_and_disables_hit_testing(self) -> None:
+        from copy import deepcopy
+        saved=[];self.Window._settings_saver=lambda value:saved.append(deepcopy(value))
+        dialog=PreferencesDialog(self.Window)
+        dialog.Controls["orientation_visible"].setChecked(False);dialog._Apply()
+        self.assertFalse(saved[-1]["preferences"]["scene"]["orientation_visible"])
+        surface=self.Window.Scene.Surface;surface.resize(640,480)
+        self.assertFalse(surface._orientation_visible)
+        self.assertFalse(surface._PickOrientation(QPoint(610,44)))
+        self.Window.ApplyPreferences(saved[-1]["preferences"],save=False)
+        self.assertFalse(surface._orientation_visible)
+
+    def test_edit_menu_duplicates_hierarchy_and_preserves_clipboard(self) -> None:
+        if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")
+        runtime=self.Window.Runtime;controller=self.Window.Controller
+        parent=runtime.CreateEntity("Original");child=runtime.CreateEntity("Child",parent)
+        runtime.AddComponent(child,"Light");runtime.SetComponentEnabled(child,"Light",False)
+        controller.SelectEntity(parent)
+        old_clipboard=controller._hierarchy_clipboard
+        self.Window.ExecuteEditCommand("duplicate")
+        duplicate=controller.SelectedEntity
+        self.assertNotEqual(duplicate,parent)
+        self.assertIs(controller._hierarchy_clipboard,old_clipboard)
+        self.assertEqual(runtime.EntityDetails(duplicate)["name"],"Original Copy")
+        duplicate_children=[entity for entity in runtime.Entities() if entity["parent"]==duplicate]
+        self.assertEqual(len(duplicate_children),1)
+        self.assertFalse(runtime.EntityDetails(duplicate_children[0]["uuid"])["component_enabled"]["Light"])
+        self.assertEqual(self.Window.MenuBar.EditActions["duplicate"].shortcut().toString(),"Ctrl+D")
+        controller.Undo()
+        self.assertNotIn(duplicate,[entity["uuid"] for entity in runtime.Entities()])
+
+    def test_edit_menu_copy_routes_to_text_instead_of_entities(self) -> None:
+        from unittest.mock import patch
+        field=QLineEdit("Example");field.selectAll()
+        with patch.object(self.Window,"_EditContext",return_value=("text",field)):
+            self.Window.ExecuteEditCommand("copy")
+            self.assertEqual(QApplication.clipboard().text(),"Example")
+            self.Window.ExecuteEditCommand("delete")
+            self.assertEqual(field.text(),"")
 
     def test_loaded_scene_cannot_be_activated_again_from_assets(self) -> None:
         browser=self.Window.AssetBrowser;activated=[];browser.AssetActivated.connect(activated.append)
@@ -274,7 +314,11 @@ class EditorShellTests(unittest.TestCase):
         self.Window.Runtime.SetTransform(second,(2,0,0),(0,0,0,1),(1,1,1))
         surface=self.Window.Scene.Surface;surface.resize(640,480);surface._UpdateCamera();surface.SetGizmoMode(GizmoMode.Translate)
         self.Window.Controller.SelectSceneEntity(first)
-        projected=surface._Project((2,0,0));point=QPointF(round(projected[0]),round(projected[1]))
+        projected=surface._Project((2,0,0));center=QPoint(round(projected[0]),round(projected[1]))
+        # The first object's X handle overlaps the second object's center.
+        # Click its visible geometry outside the overlay to switch selection.
+        target=next((QPoint(x,y) for y in range(center.y()-40,center.y()+41,2) for x in range(center.x()-40,center.x()+41,2) if surface._PickSceneObject(QPoint(x,y))==second and surface._PickGizmo(QPoint(x,y)) is None),None)
+        self.assertIsNotNone(target);point=QPointF(target)
         surface.mousePressEvent(QMouseEvent(QMouseEvent.Type.MouseButtonPress,point,Qt.MouseButton.LeftButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
         surface.mouseReleaseEvent(QMouseEvent(QMouseEvent.Type.MouseButtonRelease,point,Qt.MouseButton.LeftButton,Qt.MouseButton.NoButton,Qt.KeyboardModifier.NoModifier))
         self.assertEqual(self.Window.Controller.SelectedEntity,second)

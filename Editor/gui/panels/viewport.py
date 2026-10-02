@@ -50,6 +50,7 @@ class NativeRenderSurface(QWidget):
         self._eye = (6.0,4.0,8.0); self._selection = None; self._mode = GizmoMode.Select
         self._gizmo_drag = None; self._hover_handle = None; self._last_delta = Vec3(); self._last_angle=0.0;self._last_scale=Vec3(1,1,1)
         self._orientation_animation=None
+        self._orientation_visible=True
         self._selection_box_start=None
         self._selection_box_additive=False;self._selection_band=None
         self._selection_box_preview=()
@@ -221,6 +222,7 @@ class NativeRenderSurface(QWidget):
         self.Runtime.SetGizmoHover(axis)
 
     def _PickOrientation(self,point:QPoint)->bool:
+        if not self._orientation_visible:return False
         if point.x()<self.width()-88 or point.y()>88:return False
         cy,sy=cos(radians(self._yaw)),sin(radians(self._yaw));cp,sp=cos(radians(self._pitch)),sin(radians(self._pitch));center=QPointF(self.width()-44,44)
         def project(v):
@@ -244,21 +246,28 @@ class NativeRenderSurface(QWidget):
             if t>=1:timer.stop()
         timer.timeout.connect(tick);self._orientation_animation=timer;timer.start();return True
 
+    def SetOrientationVisible(self, visible: bool)->None:
+        self._orientation_visible=visible
+        if not visible and self._orientation_animation is not None:self._orientation_animation.stop()
+        self.Runtime.SetEditorOrientationVisible(visible)
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
         self._last = event.position().toPoint(); self.setFocus()
         if self.IsScene:self.Runtime.SetObjectHover("",self._eye)
         if self.IsScene and event.button()==Qt.MouseButton.RightButton:self._keys.clear();self._fly_navigation=False;self._navigating=True;self.NavigationChanged.emit(True);event.accept();return
         if self.IsScene and event.button()==Qt.MouseButton.LeftButton and self._PickOrientation(self._last):event.accept();return
-        picked=self._PickSceneObject(self._last) or self._PickSceneIcon(self._last) if self.IsScene and event.button()==Qt.MouseButton.LeftButton else ""
-        different_object=bool(picked and picked not in self._selected_entity_ids)
-        if self.IsScene and event.button()==Qt.MouseButton.LeftButton and not different_object and self._selection and self._mode is not GizmoMode.Select:
+        # Manipulation handles are editor overlays: a primitive behind a handle
+        # must never steal its press and turn the gesture into a marquee.
+        if self.IsScene and event.button()==Qt.MouseButton.LeftButton and self._selection is not None and self._mode is not GizmoMode.Select:
             ray=self._Ray(self._last);handle=self._PickGizmo(self._last)
             if handle is not None:
+                self._selection_box_start=None;self._selection_box_dragging=False;self._selection_box_preview=();self._pending_pick=""
+                self._DestroySelectionBand()
                 self._SetHover(handle)
                 self.GizmoDragStarted.emit()
                 self._gizmo_drag=GizmoDrag(self._mode,handle,ray,self._selection,(Vec3(*self._target)-Vec3(*self._eye)).Normalized());self._last_delta=Vec3();self._last_angle=0.0;self._last_scale=Vec3(1,1,1);event.accept();return
         if self.IsScene and event.button()==Qt.MouseButton.LeftButton:
-            entity_id=picked
+            entity_id=self._PickSceneObject(self._last) or self._PickSceneIcon(self._last)
             self._selection_box_start=self._last;self._selection_box_additive=bool(event.modifiers()&Qt.KeyboardModifier.ControlModifier)
             self._selection_box_preview=();self._selection_box_dragging=False;self._pending_pick=entity_id
             event.accept();return

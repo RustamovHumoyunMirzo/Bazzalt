@@ -32,6 +32,8 @@ public:
     Engine& operator=(const Engine&) = delete;
 
     bool Init();
+    static std::vector<std::string> SupportedRenderingBackends();
+    bool ConfigureRenderingBackend(const std::string& backend);
     void Update();
     void RenderEditorFrame();
     void Shutdown();
@@ -71,6 +73,7 @@ public:
     void SetEditorSelection(std::vector<UUID> ids) { m_selectedObjects=std::move(ids); }
     void SetEditorGrid(bool visible, int plane);
     void SetEditorIconsVisible(bool visible) { m_editorIconsVisible=visible; }
+    void SetEditorOrientationVisible(bool visible);
     bool SetSceneRenderMode(const std::string& mode);
     bool ConfigureScripts(std::vector<ScriptBinding> bindings);
     bool StartScripts();
@@ -92,6 +95,7 @@ private:
     bool m_isInitialized = false;
     bool m_shouldClose = false;
     float m_deltaTime = 0.016f;
+    double m_fixedAccumulator = 0.0;
     std::uint64_t m_frameCount = 0;
     std::chrono::steady_clock::time_point m_lastFrameTime{};
     std::unique_ptr<Scene> m_scene;

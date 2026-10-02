@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include "Bazzalt/Component.h"
+#include "Bazzalt/Time.h"
 
 namespace Bazzalt {
 class ScriptRuntimeAccess;
@@ -14,6 +15,7 @@ public:
     virtual ~Behavior() = default;
     virtual void OnCreate() {}
     virtual void OnUpdate(float deltaTime) { (void)deltaTime; }
+    virtual void OnFixedUpdate(float fixedDeltaTime) { (void)fixedDeltaTime; }
     virtual void OnDestroy() {}
     [[nodiscard]] const std::string& GetEntityUUID() const { return m_entityUUID; }
 private:
@@ -24,6 +26,7 @@ private:
 class ScriptRuntimeAccess final {
 public:
     static void Bind(Behavior& behavior,const char* entity){behavior.m_entityUUID=entity?entity:"";}
+    static void BindTime(Detail::TimeState* state){Time::Bind(state);}
 };
 
 enum class PropertyType : std::uint8_t { Boolean, Integer, Float, String, Vec2, Vec3, Vec4, Entity, Asset };

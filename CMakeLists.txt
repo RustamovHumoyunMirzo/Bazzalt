@@ -163,6 +163,21 @@ target_include_directories(Bazzalt
 target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE ryml::ryml Filament::Filament ${CMAKE_DL_LIBS})
 
 target_compile_features(Bazzalt PUBLIC cxx_std_20)
+# Match these flags to the linked Filament SDK when using a custom build.
+option(BAZZALT_FILAMENT_OPENGL "SDK contains the OpenGL backend" ON)
+if(APPLE)
+    set(_bazzalt_vulkan_default OFF)
+else()
+    set(_bazzalt_vulkan_default ON)
+endif()
+option(BAZZALT_FILAMENT_VULKAN "SDK contains the Vulkan backend" ${_bazzalt_vulkan_default})
+option(BAZZALT_FILAMENT_METAL "SDK contains the Metal backend" ${APPLE})
+option(BAZZALT_FILAMENT_WEBGPU "SDK contains the WebGPU backend" OFF)
+target_compile_definitions(Bazzalt PRIVATE
+    BAZZALT_FILAMENT_OPENGL=$<BOOL:${BAZZALT_FILAMENT_OPENGL}>
+    BAZZALT_FILAMENT_VULKAN=$<BOOL:${BAZZALT_FILAMENT_VULKAN}>
+    BAZZALT_FILAMENT_METAL=$<BOOL:${BAZZALT_FILAMENT_METAL}>
+    BAZZALT_FILAMENT_WEBGPU=$<BOOL:${BAZZALT_FILAMENT_WEBGPU}>)
 target_compile_definitions(Bazzalt PRIVATE
     BAZZALT_MATC_EXECUTABLE="${BAZZALT_MATC_EXECUTABLE}"
     BAZZALT_FILAMESH_EXECUTABLE="${BAZZALT_FILAMESH_EXECUTABLE}"
@@ -216,6 +231,10 @@ if(BUILD_TESTING)
     add_executable(BazzaltMathTests
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/MathTests.cpp"
     )
+    add_executable(BazzaltTimeTests tests/TimeTests.cpp)
+    target_include_directories(BazzaltTimeTests PRIVATE include src)
+    bazzalt_enable_test_assertions(BazzaltTimeTests)
+    add_test(NAME BazzaltTimeTests COMMAND BazzaltTimeTests)
     target_link_libraries(BazzaltMathTests PRIVATE Bazzalt)
     bazzalt_enable_test_assertions(BazzaltMathTests)
     add_test(NAME BazzaltMathTests COMMAND BazzaltMathTests)

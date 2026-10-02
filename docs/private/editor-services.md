@@ -18,6 +18,43 @@ icon = editor.Resources.Icon("icons/import.svg")
 text = editor.Resources.ReadText("templates/default.txt")
 ```
 
+## Rendering preferences and restart-required settings
+
+Edit > Preferences > Rendering offers Automatic and the backend names reported
+by the native runtime build. Automatic uses Filament's platform default. A GPU
+and compatible driver are still required: inclusion in the build is not a
+hardware availability guarantee. The supported SDK flags are
+`BAZZALT_FILAMENT_OPENGL`, `BAZZALT_FILAMENT_VULKAN`,
+`BAZZALT_FILAMENT_METAL`, and `BAZZALT_FILAMENT_WEBGPU` in CMake; custom SDK
+builds must configure these flags to match their actual compiled drivers.
+WebGPU is off by default; Metal is only exposed on Apple builds. No-op/testing
+drivers are intentionally not offered as viewport renderers.
+See [Filament's backend definitions](https://github.com/google/filament/blob/main/filament/backend/include/backend/DriverEnums.h).
+
+The saved backend is configured before any native viewport initializes. Apply
+does not recreate live swap chains. Changing it prompts Restart Now / Restart
+Later with one generic warning line; restarting uses the normal unsaved-scene close
+workflow and preserves the hub's project path and editor version. Native scene
+locks are released before the replacement process launches. Both development
+Python launches and packaged Nuitka executables are supported. Pending changes
+remain saved when restarting later.
+
+File > Project Settings edits name, company, version, and description. Unknown
+metadata properties are preserved. A successful name change prompts the same
+restart workflow; cancelling or a failed save does not. Identity/path fields
+are read-only. The engine remains independent of editor preferences and UI.
+
+Scene preferences include Show scene viewport orientation widget. This applies
+immediately, is persisted with editor preferences, and disables both rendering
+and hit testing when hidden.
+
+Edit also provides Copy, Paste, Duplicate, Rename, Delete, Select All, and
+Deselect All with standard shortcuts. Commands follow the focused text field,
+Console, Asset Browser, or entity selection. Duplicate is undoable, keeps parent
+and scene ownership, clones descendants, and preserves component enabled states
+without replacing the existing copy clipboard. Hierarchy and Console use the
+global commands in the main editor to avoid duplicate shortcut registrations.
+
 ## Localization
 
 Locale catalogs are flat UTF-8 JSON objects in `Editor/assets/locales`. UI code

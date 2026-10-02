@@ -6,7 +6,7 @@ import json
 from typing import Callable
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox
+from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox, QLineEdit, QTextEdit, QPlainTextEdit
 
 from ..localization import LocalizationManager
 from ..resources import ResourceManager
@@ -75,10 +75,10 @@ class Editor(QMainWindow):
         self.MenuBar.SetDockingSystem(self.Docking)
         self.ThemeManager.ThemeChanged.connect(self.Docking.set_theme)
 
-        self.Console = ConsolePanel(self.Localization,self.Resources,self.ThemeManager)
+        self.Console = ConsolePanel(self.Localization,self.Resources,self.ThemeManager,install_shortcuts=False)
         self.Output = ViewportPanel(self.Runtime, False, self.Localization, self.Resources,self.ThemeManager)
         self.Scene = ViewportPanel(self.Runtime, True, self.Localization, self.Resources,self.ThemeManager)
-        self.Hierarchy = HierarchyPanel(self.Localization)
+        self.Hierarchy = HierarchyPanel(self.Localization, install_shortcuts=False)
         self.Properties = PropertiesPanel(self.Localization)
         self.AssetBrowser = AssetBrowserPanel(self.Localization, self.Resources)
         self._PanelWidgets = {
@@ -96,6 +96,7 @@ class Editor(QMainWindow):
         self.Docking.layout_changed.connect(lambda:self._layout_save_timer.start())
         self.MenuBar.ResetWorkspaceRequested.connect(self._ResetWorkspace)
         self.MenuBar.PreferencesRequested.connect(self.OpenPreferences)
+        self.MenuBar.ProjectSettingsRequested.connect(self.OpenProjectSettings)
         self.MenuBar.MaximizeViewportRequested.connect(self.SetViewportMaximized)
         self.Scene.GridToggle.toggled.connect(self.MenuBar.GridAction.setChecked)
         self.ThemeManager.ThemeChanged.connect(
@@ -109,6 +110,11 @@ class Editor(QMainWindow):
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.Toolbar)
         self.setCentralWidget(self.Docking)
         self.Controller = EditorController(self, self.Runtime)
+        self.MenuBar.EditCommandRequested.connect(self.ExecuteEditCommand)
+        self.MenuBar.EditMenu.aboutToShow.connect(self.RefreshEditActions)
+        application.focusChanged.connect(self.RefreshEditActions)
+        self.Console.View.itemSelectionChanged.connect(self.RefreshEditActions)
+        self.AssetBrowser.Browser.itemSelectionChanged.connect(self.RefreshEditActions)
         # Hierarchy row icons are theme-specific SVGs rather than palette icons.
         # Rebuild the rows when the theme changes so already-visible objects do
         # not retain the previous theme's low-contrast artwork.
@@ -140,7 +146,80 @@ class Editor(QMainWindow):
         return self.GetPreferences().get(section,{}).get(key,default)
 
     def OpenPreferences(self)->None:
-        PreferencesDialog(self).exec()
+        previous=self.PreferenceValue("rendering","backend","automatic")
+        if PreferencesDialog(self).exec() and previous!=self.PreferenceValue("rendering","backend","automatic"):
+            self.RequestRestart()
+
+    def OpenProjectSettings(self)->None:
+        from .project_settings import ProjectSettingsDialog
+        previous=self.Runtime.ProjectInfo().get("name")
+        if ProjectSettingsDialog(self).exec() and previous!=self.Runtime.ProjectInfo().get("name"):
+            self.RequestRestart()
+
+    def RequestRestart(self)->None:
+        tr=self.Localization.Translate;dialog=QMessageBox(self)
+        dialog.setWindowTitle(tr("restart.title"));dialog.setIcon(QMessageBox.Icon.Warning)
+        dialog.setText(tr("restart.message"))
+        now=dialog.addButton(tr("restart.now"),QMessageBox.ButtonRole.AcceptRole)
+        later=dialog.addButton(tr("restart.later"),QMessageBox.ButtonRole.RejectRole)
+        dialog.setDefaultButton(later);dialog.setEscapeButton(later);dialog.exec()
+        if dialog.clickedButton() is now and self.close():
+            QApplication.instance().exit(75)
+
+    def _EditContext(self):
+        focus=QApplication.focusWidget()
+        if isinstance(focus,(QLineEdit,QTextEdit,QPlainTextEdit)):return "text",focus
+        if focus is not None and (focus is self.AssetBrowser or self.AssetBrowser.isAncestorOf(focus)):return "assets",self.AssetBrowser.Browser
+        if focus is not None and (focus is self.Console or self.Console.isAncestorOf(focus)):return "console",self.Console.View
+        return "entities",focus
+
+    def RefreshEditActions(self,*_args)->None:
+        if not hasattr(self,"Controller"):return
+        context,widget=self._EditContext();selected=bool(self.Controller.SelectedEntities)
+        if context=="text":
+            selected=widget.hasSelectedText() if isinstance(widget,QLineEdit) else widget.textCursor().hasSelection()
+            writable=not widget.isReadOnly()
+            states=dict(copy=selected,paste=writable,delete=selected and writable,rename=False,duplicate=False,select_all=True,deselect_all=selected)
+        elif context in {"assets","console"}:
+            count=len(widget.selectedItems());states=dict(copy=count>0,paste=context=="assets" and bool(self.AssetBrowser._clipboard),delete=count>0,rename=context=="assets" and count==1,duplicate=False,select_all=widget.count()>0,deselect_all=count>0)
+        else:
+            item=self.Hierarchy.Tree.currentItem()
+            rename=bool(item and item.data(0,Qt.ItemDataRole.UserRole+1) in {"entity","scene"} and len(self.Hierarchy.Tree.selectedItems())==1)
+            states=dict(copy=selected,paste=bool(self.Controller._hierarchy_clipboard),delete=selected,rename=rename,duplicate=selected,select_all=bool(self.Runtime.Entities()),deselect_all=selected)
+        for key,enabled in states.items():self.MenuBar.EditActions[key].setEnabled(enabled)
+
+    def ExecuteEditCommand(self,command:str)->None:
+        context,widget=self._EditContext()
+        if context=="text":
+            if command in {"copy","paste","select_all"}:getattr(widget,{"select_all":"selectAll"}.get(command,command))()
+            elif command=="delete" and not widget.isReadOnly():
+                if isinstance(widget,QLineEdit):widget.del_()
+                else:cursor=widget.textCursor();cursor.removeSelectedText();widget.setTextCursor(cursor)
+            elif command=="deselect_all":
+                if isinstance(widget,QLineEdit):widget.deselect()
+                else:cursor=widget.textCursor();cursor.clearSelection();widget.setTextCursor(cursor)
+        elif context in {"assets","console"}:
+            if command=="select_all":widget.selectAll()
+            elif command=="deselect_all":widget.clearSelection()
+            elif context=="console":
+                if command=="copy":self.Console._CopySelected()
+                elif command=="delete":self.Console.RemoveSelected()
+            elif command=="copy":self.AssetBrowser._Copy()
+            elif command=="paste":self.AssetBrowser._Paste()
+            elif command=="delete":self.AssetBrowser._Delete()
+            elif command=="rename" and len(widget.selectedItems())==1:widget.editItem(widget.selectedItems()[0])
+        else:
+            selected=list(self.Controller.SelectedEntities)
+            if command=="copy":self.Controller.CopyHierarchyEntities(selected)
+            elif command=="paste":self.Controller.PasteHierarchyEntities(self.Hierarchy._ContextParent())
+            elif command=="duplicate":self.Controller.DuplicateHierarchyEntities(selected)
+            elif command=="delete" and selected:self.Controller.DeleteEntity(selected)
+            elif command=="rename":self.Hierarchy._BeginRename()
+            elif command=="select_all":
+                if widget is not None and self.Hierarchy.isAncestorOf(widget):self.Hierarchy.Tree.selectAll()
+                else:self.Controller.SelectEntities([str(entity["uuid"]) for entity in self.Runtime.Entities()])
+            elif command=="deselect_all":self.Controller.SelectEntity(None);self.Hierarchy.SetSelectedData([])
+        self.RefreshEditActions()
 
     def ApplyPreferences(self,preferences:dict,save:bool=True)->None:
         self._applying_preferences=True
@@ -156,6 +235,7 @@ class Editor(QMainWindow):
         self.MenuBar.IconsAction.setChecked(bool(scene["icons_visible"]));self.Runtime.SetEditorIconsVisible(bool(scene["icons_visible"]))
         self.Scene.ShadingMode.setCurrentIndex(int(scene["shading_mode"]))
         self.Scene.Surface._look_sensitivity=float(scene["look_sensitivity"]);self.Scene.Surface._fly_boost=float(scene["fly_boost"])
+        self.Scene.Surface.SetOrientationVisible(bool(scene["orientation_visible"]))
         self.Controller.History.Configure(value["history"]["command_limit"],int(value["history"]["memory_mb"])*1024*1024)
         self._applying_preferences=False
         if save and self._settings_saver is not None:self._settings_saver(self._settings)
@@ -282,6 +362,9 @@ class Editor(QMainWindow):
         self.Controller.Stop()
         application=QApplication.instance()
         if application is not None:application.removeEventFilter(self.CursorPolicy)
+        if application is not None:
+            try:application.focusChanged.disconnect(self.RefreshEditActions)
+            except RuntimeError:pass
         super().closeEvent(event)
 
 

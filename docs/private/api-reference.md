@@ -3,6 +3,12 @@
 This covers headers under `include/Bazzalt`. Headers remain authoritative for
 templates and exact declarations.
 
+## `Bazzalt/Time.h`
+
+`Time` exposes static gameplay clocks and scale controls without engine-loop
+access. See the [complete time reference](time.md) for all methods, defaults,
+fixed callbacks, validation, and native-script clock sharing.
+
 ## `Bazzalt/Component.h`
 
 ### `Component`

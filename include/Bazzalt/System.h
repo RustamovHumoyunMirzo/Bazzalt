@@ -20,6 +20,7 @@ public:
 protected:
     virtual void OnCreate(Scene&) {}
     virtual void OnUpdate(Scene&, float deltaTime) = 0;
+    virtual void OnFixedUpdate(Scene&, float fixedDeltaTime) { (void)fixedDeltaTime; }
     virtual void OnDestroy(Scene&) {}
 
 private:

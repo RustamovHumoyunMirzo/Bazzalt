@@ -1,4 +1,5 @@
 import unittest
+import tempfile
 from pathlib import Path
 
 from Editor.scripting import ScriptAttachments, ScriptCompiler
@@ -27,10 +28,22 @@ class ScriptingTests(unittest.TestCase):
         self.assertIn("BazzaltGetScriptModuleV1",wrapper)
         self.assertIn('strcmp(name,"Speed")',wrapper)
         self.assertIn("OnUpdate(void* p,float dt)",wrapper)
+        self.assertIn("BazzaltBindTimeV1",wrapper)
+        self.assertIn("BazzaltFixedUpdateV1",wrapper)
 
     def test_compilation_ui_text_is_localized(self):
         localization=LocalizationManager(ResourceManager())
         self.assertEqual(localization.Translate("scripting.compiling"),"Compiling game scripts…")
         self.assertIn("3",localization.Translate("scripting.compile_success",count=3))
+
+    def test_time_behavior_compiles_with_bundled_toolchain(self):
+        root=Path(__file__).resolve().parents[2]
+        if ScriptCompiler(root,engine_root=root)._compiler() is None:self.skipTest("bundled toolchain is unavailable")
+        with tempfile.TemporaryDirectory(prefix="time-script-test-",dir=root/"build") as project:
+            compiler=ScriptCompiler(project,engine_root=root)
+            result=compiler.Build([self.source.with_name("TimeProbe.cpp")])
+            self.assertTrue(result.success,"\n".join(item.message for item in result.diagnostics))
+            self.assertTrue(result.outputs[0].is_file())
+            self.assertEqual(compiler.Build([self.source.with_name("TimeProbe.cpp")]).outputs,result.outputs)
 
 if __name__=="__main__":unittest.main()

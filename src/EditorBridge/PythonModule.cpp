@@ -164,7 +164,26 @@ public:
     }
     bool IsSceneLoaded(const std::string& path) { return FindLoadedScene(path).has_value(); }
     std::string LastError() const { return m_bridgeError.empty()?m_engine->GetLastError():m_bridgeError; }
+    std::vector<std::string> SupportedRenderingBackends() const {return Runtime::Engine::SupportedRenderingBackends();}
+    bool ConfigureRenderingBackend(const std::string& backend){return m_engine->ConfigureRenderingBackend(backend);}
     py::str ProjectDirectory() const { return m_projectPath.empty() ? py::str() : PathText(m_projectPath.parent_path()); }
+    py::dict ProjectInfo() const {
+        py::dict result;if(m_projectPath.empty())return result;
+        const auto& project=m_engine->GetProject();
+        result["name"]=project.Name;result["uuid"]=project.ProjectUUID.ToString();
+        result["asset_directory"]=PathText(project.AssetDirectory);
+        result["startup_scene"]=PathText(project.StartupScene);
+        result["project_path"]=PathText(m_projectPath);result["properties"]=py::cast(project.Properties);
+        return result;
+    }
+    bool UpdateProjectInfo(const std::string& name,const std::map<std::string,std::string>& properties) {
+        m_bridgeError.clear();
+        if(m_projectPath.empty()||name.find_first_not_of(" \t\r\n")==std::string::npos){m_bridgeError="Project name must not be empty.";return false;}
+        auto& project=m_engine->GetProject();const auto previous=project;
+        project.Name=name;project.Properties=properties;
+        if(!m_engine->SaveProject(m_projectPath)){project=previous;return false;}
+        return true;
+    }
     py::str AssetDirectory() const {
         if (m_projectPath.empty()) return py::str();
         return PathText(m_projectPath.parent_path() / m_engine->GetProject().AssetDirectory);
@@ -333,6 +352,7 @@ public:
     void SetSelectionOutline(const std::vector<std::string>& ids){std::vector<UUID> selected;for(const auto& id:ids)if(!id.empty())selected.push_back(ParseUuid(id));m_engine->SetEditorSelection(std::move(selected));}
     void SetGrid(bool visible, int plane) { m_engine->SetEditorGrid(visible, plane); }
     void SetEditorIconsVisible(bool visible){m_engine->SetEditorIconsVisible(visible);}
+    void SetEditorOrientationVisible(bool visible){m_engine->SetEditorOrientationVisible(visible);}
     bool SetSceneRenderMode(const std::string& mode){return m_engine->SetSceneRenderMode(mode);}
     bool CreateViewport(std::uint64_t id, std::uintptr_t handle, bool scene,
                         std::uint32_t width, std::uint32_t height, float pixelRatio) {
@@ -445,6 +465,10 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("new_scene", &Bazzalt::EditorBridge::EditorHost::NewScene)
         .def("last_error", &Bazzalt::EditorBridge::EditorHost::LastError)
         .def("project_directory", &Bazzalt::EditorBridge::EditorHost::ProjectDirectory)
+        .def("supported_rendering_backends", &Bazzalt::EditorBridge::EditorHost::SupportedRenderingBackends)
+        .def("configure_rendering_backend", &Bazzalt::EditorBridge::EditorHost::ConfigureRenderingBackend)
+        .def("project_info", &Bazzalt::EditorBridge::EditorHost::ProjectInfo)
+        .def("update_project_info", &Bazzalt::EditorBridge::EditorHost::UpdateProjectInfo)
         .def("asset_directory", &Bazzalt::EditorBridge::EditorHost::AssetDirectory)
         .def("entities", &Bazzalt::EditorBridge::EditorHost::Entities)
         .def("loaded_scenes", &Bazzalt::EditorBridge::EditorHost::LoadedScenes)
@@ -481,6 +505,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("set_selection_outline", &Bazzalt::EditorBridge::EditorHost::SetSelectionOutline)
         .def("set_grid", &Bazzalt::EditorBridge::EditorHost::SetGrid)
         .def("set_editor_icons_visible", &Bazzalt::EditorBridge::EditorHost::SetEditorIconsVisible)
+        .def("set_editor_orientation_visible", &Bazzalt::EditorBridge::EditorHost::SetEditorOrientationVisible)
         .def("set_scene_render_mode", &Bazzalt::EditorBridge::EditorHost::SetSceneRenderMode)
         .def("configure_scripts", &Bazzalt::EditorBridge::EditorHost::ConfigureScripts)
         .def("play", &Bazzalt::EditorBridge::EditorHost::Play)

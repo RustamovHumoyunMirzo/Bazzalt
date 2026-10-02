@@ -264,6 +264,17 @@ void Scene::Update(float deltaTime) {
     }
 }
 
+void Scene::FixedUpdate(float deltaTime) {
+    struct UpdateGuard {
+        bool& Flag;
+        explicit UpdateGuard(bool& flag) : Flag(flag) { Flag = true; }
+        ~UpdateGuard() { Flag = false; }
+    } guard(m_isUpdating);
+    for (const auto& system : m_systems) {
+        if (system->IsEnabled()) system->OnFixedUpdate(*this, deltaTime);
+    }
+}
+
 void Scene::DestroySystems() {
     for (auto it = m_systems.rbegin(); it != m_systems.rend(); ++it) {
         try {

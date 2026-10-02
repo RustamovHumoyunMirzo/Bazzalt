@@ -7,8 +7,9 @@ COMPONENT(LifecycleProbe) {
 public:
     PROPERTY(std::string, LogPath, "")
     void Write(const char* value){std::ofstream(LogPath,std::ios::app)<<value<<':'<<GetEntityUUID()<<'\n';}
-    void OnCreate() override { Write("create"); }
-    void OnUpdate(float) override { Write("update"); }
+    void OnCreate() override { Bazzalt::Time::SetSlowMotion(0.25f);Write("create"); }
+    void OnUpdate(float delta) override { if(Bazzalt::Time::GetDeltaTime()!=delta)throw std::runtime_error("Module clock was not shared");Write("update"); }
+    void OnFixedUpdate(float delta) override { if(!Bazzalt::Time::IsInFixedTimeStep()||Bazzalt::Time::GetDeltaTime()!=delta)throw std::runtime_error("Module fixed clock was not shared");Write("fixed"); }
     void OnDestroy() override { Write("destroy"); }
 };
 
@@ -27,3 +28,5 @@ const Bazzalt::ScriptModuleApi Api{Bazzalt::ScriptAbiVersion,"LifecycleProbe",Cr
 #define SCRIPT_EXPORT __attribute__((visibility("default")))
 #endif
 extern "C" SCRIPT_EXPORT const Bazzalt::ScriptModuleApi* BazzaltGetScriptModuleV1(){return &Api;}
+extern "C" SCRIPT_EXPORT void BazzaltBindTimeV1(Bazzalt::Detail::TimeState* state){Bazzalt::ScriptRuntimeAccess::BindTime(state);}
+extern "C" SCRIPT_EXPORT void BazzaltFixedUpdateV1(void* value,float delta){static_cast<LifecycleProbe*>(value)->OnFixedUpdate(delta);}

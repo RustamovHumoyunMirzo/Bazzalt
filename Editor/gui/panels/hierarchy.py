@@ -85,7 +85,7 @@ class HierarchyPanel(QWidget):
     UnloadSceneRequested = Signal(str)
     RenameSceneRequested = Signal(str, str)
 
-    def __init__(self, localization: LocalizationManager) -> None:
+    def __init__(self, localization: LocalizationManager, install_shortcuts: bool = True) -> None:
         super().__init__(); self._localization = localization;self._collapsed_ids:set[str]=set()
         layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0)
         self.Tree=HierarchyTree();self.Tree.setHeaderHidden(True);self.Tree.setRootIsDecorated(True);self.Tree.setItemsExpandable(True);self.Tree.setIndentation(14);self.Tree.setUniformRowHeights(True);self.Tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);self.Tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -97,7 +97,7 @@ class HierarchyPanel(QWidget):
         self.Tree.itemSelectionChanged.connect(self._SelectionChanged)
         self.Tree.itemChanged.connect(self._ItemRenamed)
         self.Tree.itemCollapsed.connect(self._RememberCollapsed);self.Tree.itemExpanded.connect(self._RememberExpanded)
-        self._InstallActions()
+        if install_shortcuts:self._InstallActions()
         layout.addWidget(self.Tree)
 
     def AddItem(self, name: str, data=None, parent: QTreeWidgetItem | None = None,
@@ -170,7 +170,7 @@ class HierarchyPanel(QWidget):
 
     def _ContextParent(self):
         item=self.Tree.currentItem()
-        return item.data(0,Qt.ItemDataRole.UserRole) if item and item.data(0,Qt.ItemDataRole.UserRole+1)=="entity" else None
+        return item.data(0,Qt.ItemDataRole.UserRole) if item and item.data(0,Qt.ItemDataRole.UserRole+1) in {"entity","scene"} else None
 
     def _BeginRename(self)->None:
         item=self.Tree.currentItem()

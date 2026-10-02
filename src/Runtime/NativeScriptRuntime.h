@@ -14,6 +14,7 @@ public:
     bool Configure(std::vector<ScriptBinding> bindings,std::string& error);
     bool Start(std::string& error);
     void Update(float deltaTime);
+    void FixedUpdate(float deltaTime);
     void Stop() noexcept;
 private:
     struct Instance;std::vector<ScriptBinding> m_bindings;std::vector<Instance> m_instances;

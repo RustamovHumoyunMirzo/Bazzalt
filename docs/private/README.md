@@ -20,6 +20,8 @@ resource ownership, and extension points for game code.
    private Filament backend.
 7. [Math](math.md) — coordinate conventions and public math types.
 8. [Public API reference](api-reference.md) — header-by-header reference.
+   [Gameplay time](time.md) covers slow motion, scaled/unscaled clocks, pause,
+   and fixed updates.
 9. [Roadmap](roadmap.md) — planned systems that are not part of the current API.
 
 ## API stability boundary

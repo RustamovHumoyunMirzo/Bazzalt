@@ -173,6 +173,7 @@ private:
     }
 
     void Update(float deltaTime);
+    void FixedUpdate(float deltaTime);
     Entity CreateRootEntity();
     void DestroySystems();
     void DestroyEntityRecursive(Entity entity);

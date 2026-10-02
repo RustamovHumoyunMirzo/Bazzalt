@@ -1,5 +1,5 @@
 from __future__ import annotations
-import argparse, os, sys, traceback
+import argparse, os, sys, traceback, subprocess
 from pathlib import Path
 from PySide6.QtCore import QObject, QTimer, Qt, QThread, Signal, Slot
 from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QProgressBar, QVBoxLayout, QWidget
@@ -19,6 +19,7 @@ else:
     from .theme import Theme, ThemeManager
 from bazzalt.settings import DataPaths, ReadProjectMetadata, SettingsStore, Version
 from bazzalt.branding import LogoIcon
+from Editor.gui.preferences import MergePreferences
 
 EDITOR_PROJECT_FORMAT_MAX = 1
 
@@ -77,7 +78,11 @@ class EditorSession(QObject):
         self.Resources=ResourceManager();self.Localization=LocalizationManager(self.Resources)
         self.Themes=ThemeManager(app,Theme.light() if settings.get("theme")=="light" else Theme.dark())
         app.setWindowIcon(LogoIcon("#202020" if settings.get("theme")=="light" else "#eeeeee"))
-        self.Runtime=RuntimeService();self.Loading=LoadingWindow(project,version,self.Runtime)
+        self.Runtime=RuntimeService()
+        backend=MergePreferences(settings.get("preferences"))["rendering"]["backend"]
+        if backend not in self.Runtime.SupportedRenderingBackends():backend="automatic"
+        self.Runtime.ConfigureRenderingBackend(backend)
+        self.Loading=LoadingWindow(project,version,self.Runtime)
         self.Loading.Loaded.connect(self.OpenEditor)
     def Start(self)->None:self.Loading.show();self.Loading.Start()
     @Slot(object)
@@ -104,6 +109,23 @@ def main(arguments:list[str]|None=None)->int:
     try:version=Version.Parse(options.editor_version)
     except ValueError as error:QMessageBox.critical(None,"Invalid Editor Version",str(error));return 2
     store=_EditorSettings();settings=store.Load();session=EditorSession(app,options.project.resolve(),version,settings,store.Save)
-    session.Start();result=app.exec();settings["theme"]="light" if session.Themes.GetTheme().background==Theme.light().background else "dark";store.Save(settings);return result
+    session.Start();result=app.exec();settings["theme"]="light" if session.Themes.GetTheme().background==Theme.light().background else "dark";store.Save(settings)
+    if result==75:
+        # Release native scene locks and swap chains before the replacement
+        # process opens the same project. Preserve the hub's project/version.
+        session.Runtime.Release()
+        command=RestartCommand(options.project.resolve(),str(version))
+        try:
+            subprocess.Popen(command,cwd=Path(__file__).resolve().parent.parent,creationflags=subprocess.CREATE_NO_WINDOW if os.name=="nt" else 0)
+        except OSError as error:
+            QMessageBox.critical(None,session.Localization.Translate("restart.title"),session.Localization.Translate("restart.failed")+" "+str(error))
+            return 1
+        return 0
+    return result
+
+def RestartCommand(project:Path,version:str)->list[str]:
+    arguments=["--project",str(project),"--editor-version",version]
+    if getattr(sys,"frozen",False) or "__compiled__" in globals():return [sys.executable,*arguments]
+    return [sys.executable,"-m","Editor.main",*arguments]
 
 if __name__=="__main__":raise SystemExit(main())

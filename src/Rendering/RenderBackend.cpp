@@ -106,9 +106,38 @@ RenderBackend::RenderBackend() = default;
 
 RenderBackend::~RenderBackend() { Shutdown(); }
 
+std::vector<std::string> RenderBackend::SupportedBackends() {
+    std::vector<std::string> result{"automatic"};
+#if BAZZALT_FILAMENT_OPENGL
+    result.push_back("opengl");
+#endif
+#if BAZZALT_FILAMENT_VULKAN
+    result.push_back("vulkan");
+#endif
+#if BAZZALT_FILAMENT_METAL && defined(__APPLE__)
+    result.push_back("metal");
+#endif
+#if BAZZALT_FILAMENT_WEBGPU
+    result.push_back("webgpu");
+#endif
+    return result;
+}
+
+bool RenderBackend::ConfigureBackend(const std::string& backend) {
+    const auto supported=SupportedBackends();
+    if(std::find(supported.begin(),supported.end(),backend)==supported.end())return false;
+    if(m_engine)return backend==m_backend;
+    m_backend=backend;return true;
+}
+
 bool RenderBackend::Initialize() {
     if (m_engine != nullptr) return true;
-    m_engine = filament::Engine::create();
+    auto backend=filament::Engine::Backend::DEFAULT;
+    if(m_backend=="opengl")backend=filament::Engine::Backend::OPENGL;
+    else if(m_backend=="vulkan")backend=filament::Engine::Backend::VULKAN;
+    else if(m_backend=="metal")backend=filament::Engine::Backend::METAL;
+    else if(m_backend=="webgpu")backend=filament::Engine::Backend::WEBGPU;
+    m_engine = filament::Engine::create(backend);
     if (m_engine == nullptr) return false;
     m_renderer = m_engine->createRenderer();
     m_scene = m_engine->createScene();
@@ -362,7 +391,7 @@ void RenderBackend::Render() {
         if (!resource->SwapChain || !m_renderer->beginFrame(resource->SwapChain)) continue;
         if (resource->Kind == ViewportKind::Scene) {
             if (resource->View) m_renderer->render(resource->View);
-            if (resource->HelperView) {
+            if (resource->HelperView && m_orientationVisible) {
                 m_renderer->setClearOptions({.clearColor={0,0,0,0},.clear=false});
                 m_renderer->render(resource->HelperView);
                 m_renderer->setClearOptions({.clearColor={0.055,0.065,0.085,1.0},.clear=true});

@@ -72,6 +72,8 @@ class EditorMenuBar(QMenuBar):
     UndoRequested = Signal()
     RedoRequested = Signal()
     PreferencesRequested = Signal()
+    ProjectSettingsRequested = Signal()
+    EditCommandRequested = Signal(str)
     ResetWorkspaceRequested = Signal()
     MaximizeViewportRequested = Signal(bool)
     CameraPresetRequested = Signal(str)
@@ -138,6 +140,9 @@ class EditorMenuBar(QMenuBar):
 
         self.FileMenu.addSeparator()
         self.ExitAction = action = self.FileMenu.addAction("")
+        self.ProjectSettingsAction = QAction(self.FileMenu)
+        self.FileMenu.insertAction(action, self.ProjectSettingsAction)
+        self.ProjectSettingsAction.triggered.connect(self.ProjectSettingsRequested)
         action.setShortcut(QKeySequence.StandardKey.Quit)
         action.triggered.connect(self._Quit)
 
@@ -149,6 +154,12 @@ class EditorMenuBar(QMenuBar):
         self.RedoAction = action = self.EditMenu.addAction("")
         action.setShortcut(QKeySequence.StandardKey.Redo)
         action.triggered.connect(self.RedoRequested)
+        self.EditMenu.addSeparator()
+        self.EditActions={}
+        for key,shortcut in (("copy",QKeySequence.StandardKey.Copy),("paste",QKeySequence.StandardKey.Paste),("duplicate",QKeySequence("Ctrl+D")),("rename",QKeySequence("F2")),("delete",QKeySequence.StandardKey.Delete),("select_all",QKeySequence.StandardKey.SelectAll),("deselect_all",QKeySequence("Ctrl+Shift+A"))):
+            if key=="select_all":self.EditMenu.addSeparator()
+            action=self.EditMenu.addAction("");action.setShortcut(shortcut)
+            action.triggered.connect(lambda _=False,command=key:self.EditCommandRequested.emit(command));self.EditActions[key]=action
         self.EditMenu.addSeparator()
         self.PreferencesAction=action=self.EditMenu.addAction("")
         action.triggered.connect(self.PreferencesRequested)
@@ -217,6 +228,8 @@ class EditorMenuBar(QMenuBar):
         self.UndoAction.setText(tr("action.undo"))
         self.RedoAction.setText(tr("action.redo"))
         self.PreferencesAction.setText(tr("action.preferences"))
+        for key,action in self.EditActions.items():action.setText(tr("action."+key))
+        self.ProjectSettingsAction.setText(tr("action.project_settings"))
         self.MaximizeViewportAction.setText(tr("view.maximize"));self.CameraMenu.setTitle(tr("view.camera_presets"))
         for key,action in self.CameraActions.items():action.setText(tr(f"view.camera.{key}"))
         self.FocusSelectedAction.setText(tr("view.focus_selected"));self.FrameAllAction.setText(tr("view.frame_all"));self.GizmosAction.setText(tr("view.gizmos"));self.OverlaysMenu.setTitle(tr("view.overlays"));self.GridAction.setText(tr("view.grid"));self.IconsAction.setText(tr("view.icons"));self.StatsAction.setText(tr("view.stats"));self.NavMeshAction.setText(tr("view.navmesh"));self.ShadingMenu.setTitle(tr("view.shading"))

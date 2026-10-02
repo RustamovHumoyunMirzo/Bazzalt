@@ -1,6 +1,7 @@
 #include "Runtime/Engine.h"
 #include "Runtime/AssetDatabase.h"
 #include "Runtime/NativeScriptRuntime.h"
+#include "Runtime/TimeAccess.h"
 #include "Rendering/RenderBackend.h"
 #include "Rendering/RenderSystems.h"
 #include "Rendering/RenderAssets.h"
@@ -61,6 +62,8 @@ bool Engine::Init()
     m_frameCount = 0;
     m_deltaTime = 0.016f;
     m_lastFrameTime = std::chrono::steady_clock::now();
+    TimeAccess::Reset();
+    m_fixedAccumulator = 0.0;
     if(!m_scriptRuntime->Start(m_lastError)){DetachRenderSystems();m_renderBackend->Shutdown();m_isInitialized=false;return false;}
 
     std::cout << "[Engine] Initialization complete.\n";
@@ -78,18 +81,38 @@ void Engine::Update()
     ProcessPendingSceneLoad();
 
     const auto currentTime = std::chrono::steady_clock::now();
-    m_deltaTime = std::chrono::duration<float>(currentTime - m_lastFrameTime).count();
+    TimeAccess::Advance(std::chrono::duration<double>(currentTime - m_lastFrameTime).count());
+    m_deltaTime = Time::GetDeltaTime();
     m_lastFrameTime = currentTime;
 
     m_frameCount++;
+    m_fixedAccumulator += m_deltaTime;
+    // Bound catch-up work even if game code chooses an extremely short step.
+    int fixedSteps = 0;
+    while(!Time::IsPaused() && m_fixedAccumulator >= Time::GetFixedDeltaTime() && fixedSteps++ < 64) {
+        const float step = Time::GetFixedDeltaTime();
+        m_fixedAccumulator -= step;
+        TimeAccess::FixedScope fixed;
+        m_scene->FixedUpdate(step);
+        m_scriptRuntime->FixedUpdate(step);
+    }
+    if(fixedSteps > 64)m_fixedAccumulator = std::fmod(m_fixedAccumulator, double(Time::GetFixedDeltaTime()));
     m_scene->Update(m_deltaTime);
     m_scriptRuntime->Update(m_deltaTime);
     m_renderBackend->Render();
 }
 
+std::vector<std::string> Engine::SupportedRenderingBackends(){return RenderBackend::SupportedBackends();}
+bool Engine::ConfigureRenderingBackend(const std::string& backend){
+    if(m_renderBackend->ConfigureBackend(backend))return true;
+    m_lastError="Rendering backend is unsupported by this build or requires a restart.";return false;
+}
+
 void Engine::RenderEditorFrame()
 {
     if (!m_isInitialized) return;
+    // Editor and paused frames must not accumulate a giant gameplay delta.
+    m_lastFrameTime = std::chrono::steady_clock::now();
     ProcessPendingSceneLoad();
     m_scene->UpdateSystem<CameraSystem>();
     m_scene->UpdateSystem<LightSystem>();
@@ -100,9 +123,9 @@ void Engine::RenderEditorFrame()
     const auto line=[&](Vec3 a,Vec3 b,Vec4 color){guides.push_back({a.X,a.Y,a.Z,b.X,b.Y,b.Z,color.X,color.Y,color.Z,color.W});};
     const auto ring=[&](Vec3 center,Vec3 axisA,Vec3 axisB,float radius,Vec4 color){constexpr int steps=32;Vec3 previous=center+axisA*radius;for(int i=1;i<=steps;++i){const float angle=2.0f*Pi*static_cast<float>(i)/steps;Vec3 next=center+(axisA*std::cos(angle)+axisB*std::sin(angle))*radius;line(previous,next,color);previous=next;}};
     auto cameras=m_scene->GetRegistry().view<Camera>();
-    for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));const auto& camera=cameras.get<Camera>(handle);if(!camera.IsEnabled())continue;const Mat4 world=entity.GetWorldMatrix();const Vec3 p=world.TransformPoint({}),forward=world.TransformDirection({0,0,-1}).Normalized(),right=world.TransformDirection({1,0,0}).Normalized(),up=world.TransformDirection({0,1,0}).Normalized();icons.push_back({p.X,p.Y,p.Z,true});float aspect=camera.AspectRatio;if(camera.AspectMode==CameraAspectMode::Automatic){const float width=std::max(1.0f,float(m_renderBackend->GetPresentationWidth())*camera.Viewport.Width),height=std::max(1.0f,float(m_renderBackend->GetPresentationHeight())*camera.Viewport.Height);aspect=width/height;}const float nearPlane=std::max(.001f,camera.NearPlane),farPlane=std::max(nearPlane+.001f,camera.FarPlane);float nearHeight,farHeight;if(camera.Projection==CameraProjection::Perspective){nearHeight=std::tan(camera.VerticalFieldOfView*.5f)*nearPlane;farHeight=std::tan(camera.VerticalFieldOfView*.5f)*farPlane;}else nearHeight=farHeight=std::max(.001f,camera.OrthographicSize*.5f);const float nearWidth=nearHeight*aspect,farWidth=farHeight*aspect;std::array<Vec3,4> nearCorners,farCorners;for(int i=0;i<4;++i){const float x=(i==0||i==3)?-1.0f:1.0f,y=i<2?-1.0f:1.0f;nearCorners[i]=p+forward*nearPlane+right*(x*nearWidth)+up*(y*nearHeight);farCorners[i]=p+forward*farPlane+right*(x*farWidth)+up*(y*farHeight);}const Vec4 color{.35f,.72f,1,.82f};for(int i=0;i<4;++i){line(nearCorners[i],nearCorners[(i+1)%4],color);line(farCorners[i],farCorners[(i+1)%4],color);line(camera.Projection==CameraProjection::Perspective?p:nearCorners[i],farCorners[i],color);}}
+for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));const auto& camera=cameras.get<Camera>(handle);if(!camera.IsEnabled())continue;const Mat4 world=entity.GetWorldMatrix();const Vec3 p=world.TransformPoint({}),forward=world.TransformDirection({0,0,-1}).Normalized(),right=world.TransformDirection({1,0,0}).Normalized(),up=world.TransformDirection({0,1,0}).Normalized();icons.push_back({p.X,p.Y,p.Z,true});if(std::find(m_selectedObjects.begin(),m_selectedObjects.end(),entity.GetUUID())==m_selectedObjects.end())continue;float aspect=camera.AspectRatio;if(camera.AspectMode==CameraAspectMode::Automatic){const float width=std::max(1.0f,float(m_renderBackend->GetPresentationWidth())*camera.Viewport.Width),height=std::max(1.0f,float(m_renderBackend->GetPresentationHeight())*camera.Viewport.Height);aspect=width/height;}const float nearPlane=std::max(.001f,camera.NearPlane),farPlane=std::max(nearPlane+.001f,camera.FarPlane);float nearHeight,farHeight;if(camera.Projection==CameraProjection::Perspective){nearHeight=std::tan(camera.VerticalFieldOfView*.5f)*nearPlane;farHeight=std::tan(camera.VerticalFieldOfView*.5f)*farPlane;}else nearHeight=farHeight=std::max(.001f,camera.OrthographicSize*.5f);const float nearWidth=nearHeight*aspect,farWidth=farHeight*aspect;std::array<Vec3,4> nearCorners,farCorners;for(int i=0;i<4;++i){const float x=(i==0||i==3)?-1.0f:1.0f,y=i<2?-1.0f:1.0f;nearCorners[i]=p+forward*nearPlane+right*(x*nearWidth)+up*(y*nearHeight);farCorners[i]=p+forward*farPlane+right*(x*farWidth)+up*(y*farHeight);}const Vec4 color{.35f,.72f,1,.82f};for(int i=0;i<4;++i){line(nearCorners[i],nearCorners[(i+1)%4],color);line(farCorners[i],farCorners[(i+1)%4],color);line(camera.Projection==CameraProjection::Perspective?p:nearCorners[i],farCorners[i],color);}}
     auto lights=m_scene->GetRegistry().view<Light>();
-    for(auto handle:lights){Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));const auto& light=lights.get<Light>(handle);if(!light.IsEnabled())continue;const Mat4 world=entity.GetWorldMatrix();const Vec3 p=world.TransformPoint({}),forward=world.TransformDirection({0,0,-1}).Normalized(),right=world.TransformDirection({1,0,0}).Normalized(),up=world.TransformDirection({0,1,0}).Normalized();icons.push_back({p.X,p.Y,p.Z,false});const Vec4 color{light.Color.X,light.Color.Y,light.Color.Z,.82f};if(light.Type==LightType::Point){ring(p,right,up,light.Range,color);ring(p,right,forward,light.Range,color);ring(p,up,forward,light.Range,color);}else if(light.Type==LightType::Spot){const float length=std::max(.001f,light.Range),outer=std::tan(light.OuterConeAngle)*length,inner=std::tan(light.InnerConeAngle)*length;Vec3 end=p+forward*length;ring(end,right,up,outer,color);ring(end,right,up,inner,{color.X,color.Y,color.Z,.45f});for(const Vec3 offset:{right*outer,-right*outer,up*outer,-up*outer})line(p,end+offset,color);}else{const float length=std::max(3.0f,std::sqrt(std::max(0.0f,light.Intensity))*.1f),radius=std::tan(light.Type==LightType::Sun?light.SunAngularRadius:.03f)*length;Vec3 end=p+forward*length;ring(end,right,up,radius,color);line(p,end+right*radius,color);line(p,end-right*radius,color);line(p,end+up*radius,color);line(p,end-up*radius,color);}}
+    for(auto handle:lights){Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));const auto& light=lights.get<Light>(handle);if(!light.IsEnabled())continue;const Mat4 world=entity.GetWorldMatrix();const Vec3 p=world.TransformPoint({}),forward=world.TransformDirection({0,0,-1}).Normalized(),right=world.TransformDirection({1,0,0}).Normalized(),up=world.TransformDirection({0,1,0}).Normalized();icons.push_back({p.X,p.Y,p.Z,false});if(std::find(m_selectedObjects.begin(),m_selectedObjects.end(),entity.GetUUID())==m_selectedObjects.end())continue;const Vec4 color{light.Color.X,light.Color.Y,light.Color.Z,.82f};if(light.Type==LightType::Point){ring(p,right,up,light.Range,color);ring(p,right,forward,light.Range,color);ring(p,up,forward,light.Range,color);}else if(light.Type==LightType::Spot){const float length=std::max(.001f,light.Range),outer=std::tan(light.OuterConeAngle)*length,inner=std::tan(light.InnerConeAngle)*length;Vec3 end=p+forward*length;ring(end,right,up,outer,color);ring(end,right,up,inner,{color.X,color.Y,color.Z,.45f});for(const Vec3 offset:{right*outer,-right*outer,up*outer,-up*outer})line(p,end+offset,color);}else{const float length=std::max(3.0f,std::sqrt(std::max(0.0f,light.Intensity))*.1f),radius=std::tan(light.Type==LightType::Sun?light.SunAngularRadius:.03f)*length;Vec3 end=p+forward*length;ring(end,right,up,radius,color);line(p,end+right*radius,color);line(p,end-right*radius,color);line(p,end+up*radius,color);line(p,end-up*radius,color);}}
     m_renderBackend->SetEditorIcons(m_editorIconsVisible?icons:std::vector<RenderBackend::EditorIcon>{});
     if(!m_editorIconsVisible)guides.clear();
     auto outlined=m_selectedObjects;
@@ -163,6 +186,7 @@ void Engine::SetEditorGizmo(bool visible, float x, float y, float z, int mode) {
 void Engine::SetEditorGizmoHover(int axis) {
     m_renderBackend->SetEditorGizmoHover(axis);
 }
+void Engine::SetEditorOrientationVisible(bool visible){m_renderBackend->SetEditorOrientationVisible(visible);}
 
 void Engine::SetEditorGrid(bool visible, int plane) {
     m_renderBackend->SetEditorGrid(visible, plane);
@@ -200,7 +224,7 @@ void Engine::RequestClose()
 }
 
 bool Engine::ConfigureScripts(std::vector<ScriptBinding> bindings){return m_scriptRuntime->Configure(std::move(bindings),m_lastError);}
-bool Engine::StartScripts(){return m_scriptRuntime->Start(m_lastError);}
+bool Engine::StartScripts(){TimeAccess::Reset();m_fixedAccumulator=0.0;m_lastFrameTime=std::chrono::steady_clock::now();return m_scriptRuntime->Start(m_lastError);}
 void Engine::StopScripts(){m_scriptRuntime->Stop();}
 
 Scene& Engine::CreateScene()

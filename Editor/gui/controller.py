@@ -459,6 +459,7 @@ class EditorController(QObject):
 
     def _GizmoModeChanged(self, mode) -> None: self.Window.Scene.Surface.SetGizmoMode(mode);self._UpdateGizmo()
     def _UpdateGizmo(self) -> None:
+        self.Window.RefreshEditActions()
         self.Window.Scene.Surface._selected_entity_ids=set(self.SelectedEntities)
         self.Runtime.SetSelectionOutline(self.SelectedEntities)
         modes={GizmoMode.Select:0,GizmoMode.Translate:1,GizmoMode.Rotate:2,GizmoMode.Scale:3}
@@ -610,7 +611,7 @@ class EditorController(QObject):
             self.SetDirty(True);self.RefreshHierarchy()
 
     def CopyHierarchyEntities(self,entity_ids)->None:
-        selected={str(value) for value in entity_ids if value};entities=self.Runtime.Entities()
+        selected=list(dict.fromkeys(str(value) for value in entity_ids if value));entities=[entity for scene in self.Runtime.LoadedScenes() for entity in scene.get("entities",())]
         by_parent={}
         for entity in entities:by_parent.setdefault(str(entity.get("parent","")),[]).append(str(entity["uuid"]))
         roots=[value for value in selected if str(self.Runtime.EntityDetails(value).get("parent","")) not in selected]
@@ -618,6 +619,22 @@ class EditorController(QObject):
             details=dict(self.Runtime.EntityDetails(entity_id))
             return {"details":details,"children":[snapshot(child) for child in by_parent.get(entity_id,())]}
         self._hierarchy_clipboard=[snapshot(value) for value in roots]
+        self.Window.RefreshEditActions()
+
+    def DuplicateHierarchyEntities(self,entity_ids)->None:
+        if not entity_ids:return
+        previous=self._hierarchy_clipboard
+        self.CopyHierarchyEntities(entity_ids);nodes=self._hierarchy_clipboard;self._hierarchy_clipboard=previous
+        self.History.Begin("Duplicate entities");created=[];scenes=set()
+        try:
+            for node in nodes:
+                details=node["details"];parent=str(details.get("parent") or "")
+                if not parent or parent=="00000000-0000-0000-0000-000000000000":parent=str(details.get("scene_uuid") or "")
+                value=self._CloneHierarchyNode(node,parent,True)
+                if value:created.append(value);scenes.add(str(details.get("scene_uuid","")))
+        except Exception:self.History.Cancel();raise
+        if not created:self.History.Cancel();return
+        self.History.Commit();self.SetDirty(True,scenes);self.RefreshHierarchy();self.SelectEntities(created)
 
     def PasteHierarchyEntities(self,parent_id)->None:
         if not self._hierarchy_clipboard:return
@@ -640,6 +657,7 @@ class EditorController(QObject):
         for component,fields in details.get("component_data",{}).items():
             if component not in supported or not self.Runtime.AddComponent(entity,component):continue
             for field,value in dict(fields).items():self.Runtime.SetComponentProperty(entity,component,field,value)
+            self.Runtime.SetComponentEnabled(entity,component,bool(details.get("component_enabled",{}).get(component,True)))
         for child in node.get("children",()):self._CloneHierarchyNode(child,entity)
         return entity
 
