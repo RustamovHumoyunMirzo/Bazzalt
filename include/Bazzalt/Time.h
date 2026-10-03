@@ -1,4 +1,5 @@
 #pragma once
+#include "Bazzalt/Export.h"
 
 #include <chrono>
 #include <cmath>
@@ -71,8 +72,8 @@ public:
 private:
     friend class Runtime::TimeAccess;
     friend class ScriptRuntimeAccess;
-    static Detail::TimeState& State() { return *s_state; }
-    static void Bind(Detail::TimeState* state) { s_state = state ? state : &s_default; }
+    BAZZALT_API static Detail::TimeState& State();
+    BAZZALT_API static void Bind(Detail::TimeState* state);
     inline static Detail::TimeState s_default{};
     inline static Detail::TimeState* s_state = &s_default;
 };

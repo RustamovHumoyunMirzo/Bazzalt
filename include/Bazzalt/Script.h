@@ -5,6 +5,8 @@
 #include "Bazzalt/Component.h"
 #include "Bazzalt/Time.h"
 #include "Bazzalt/Input.h"
+#include "Bazzalt/Scene.h"
+#include "Bazzalt/SceneManager.h"
 
 namespace Bazzalt {
 class ScriptRuntimeAccess;
@@ -19,6 +21,11 @@ public:
     virtual void OnFixedUpdate(float fixedDeltaTime) { (void)fixedDeltaTime; }
     virtual void OnDestroy() {}
     [[nodiscard]] const std::string& GetEntityUUID() const { return m_entityUUID; }
+    [[nodiscard]] Entity GetEntity() const {
+        UUID id;
+        auto* scene = SceneManager::GetActiveScene();
+        return scene && UUID::TryParse(m_entityUUID, id) ? scene->GetEntity(id) : Entity{};
+    }
 private:
     friend class ScriptRuntimeAccess;
     std::string m_entityUUID;

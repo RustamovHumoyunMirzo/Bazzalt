@@ -1,4 +1,5 @@
 #pragma once
+#include "Bazzalt/Export.h"
 
 #include <cstdint>
 #include <string>
@@ -27,7 +28,7 @@ struct MaterialServices {
     bool (*Set)(UUID, const char*, ShaderParameterType, const MaterialValue*) = nullptr;
     UUID (*Clone)(UUID, bool) = nullptr;
 };
-inline MaterialServices* BoundMaterialServices = nullptr;
+extern BAZZALT_API MaterialServices* BoundMaterialServices;
 }
 class Shader final {
 public:

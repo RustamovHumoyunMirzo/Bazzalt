@@ -1,4 +1,5 @@
 #pragma once
+#include "Bazzalt/Export.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -23,7 +24,7 @@ struct ProjectMetadata {
     std::map<std::string, std::string> Properties;
 };
 
-class ProjectSerializer final {
+class BAZZALT_API ProjectSerializer final {
 private:
     friend class Runtime::Engine;
     bool Save(const ProjectMetadata& project, const std::filesystem::path& path);

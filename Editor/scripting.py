@@ -83,6 +83,17 @@ class ScriptCompiler:
             candidate=root/"toolchain"/"llvm"/"bin"/name
             if candidate.is_file():return candidate
         return None
+    def _sdk(self)->Path|None:
+        for root in (self.app_root/"ScriptSDK",self.engine_root/"build"/"ScriptSDK"):
+            if (root/"include/Bazzalt/Scene.h").is_file() and (root/"include/entt/entity/registry.hpp").is_file():return root
+        return None
+    def _link_library(self,sdk:Path)->Path|None:
+        names=("Bazzalt.lib",) if os.name=="nt" else ("libBazzalt.dylib",) if os.sys.platform=="darwin" else ("libBazzalt.so",)
+        for folder in (sdk/"lib/Release",sdk/"lib"):
+            for name in names:
+                candidate=folder/name
+                if candidate.is_file():return candidate
+        return None
     def Build(self, used: list[str|Path])->BuildResult:
         used=list(dict.fromkeys(Path(path).resolve() for path in used));assets=self.project/"Assets"
         project_sources=[path for path in assets.rglob("*") if path.is_file() and path.suffix.lower()==".cpp"] if assets.is_dir() else []
@@ -94,19 +105,27 @@ class ScriptCompiler:
         if not descriptors:return BuildResult(True)
         compiler=self._compiler()
         if compiler is None:return BuildResult(False,diagnostics=(Diagnostic("error","Bundled LLVM/Clang toolchain is missing. Repair this editor installation.",localization_key="scripting.toolchain_missing"),))
+        sdk=self._sdk();library=self._link_library(sdk) if sdk else None
+        if not library:return BuildResult(False,diagnostics=(Diagnostic("error","The matching Bazzalt script SDK/link library is missing. Rebuild or repair this editor installation.",localization_key="scripting.sdk_missing"),))
         self.cache.mkdir(parents=True,exist_ok=True)
         try:state=json.loads(self.state_file.read_text(encoding="utf-8"))
         except (OSError,json.JSONDecodeError):state={}
         outputs=[];diagnostics=[]
+        headers=b"".join(str(path.relative_to(sdk)).encode()+path.read_bytes() for path in sorted((sdk/"include").rglob("*.h")))
+        headers+=b"".join(str(path.relative_to(sdk)).encode()+path.read_bytes() for path in sorted((sdk/"include").rglob("*.hpp")))
+        sdk_digest=hashlib.sha256(headers+library.read_bytes()).digest()
         for descriptor in descriptors:
-            headers=b"".join((self.engine_root/f"include/Bazzalt/{name}.h").read_bytes() for name in ("Time","Input","Material","Shader"))
-            digest=hashlib.sha256(descriptor.path.read_bytes()+b"\0bazzalt-script-abi-1-wrapper-5-input-1-material-1"+headers).hexdigest()
+            digest=hashlib.sha256(descriptor.path.read_bytes()+b"\0bazzalt-script-linked-sdk-1"+sdk_digest).hexdigest()
             suffix=".dll" if os.name=="nt" else ".dylib" if os.sys.platform=="darwin" else ".so"
             output=self.cache/f"{descriptor.name}-{digest[:12]}{suffix}";outputs.append(output)
             if state.get(str(descriptor.path))==digest and output.exists():continue
             wrapper=self.cache/f"{descriptor.name}-{digest[:12]}.module.cpp"
             wrapper.write_text(self._Wrapper(descriptor),encoding="utf-8")
-            command=[str(compiler),"-std=c++20","-shared","-fvisibility=hidden",f"-I{self.engine_root/'include'}",str(wrapper),"-o",str(output)]
+            command=[str(compiler),"-std=c++20","-shared","-fvisibility=hidden",f"-I{sdk/'include'}",str(wrapper),str(library),"-o",str(output)]
+            if os.name=="nt":command.extend(["-fms-runtime-lib=dll","-D_ITERATOR_DEBUG_LEVEL=0"])
+            else:
+                command.extend(["-fPIC",f"-Wl,-rpath,{sdk/'lib'}"])
+                if os.sys.platform!="darwin":command.append("-Wl,--no-undefined")
             process=subprocess.run(command,cwd=self.project,text=True,capture_output=True,encoding="utf-8",errors="replace",creationflags=subprocess.CREATE_NO_WINDOW if os.name=="nt" else 0)
             for line in (process.stdout+"\n"+process.stderr).splitlines():
                 if line.strip():diagnostics.append(Diagnostic("error" if "error:" in line.lower() else "warning" if "warning:" in line.lower() else "info",line.strip()))
@@ -122,6 +141,10 @@ class ScriptCompiler:
             kind=prop.type.replace("const","").replace("&","").strip()
             if kind in ("bool",):body=f'self->{prop.name}=std::strcmp(value,"true")==0||std::strcmp(value,"1")==0;return true;'
             elif kind in ("string","std::string"):body=f'self->{prop.name}=value;return true;'
+            elif kind in ("EntityReference","Bazzalt::EntityReference"):
+                body=f'{{Bazzalt::UUID id;if(std::strcmp(value,"0")!=0&&std::strcmp(value,"")!=0&&!Bazzalt::UUID::TryParse(value,id))return false;self->{prop.name}=Bazzalt::EntityReference(id);return true;}}'
+            elif kind in ("Entity","Bazzalt::Entity"):
+                body=f'{{Bazzalt::UUID id;if(std::strcmp(value,"0")!=0&&std::strcmp(value,"")!=0&&!Bazzalt::UUID::TryParse(value,id))return false;auto* scene=Bazzalt::SceneManager::GetActiveScene();self->{prop.name}=id&&scene?scene->GetEntity(id):Bazzalt::Entity{{}};return true;}}'
             elif kind in ("Material","Bazzalt::Material","Shader","Bazzalt::Shader"):
                 type_name=kind.split("::")[-1];body=f'{{Bazzalt::UUID id;if(std::strcmp(value,"0")!=0&&!Bazzalt::UUID::TryParse(value,id))return false;self->{prop.name}=Bazzalt::{type_name}::Load(id);return !id||self->{prop.name}.IsValid();}}'
             elif kind in ("Vec2","Bazzalt::Vec2"):body=f'return std::sscanf(value,"%f,%f",&self->{prop.name}.X,&self->{prop.name}.Y)==2;'
@@ -135,6 +158,8 @@ class ScriptCompiler:
         wrapper += '\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltBindTimeV1(Bazzalt::Detail::TimeState* state){Bazzalt::ScriptRuntimeAccess::BindTime(state);}\n'
         wrapper += '\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltBindInputV1(Bazzalt::Detail::InputState* state){Bazzalt::ScriptRuntimeAccess::BindInput(state);}\n'
         wrapper = '#include <Bazzalt/Material.h>\n'+wrapper
+        wrapper = '#include <Bazzalt/EntityReference.h>\n'+wrapper
+        wrapper += '\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltBindEntitiesV1(Bazzalt::Detail::EntityServices* services){Bazzalt::Detail::BoundEntityServices=services;}\n'
         wrapper += '\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltBindMaterialsV1(Bazzalt::Detail::MaterialServices* services){Bazzalt::Detail::BoundMaterialServices=services;}\n'
         wrapper += f'\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltFixedUpdateV1(void* p,float dt){{static_cast<{name}*>(p)->OnFixedUpdate(dt);}}\n'
         return wrapper.replace(f"void* Create(){{return new {name}();}}",f"void* Create(const char* entity){{auto* value=new {name}();Bazzalt::ScriptRuntimeAccess::Bind(*value,entity);return value;}}")
@@ -161,7 +186,7 @@ class ScriptAttachments:
         if any(v.get("type")==descriptor.name or Path(v["source"]).resolve()==descriptor.path.resolve() for v in entries):return False
         names=[p.name for p in descriptor.properties]
         if len(names)!=len(set(names)):raise ScriptValidationError(f"Duplicate properties in component {descriptor.name}")
-        entries.append({"source":str(descriptor.path),"type":descriptor.name,"enabled":True,"properties":{p.name:"00000000-0000-0000-0000-000000000000" if p.type.replace("Bazzalt::","").strip() in ("Material","Shader") else _Literal(p.default) for p in descriptor.properties}});self.Save();return True
+        entries.append({"source":str(descriptor.path),"type":descriptor.name,"enabled":True,"properties":{p.name:"00000000-0000-0000-0000-000000000000" if p.type.replace("Bazzalt::","").strip() in ("Material","Shader","EntityReference","Entity") else _Literal(p.default) for p in descriptor.properties}});self.Save();return True
     def Remove(self,entity: str,type_name: str)->bool:
         entries=self.values.setdefault("entities",{}).setdefault(entity,[]);remaining=[v for v in entries if v.get("type")!=type_name]
         if len(remaining)==len(entries):return False

@@ -11,7 +11,14 @@
 namespace Bazzalt {
 
 Scene::Scene() {
+    RetainGameplayModule();
     CreateRootEntity();
+}
+
+void Scene::RetainGameplayModule() {
+    auto module = Detail::GetCurrentGameplayModule();
+    if (module && std::find(m_gameplayModules.begin(), m_gameplayModules.end(), module) == m_gameplayModules.end())
+        m_gameplayModules.push_back(std::move(module));
 }
 
 Scene::~Scene() {

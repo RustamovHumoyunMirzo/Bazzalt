@@ -28,6 +28,8 @@ resource ownership, and extension points for game code.
    and fixed updates.
    [Gameplay input](input.md) covers keyboard/mouse APIs, focus gating,
    Game maximization, and Play-mode restoration.
+   [Native script SDK](script-sdk.md) covers direct public API linking, shared
+   engine state, entity properties, and safe native module lifetime.
 9. [Roadmap](roadmap.md) — planned systems that are not part of the current API.
 
 ## API stability boundary

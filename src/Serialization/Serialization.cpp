@@ -52,7 +52,15 @@ bool ReadEnvironment(ryml::ConstNodeRef root,SceneEnvironment& v){
 }
 } // namespace
 
-void ComponentSerializationRegistry::RegisterDescriptor(Descriptor d){if(d.Type.empty()||d.Version==0||!d.Serialize||!d.Deserialize)throw std::invalid_argument("Component serializer descriptor is incomplete");for(auto& e:m_descriptors)if(e.Type==d.Type){e=std::move(d);return;}m_descriptors.emplace_back(std::move(d));}
+void ComponentSerializationRegistry::RegisterDescriptor(Descriptor d){
+    if(d.Type.empty()||d.Version==0||!d.Serialize||!d.Deserialize)throw std::invalid_argument("Component serializer descriptor is incomplete");
+    if(auto module=Detail::GetCurrentGameplayModule()) {
+        if(std::find(m_gameplayModules.begin(),m_gameplayModules.end(),module)==m_gameplayModules.end())
+            m_gameplayModules.push_back(std::move(module));
+    }
+    for(auto& e:m_descriptors)if(e.Type==d.Type){e=std::move(d);return;}
+    m_descriptors.emplace_back(std::move(d));
+}
 const ComponentSerializationRegistry::Descriptor* ComponentSerializationRegistry::Find(const std::string& t)const{for(const auto& d:m_descriptors)if(d.Type==t)return &d;return nullptr;}
 
 SceneSerializer::SceneSerializer(){m_components.Register<Transform>("Bazzalt.Transform",1,

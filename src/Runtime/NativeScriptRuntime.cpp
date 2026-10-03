@@ -1,5 +1,8 @@
 #include "Runtime/NativeScriptRuntime.h"
 #include "Bazzalt/Script.h"
+#include "Bazzalt/EntityReference.h"
+#include "Bazzalt/SceneManager.h"
+#include "Bazzalt/Scene.h"
 #include "Runtime/TimeAccess.h"
 #include "Runtime/InputAccess.h"
 #include "Runtime/MaterialLibrary.h"
@@ -13,7 +16,32 @@
 #include <dlfcn.h>
 #endif
 namespace Bazzalt::Runtime {
+namespace {
+struct ModuleScope {
+    std::shared_ptr<void> Previous;
+    explicit ModuleScope(std::shared_ptr<void> module) : Previous(Detail::SetCurrentGameplayModule(std::move(module))) {}
+    ~ModuleScope() { Detail::SetCurrentGameplayModule(std::move(Previous)); }
+};
+Detail::EntityServices EntityHostServices{
+    [](UUID id, Transform* value) {
+        auto* scene = SceneManager::GetActiveScene();
+        if (!scene || !value) return false;
+        auto entity = scene->GetEntity(id);
+        if (!entity) return false;
+        *value = entity.GetWorldTransform();
+        return true;
+    },
+    [](UUID id, const Transform* value) {
+        auto* scene = SceneManager::GetActiveScene();
+        if (!scene || !value) return false;
+        auto entity = scene->GetEntity(id);
+        if (!entity) return false;
+        return entity.SetWorldTransform(*value);
+    }
+};
+}
 struct NativeScriptRuntime::Instance {
+    std::shared_ptr<void> Lease;
 #ifdef _WIN32
     HMODULE Library{};
 #else
@@ -45,7 +73,15 @@ bool NativeScriptRuntime::Start(std::string& error){
 #else
         instance.Library=dlopen(binding.Module.c_str(),RTLD_NOW|RTLD_LOCAL);auto entry=instance.Library?reinterpret_cast<GetScriptModuleApi>(dlsym(instance.Library,"BazzaltGetScriptModuleV1")):nullptr;
 #endif
+        if(instance.Library) instance.Lease=std::shared_ptr<void>(instance.Library,[](void* library){
+#ifdef _WIN32
+            FreeLibrary(static_cast<HMODULE>(library));
+#else
+            dlclose(library);
+#endif
+        });
         if(!entry){error="Could not load script module: "+binding.Module.string();Stop();return false;}
+        ModuleScope moduleScope(instance.Lease);
         instance.Api=entry();
         if(!instance.Api||instance.Api->AbiVersion!=ScriptAbiVersion||!instance.Api->TypeName||binding.TypeName!=instance.Api->TypeName){error="Incompatible script module: "+binding.Module.string();m_instances.push_back(instance);Stop();return false;}
         // Optional service binding preserves compatibility with existing V1 modules.
@@ -63,6 +99,13 @@ bool NativeScriptRuntime::Start(std::string& error){
         auto bindInput=reinterpret_cast<BindInput>(dlsym(instance.Library,"BazzaltBindInputV1"));
 #endif
         if(bindInput)bindInput(InputAccess::GetState());
+        using BindEntities = void (*)(Detail::EntityServices*);
+#ifdef _WIN32
+        auto bindEntities=reinterpret_cast<BindEntities>(GetProcAddress(instance.Library,"BazzaltBindEntitiesV1"));
+#else
+        auto bindEntities=reinterpret_cast<BindEntities>(dlsym(instance.Library,"BazzaltBindEntitiesV1"));
+#endif
+        if(bindEntities)bindEntities(&EntityHostServices);
         using BindMaterials = void (*)(Detail::MaterialServices*);
 #ifdef _WIN32
         auto bindMaterials=reinterpret_cast<BindMaterials>(GetProcAddress(instance.Library,"BazzaltBindMaterialsV1"));
@@ -80,15 +123,9 @@ bool NativeScriptRuntime::Start(std::string& error){
         for(const auto& [name,value]:binding.Properties)if(instance.Api->SetProperty&&!instance.Api->SetProperty(instance.Object,name.c_str(),value.c_str())){error="Invalid property '"+name+"' on "+binding.TypeName;m_instances.push_back(instance);Stop();return false;}
         m_instances.push_back(instance);
     }
-    try{for(auto& instance:m_instances)instance.Api->OnCreate(instance.Object);}catch(const std::exception& e){error=std::string("Script OnCreate failed: ")+e.what();Stop();return false;}catch(...){error="Script OnCreate failed";Stop();return false;}return true;
+    try{for(auto& instance:m_instances){ModuleScope scope(instance.Lease);instance.Api->OnCreate(instance.Object);}}catch(const std::exception& e){error=std::string("Script OnCreate failed: ")+e.what();Stop();return false;}catch(...){error="Script OnCreate failed";Stop();return false;}return true;
 }
-void NativeScriptRuntime::Update(float deltaTime){for(auto& instance:m_instances)try{instance.Api->OnUpdate(instance.Object,deltaTime);}catch(...) {}}
-void NativeScriptRuntime::FixedUpdate(float deltaTime){for(auto& instance:m_instances)if(instance.OnFixedUpdate)try{instance.OnFixedUpdate(instance.Object,deltaTime);}catch(...) {}}
-void NativeScriptRuntime::Stop() noexcept{for(auto it=m_instances.rbegin();it!=m_instances.rend();++it)if(it->Object&&it->Api){try{it->Api->OnDestroy(it->Object);}catch(...){}try{it->Api->Destroy(it->Object);}catch(...){}}for(auto it=m_instances.rbegin();it!=m_instances.rend();++it)if(it->Library){
-#ifdef _WIN32
-FreeLibrary(it->Library);
-#else
-dlclose(it->Library);
-#endif
-}m_instances.clear();}
+void NativeScriptRuntime::Update(float deltaTime){for(auto& instance:m_instances)try{ModuleScope scope(instance.Lease);instance.Api->OnUpdate(instance.Object,deltaTime);}catch(...) {}}
+void NativeScriptRuntime::FixedUpdate(float deltaTime){for(auto& instance:m_instances)if(instance.OnFixedUpdate)try{ModuleScope scope(instance.Lease);instance.OnFixedUpdate(instance.Object,deltaTime);}catch(...) {}}
+void NativeScriptRuntime::Stop() noexcept{for(auto it=m_instances.rbegin();it!=m_instances.rend();++it)if(it->Object&&it->Api){ModuleScope scope(it->Lease);try{it->Api->OnDestroy(it->Object);}catch(...){}try{it->Api->Destroy(it->Object);}catch(...){}}m_instances.clear();}
 }

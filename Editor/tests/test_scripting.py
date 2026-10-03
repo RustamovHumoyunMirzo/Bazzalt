@@ -7,6 +7,25 @@ from Editor.localization import LocalizationManager
 from Editor.resources import ResourceManager
 
 class ScriptingTests(unittest.TestCase):
+    def test_walk_uses_real_entity_property(self):
+        descriptor=ScriptCompiler.Inspect(Path(__file__).resolve().parents[2]/"examples"/"Walk.cpp")
+        self.assertEqual(descriptor.name,"Walk")
+        self.assertEqual(descriptor.properties[0].type,"Bazzalt::Entity")
+        wrapper=ScriptCompiler._Wrapper(descriptor)
+        self.assertIn("BazzaltBindEntitiesV1",wrapper)
+        self.assertIn("self->Cube=id&&scene?scene->GetEntity(id)",wrapper)
+        with tempfile.TemporaryDirectory() as root:
+            store=ScriptAttachments(root);store.Attach("entity",descriptor)
+            self.assertEqual(store.For("entity")[0]["properties"]["Cube"],"00000000-0000-0000-0000-000000000000")
+    def test_sdk_is_staged_with_public_and_entt_headers_and_link_library(self):
+        root=Path(__file__).resolve().parents[2]
+        compiler=ScriptCompiler(root,engine_root=root,app_root=root/"build")
+        sdk=compiler._sdk()
+        if sdk is None:self.skipTest("native SDK is not built")
+        self.assertTrue((sdk/"include/Bazzalt/Scene.h").is_file())
+        self.assertTrue((sdk/"include/entt/entity/registry.hpp").is_file())
+        self.assertFalse((sdk/"include/Runtime").exists())
+        self.assertIsNotNone(compiler._link_library(sdk))
     source=Path(__file__).parent/"fixtures"/"scripts"/"Mover.cpp"
     def test_inspects_component_and_properties(self):
         value=ScriptCompiler.Inspect(self.source)

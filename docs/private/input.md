@@ -89,3 +89,23 @@ ABI implementation details, not APIs for gameplay code to initialize input.
 Native tests cover edge/hold semantics, mouse accumulation, invalid keys, focus
 reset, and sharing input through a real loaded module. Editor tests cover Play,
 Stop restoration, focus gating, maximization, and loaded-scene folder renaming.
+
+## WASD example and entity references
+
+`examples/Walk.cpp` declares a `Walk` behavior with `Cube` and `Speed` properties.
+Attach it to an entity, assign a cube by dragging its hierarchy row into `Cube`
+or double-clicking it in the field's picker, then enter Play and focus Game.
+W/S move along negative/positive world Z; A/D move along negative/positive X.
+Movement uses the scaled update delta and normalized direction, so diagonal
+movement is not faster. Stop restores the authoring scene.
+
+Include `Bazzalt/EntityReference.h` for script-safe entity properties.
+`EntityReference(UUID)` stores a stable, non-owning UUID rather than a registry
+pointer. `GetUUID()` returns it; `IsValid()` resolves it in the active scene.
+`TryGetWorldTransform(Transform&)` reads the resolved world transform, and
+`SetWorldTransform(const Transform&)` writes it while respecting hierarchy.
+Both return false for missing/unassigned entities or an unbound runtime. Only
+the active scene is resolved; references to inactive scenes cannot be moved.
+The reference resolves to the real `Entity` through the shared engine library.
+Scripts can also declare `PROPERTY(Bazzalt::Entity, Cube, {})` and call the
+ordinary Entity/Scene APIs directly. See [Script SDK](script-sdk.md).

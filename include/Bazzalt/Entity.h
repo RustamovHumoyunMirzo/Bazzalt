@@ -1,4 +1,6 @@
 #pragma once
+#include "Bazzalt/Export.h"
+#include "Bazzalt/Detail/ModuleLifetime.h"
 
 #include <cstdint>
 #include <stdexcept>
@@ -22,7 +24,7 @@ struct Identity;
 struct Name;
 struct Transform;
 
-class Entity final {
+class BAZZALT_API Entity final {
 public:
     using Id = std::uint32_t;
 
@@ -147,6 +149,7 @@ private:
     void RequireValid(const char* operation) const {
         if (!IsValid())
             throw std::logic_error(std::string(operation) + " called on an invalid entity");
+        Detail::RetainGameplayModule(m_scene);
     }
 
     entt::entity m_handle{entt::null};

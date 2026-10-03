@@ -7,7 +7,7 @@ from math import cos, sin
 from time import monotonic
 
 from PySide6.QtCore import QObject, QSignalBlocker, QTimer, Qt
-from PySide6.QtWidgets import QApplication, QFileDialog, QLabel, QMenu, QProgressDialog, QLineEdit, QWidgetAction
+from PySide6.QtWidgets import QApplication, QFileDialog, QLabel, QMenu, QProgressDialog, QLineEdit, QWidgetAction, QDialog, QVBoxLayout, QListWidget, QListWidgetItem
 
 from ..runtime import RuntimeService
 from ..history import SceneHistory
@@ -20,7 +20,7 @@ from .panels import ConsoleLevel
 from .panels.assets import (ENVIRONMENT_EXTENSIONS, IMAGE_EXTENSIONS,
                             MODEL_EXTENSIONS, SHADER_EXTENSIONS)
 from .gizmos import GizmoMode, Vec3
-from .widgets import AssetPickerInput, BoolInput, ColorInput, EnumInput, FloatInput, IntInput, PlayState, StringInput, UIntInput, Vec2Input, Vec3Input, Vec4Input
+from .widgets import AssetPickerInput, ObjectPickerInput, BoolInput, ColorInput, EnumInput, FloatInput, IntInput, PlayState, StringInput, UIntInput, Vec2Input, Vec3Input, Vec4Input
 
 
 class EditorController(QObject):
@@ -595,6 +595,23 @@ class EditorController(QObject):
         try:descriptor=ScriptCompiler.Inspect(script.get("source",""))
         except ScriptValidationError:descriptor=None
         prop=next((p for p in descriptor.properties if p.name==name),None) if descriptor else None
+        if prop and prop.type.replace("Bazzalt::","").strip() in ("EntityReference","Entity"):
+            entities={str(item["uuid"]):item for item in self.Runtime.Entities()}
+            editor=ObjectPickerInput(validator=lambda v:v in entities)
+            def assign(v):
+                editor.Display.setText(entities.get(str(v),{}).get("name", ""))
+                commit(v or "00000000-0000-0000-0000-000000000000")
+            editor.SetValue(value if value in entities else None,entities.get(value,{}).get("name",""))
+            editor.ValueChanged.connect(assign)
+            def pick():
+                dialog=QDialog(editor);dialog.setWindowTitle(name);layout=QVBoxLayout(dialog);items=QListWidget(dialog);layout.addWidget(items)
+                for uuid,entity in entities.items():
+                    item=QListWidgetItem(entity.get("name",""));item.setData(Qt.ItemDataRole.UserRole,uuid);items.addItem(item)
+                def accept(item):
+                    editor.SetValue(item.data(Qt.ItemDataRole.UserRole));dialog.accept()
+                items.itemDoubleClicked.connect(accept);dialog.exec()
+            editor.PickRequested.connect(pick)
+            return editor
         if prop and prop.type.replace("Bazzalt::","").strip() in ("Material","Shader"):
             return self._AssetPicker(value,{".matinst"} if "Material" in prop.type else {".mat",".shad"},commit)
         if isinstance(value,bool):editor=BoolInput(value);editor.ValueChanged.connect(commit);return editor

@@ -1,4 +1,5 @@
 #pragma once
+#include "Bazzalt/Export.h"
 
 #include <filesystem>
 #include <string>
@@ -11,7 +12,7 @@ class Scene;
 namespace Runtime { class Engine; }
 
 // Small game-facing facade. Loads are deferred to a safe frame boundary.
-class SceneManager final {
+class BAZZALT_API SceneManager final {
 public:
     SceneManager() = delete;
 

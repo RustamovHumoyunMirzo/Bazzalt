@@ -142,12 +142,25 @@ file(GLOB_RECURSE LIB_HEADERS CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h"
 )
 
-add_library(Bazzalt STATIC
+add_library(Bazzalt SHARED
     ${LIB_SOURCES}
     ${LIB_HEADERS}
     ${BAZZALT_EMBEDDED_HEADERS}
 )
-set_target_properties(Bazzalt PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_target_properties(Bazzalt PROPERTIES POSITION_INDEPENDENT_CODE ON
+    WINDOWS_EXPORT_ALL_SYMBOLS ON
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/ScriptSDK/lib"
+    BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+target_compile_definitions(Bazzalt PRIVATE BAZZALT_BUILDING_LIBRARY)
+# SDK staged beside the editor: public headers only, with the EnTT dependency.
+add_custom_command(TARGET Bazzalt POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/include/Bazzalt" "${CMAKE_BINARY_DIR}/ScriptSDK/include/Bazzalt"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${BAZZALT_ENTT_DIR}/src/entt" "${CMAKE_BINARY_DIR}/ScriptSDK/include/entt"
+    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:Bazzalt>" "${CMAKE_BINARY_DIR}/ScriptSDK/lib/$<TARGET_FILE_NAME:Bazzalt>"
+    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_LINKER_FILE:Bazzalt>" "${CMAKE_BINARY_DIR}/ScriptSDK/lib/$<TARGET_LINKER_FILE_NAME:Bazzalt>"
+    VERBATIM)
 
 target_include_directories(Bazzalt
     PUBLIC
@@ -225,10 +238,18 @@ target_link_libraries(BazzaltExample
     PRIVATE
     Bazzalt
 )
+if(WIN32)
+    add_custom_command(TARGET BazzaltExample POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE_DIR:BazzaltExample>/$<TARGET_FILE_NAME:Bazzalt>")
+endif()
 
 include(CTest)
 if(BUILD_TESTING)
     function(bazzalt_enable_test_assertions target)
+        if(WIN32)
+            add_custom_command(TARGET ${target} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE_DIR:${target}>/$<TARGET_FILE_NAME:Bazzalt>")
+        endif()
         if(MSVC)
             target_compile_options(${target} PRIVATE /UNDEBUG)
         else()
@@ -239,6 +260,7 @@ if(BUILD_TESTING)
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/MathTests.cpp"
     )
     add_executable(BazzaltTimeTests tests/TimeTests.cpp)
+    target_link_libraries(BazzaltTimeTests PRIVATE Bazzalt)
     add_executable(BazzaltInputTests tests/InputTests.cpp)
     target_link_libraries(BazzaltInputTests PRIVATE Bazzalt)
     target_include_directories(BazzaltInputTests PRIVATE src)
@@ -289,8 +311,16 @@ if(BUILD_TESTING)
     add_test(NAME BazzaltAssetPipelineTests COMMAND BazzaltAssetPipelineTests)
 
     add_library(BazzaltScriptLifecycleModule MODULE tests/fixtures/ScriptLifecycleModule.cpp)
-    target_include_directories(BazzaltScriptLifecycleModule PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    target_link_libraries(BazzaltScriptLifecycleModule PRIVATE Bazzalt)
     set_target_properties(BazzaltScriptLifecycleModule PROPERTIES PREFIX "")
+    add_library(BazzaltPublicApiModule MODULE tests/fixtures/PublicApiModule.cpp)
+    target_link_libraries(BazzaltPublicApiModule PRIVATE Bazzalt)
+    set_target_properties(BazzaltPublicApiModule PROPERTIES PREFIX "")
+    add_executable(BazzaltPublicScriptApiTests tests/PublicScriptApiTests.cpp)
+    target_include_directories(BazzaltPublicScriptApiTests PRIVATE src)
+    target_link_libraries(BazzaltPublicScriptApiTests PRIVATE Bazzalt)
+    bazzalt_enable_test_assertions(BazzaltPublicScriptApiTests)
+    add_test(NAME BazzaltPublicScriptApiTests COMMAND BazzaltPublicScriptApiTests $<TARGET_FILE:BazzaltPublicApiModule>)
     add_executable(BazzaltNativeScriptRuntimeTests tests/NativeScriptRuntimeTests.cpp)
     target_include_directories(BazzaltNativeScriptRuntimeTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_link_libraries(BazzaltNativeScriptRuntimeTests PRIVATE Bazzalt ${CMAKE_DL_LIBS})

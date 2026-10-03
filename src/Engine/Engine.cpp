@@ -30,6 +30,7 @@ Engine::Engine()
 {
     SceneManager::Bind(this);
     AssetManager::Bind(this);
+    Detail::BoundMaterialServices = GetMaterialServices();
 }
 
 Engine::~Engine()

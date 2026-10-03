@@ -1,4 +1,5 @@
 #pragma once
+#include "Bazzalt/Export.h"
 #include <array>
 #include <cstdint>
 #include "Bazzalt/Math.h"
@@ -36,17 +37,17 @@ struct InputState {
 class Input final {
 public:
     Input()=delete;
-    [[nodiscard]] static bool IsActive(){return s_state->Active;}
-    [[nodiscard]] static bool GetKey(KeyCode key){return Key(s_state->Keys,key);}
-    [[nodiscard]] static bool GetKeyDown(KeyCode key){return Key(s_state->KeysDown,key);}
-    [[nodiscard]] static bool GetKeyUp(KeyCode key){return Key(s_state->KeysUp,key);}
-    [[nodiscard]] static bool GetMouseButton(MouseButton button){return Button(s_state->Buttons,button);}
-    [[nodiscard]] static bool GetMouseButtonDown(MouseButton button){return Button(s_state->ButtonsDown,button);}
-    [[nodiscard]] static bool GetMouseButtonUp(MouseButton button){return Button(s_state->ButtonsUp,button);}
-    [[nodiscard]] static Vec2 GetMousePosition(){return IsActive()?s_state->MousePosition:Vec2{};}
-    [[nodiscard]] static Vec2 GetMouseDelta(){return IsActive()?s_state->MouseDelta:Vec2{};}
-    [[nodiscard]] static Vec2 GetScrollDelta(){return IsActive()?s_state->ScrollDelta:Vec2{};}
-    [[nodiscard]] static bool GetAnyKey(){if(!IsActive())return false;for(auto key:s_state->Keys)if(key)return true;for(auto button:s_state->Buttons)if(button)return true;return false;}
+    [[nodiscard]] static bool IsActive(){return State().Active;}
+    [[nodiscard]] static bool GetKey(KeyCode key){return Key(State().Keys,key);}
+    [[nodiscard]] static bool GetKeyDown(KeyCode key){return Key(State().KeysDown,key);}
+    [[nodiscard]] static bool GetKeyUp(KeyCode key){return Key(State().KeysUp,key);}
+    [[nodiscard]] static bool GetMouseButton(MouseButton button){return Button(State().Buttons,button);}
+    [[nodiscard]] static bool GetMouseButtonDown(MouseButton button){return Button(State().ButtonsDown,button);}
+    [[nodiscard]] static bool GetMouseButtonUp(MouseButton button){return Button(State().ButtonsUp,button);}
+    [[nodiscard]] static Vec2 GetMousePosition(){return IsActive()?State().MousePosition:Vec2{};}
+    [[nodiscard]] static Vec2 GetMouseDelta(){return IsActive()?State().MouseDelta:Vec2{};}
+    [[nodiscard]] static Vec2 GetScrollDelta(){return IsActive()?State().ScrollDelta:Vec2{};}
+    [[nodiscard]] static bool GetAnyKey(){if(!IsActive())return false;for(auto key:State().Keys)if(key)return true;for(auto button:State().Buttons)if(button)return true;return false;}
     [[nodiscard]] static float GetAxis(InputAxis axis){
         switch(axis){
         case InputAxis::Horizontal:return float(GetKey(KeyCode::D)||GetKey(KeyCode::Right))-float(GetKey(KeyCode::A)||GetKey(KeyCode::Left));
@@ -60,7 +61,8 @@ private:
     friend class ScriptRuntimeAccess;
     static bool Key(const std::array<std::uint8_t,512>& values,KeyCode key){const auto index=static_cast<std::size_t>(key);return IsActive()&&index>0&&index<values.size()&&values[index];}
     static bool Button(const std::array<std::uint8_t,6>& values,MouseButton button){const auto index=static_cast<std::size_t>(button);return IsActive()&&index>0&&index<values.size()&&values[index];}
-    static void Bind(Detail::InputState* state){s_state=state?state:&s_default;}
+    BAZZALT_API static Detail::InputState& State();
+    BAZZALT_API static void Bind(Detail::InputState* state);
     inline static Detail::InputState s_default{};
     inline static Detail::InputState* s_state=&s_default;
 };

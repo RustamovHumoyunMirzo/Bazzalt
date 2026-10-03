@@ -55,13 +55,17 @@ cmake --build build --config Debug
 ctest --test-dir build -C Debug --output-on-failure
 ```
 
-The repository builds a static `Bazzalt` target, a public API example, and test
+The repository builds a shared `Bazzalt` target, a public API example, and test
 executables. A CMake consumer can link it directly:
 
 ```cmake
 add_subdirectory(path/to/BAZZALT)
 target_link_libraries(MyGame PRIVATE Bazzalt)
 ```
+
+The editor and native gameplay modules use the same shared engine. Builds stage
+public headers, EnTT headers, and the link library in `build/ScriptSDK`.
+See [Native gameplay script SDK](script-sdk.md) for module linking and lifetime.
 
 ## First component and system
 

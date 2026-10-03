@@ -1,4 +1,5 @@
 #pragma once
+#include "Bazzalt/Export.h"
 
 #include <filesystem>
 #include <optional>
@@ -11,7 +12,7 @@ namespace Bazzalt {
 namespace Runtime { class Engine; }
 
 // Read-only game-facing access to the editor-built asset database.
-class AssetManager final {
+class BAZZALT_API AssetManager final {
 public:
     AssetManager() = delete;
 

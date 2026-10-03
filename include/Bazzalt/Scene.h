@@ -27,7 +27,7 @@ namespace Bazzalt {
 
 namespace Runtime { class Engine; }
 
-class Scene final {
+class BAZZALT_API Scene final {
 public:
     Scene();
     ~Scene();
@@ -101,6 +101,7 @@ public:
 
     template<typename SystemType, typename... Args>
     SystemType& AddSystem(Args&&... args) {
+        RetainGameplayModule();
         static_assert(std::is_base_of_v<System, SystemType>,
                       "SystemType must derive from Bazzalt::System");
         if (m_isUpdating)
@@ -160,10 +161,12 @@ public:
         return true;
     }
 
-    [[nodiscard]] entt::registry& GetRegistry() { return m_registry; }
+    [[nodiscard]] entt::registry& GetRegistry() { RetainGameplayModule(); return m_registry; }
     [[nodiscard]] const entt::registry& GetRegistry() const { return m_registry; }
 
 private:
+    friend void Detail::RetainGameplayModule(Scene*);
+    void RetainGameplayModule();
     SceneEnvironment m_environment{};
     friend class SceneSerializer;
     friend class Runtime::Engine;
@@ -184,6 +187,8 @@ private:
     void DetachFromParent(Entity entity);
     [[nodiscard]] bool Owns(Entity entity) const;
 
+    // Declared before registry: released after systems and component pools die.
+    std::vector<std::shared_ptr<void>> m_gameplayModules;
     entt::registry m_registry;
     UUID m_uuid = UUID::Generate();
     std::unordered_map<UUID, entt::entity> m_uuidLookup;

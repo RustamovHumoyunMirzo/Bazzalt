@@ -168,6 +168,7 @@
   "scripting.compiler_source": "Compiler",
   "scripting.runtime_source": "Runtime",
   "scripting.toolchain_missing": "Bundled LLVM/Clang toolchain is missing. Repair this editor installation.",
+  "scripting.sdk_missing": "The matching Bazzalt script SDK/link library is missing. Rebuild or repair this editor installation.",
   "scripting.compile_success": "Compiled {count} script module(s).",
   "preferences.title": "Preferences",
   "preferences.section.general": "General",

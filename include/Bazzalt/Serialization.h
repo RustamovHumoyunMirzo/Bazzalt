@@ -30,7 +30,7 @@ struct UnresolvedComponents : Component {
     std::vector<SerializedComponent> Values;
 };
 
-class ComponentSerializationRegistry final {
+class BAZZALT_API ComponentSerializationRegistry final {
 public:
     struct Descriptor {
         std::string Type;
@@ -75,10 +75,11 @@ public:
     [[nodiscard]] const std::vector<Descriptor>& GetDescriptors() const { return m_descriptors; }
 
 private:
+    std::vector<std::shared_ptr<void>> m_gameplayModules;
     std::vector<Descriptor> m_descriptors;
 };
 
-class SceneSerializer final {
+class BAZZALT_API SceneSerializer final {
 public:
     static constexpr std::uint32_t CurrentFormatVersion = 1;
 

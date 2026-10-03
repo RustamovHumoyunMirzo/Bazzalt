@@ -1,4 +1,5 @@
 #pragma once
+#include "Bazzalt/EcsConfig.h"
 
 #include <cstdint>
 

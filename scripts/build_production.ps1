@@ -41,6 +41,10 @@ New-Item -ItemType Directory -Force -Path $EditorTarget | Out-Null
 Copy-Item -Path (Join-Path $EditorBuild "*") -Destination $EditorTarget -Recurse -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $EditorTarget "Editor") | Out-Null
 Copy-Item -LiteralPath $Native.FullName -Destination (Join-Path $EditorTarget "Editor/$($Native.Name)") -Force
+$EngineLibrary = Join-Path $Build "Editor/Release/Bazzalt.dll"
+if (-not (Test-Path -LiteralPath $EngineLibrary)) { throw "Shared Bazzalt engine is missing" }
+Copy-Item -LiteralPath $EngineLibrary -Destination (Join-Path $EditorTarget "Editor/Bazzalt.dll") -Force
+Copy-Item -LiteralPath (Join-Path $Build "ScriptSDK") -Destination (Join-Path $EditorTarget "ScriptSDK") -Recurse -Force
 $Bshader = Join-Path $Build "Editor/Release/bshad.dll"
 if (-not (Test-Path -LiteralPath $Bshader)) { throw "Bshader editor translator is missing" }
 Copy-Item -LiteralPath $Bshader -Destination (Join-Path $EditorTarget "Editor/bshad.dll") -Force
