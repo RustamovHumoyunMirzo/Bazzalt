@@ -1,6 +1,7 @@
 #include "Runtime/NativeScriptRuntime.h"
 #include "Bazzalt/Script.h"
 #include "Runtime/TimeAccess.h"
+#include "Runtime/InputAccess.h"
 #include "Runtime/MaterialLibrary.h"
 #include <exception>
 #include <map>
@@ -55,6 +56,13 @@ bool NativeScriptRuntime::Start(std::string& error){
         auto bindTime=reinterpret_cast<BindTime>(dlsym(instance.Library,"BazzaltBindTimeV1"));
 #endif
         if(bindTime)bindTime(TimeAccess::GetState());
+        using BindInput = void (*)(Detail::InputState*);
+#ifdef _WIN32
+        auto bindInput=reinterpret_cast<BindInput>(GetProcAddress(instance.Library,"BazzaltBindInputV1"));
+#else
+        auto bindInput=reinterpret_cast<BindInput>(dlsym(instance.Library,"BazzaltBindInputV1"));
+#endif
+        if(bindInput)bindInput(InputAccess::GetState());
         using BindMaterials = void (*)(Detail::MaterialServices*);
 #ifdef _WIN32
         auto bindMaterials=reinterpret_cast<BindMaterials>(GetProcAddress(instance.Library,"BazzaltBindMaterialsV1"));

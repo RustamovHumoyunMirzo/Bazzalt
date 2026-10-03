@@ -14,12 +14,12 @@ On Linux or macOS, use `./scripts/run_editor.sh /path/to/Game.bproject`.
 
 ## Requirements
 
-- CMake 3.15 or newer
+- CMake 3.16 or newer
 - A C++20 compiler
 - Git, `curl`, and an archive tool used by the dependency scripts
 - A graphics driver supported by the selected Filament backend
 
-BAZZALT pins EnTT, rapidyaml, and the Filament SDK through scripts in
+BAZZALT pins EnTT, SDL3, rapidyaml, and the Filament SDK through scripts in
 `scripts/`. Dependencies are placed under `deps/` and do not expand the public
 include surface.
 
@@ -29,6 +29,7 @@ Windows PowerShell:
 
 ```powershell
 ./scripts/get_entt.ps1
+./scripts/get_sdl3.ps1
 ./scripts/get_rapidyaml.ps1
 ./scripts/get_filament.ps1
 ```
@@ -37,6 +38,7 @@ Linux or macOS:
 
 ```bash
 ./scripts/get_entt.sh
+./scripts/get_sdl3.sh
 ./scripts/get_rapidyaml.sh
 ./scripts/get_filament.sh
 ```

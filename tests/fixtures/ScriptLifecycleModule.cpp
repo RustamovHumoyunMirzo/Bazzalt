@@ -10,7 +10,7 @@ public:
     PROPERTY(Bazzalt::Material, Surface, {})
     void Write(const char* value){std::ofstream(LogPath,std::ios::app)<<value<<':'<<GetEntityUUID()<<'\n';}
     void OnCreate() override { if(!Bazzalt::Detail::BoundMaterialServices)throw std::runtime_error("Material host service was not bound");if(Surface.IsValid())Surface.SetFloat("roughness",0.1f);Bazzalt::Time::SetSlowMotion(0.25f);Write("create"); }
-    void OnUpdate(float delta) override { if(Bazzalt::Time::GetDeltaTime()!=delta)throw std::runtime_error("Module clock was not shared");Write("update"); }
+    void OnUpdate(float delta) override { if(Bazzalt::Time::GetDeltaTime()!=delta)throw std::runtime_error("Module clock was not shared");Write("update");if(Bazzalt::Input::GetKeyDown(Bazzalt::KeyCode::W))Write("input_w"); }
     void OnFixedUpdate(float delta) override { if(!Bazzalt::Time::IsInFixedTimeStep()||Bazzalt::Time::GetDeltaTime()!=delta)throw std::runtime_error("Module fixed clock was not shared");Write("fixed"); }
     void OnDestroy() override { Write("destroy"); }
 };
@@ -31,5 +31,6 @@ const Bazzalt::ScriptModuleApi Api{Bazzalt::ScriptAbiVersion,"LifecycleProbe",Cr
 #endif
 extern "C" SCRIPT_EXPORT const Bazzalt::ScriptModuleApi* BazzaltGetScriptModuleV1(){return &Api;}
 extern "C" SCRIPT_EXPORT void BazzaltBindTimeV1(Bazzalt::Detail::TimeState* state){Bazzalt::ScriptRuntimeAccess::BindTime(state);}
+extern "C" SCRIPT_EXPORT void BazzaltBindInputV1(Bazzalt::Detail::InputState* state){Bazzalt::ScriptRuntimeAccess::BindInput(state);}
 extern "C" SCRIPT_EXPORT void BazzaltBindMaterialsV1(Bazzalt::Detail::MaterialServices* services){Bazzalt::Detail::BoundMaterialServices=services;}
 extern "C" SCRIPT_EXPORT void BazzaltFixedUpdateV1(void* value,float delta){static_cast<LifecycleProbe*>(value)->OnFixedUpdate(delta);}

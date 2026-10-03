@@ -24,6 +24,7 @@
 #include "Runtime/Engine.h"
 #include "Bazzalt/Material.h"
 #include "Runtime/NativeScriptRuntime.h"
+#include "Runtime/InputAccess.h"
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Components/Light.h"
 #include "Rendering/LightParameters.h"
@@ -171,6 +172,23 @@ public:
         loaded.Path=target;if(*found==m_activeScene){m_scenePath=target;UpdateStartupScene();}AcquireSceneLock(loaded);return true;
     }
     bool IsSceneLoaded(const std::string& path) { return FindLoadedScene(path).has_value(); }
+    bool RenameAssetDirectory(const std::string& source,const std::string& destination){
+        if(m_projectPath.empty())return false;
+        const auto root=std::filesystem::weakly_canonical(m_projectPath.parent_path()/m_engine->GetProject().AssetDirectory);
+        const auto old=std::filesystem::weakly_canonical(std::filesystem::u8path(source));
+        const auto target=std::filesystem::u8path(destination).lexically_normal();const auto relative=old.lexically_relative(root);
+        if(relative.empty()||relative=="."||*relative.begin()==".."||old.parent_path()!=target.parent_path()||!std::filesystem::is_directory(old)||std::filesystem::exists(target))return false;
+        std::vector<std::pair<std::size_t,std::filesystem::path>> moved;
+        for(std::size_t i=0;i<m_loadedScenes.size();++i){
+            const auto rel=m_loadedScenes[i].Path.lexically_relative(old);
+            if(!rel.empty()&&*rel.begin()!=".."){moved.emplace_back(i,target/rel);ReleaseSceneLock(m_loadedScenes[i]);}
+        }
+        std::error_code error;std::filesystem::rename(old,target,error);
+        if(!error)for(const auto& [index,path]:moved){m_loadedScenes[index].Path=path;if(index==m_activeScene){m_scenePath=path;UpdateStartupScene();}}
+        for(const auto& [index,_]:moved)AcquireSceneLock(m_loadedScenes[index]);
+        if(error){m_bridgeError=error.message();return false;}
+        m_bridgeError.clear();return true;
+    }
     std::string LastError() const { return m_bridgeError.empty()?m_engine->GetLastError():m_bridgeError; }
     std::vector<std::string> SupportedRenderingBackends() const {return Runtime::Engine::SupportedRenderingBackends();}
     bool ConfigureRenderingBackend(const std::string& backend){return m_engine->ConfigureRenderingBackend(backend);}
@@ -438,10 +456,21 @@ public:
         m_snapshot = std::filesystem::temp_directory_path() /
             ("bazzalt-editor-play-" + UUID::Generate().ToString() + ".bscene");
         if (!m_engine->SaveScene(m_snapshot)) return false;
-        if (!m_engine->Init()||!m_engine->StartScripts()) { CleanupSnapshot(); return false; }
+        for(std::size_t i=0;i<m_loadedScenes.size();++i)if(i!=m_activeScene){
+            const auto path=std::filesystem::temp_directory_path()/("bazzalt-editor-play-"+UUID::Generate().ToString()+".bscene");
+            if(!m_engine->SaveSceneAsset(SceneAt(i),path)){CleanupSnapshot();return false;}
+            m_extraSnapshots.emplace_back(SceneAt(i).GetUUID(),path);
+        }
+        if (!m_engine->Init()||!m_engine->StartScripts()) {m_engine->StopScripts();m_engine->LoadScene(m_snapshot);CleanupSnapshot();return false;}
         m_playing = true; m_paused = false; return true;
     }
-    void Pause(bool paused) { if (m_playing) m_paused = paused; }
+    void Pause(bool paused) { if (m_playing) {m_paused = paused;if(paused)Runtime::InputAccess::SetActive(false);} }
+    void SetGameInputActive(bool focused){Runtime::InputAccess::SetActive(m_playing&&!m_paused&&focused);}
+    void GameKey(int key,bool down,bool repeat){if(m_playing&&!m_paused)Runtime::InputAccess::KeyEvent(key,down,repeat);}
+    void GameButton(int button,bool down){if(m_playing&&!m_paused)Runtime::InputAccess::ButtonEvent(button,down);}
+    void GameMotion(float x,float y,float dx,float dy){if(m_playing&&!m_paused)Runtime::InputAccess::MotionEvent(x,y,dx,dy);}
+    void GameScroll(float x,float y){if(m_playing&&!m_paused)Runtime::InputAccess::ScrollEvent(x,y);}
+    py::dict InputSnapshot(){const auto& state=*Runtime::InputAccess::GetState();py::dict out;out["active"]=state.Active;py::list keys,down,up;for(int i=1;i<512;++i){if(state.Keys[i])keys.append(i);if(state.KeysDown[i])down.append(i);if(state.KeysUp[i])up.append(i);}out["keys"]=keys;out["down"]=down;out["up"]=up;return out;}
     void Step() { if (m_playing) m_engine->Update(); }
     void Tick() {
         if (m_playing && !m_paused) m_engine->Update();
@@ -450,8 +479,10 @@ public:
     void Stop() {
         if (!m_playing) return;
         m_playing = false; m_paused = false;
+        Runtime::InputAccess::SetActive(false);
         m_engine->StopScripts();
         if (!m_snapshot.empty()) m_engine->LoadScene(m_snapshot);
+        for(const auto& [id,path]:m_extraSnapshots)for(std::size_t i=0;i<m_loadedScenes.size();++i)if(i!=m_activeScene&&SceneAt(i).GetUUID()==id){auto restored=m_engine->LoadSceneAsset(path);if(restored)m_loadedScenes[i].Data=std::move(restored);break;}
         CleanupSnapshot();
     }
     bool IsPlaying() const { return m_playing; }
@@ -497,6 +528,7 @@ private:
         return entity;
     }
     void CleanupSnapshot() {
+        for(const auto& [_,path]:m_extraSnapshots){std::error_code error;std::filesystem::remove(path,error);}m_extraSnapshots.clear();
         if (m_snapshot.empty()) return;
         std::error_code error; std::filesystem::remove(m_snapshot, error); m_snapshot.clear();
     }
@@ -504,6 +536,7 @@ private:
     std::unique_ptr<Runtime::Engine> m_engine;
     std::filesystem::path m_projectPath;
     std::filesystem::path m_snapshot;
+    std::vector<std::pair<UUID,std::filesystem::path>> m_extraSnapshots;
     std::filesystem::path m_scenePath;
     std::string m_bridgeError;
     std::vector<LoadedScene> m_loadedScenes;
@@ -585,5 +618,12 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("tick", &Bazzalt::EditorBridge::EditorHost::Tick)
         .def("stop", &Bazzalt::EditorBridge::EditorHost::Stop)
         .def("is_playing", &Bazzalt::EditorBridge::EditorHost::IsPlaying)
-        .def("is_paused", &Bazzalt::EditorBridge::EditorHost::IsPaused);
+        .def("is_paused", &Bazzalt::EditorBridge::EditorHost::IsPaused)
+        .def("rename_asset_directory", &Bazzalt::EditorBridge::EditorHost::RenameAssetDirectory)
+        .def("set_game_input_active", &Bazzalt::EditorBridge::EditorHost::SetGameInputActive)
+        .def("game_key", &Bazzalt::EditorBridge::EditorHost::GameKey)
+        .def("game_button", &Bazzalt::EditorBridge::EditorHost::GameButton)
+        .def("game_motion", &Bazzalt::EditorBridge::EditorHost::GameMotion)
+        .def("game_scroll", &Bazzalt::EditorBridge::EditorHost::GameScroll)
+        .def("input_snapshot", &Bazzalt::EditorBridge::EditorHost::InputSnapshot);
 }

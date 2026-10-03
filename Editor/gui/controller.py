@@ -14,6 +14,7 @@ from ..history import SceneHistory
 from ..scripting import ScriptAttachments, ScriptCompiler, ScriptValidationError
 from ..materials import MaterialCompiler, MaterialError, ZERO, COUNTS
 from ..environments import InspectEnvironment
+from ..game_input import GameInputRouter
 from .widgets.inspector_viewport import InspectorViewport
 from .panels import ConsoleLevel
 from .panels.assets import (ENVIRONMENT_EXTENSIONS, IMAGE_EXTENSIONS,
@@ -27,12 +28,14 @@ class EditorController(QObject):
         super().__init__(window)
         self.Window = window
         self.Runtime = runtime
+        self.GameInput=GameInputRouter(window,runtime)
         self.SelectedEntity = ""
         self.InspectedScene = ""
         self.SelectedEntities: list[str] = []
         self.ScenePath = ""
         self._updating_inspector = False
         self.IsDirty = False
+        self._play_authoring=None
         self._dirty_scenes:set[str]=set()
         self._hierarchy_clipboard: list[dict] = []
         self._box_selection_base: list[str] = []
@@ -89,6 +92,7 @@ class EditorController(QObject):
         window.AssetBrowser.AssetActivated.connect(self.ActivateAsset)
         window.AssetBrowser.LoadSceneRequested.connect(self.LoadSceneAdditive)
         window.AssetBrowser.SceneRenameHandler=self.RenameSceneAsset
+        window.AssetBrowser.DirectoryRenameHandler=runtime.RenameAssetDirectory
         window.AssetBrowser.SceneLoadedChecker=self.Runtime.IsSceneLoaded
         window.AssetBrowser.AssetOperationFailed.connect(lambda text:window.Console.AddMessage(text,ConsoleLevel.Error,True,"Editor"))
         runtime.SceneChanged.connect(self.RefreshHierarchy)
@@ -125,9 +129,11 @@ class EditorController(QObject):
         if path and self.Runtime.LoadScene(path): self.ScenePath = path
 
     def _Tick(self) -> None:
+        self.GameInput.SyncFocus()
         if monotonic()-self._material_check>2.0:
             self._material_check=monotonic();self._PrepareUsedMaterials()
         self.Runtime.Tick()
+        if self._play_authoring is not None and not self.Runtime.IsPlaying():self._RestorePlayAuthoring()
         self._stats_frames+=1;now=monotonic()
         if now-self._stats_started>=1.0:
             self.Window.Scene.StatsLabel.setText(self.Window.Localization.Translate("viewport.stats",fps=round(self._stats_frames/(now-self._stats_started)),objects=len(self.Runtime.Entities())));self._stats_frames=0;self._stats_started=now
@@ -135,6 +141,7 @@ class EditorController(QObject):
         # Editor gizmos follow the authoritative world transform every frame.
         # This also covers transforms changed by systems or native user code.
         if self.SelectedEntity:self._UpdateGizmo()
+        if self.SelectedEntity and self.Runtime.IsPlaying():self._RefreshInspectorValues(preserve_editing=True)
 
     def SaveScene(self) -> bool:
         if self.ScenePath:
@@ -502,7 +509,7 @@ class EditorController(QObject):
             if value<1024.0 or unit=="TB":return f"{int(value)} {unit}" if unit=="B" else f"{value:.1f} {unit}"
             value/=1024.0
 
-    def _RefreshInspectorValues(self) -> None:
+    def _RefreshInspectorValues(self,preserve_editing:bool=False) -> None:
         if not self.SelectedEntity:return
         details=self.Runtime.EntityDetails(self.SelectedEntity)
         if not details:return
@@ -522,6 +529,8 @@ class EditorController(QObject):
                 if section is None:continue
                 for name,value in fields.items():
                     editor=section._fields.get(name);setter=getattr(editor,"SetValue",None) if editor else None
+                    focus=QApplication.focusWidget()
+                    if preserve_editing and editor is not None and focus is not None and (focus is editor or editor.isAncestorOf(focus)):continue
                     if callable(setter):
                         blocker=QSignalBlocker(editor);setter(value);del blocker
         finally:self._updating_inspector=False
@@ -879,6 +888,7 @@ class EditorController(QObject):
             if entity_id==self.SelectedEntity:self.SelectEntity(entity_id,force=True)
 
     def Play(self) -> None:
+        if self.Runtime.IsPlaying():return
         if not self._PrepareUsedMaterials():self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
         if self.Window.PreferenceValue("console","clear_on_play",False):self.Window.Console.Clear()
         if self.ScriptCompiler and self.ScriptAttachments:
@@ -896,7 +906,12 @@ class EditorController(QObject):
             except ScriptValidationError as error:self._ScriptValidationFailed(error);self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
             if not self.Runtime.ConfigureScripts(bindings):
                 self.Window.Console.AddMessage(self.Runtime.LastError(),ConsoleLevel.Error,True,tr("scripting.runtime_source"));self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
+        authoring=(set(self._dirty_scenes),self.History.Checkpoint())
         if not self.Runtime.Play():self.Window.Toolbar.SetPlayState(PlayState.Stopped)
+        else:
+            self._play_authoring=authoring;self.History.Clear()
+            self.Window.Output.SetGameCameraAvailable(self.Runtime.HasActiveCamera())
+            self.Window.Docking.activate_panel("output");self.GameInput.FocusGame()
 
     def _AttachScript(self,descriptor,entity_id:str|None=None)->None:
         entity_id=entity_id or self.SelectedEntity
@@ -922,7 +937,18 @@ class EditorController(QObject):
         if self.ScriptAttachments:self.ScriptAttachments.Save();self.SetDirty(True)
 
     def Stop(self) -> None:
+        self.Runtime.SetGameInputActive(False)
         self.Runtime.Stop()
+        self._RestorePlayAuthoring()
+
+    def _RestorePlayAuthoring(self)->None:
+        if self._play_authoring is None:return
+        dirty,history=self._play_authoring;self._play_authoring=None
+        self._dirty_scenes=dirty;self.History.RestoreCheckpoint(history);self._SyncDirtyPresentation()
+        selected=[value for value in self.SelectedEntities if self.Runtime.EntityDetails(value)]
+        if len(selected)>1:self.SelectEntities(selected)
+        else:self.SelectEntity(selected[0] if selected else None,force=True)
+        self.Window.Toolbar.SetPlayState(PlayState.Stopped)
 
     def _SceneForParent(self,parent)->str:
         value=str(parent or "")

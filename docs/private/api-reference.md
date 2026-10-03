@@ -3,6 +3,13 @@
 This covers headers under `include/Bazzalt`. Headers remain authoritative for
 templates and exact declarations.
 
+## `Bazzalt/Input.h`
+
+`Input` provides read-only keyboard/mouse held and edge states, pointer/wheel
+deltas, and typed digital axes. `KeyCode`, `MouseButton`, and `InputAxis` contain
+no SDL types. The runtime owns input frames and Game-panel focus. See the
+[complete input reference](input.md) for all methods and lifecycle semantics.
+
 ## `Bazzalt/Time.h`
 
 `Time` exposes static gameplay clocks and scale controls without engine-loop

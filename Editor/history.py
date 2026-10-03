@@ -48,6 +48,9 @@ class SceneHistory(QObject):
         else:self._redo.append(command)
         return ok
     def Clear(self)->None:self._undo.clear();self._redo.clear();self._pending=None;self.Changed.emit()
+    def Checkpoint(self):return (list(self._undo),list(self._redo))
+    def RestoreCheckpoint(self,checkpoint)->None:
+        self._undo,self._redo=(list(values) for values in checkpoint);self._pending=None;self._Trim();self.Changed.emit()
     def CanUndo(self)->bool:return bool(self._undo)
     def CanRedo(self)->bool:return bool(self._redo)
     def UndoLabel(self)->str:return self._undo[-1].Label if self._undo else ""

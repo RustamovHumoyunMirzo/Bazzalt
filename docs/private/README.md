@@ -26,6 +26,8 @@ resource ownership, and extension points for game code.
 8. [Public API reference](api-reference.md) — header-by-header reference.
    [Gameplay time](time.md) covers slow motion, scaled/unscaled clocks, pause,
    and fixed updates.
+   [Gameplay input](input.md) covers keyboard/mouse APIs, focus gating,
+   Game maximization, and Play-mode restoration.
 9. [Roadmap](roadmap.md) — planned systems that are not part of the current API.
 
 ## API stability boundary

@@ -38,7 +38,7 @@ class AssetBrowserPanel(QWidget):
     AssetsChanged=Signal()
     AssetActivated=Signal(object);AssetSelected=Signal(object);ContextMenuRequested=Signal(object,object);SelectionCleared=Signal();LoadSceneRequested=Signal(object);AssetOperationFailed=Signal(str)
     def __init__(self,localization:LocalizationManager,resources=None)->None:
-        super().__init__();self._localization=localization;self._resources=resources;self._root=None;self._folder=None;self._clipboard=[];self.SceneRenameHandler=None;self.SceneLoadedChecker=None;self.ExternalOpener=None
+        super().__init__();self._localization=localization;self._resources=resources;self._root=None;self._folder=None;self._clipboard=[];self.SceneRenameHandler=None;self.DirectoryRenameHandler=None;self.SceneLoadedChecker=None;self.ExternalOpener=None
         self._watcher=QFileSystemWatcher(self);self._watcher.directoryChanged.connect(lambda _path:self.Refresh())
         layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0)
         self.Search=QLineEdit();self.Search.setObjectName("AssetBrowserSearch");self.Search.setClearButtonEnabled(True);layout.addWidget(self.Search)
@@ -46,7 +46,7 @@ class AssetBrowserPanel(QWidget):
         self.Search.textChanged.connect(lambda _:self._search_timer.start())
         localization.LocaleChanged.connect(lambda _:self._RetranslateSearch());self._RetranslateSearch()
         splitter=QSplitter(Qt.Orientation.Horizontal);splitter.setChildrenCollapsible(False)
-        self.Tree=QTreeWidget();self.Tree.setHeaderHidden(True);self.Tree.currentItemChanged.connect(self._FolderSelected)
+        self.Tree=QTreeWidget();self.Tree.setHeaderHidden(True);self.Tree.currentItemChanged.connect(self._FolderSelected);self.Tree.itemChanged.connect(self._TreeItemRenamed)
         self.Browser=AssetList();self.Browser.setItemDelegate(AssetNameDelegate(self.Browser));self.Browser.setViewMode(QListWidget.ViewMode.IconMode);self.Browser.setIconSize(QSize(48,48));self.Browser.setGridSize(QSize(104,86));self.Browser.setResizeMode(QListWidget.ResizeMode.Adjust);self.Browser.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.Browser.setUniformItemSizes(True);self.Browser.setWordWrap(False);self.Browser.setTextElideMode(Qt.TextElideMode.ElideMiddle);self.Browser.setSpacing(2);self.Browser.setMovement(QListWidget.Movement.Static)
         # QListView::setMovement resets drag/drop mode, so drag-source setup
@@ -103,7 +103,7 @@ class AssetBrowserPanel(QWidget):
         try:entries=sorted((p for p in Path(path).iterdir() if p.is_dir() and not p.is_symlink()),key=lambda p:p.name.lower())
         except OSError:return
         for directory in entries:
-            item=QTreeWidgetItem([directory.name]);item.setData(0,Qt.ItemDataRole.UserRole,directory);item.setIcon(0,self._Icon(directory));parent.addChild(item);self._PopulateDirectories(item,directory)
+            item=QTreeWidgetItem([directory.name]);item.setData(0,Qt.ItemDataRole.UserRole,directory);item.setIcon(0,self._Icon(directory));item.setFlags(item.flags()|Qt.ItemFlag.ItemIsEditable);parent.addChild(item);self._PopulateDirectories(item,directory)
     def _FolderSelected(self,item,_previous)->None:
         self._folder=Path(item.data(0,Qt.ItemDataRole.UserRole)) if item else None
         if self._folder is None:return
@@ -174,20 +174,44 @@ class AssetBrowserPanel(QWidget):
         old=Path(item.data(Qt.ItemDataRole.UserRole));name=item.text().strip()
         if not name or name==item.data(Qt.ItemDataRole.UserRole+1):
             self.Browser.blockSignals(True);item.setText(self._DisplayName(old));self.Browser.blockSignals(False);return
+        if Path(name).name!=name or name in {".",".."}:
+            self.Browser.blockSignals(True);item.setText(self._DisplayName(old));self.Browser.blockSignals(False);return
         target=old.with_name(name)
         if not self._InsideRoot(target) or target.exists():
             self.Browser.blockSignals(True);item.setText(self._DisplayName(old));self.Browser.blockSignals(False);return
         if old.suffix.lower()==".bscene" and callable(self.SceneRenameHandler):
             if self.SceneRenameHandler(old,target):return
             self.Browser.blockSignals(True);item.setText(self._DisplayName(old));self.Browser.blockSignals(False);return
-        try:old.rename(target)
-        except OSError:
+        try:
+            if old.is_dir() and callable(self.DirectoryRenameHandler):
+                if not self.DirectoryRenameHandler(old,target):raise OSError("Directory rename failed")
+            else:old.rename(target)
+        except OSError as error:
+            self.AssetOperationFailed.emit(self._localization.Translate("assets.rename_failed",name=old.name,error=str(error)))
             self.Browser.blockSignals(True);item.setText(self._DisplayName(old));self.Browser.blockSignals(False);return
         meta=old.with_name(old.name+".meta")
         if meta.exists():
             try:meta.rename(target.with_name(target.name+".meta"))
             except OSError:pass
         self.Refresh(target)
+
+    def _TreeItemRenamed(self,item,column)->None:
+        old=Path(item.data(0,Qt.ItemDataRole.UserRole));name=item.text(0).strip()
+        if name==old.name:return
+        try:
+            if not name or Path(name).name!=name or name in {".",".."} or old==self._root:raise OSError("Invalid directory name")
+            target=old.with_name(name)
+            if not self._InsideRoot(target) or target.exists():raise OSError("Invalid destination")
+            if callable(self.DirectoryRenameHandler):
+                if not self.DirectoryRenameHandler(old,target):raise OSError("Directory rename failed")
+            else:old.rename(target)
+        except (OSError,ValueError) as error:
+            self.Tree.blockSignals(True);item.setText(0,old.name);self.Tree.blockSignals(False)
+            self.AssetOperationFailed.emit(self._localization.Translate("assets.rename_failed",name=old.name,error=str(error)));return
+        if self._folder is not None:
+            try:self._folder=target/self._folder.relative_to(old)
+            except ValueError:pass
+        self.Refresh()
     def _Delete(self)->None:
         for item in self.Browser.selectedItems():
             path=Path(item.data(Qt.ItemDataRole.UserRole))
@@ -217,7 +241,7 @@ class AssetBrowserPanel(QWidget):
         open_action=menu.addAction(tr("assets.open"));open_action.setVisible(external);open_action.triggered.connect(lambda _=False:self._OpenExternal(reveal_paths))
         open_with=menu.addAction(tr("assets.open_with"));open_with.setVisible(external);open_with.triggered.connect(lambda _=False:self._OpenExternal(reveal_paths,True))
         load=menu.addAction(tr("assets.load_scene"));is_scene=bool(current and current.suffix.lower()==".bscene");load.setVisible(is_scene);load.setEnabled(bool(is_scene and not (callable(self.SceneLoadedChecker) and self.SceneLoadedChecker(current))));load.triggered.connect(lambda:self.LoadSceneRequested.emit(current) if current else None)
-        rename=menu.addAction(tr("assets.rename"));rename.setEnabled(len(self.Browser.selectedItems())==1);rename.triggered.connect(lambda:self.Browser.editItem(self.Browser.currentItem()));copy=menu.addAction(tr("assets.copy"));copy.setEnabled(selected);copy.triggered.connect(self._Copy);paste=menu.addAction(tr("assets.paste"));paste.setEnabled(bool(self._clipboard));paste.triggered.connect(self._Paste);delete=menu.addAction(tr("assets.delete"));delete.setEnabled(selected);delete.triggered.connect(self._Delete);menu.addSeparator();menu.addAction(tr("assets.refresh"),self.Refresh)
+        rename=menu.addAction(tr("assets.rename"));rename.setEnabled(bool(target is not None and Path(target.data(0,Qt.ItemDataRole.UserRole))!=self._root) if widget is self.Tree else len(self.Browser.selectedItems())==1);rename.triggered.connect(lambda:self.Tree.editItem(target,0) if widget is self.Tree else self.Browser.editItem(self.Browser.currentItem()));copy=menu.addAction(tr("assets.copy"));copy.setEnabled(selected);copy.triggered.connect(self._Copy);paste=menu.addAction(tr("assets.paste"));paste.setEnabled(bool(self._clipboard));paste.triggered.connect(self._Paste);delete=menu.addAction(tr("assets.delete"));delete.setEnabled(selected);delete.triggered.connect(self._Delete);menu.addSeparator();menu.addAction(tr("assets.refresh"),self.Refresh)
         reveal_key="assets.reveal" if sys.platform=="win32" else "assets.reveal_finder" if sys.platform=="darwin" else "assets.reveal_manager"
         reveal=menu.addAction(tr(reveal_key));reveal.setEnabled(bool(reveal_paths));reveal.triggered.connect(lambda _=False:self._Reveal(reveal_paths))
         self.ContextMenuRequested.emit(menu,widget.mapToGlobal(position));menu.exec(widget.mapToGlobal(position))

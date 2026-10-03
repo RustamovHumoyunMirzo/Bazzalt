@@ -4,6 +4,7 @@
 #include <string>
 #include "Bazzalt/Component.h"
 #include "Bazzalt/Time.h"
+#include "Bazzalt/Input.h"
 
 namespace Bazzalt {
 class ScriptRuntimeAccess;
@@ -27,6 +28,7 @@ class ScriptRuntimeAccess final {
 public:
     static void Bind(Behavior& behavior,const char* entity){behavior.m_entityUUID=entity?entity:"";}
     static void BindTime(Detail::TimeState* state){Time::Bind(state);}
+    static void BindInput(Detail::InputState* state){Input::Bind(state);}
 };
 
 enum class PropertyType : std::uint8_t { Boolean, Integer, Float, String, Vec2, Vec3, Vec4, Entity, Asset };

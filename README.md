@@ -55,7 +55,7 @@ player.AddComponent<Health>();
 
 ## Build from source
 
-Requirements: CMake 3.15+, a C++20 compiler, Python 3 with PySide6 for the
+Requirements: CMake 3.16+, a C++20 compiler, Python 3 with PySide6 for the
 editor, and supported Filament tools. Fetch the pinned dependencies first:
 
 ```powershell

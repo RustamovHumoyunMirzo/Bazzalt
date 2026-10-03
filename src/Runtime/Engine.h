@@ -87,6 +87,7 @@ public:
     void StopScripts();
 
 private:
+    void UpdateEditorOverlays();
     friend class Bazzalt::SceneManager;
     friend class Bazzalt::AssetManager;
 

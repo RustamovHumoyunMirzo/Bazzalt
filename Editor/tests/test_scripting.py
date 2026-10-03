@@ -29,6 +29,7 @@ class ScriptingTests(unittest.TestCase):
         self.assertIn('strcmp(name,"Speed")',wrapper)
         self.assertIn("OnUpdate(void* p,float dt)",wrapper)
         self.assertIn("BazzaltBindTimeV1",wrapper)
+        self.assertIn("BazzaltBindInputV1",wrapper)
         self.assertIn("BazzaltFixedUpdateV1",wrapper)
 
     def test_compilation_ui_text_is_localized(self):

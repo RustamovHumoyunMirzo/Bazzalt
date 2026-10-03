@@ -171,7 +171,8 @@ class Editor(QMainWindow):
     def _EditContext(self):
         focus=QApplication.focusWidget()
         if isinstance(focus,(QLineEdit,QTextEdit,QPlainTextEdit)):return "text",focus
-        if focus is not None and (focus is self.AssetBrowser or self.AssetBrowser.isAncestorOf(focus)):return "assets",self.AssetBrowser.Browser
+        if focus is not None and (focus is self.AssetBrowser or self.AssetBrowser.isAncestorOf(focus)):
+            return "assets",self.AssetBrowser.Tree if focus is self.AssetBrowser.Tree or self.AssetBrowser.Tree.isAncestorOf(focus) else self.AssetBrowser.Browser
         if focus is not None and (focus is self.Console or self.Console.isAncestorOf(focus)):return "console",self.Console.View
         return "entities",focus
 
@@ -182,6 +183,8 @@ class Editor(QMainWindow):
             selected=widget.hasSelectedText() if isinstance(widget,QLineEdit) else widget.textCursor().hasSelection()
             writable=not widget.isReadOnly()
             states=dict(copy=selected,paste=writable,delete=selected and writable,rename=False,duplicate=False,select_all=True,deselect_all=selected)
+        elif context=="assets" and widget is self.AssetBrowser.Tree:
+            item=widget.currentItem();states=dict(copy=False,paste=False,delete=False,rename=bool(item and item.parent()),duplicate=False,select_all=widget.topLevelItemCount()>0,deselect_all=bool(widget.selectedItems()))
         elif context in {"assets","console"}:
             count=len(widget.selectedItems());states=dict(copy=count>0,paste=context=="assets" and bool(self.AssetBrowser._clipboard),delete=count>0,rename=context=="assets" and count==1,duplicate=False,select_all=widget.count()>0,deselect_all=count>0)
         else:
@@ -242,12 +245,18 @@ class Editor(QMainWindow):
         self._applying_preferences=False
         if save and self._settings_saver is not None:self._settings_saver(self._settings)
 
-    def SetViewportMaximized(self,maximized:bool)->None:
+    def SetViewportMaximized(self,maximized:bool,panel_id:str="scene")->None:
         if maximized:
             if self._pre_maximize_layout is None:self._pre_maximize_layout=self.Docking.save_layout()
-            self.Docking.restore_layout({"version":1,"root":{"type":"tabs","panels":["scene"],"current":0},"pinned":[],"floating":[]})
+            self._maximized_panel=panel_id
+            self.Docking.restore_layout({"version":1,"root":{"type":"tabs","panels":[panel_id],"current":0},"pinned":[],"floating":[]})
         elif self._pre_maximize_layout is not None:
             layout=self._pre_maximize_layout;self._pre_maximize_layout=None;self.Docking.restore_layout(layout)
+
+    def ToggleGameMaximized(self)->None:
+        restore=self._pre_maximize_layout is not None and getattr(self,"_maximized_panel","")=="output"
+        self.SetViewportMaximized(not restore,"output")
+        self.Docking.activate_panel("output")
 
     def _UpdateBrandIcon(self)->None:
         color="#202020" if self.ThemeManager.GetTheme().background=="#d4d4d4" else "#eeeeee"
@@ -360,6 +369,7 @@ class Editor(QMainWindow):
             if clicked is save and not self.Controller.SaveScene():event.ignore();return
             if clicked is not discard and clicked is not save:event.ignore();return
         self.Controller.Timer.stop()
+        self.Controller.GameInput.Close()
         self.Scene.Surface._fly_timer.stop();self.Output.Surface._fly_timer.stop()
         self._layout_save_timer.stop();self._SaveWorkspace()
         self.Scene.Detach(); self.Output.Detach()

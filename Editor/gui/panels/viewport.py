@@ -441,7 +441,9 @@ class ViewportPanel(QFrame):
 
     def SetGameCameraAvailable(self, available: bool) -> None:
         if not hasattr(self, "_output_stack"): return
+        previous=self._output_stack.currentWidget();focused=previous.hasFocus()
         self._output_stack.setCurrentWidget(self.Surface if available else self._no_camera)
+        if focused and previous is not self._output_stack.currentWidget():self._output_stack.currentWidget().setFocus()
         if available: QTimer.singleShot(0, self.Surface, self.Surface._Attach)
 
     def resizeEvent(self,event)->None:

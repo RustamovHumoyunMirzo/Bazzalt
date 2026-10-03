@@ -307,6 +307,24 @@ class RuntimeService(QObject):
         if not result:self.ErrorOccurred.emit(self.LastError())
         return result
 
+    def IsPlaying(self)->bool:return bool(self._host and self._host.is_playing())
+    def RenameAssetDirectory(self,source,target)->bool:
+        if not self._host or not hasattr(self._host,"rename_asset_directory"):return False
+        result=bool(self._host.rename_asset_directory(str(Path(source).resolve()),str(Path(target).resolve())))
+        if result:self.SceneChanged.emit()
+        return result
+    def IsPaused(self)->bool:return bool(self._host and self._host.is_paused())
+    def SetGameInputActive(self,active:bool)->None:
+        if self._host is not None and hasattr(self._host,"set_game_input_active"):self._host.set_game_input_active(active)
+    def GameKey(self,key:int,down:bool,repeat:bool=False)->None:
+        if self._host is not None and hasattr(self._host,"game_key"):self._host.game_key(key,down,repeat)
+    def GameButton(self,button:int,down:bool)->None:
+        if self._host is not None and hasattr(self._host,"game_button"):self._host.game_button(button,down)
+    def GameMotion(self,x:float,y:float,dx:float,dy:float)->None:
+        if self._host is not None and hasattr(self._host,"game_motion"):self._host.game_motion(x,y,dx,dy)
+    def GameScroll(self,x:float,y:float)->None:
+        if self._host is not None and hasattr(self._host,"game_scroll"):self._host.game_scroll(x,y)
+
     def ConfigureScripts(self,bindings:list[dict])->bool:
         return bool(self._host and hasattr(self._host,"configure_scripts") and self._host.configure_scripts(bindings))
 

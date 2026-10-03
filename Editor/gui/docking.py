@@ -841,6 +841,14 @@ class DockingSystem(QWidget):
         """Show a previously closed panel by docking it into the main root."""
         self.dock(panel, area)
 
+    def activate_panel(self,panel:DockPanel|str)->None:
+        item=self.panel(panel)
+        if not self.is_panel_open(item):self.open_panel(item)
+        for group in self._groups:
+            if item.panel_id in group.node.panels:
+                group.setCurrentIndex(group.node.panels.index(item.panel_id))
+                group.window().raise_();group.window().activateWindow();break
+
     def pin_panel(self, panel: DockPanel | str, pinned: bool = True) -> None:
         """Pin or unpin a panel, locking its tab against close and movement."""
         item = self.panel(panel)

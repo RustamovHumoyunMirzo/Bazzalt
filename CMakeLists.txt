@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.16)
 project(BAZZALT VERSION 1.0.0 LANGUAGES C CXX)
 find_package(Python COMPONENTS Interpreter REQUIRED)
 
@@ -17,6 +17,24 @@ if(NOT EXISTS "${BAZZALT_ENTT_DIR}/CMakeLists.txt")
 endif()
 
 add_subdirectory("${BAZZALT_ENTT_DIR}" EXCLUDE_FROM_ALL)
+
+set(BAZZALT_SDL3_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/SDL3" CACHE PATH "SDL3 source tree")
+if(NOT EXISTS "${BAZZALT_SDL3_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR "SDL3 is missing. Run scripts/get_sdl3.ps1 or scripts/get_sdl3.sh.")
+endif()
+set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+set(SDL_STATIC ON CACHE BOOL "" FORCE)
+set(SDL_TESTS OFF CACHE BOOL "" FORCE)
+set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
+set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
+# Qt owns native windows, and Filament owns rendering. SDL is input-only.
+foreach(_subsystem AUDIO VIDEO GPU RENDER CAMERA JOYSTICK HAPTIC SENSOR DIALOG)
+    set(SDL_${_subsystem} OFF CACHE BOOL "" FORCE)
+endforeach()
+add_subdirectory("${BAZZALT_SDL3_DIR}" "deps/SDL3" EXCLUDE_FROM_ALL)
+if(NOT WIN32)
+    set_target_properties(SDL3-static PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
 
 set(BAZZALT_RYML_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/rapidyaml" CACHE PATH
     "Path to a rapidyaml source tree")
@@ -140,7 +158,7 @@ target_include_directories(Bazzalt
     "${_bazzalt_generated_dir}"
 )
 
-target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE ryml::ryml Filament::Filament ${CMAKE_DL_LIBS})
+target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE SDL3::SDL3-static ryml::ryml Filament::Filament ${CMAKE_DL_LIBS})
 
 target_compile_features(Bazzalt PUBLIC cxx_std_20)
 # Match these flags to the linked Filament SDK when using a custom build.
@@ -221,6 +239,11 @@ if(BUILD_TESTING)
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/MathTests.cpp"
     )
     add_executable(BazzaltTimeTests tests/TimeTests.cpp)
+    add_executable(BazzaltInputTests tests/InputTests.cpp)
+    target_link_libraries(BazzaltInputTests PRIVATE Bazzalt)
+    target_include_directories(BazzaltInputTests PRIVATE src)
+    bazzalt_enable_test_assertions(BazzaltInputTests)
+    add_test(NAME BazzaltInputTests COMMAND BazzaltInputTests $<TARGET_FILE:BazzaltScriptLifecycleModule>)
     add_executable(BazzaltMaterialTests tests/MaterialTests.cpp)
     target_link_libraries(BazzaltMaterialTests PRIVATE Bazzalt Filament::Filament)
     target_include_directories(BazzaltMaterialTests PRIVATE src)

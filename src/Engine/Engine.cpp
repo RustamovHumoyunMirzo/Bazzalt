@@ -2,6 +2,7 @@
 #include "Runtime/AssetDatabase.h"
 #include "Runtime/NativeScriptRuntime.h"
 #include "Runtime/TimeAccess.h"
+#include "Runtime/InputAccess.h"
 #include "Runtime/MaterialLibrary.h"
 #include "Rendering/RenderBackend.h"
 #include "Rendering/RenderSystems.h"
@@ -57,6 +58,9 @@ bool Engine::Init()
         std::cerr << "[Engine] " << m_lastError << "\n";
         return false;
     }
+    if(!InputAccess::Initialize()){
+        m_lastError="Could not initialize the SDL3 input subsystem";m_renderBackend->Shutdown();return false;
+    }
     AttachRenderSystems();
 
     m_isInitialized = true;
@@ -66,7 +70,7 @@ bool Engine::Init()
     m_lastFrameTime = std::chrono::steady_clock::now();
     TimeAccess::Reset();
     m_fixedAccumulator = 0.0;
-    if(!m_scriptRuntime->Start(m_lastError)){DetachRenderSystems();m_renderBackend->Shutdown();m_isInitialized=false;return false;}
+    if(!m_scriptRuntime->Start(m_lastError)){DetachRenderSystems();m_renderBackend->Shutdown();InputAccess::Shutdown();m_isInitialized=false;return false;}
 
     std::cout << "[Engine] Initialization complete.\n";
     return true;
@@ -88,6 +92,7 @@ void Engine::Update()
     m_lastFrameTime = currentTime;
 
     m_frameCount++;
+    InputAccess::BeginFrame();
     m_fixedAccumulator += m_deltaTime;
     // Bound catch-up work even if game code chooses an extremely short step.
     int fixedSteps = 0;
@@ -101,6 +106,7 @@ void Engine::Update()
     if(fixedSteps > 64)m_fixedAccumulator = std::fmod(m_fixedAccumulator, double(Time::GetFixedDeltaTime()));
     m_scene->Update(m_deltaTime);
     m_scriptRuntime->Update(m_deltaTime);
+    UpdateEditorOverlays();
     m_renderBackend->SetEnvironment(m_scene->GetEnvironment());
     m_renderBackend->Render();
 }
@@ -121,6 +127,13 @@ void Engine::RenderEditorFrame()
     m_scene->UpdateSystem<LightSystem>();
     m_scene->UpdateSystem<MeshSystem>();
     m_scene->UpdateSystem<PrimitiveSystem>();
+    UpdateEditorOverlays();
+    m_renderBackend->SetEnvironment(m_scene->GetEnvironment());
+    m_renderBackend->Render();
+}
+
+void Engine::UpdateEditorOverlays()
+{
     std::vector<RenderBackend::EditorIcon> icons;
     std::vector<RenderBackend::EditorGuide> guides;
     const auto line=[&](Vec3 a,Vec3 b,Vec4 color){guides.push_back({a.X,a.Y,a.Z,b.X,b.Y,b.Z,color.X,color.Y,color.Z,color.W});};
@@ -153,8 +166,6 @@ for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id
     }
     }
     m_renderBackend->SetEditorGuides(guides);
-    m_renderBackend->SetEnvironment(m_scene->GetEnvironment());
-    m_renderBackend->Render();
 }
 
 UUID Engine::PickEditorPrimitive(Vec3 origin,Vec3 direction){
@@ -216,9 +227,11 @@ void Engine::Shutdown()
 
     std::cout << "[Engine] Shutting down core subsystems...\n";
 
+    InputAccess::SetActive(false);
     m_scriptRuntime->Stop();
     DetachRenderSystems();
     m_renderBackend->Shutdown();
+    InputAccess::Shutdown();
 
     m_isInitialized = false;
     std::cout << "[Engine] Shutdown complete.\n";
