@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <unordered_set>
 
 #include "Bazzalt/Project.h"
 #include "Bazzalt/AssetManager.h"
@@ -33,6 +34,10 @@ public:
 
     bool Init();
     bool RefreshAssets();
+    bool SetEnvironmentImportSettings(UUID id,const PropertyMap& settings);
+    PropertyMap GetAssetImportSettings(UUID id);
+    bool HasEnvironmentLighting() const;
+    bool HasEnvironmentSkybox() const;
     static std::vector<std::string> SupportedRenderingBackends();
     bool ConfigureRenderingBackend(const std::string& backend);
     void Update();
@@ -70,6 +75,7 @@ public:
     void SetEditorGizmo(bool visible, float x, float y, float z, int mode);
     void SetEditorGizmoHover(int axis);
     UUID PickEditorPrimitive(Vec3 origin, Vec3 direction);
+    void SetEditorEntityState(std::vector<UUID> hidden,std::vector<UUID> unselectable);
     void SetEditorObjectHover(UUID id, Vec3 eye) { m_hoveredObject=id; m_hoverEye=eye; }
     void SetEditorSelection(std::vector<UUID> ids) { m_selectedObjects=std::move(ids); }
     void SetEditorGrid(bool visible, int plane);
@@ -110,6 +116,7 @@ private:
     std::unique_ptr<NativeScriptRuntime> m_scriptRuntime;
     bool m_editorIconsVisible=true;
     UUID m_hoveredObject{};
+    std::unordered_set<UUID> m_editorHidden,m_editorUnselectable;
     std::vector<UUID> m_selectedObjects;
     Vec3 m_hoverEye{};
 };

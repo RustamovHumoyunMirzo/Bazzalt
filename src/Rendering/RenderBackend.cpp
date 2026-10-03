@@ -2,11 +2,18 @@
 
 #include <algorithm>
 #include <cmath>
+#include <fstream>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <Windows.h>
 #endif
+
+#include <filament/Skybox.h>
+#include <filament/IndirectLight.h>
+#include <ktxreader/Ktx1Reader.h>
+#include "Bazzalt/AssetManager.h"
+#include "Bazzalt/Material.h"
 
 #include <filament/Engine.h>
 #include <filament/Camera.h>
@@ -30,6 +37,7 @@
 #include <utils/EntityManager.h>
 #include "Rendering/RenderAssets.h"
 #include "editor_gizmo_filamat.h"
+#include "editor_guide_filamat.h"
 #include "editor_grid_filamat.h"
 #include "editor_icon_filamat.h"
 #include "scene_cam_rgba.h"
@@ -59,6 +67,7 @@ struct RenderBackend::GizmoResource {
     struct Icon { utils::Entity Entity; filament::MaterialInstance* Instance=nullptr; };
     struct Guide { utils::Entity Entity; filament::MaterialInstance* Instance=nullptr; };
     filament::Material* Material = nullptr;
+    filament::Material* GuideMaterial = nullptr;
     std::array<filament::VertexBuffer*, 3> Vertices{};
     std::array<filament::IndexBuffer*, 3> Indices{};
     std::array<filament::MaterialInstance*, 3> Instances{};
@@ -93,19 +102,34 @@ const std::uint8_t* GlbBinary(const std::uint8_t* bytes, std::size_t size) {
     return binaryHeader + 8 <= size ? bytes + binaryHeader + 8 : nullptr;
 }
 
-void ConfigureEditorFog(filament::View& view, float gridScale) {
+} // namespace
+void RenderBackend::ConfigureEditorFog(filament::View& view, float gridScale) {
     filament::View::FogOptions fog;
     fog.enabled = true;
     // Keep the useful editing area clear, then blend distant scene geometry
     // into the editor background before the adaptive grid can reach its edge.
     fog.distance = 60.0f * gridScale;
+    // Filament places skybox fragments around 1e19 units away. Infinite fog
+    // cutoff was completely covering the sky while Game views stayed clear.
+    fog.cutOffDistance = 1000000.0f * gridScale;
     fog.density = 0.025f / gridScale;
     fog.maximumOpacity = 1.0f;
     fog.heightFalloff = 0.0f;
     fog.color = {0.055f, 0.065f, 0.085f};
     view.setFogOptions(fog);
+    // Local contact shading for IBL; projected shadows remain owned by lights.
+    view.setAmbientOcclusionOptions({.enabled=true});
 }
-}
+
+struct RenderBackend::EnvironmentResource {
+    std::filesystem::path Path;
+    filament::Texture* Reflections=nullptr;
+    filament::Texture* SkyTexture=nullptr;
+    filament::IndirectLight* Light=nullptr;
+    filament::Skybox* Sky=nullptr;
+    bool ShowSun=false;
+    float SkyIntensity=0;
+};
 
 RenderBackend::RenderBackend() = default;
 
@@ -151,9 +175,11 @@ bool RenderBackend::Initialize() {
     m_gizmo = std::make_unique<GizmoResource>();
     m_gizmo->Material = filament::Material::Builder()
         .package(Embedded::EditorGizmoFilamat, Embedded::EditorGizmoFilamatSize).build(*m_engine);
+    m_gizmo->GuideMaterial = filament::Material::Builder()
+        .package(Embedded::EditorGuideFilamat, Embedded::EditorGuideFilamatSize).build(*m_engine);
     m_gizmo->GridMaterial = filament::Material::Builder()
         .package(Embedded::EditorGridFilamat, Embedded::EditorGridFilamatSize).build(*m_engine);
-    if (!m_gizmo->Material || !m_gizmo->GridMaterial) { Shutdown(); return false; }
+    if (!m_gizmo->Material || !m_gizmo->GuideMaterial || !m_gizmo->GridMaterial) { Shutdown(); return false; }
     struct Model { const std::uint8_t* Bytes; std::size_t Size; std::uint32_t Vertices, Indices, IndexOffset; };
     const Model models[] = {
         {Embedded::EditorTranslateGizmoGlb, Embedded::EditorTranslateGizmoGlbSize, 75, 198, 2400},
@@ -373,7 +399,8 @@ void RenderBackend::SetEditorIcons(const std::vector<EditorIcon>& icons) {
 void RenderBackend::SetEditorGuides(const std::vector<EditorGuide>& guides){
     if(!m_gizmo||!m_engine)return;
     while(m_gizmo->Guides.size()>guides.size()){auto value=m_gizmo->Guides.back();m_scene->remove(value.Entity);m_engine->destroy(value.Entity);m_engine->getEntityManager().destroy(value.Entity);if(value.Instance)m_engine->destroy(value.Instance);m_gizmo->Guides.pop_back();}
-    while(m_gizmo->Guides.size()<guides.size()){GizmoResource::Guide value;value.Instance=m_gizmo->Material->createInstance();value.Instance->setDepthWrite(false);value.Instance->setDepthCulling(true);value.Entity=m_engine->getEntityManager().create();m_engine->getTransformManager().create(value.Entity);filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{1,1,1}}).material(0,value.Instance).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,m_gizmo->HelperVertices,m_gizmo->HelperIndices).culling(false).castShadows(false).receiveShadows(false).layerMask(0xff,0x80).priority(6).build(*m_engine,value.Entity);m_scene->addEntity(value.Entity);m_gizmo->Guides.push_back(value);}
+    // Transparent guides render after the skybox, without polluting scene depth.
+    while(m_gizmo->Guides.size()<guides.size()){GizmoResource::Guide value;value.Instance=m_gizmo->GuideMaterial->createInstance();value.Instance->setDepthWrite(false);value.Instance->setDepthCulling(true);value.Entity=m_engine->getEntityManager().create();m_engine->getTransformManager().create(value.Entity);filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{1,1,1}}).material(0,value.Instance).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,m_gizmo->HelperVertices,m_gizmo->HelperIndices).culling(false).castShadows(false).receiveShadows(false).layerMask(0xff,0x80).priority(6).build(*m_engine,value.Entity);m_scene->addEntity(value.Entity);m_gizmo->Guides.push_back(value);}
     auto& transforms=m_engine->getTransformManager();
     for(std::size_t i=0;i<guides.size();++i){
         const auto& line=guides[i];auto& value=m_gizmo->Guides[i];
@@ -384,19 +411,72 @@ void RenderBackend::SetEditorGuides(const std::vector<EditorGuide>& guides){
         auto instance=m_engine->getRenderableManager().getInstance(value.Entity);
         m_engine->getRenderableManager().setLayerMask(instance,0xff,0x80);
         filament::math::float3 a{line.AX,line.AY,line.AZ},b{line.BX,line.BY,line.BZ},delta=b-a;
-        float lengthValue=length(delta);if(lengthValue<.0001f){m_scene->remove(value.Entity);continue;}
+        float lengthValue=length(delta);if(!std::isfinite(a.x)||!std::isfinite(a.y)||!std::isfinite(a.z)||!std::isfinite(b.x)||!std::isfinite(b.y)||!std::isfinite(b.z)||!std::isfinite(lengthValue)||lengthValue<1e-6f){m_scene->remove(value.Entity);continue;}
         m_scene->addEntity(value.Entity);auto x=normalize(delta);
         auto helper=std::abs(x.y)<.99f?filament::math::float3{0,1,0}:filament::math::float3{1,0,0};
         auto z=normalize(cross(x,helper));auto y=normalize(cross(z,x));float thickness=.0125f;
-        if(line.Outline)for(const auto& [_,viewport]:m_viewports)if(viewport->Kind==ViewportKind::Scene){
+        for(const auto& [_,viewport]:m_viewports)if(viewport->Kind==ViewportKind::Scene){
             const float depth=std::max(.05f,length(viewport->Eye-(a+b)*.5f));
-            // Half-width of a three-logical-pixel stroke at the editor's 60° FOV.
-            thickness=depth*2.0f*std::tan(.5235988f)*1.5f*viewport->PixelRatio/std::max(1u,viewport->Height);break;
+            // Camera-relative stroke width, also for light/camera guides.
+            const float pixels=line.Outline?1.5f:1.0f;
+            thickness=depth*2.0f*std::tan(.5235988f)*pixels*viewport->PixelRatio/std::max(1u,viewport->Height);break;
         }
         filament::math::mat4f matrix{filament::math::float4{x*(lengthValue*.5f),0},filament::math::float4{y*thickness,0},filament::math::float4{z*thickness,0},filament::math::float4{(a+b)*.5f,1}};
         transforms.setTransform(transforms.getInstance(value.Entity),matrix);
     }
 }
+
+void RenderBackend::SetEnvironment(const SceneEnvironment& value) {
+    if(!m_engine||!value.IsValid())return;
+    m_clearColor=value.ClearColor;
+    UUID source=value.Mode==SceneEnvironmentMode::Map?value.SourceAsset:UUID{};
+    if(value.Mode==SceneEnvironmentMode::Material&&value.MaterialAsset){
+        const auto material=Material::Load(value.MaterialAsset);
+        for(const auto& parameter:material.GetParameters()){
+            if(parameter.Type==ShaderParameterType::Texture2D){const auto texture=material.GetTexture(parameter.Name);const auto info=AssetManager::GetAsset(texture);if(info&&(info->SourcePath.extension()==".hdr"||info->SourcePath.extension()==".exr"||info->SourcePath.extension()==".ktx")){source=texture;break;}}
+        }
+        for(const auto& parameter:material.GetParameters())if(parameter.Name=="color"||parameter.Name=="baseColor"){
+            if(parameter.Type==ShaderParameterType::Float4)m_clearColor=material.GetVec4(parameter.Name);
+            else if(parameter.Type==ShaderParameterType::Float3){const auto color=material.GetVec3(parameter.Name);m_clearColor={color.X,color.Y,color.Z,1};}
+        }
+    }
+    const auto asset=AssetManager::GetAsset(source);
+    const auto path=asset?asset->CachePath:std::filesystem::path{};
+    if(!m_environment||m_environment->Path!=path||m_environment->ShowSun!=value.ShowSun||(!value.ImageBasedLighting&&m_environment->SkyIntensity!=value.Intensity)){
+        m_scene->setSkybox(nullptr);m_scene->setIndirectLight(nullptr);
+        if(m_environment){if(m_environment->Sky)m_engine->destroy(m_environment->Sky);if(m_environment->Light)m_engine->destroy(m_environment->Light);if(m_environment->SkyTexture)m_engine->destroy(m_environment->SkyTexture);if(m_environment->Reflections)m_engine->destroy(m_environment->Reflections);}
+        m_environment=std::make_unique<EnvironmentResource>();m_environment->Path=path;m_environment->ShowSun=value.ShowSun;m_environment->SkyIntensity=value.Intensity;
+        if(!path.empty()){
+            auto folder=path;folder+=".environment";
+            const auto stem=folder.stem();
+            const auto load=[this](const std::filesystem::path& file,filament::math::float3* sh)->filament::Texture*{
+                std::error_code error;const auto size=std::filesystem::file_size(file,error);if(error||size<64||size>256u*1024u*1024u)return nullptr;
+                std::ifstream stream(file,std::ios::binary);std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(stream)),{});
+                const std::uint8_t magic[]{0xab,0x4b,0x54,0x58,0x20,0x31,0x31,0xbb,0x0d,0x0a,0x1a,0x0a};if(bytes.size()<64||!std::equal(std::begin(magic),std::end(magic),bytes.begin()))return nullptr;
+                auto bundle=std::make_unique<image::Ktx1Bundle>(bytes.data(),static_cast<std::uint32_t>(bytes.size()));
+                if(!bundle->isCubemap())return nullptr;
+                if(sh)bundle->getSphericalHarmonics(sh);
+                return ktxreader::Ktx1Reader::createTexture(m_engine,bundle.release(),false);
+            };
+            filament::math::float3 sh[9]{};
+            auto ibl=folder/(stem.string()+"_ibl.ktx"),sky=folder/(stem.string()+"_skybox.ktx");
+            if(path.extension()==".ktx")ibl=sky=path;
+            m_environment->Reflections=load(ibl,sh);m_environment->SkyTexture=load(sky,nullptr);
+            if(m_environment->Reflections)m_environment->Light=filament::IndirectLight::Builder().reflections(m_environment->Reflections).irradiance(3,sh).intensity(value.Intensity).build(*m_engine);
+            if(m_environment->SkyTexture)m_environment->Sky=filament::Skybox::Builder().environment(m_environment->SkyTexture).showSun(value.ShowSun).intensity(value.Intensity).build(*m_engine);
+        }
+    }
+    if(m_environment->Light){
+        m_environment->Light->setIntensity(value.Intensity);
+        const auto rotation=filament::math::mat3f::rotation(value.Rotation.Z,filament::math::float3{0,0,1})*filament::math::mat3f::rotation(value.Rotation.Y,filament::math::float3{0,1,0})*filament::math::mat3f::rotation(value.Rotation.X,filament::math::float3{1,0,0});
+        m_environment->Light->setRotation(rotation);
+    }
+    m_scene->setIndirectLight(value.ImageBasedLighting?m_environment->Light:nullptr);
+    m_scene->setSkybox(value.SkyboxVisible?m_environment->Sky:nullptr);
+    m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});
+}
+bool RenderBackend::HasEnvironmentLighting() const{return m_scene&&m_scene->getIndirectLight()!=nullptr;}
+bool RenderBackend::HasEnvironmentSkybox() const{return m_scene&&m_scene->getSkybox()!=nullptr;}
 
 void RenderBackend::Render() {
     if (!m_renderer) return;
@@ -404,11 +484,16 @@ void RenderBackend::Render() {
         (void)id;
         if (!resource->SwapChain || !m_renderer->beginFrame(resource->SwapChain)) continue;
         if (resource->Kind == ViewportKind::Scene) {
+            m_assets->BeginEditorView(m_editorHidden);
+            std::vector<utils::Entity> suspendedLights;
+            for(const auto& [owner,entity]:m_editorLights)if(m_editorHidden.contains(owner)&&m_scene->hasEntity(entity)){m_scene->remove(entity);suspendedLights.push_back(entity);}
             if (resource->View) m_renderer->render(resource->View);
+            for(auto entity:suspendedLights)m_scene->addEntity(entity);
+            m_assets->EndEditorView();
             if (resource->HelperView && m_orientationVisible) {
                 m_renderer->setClearOptions({.clearColor={0,0,0,0},.clear=false});
                 m_renderer->render(resource->HelperView);
-                m_renderer->setClearOptions({.clearColor={0.055,0.065,0.085,1.0},.clear=true});
+                m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});
             }
         } else {
             if (m_activeViews.empty()) {
@@ -429,6 +514,8 @@ void RenderBackend::Render() {
 
 void RenderBackend::Shutdown() {
     if (m_engine == nullptr) return;
+    m_scene->setSkybox(nullptr);m_scene->setIndirectLight(nullptr);
+    if(m_environment){if(m_environment->Sky)m_engine->destroy(m_environment->Sky);if(m_environment->Light)m_engine->destroy(m_environment->Light);if(m_environment->SkyTexture)m_engine->destroy(m_environment->SkyTexture);if(m_environment->Reflections)m_engine->destroy(m_environment->Reflections);m_environment.reset();}
     while (!m_viewports.empty()) DestroyViewport(m_viewports.begin()->first);
     m_activeViews.clear();
     m_postProcessEffects.clear();
@@ -452,6 +539,7 @@ void RenderBackend::Shutdown() {
         for(auto* value:m_gizmo->Vertices)if(value)m_engine->destroy(value);
         for(auto* value:m_gizmo->Indices)if(value)m_engine->destroy(value);
         if (m_gizmo->Material) m_engine->destroy(m_gizmo->Material);
+        if (m_gizmo->GuideMaterial) m_engine->destroy(m_gizmo->GuideMaterial);
         m_gizmo.reset();
     }
     if (m_scene != nullptr) m_engine->destroy(m_scene);

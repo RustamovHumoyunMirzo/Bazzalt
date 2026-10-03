@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <fstream>
 #include <array>
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <stdexcept>
@@ -21,9 +22,11 @@
 #include <pybind11/stl.h>
 
 #include "Runtime/Engine.h"
+#include "Bazzalt/Material.h"
 #include "Runtime/NativeScriptRuntime.h"
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Components/Light.h"
+#include "Rendering/LightParameters.h"
 #include "Bazzalt/Components/Mesh.h"
 #include "Bazzalt/Components/PrimitiveObject.h"
 #include "Bazzalt/Components/ModelInstance.h"
@@ -94,10 +97,15 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
         py::dict v;v["Projection"]=static_cast<int>(camera->Projection);v["Field of View"]=ToDegrees(camera->VerticalFieldOfView);v["Orthographic Size"]=camera->OrthographicSize;v["Near"]=camera->NearPlane;v["Far"]=camera->FarPlane;v["Aspect Ratio"]=camera->AspectRatio;v["Aspect Mode"]=static_cast<int>(camera->AspectMode);v["Viewport"]=py::make_tuple(camera->Viewport.X,camera->Viewport.Y,camera->Viewport.Width,camera->Viewport.Height);v["Priority"]=camera->Priority;v["Active"]=camera->Active;v["Clear Color"]=py::make_tuple(camera->ClearColor.X,camera->ClearColor.Y,camera->ClearColor.Z,camera->ClearColor.W);v["Post Processing"]=camera->PostProcessing.Enabled;v["Bloom"]=camera->PostProcessing.Bloom;v["Ambient Occlusion"]=camera->PostProcessing.AmbientOcclusion;v["Anti Aliasing"]=static_cast<int>(camera->PostProcessing.AntiAliasingMode);v["Tone Mapping"]=static_cast<int>(camera->PostProcessing.ToneMappingMode);v["Exposure"]=camera->PostProcessing.Exposure;v["Depth of Field"]=camera->PostProcessing.DepthOfField.Enabled;v["Focus Distance"]=camera->PostProcessing.DepthOfField.FocusDistance;v["Aperture"]=camera->PostProcessing.DepthOfField.Aperture;v["Shutter Speed"]=camera->PostProcessing.DepthOfField.ShutterSpeed;v["Sensitivity"]=camera->PostProcessing.DepthOfField.Sensitivity;data["Camera"]=v;
     }
     if (const auto* light=entity.TryGetComponent<Light>()) {
-        py::dict v;v["Type"]=static_cast<int>(light->Type);v["Color"]=py::make_tuple(light->Color.X,light->Color.Y,light->Color.Z);v["Intensity"]=light->Intensity;v["Range"]=light->Range;v["Inner Cone"]=ToDegrees(light->InnerConeAngle);v["Outer Cone"]=ToDegrees(light->OuterConeAngle);v["Sun Angular Radius"]=light->SunAngularRadius;v["Sun Halo Size"]=light->SunHaloSize;v["Sun Halo Falloff"]=light->SunHaloFalloff;v["Cast Shadows"]=light->CastShadows;data["Light"]=v;
+        const auto effective=Runtime::SanitizeLight(*light);py::dict v;
+        v["Type"]=static_cast<int>(effective.Type);v["Color"]=py::make_tuple(effective.Color.X,effective.Color.Y,effective.Color.Z);v["Intensity"]=effective.Intensity;
+        if(effective.Type==LightType::Point||effective.Type==LightType::Spot)v["Range"]=effective.Range;
+        if(effective.Type==LightType::Spot){v["Inner Cone"]=ToDegrees(effective.InnerConeAngle);v["Outer Cone"]=ToDegrees(effective.OuterConeAngle);}
+        if(effective.Type==LightType::Sun){v["Sun Angular Radius"]=ToDegrees(effective.SunAngularRadius);v["Sun Halo Size"]=effective.SunHaloSize;v["Sun Halo Falloff"]=effective.SunHaloFalloff;}
+        v["Cast Shadows"]=effective.CastShadows;data["Light"]=v;
     }
     if (const auto* mesh=entity.TryGetComponent<Mesh>()) { py::dict v;v["Mesh Asset"]=mesh->MeshAsset.ToString();v["Model Node Index"]=mesh->ModelNodeIndex;v["Material Asset"]=mesh->MaterialAsset.ToString();py::list slots;for(UUID id:mesh->Materials)slots.append(id.ToString());v["Material Slots"]=slots;v["Material Count"]=static_cast<int>(mesh->Materials.size());v["Layer Mask"]=mesh->LayerMask;v["Visible"]=mesh->Visible;v["Cast Shadows"]=mesh->CastShadows;v["Receive Shadows"]=mesh->ReceiveShadows;data["Mesh"]=v; }
-    if(const auto* primitive=entity.TryGetComponent<PrimitiveObject>()){py::dict v;v["Shape"]=static_cast<int>(primitive->Shape);switch(primitive->Shape){case PrimitiveShape::Cube:v["Size"]=py::make_tuple(primitive->Size.X,primitive->Size.Y,primitive->Size.Z);break;case PrimitiveShape::Sphere:v["Radius"]=primitive->Radius;v["Segments"]=primitive->Segments;v["Rings"]=primitive->Rings;break;case PrimitiveShape::Cylinder:v["Radius"]=primitive->Radius;v["Height"]=primitive->Height;v["Segments"]=primitive->Segments;break;case PrimitiveShape::Capsule:v["Radius"]=primitive->Radius;v["Height"]=primitive->Height;v["Segments"]=primitive->Segments;v["Rings"]=primitive->Rings;break;case PrimitiveShape::Plane:v["Width"]=primitive->Width;v["Depth"]=primitive->Depth;break;case PrimitiveShape::Cone:v["Radius"]=primitive->Radius;v["Height"]=primitive->Height;v["Segments"]=primitive->Segments;break;case PrimitiveShape::Torus:v["Major Radius"]=primitive->MajorRadius;v["Minor Radius"]=primitive->MinorRadius;v["Segments"]=primitive->Segments;v["Rings"]=primitive->Rings;break;}v["Color"]=py::make_tuple(primitive->Color.X,primitive->Color.Y,primitive->Color.Z,primitive->Color.W);v["Layer Mask"]=primitive->LayerMask;v["Visible"]=primitive->Visible;v["Cast Shadows"]=primitive->CastShadows;v["Receive Shadows"]=primitive->ReceiveShadows;data["Primitive Object"]=v;}
+    if(const auto* primitive=entity.TryGetComponent<PrimitiveObject>()){py::dict v;v["Shape"]=static_cast<int>(primitive->Shape);switch(primitive->Shape){case PrimitiveShape::Cube:v["Size"]=py::make_tuple(primitive->Size.X,primitive->Size.Y,primitive->Size.Z);break;case PrimitiveShape::Sphere:v["Radius"]=primitive->Radius;v["Segments"]=primitive->Segments;v["Rings"]=primitive->Rings;break;case PrimitiveShape::Cylinder:v["Radius"]=primitive->Radius;v["Height"]=primitive->Height;v["Segments"]=primitive->Segments;break;case PrimitiveShape::Capsule:v["Radius"]=primitive->Radius;v["Height"]=primitive->Height;v["Segments"]=primitive->Segments;v["Rings"]=primitive->Rings;break;case PrimitiveShape::Plane:v["Width"]=primitive->Width;v["Depth"]=primitive->Depth;break;case PrimitiveShape::Cone:v["Radius"]=primitive->Radius;v["Height"]=primitive->Height;v["Segments"]=primitive->Segments;break;case PrimitiveShape::Torus:v["Major Radius"]=primitive->MajorRadius;v["Minor Radius"]=primitive->MinorRadius;v["Segments"]=primitive->Segments;v["Rings"]=primitive->Rings;break;}v["Color"]=py::make_tuple(primitive->Color.X,primitive->Color.Y,primitive->Color.Z,primitive->Color.W);v["Material Asset"]=primitive->MaterialAsset.ToString();v["Layer Mask"]=primitive->LayerMask;v["Visible"]=primitive->Visible;v["Cast Shadows"]=primitive->CastShadows;v["Receive Shadows"]=primitive->ReceiveShadows;data["Primitive Object"]=v;}
     if (const auto* model=entity.TryGetComponent<ModelInstance>()){py::dict v;v["Model Asset"]=model->ModelAsset.ToString();data["Model Instance"]=v;}
     if (const auto* node=entity.TryGetComponent<ModelNode>()){py::dict v;v["Model Asset"]=node->ModelAsset.ToString();v["Source Index"]=node->SourceIndex;v["Mesh Index"]=node->MeshIndex;v["Stable Path"]=node->StablePath;v["Has Mesh"]=node->HasMesh;data["Model Node"]=v;}
     if (const auto* blur=entity.TryGetComponent<GaussianBlur>()) { py::dict v;v["Size"]=blur->Size;data["Gaussian Blur"]=v; }
@@ -193,13 +201,14 @@ public:
     py::dict AssetInfo(const std::string& text) const {
         py::dict result;UUID id;
         const auto asset=UUID::TryParse(text,id)?AssetManager::GetAsset(id):AssetManager::GetAsset(std::filesystem::u8path(text));
-        if(asset){result["uuid"]=asset->Id.ToString();result["path"]=PathText(asset->SourcePath);result["cache"]=PathText(asset->CachePath);}
+        if(asset){result["uuid"]=asset->Id.ToString();result["path"]=PathText(asset->SourcePath);result["cache"]=PathText(asset->CachePath);result["importer"]=asset->Importer;result["settings"]=m_engine->GetAssetImportSettings(asset->Id);}
         return result;
     }
     py::str AssetDirectory() const {
         if (m_projectPath.empty()) return py::str();
         return PathText(m_projectPath.parent_path() / m_engine->GetProject().AssetDirectory);
     }
+    bool SetEnvironmentImportSettings(const std::string& id,const PropertyMap& settings){return m_engine->SetEnvironmentImportSettings(ParseUuid(id),settings);}
 
     py::list SceneEntities(Scene& scene) {
         py::list result;
@@ -324,6 +333,30 @@ public:
         result["path"] = m_scenePath.empty() ? py::str() : PathText(m_scenePath);
         return result;
     }
+    py::dict SceneEnvironmentInfo(const std::string& id){
+        const auto index=FindLoadedScene(id);if(!index)return {};
+        const auto& value=SceneAt(*index).GetEnvironment();py::dict result;
+        UUID resolved=value.Mode==SceneEnvironmentMode::Map?value.SourceAsset:UUID{};
+        if(value.Mode==SceneEnvironmentMode::Material&&value.MaterialAsset){const auto material=Material::Load(value.MaterialAsset);for(const auto& parameter:material.GetParameters())if(parameter.Type==ShaderParameterType::Texture2D){const auto texture=material.GetTexture(parameter.Name);const auto asset=AssetManager::GetAsset(texture);if(asset&&(asset->SourcePath.extension()==".hdr"||asset->SourcePath.extension()==".exr"||asset->SourcePath.extension()==".ktx")){resolved=texture;break;}}}
+        result["resolved_source"]=resolved.ToString();
+        result["mode"]=static_cast<int>(value.Mode);result["source"]=value.SourceAsset.ToString();result["material"]=value.MaterialAsset.ToString();result["intensity"]=value.Intensity;result["rotation"]=py::make_tuple(value.Rotation.X,value.Rotation.Y,value.Rotation.Z);result["clear_color"]=py::make_tuple(value.ClearColor.X,value.ClearColor.Y,value.ClearColor.Z,value.ClearColor.W);result["ibl"]=value.ImageBasedLighting;result["skybox"]=value.SkyboxVisible;result["show_sun"]=value.ShowSun;result["lighting_ready"]=*index==m_activeScene&&m_engine->HasEnvironmentLighting();result["skybox_ready"]=*index==m_activeScene&&m_engine->HasEnvironmentSkybox();return result;
+    }
+    bool SetSceneEnvironment(const std::string& id,const py::dict& data){
+        const auto index=FindLoadedScene(id);if(!index)return false;
+        auto value=SceneAt(*index).GetEnvironment();
+        if(data.contains("mode")){const auto mode=data["mode"].cast<int>();if(mode<0||mode>1)return false;value.Mode=static_cast<SceneEnvironmentMode>(mode);}
+        if(data.contains("source"))value.SourceAsset=ParseUuid(data["source"].cast<std::string>());
+        if(data.contains("material"))value.MaterialAsset=ParseUuid(data["material"].cast<std::string>());
+        const auto validAsset=[](UUID uuid,bool material){if(!uuid)return true;const auto info=AssetManager::GetAsset(uuid);if(!info)return false;const auto ext=info->SourcePath.extension();return material?ext==".matinst":ext==".hdr"||ext==".exr"||ext==".ktx";};
+        if(value.Mode==SceneEnvironmentMode::Map?!validAsset(value.SourceAsset,false):!validAsset(value.MaterialAsset,true))return false;
+        if(data.contains("intensity"))value.Intensity=data["intensity"].cast<float>();
+        if(data.contains("rotation")){const auto v=data["rotation"].cast<std::array<float,3>>();value.Rotation={v[0],v[1],v[2]};}
+        if(data.contains("clear_color")){const auto v=data["clear_color"].cast<std::array<float,4>>();value.ClearColor={v[0],v[1],v[2],v[3]};}
+        if(data.contains("ibl"))value.ImageBasedLighting=data["ibl"].cast<bool>();
+        if(data.contains("skybox"))value.SkyboxVisible=data["skybox"].cast<bool>();
+        if(data.contains("show_sun"))value.ShowSun=data["show_sun"].cast<bool>();
+        return SceneAt(*index).SetEnvironment(value);
+    }
     py::bytes CaptureScene() {
         const auto path=std::filesystem::temp_directory_path()/("bazzalt-history-"+UUID::Generate().ToString()+".bscene");
         if(!m_engine->SaveScene(path))return {};
@@ -341,9 +374,27 @@ public:
                               const std::string& property, py::object value) {
         Entity entity=RequireEntity(id);
         if(type=="Camera"&&entity.HasComponent<Camera>()){auto&v=entity.GetComponent<Camera>();if(property=="Projection")v.Projection=static_cast<CameraProjection>(value.cast<int>());else if(property=="Field of View")v.VerticalFieldOfView=ToRadians(value.cast<float>());else if(property=="Orthographic Size")v.OrthographicSize=value.cast<float>();else if(property=="Near")v.NearPlane=value.cast<float>();else if(property=="Far")v.FarPlane=value.cast<float>();else if(property=="Aspect Ratio")v.AspectRatio=value.cast<float>();else if(property=="Aspect Mode")v.AspectMode=static_cast<CameraAspectMode>(value.cast<int>());else if(property=="Viewport"){auto a=value.cast<std::array<float,4>>();v.Viewport={a[0],a[1],a[2],a[3]};}else if(property=="Priority")v.Priority=value.cast<int>();else if(property=="Active")v.Active=value.cast<bool>();else if(property=="Clear Color"){auto a=value.cast<std::array<float,4>>();v.ClearColor={a[0],a[1],a[2],a[3]};}else if(property=="Post Processing")v.PostProcessing.Enabled=value.cast<bool>();else if(property=="Bloom")v.PostProcessing.Bloom=value.cast<bool>();else if(property=="Ambient Occlusion")v.PostProcessing.AmbientOcclusion=value.cast<bool>();else if(property=="Anti Aliasing")v.PostProcessing.AntiAliasingMode=static_cast<AntiAliasing>(value.cast<int>());else if(property=="Tone Mapping")v.PostProcessing.ToneMappingMode=static_cast<ToneMapping>(value.cast<int>());else if(property=="Exposure")v.PostProcessing.Exposure=value.cast<float>();else if(property=="Depth of Field")v.PostProcessing.DepthOfField.Enabled=value.cast<bool>();else if(property=="Focus Distance")v.PostProcessing.DepthOfField.FocusDistance=value.cast<float>();else if(property=="Aperture")v.PostProcessing.DepthOfField.Aperture=value.cast<float>();else if(property=="Shutter Speed")v.PostProcessing.DepthOfField.ShutterSpeed=value.cast<float>();else if(property=="Sensitivity")v.PostProcessing.DepthOfField.Sensitivity=value.cast<float>();else return false;return true;}
-        if(type=="Light"&&entity.HasComponent<Light>()){auto&v=entity.GetComponent<Light>();if(property=="Type")v.Type=static_cast<LightType>(value.cast<int>());else if(property=="Color"){auto a=value.cast<std::array<float,3>>();v.Color={a[0],a[1],a[2]};}else if(property=="Intensity")v.Intensity=value.cast<float>();else if(property=="Range")v.Range=value.cast<float>();else if(property=="Inner Cone")v.InnerConeAngle=ToRadians(value.cast<float>());else if(property=="Outer Cone")v.OuterConeAngle=ToRadians(value.cast<float>());else if(property=="Sun Angular Radius")v.SunAngularRadius=value.cast<float>();else if(property=="Sun Halo Size")v.SunHaloSize=value.cast<float>();else if(property=="Sun Halo Falloff")v.SunHaloFalloff=value.cast<float>();else if(property=="Cast Shadows")v.CastShadows=value.cast<bool>();else if(property=="Enabled")v.Enabled=value.cast<bool>();else return false;return true;}
+        if(type=="Light"&&entity.HasComponent<Light>()){
+            auto& stored=entity.GetComponent<Light>();auto v=stored;
+            if(property=="Type"){const int index=value.cast<int>();if(index<0||index>3)return false;v.Type=static_cast<LightType>(index);}
+            else if(property=="Color"){auto a=value.cast<std::array<float,3>>();for(float c:a)if(!std::isfinite(c)||c<0)return false;v.Color={a[0],a[1],a[2]};}
+            else if(property=="Cast Shadows")v.CastShadows=value.cast<bool>();
+            else if(property=="Enabled")v.Enabled=value.cast<bool>();
+            else{
+                const float number=value.cast<float>();if(!std::isfinite(number)||number<0)return false;
+                if(property=="Intensity")v.Intensity=number;
+                else if(property=="Range")v.Range=number;
+                else if(property=="Inner Cone"){v.InnerConeAngle=ToRadians(number);v.OuterConeAngle=std::max(v.OuterConeAngle,v.InnerConeAngle);}
+                else if(property=="Outer Cone"){v.OuterConeAngle=ToRadians(number);v.InnerConeAngle=std::min(v.InnerConeAngle,v.OuterConeAngle);}
+                else if(property=="Sun Angular Radius")v.SunAngularRadius=ToRadians(number);
+                else if(property=="Sun Halo Size")v.SunHaloSize=number;
+                else if(property=="Sun Halo Falloff")v.SunHaloFalloff=number;
+                else return false;
+            }
+            stored=Runtime::SanitizeLight(v);return true;
+        }
         if(type=="Mesh"&&entity.HasComponent<Mesh>()){auto&v=entity.GetComponent<Mesh>();if((property=="Mesh Asset"||property=="Material Asset")){const auto text=value.cast<std::string>();UUID id;if(text!="0"&&!UUID::TryParse(text,id)){const auto asset=AssetManager::GetAsset(std::filesystem::u8path(text));if(!asset)return false;id=asset->Id;}if(property=="Mesh Asset")v.MeshAsset=id;else {if(id){const auto asset=AssetManager::GetAsset(id);if(!asset||asset->SourcePath.extension()!=".matinst")return false;}v.MaterialAsset=id;}}else if(property=="Model Node Index")v.ModelNodeIndex=value.cast<std::uint32_t>();else if(property=="Visible")v.Visible=value.cast<bool>();else if(property=="Cast Shadows")v.CastShadows=value.cast<bool>();else if(property=="Receive Shadows")v.ReceiveShadows=value.cast<bool>();else if(property=="Layer Mask")v.LayerMask=static_cast<std::uint8_t>(value.cast<int>());else return false;return true;}
-        if(type=="Primitive Object"&&entity.HasComponent<PrimitiveObject>()){auto&v=entity.GetComponent<PrimitiveObject>();if(property=="Shape")v.Shape=static_cast<PrimitiveShape>(value.cast<int>());else if(property=="Size"){auto a=value.cast<std::array<float,3>>();v.Size={a[0],a[1],a[2]};}else if(property=="Radius")v.Radius=std::max(.001f,value.cast<float>());else if(property=="Height")v.Height=std::max(.001f,value.cast<float>());else if(property=="Width")v.Width=std::max(.001f,value.cast<float>());else if(property=="Depth")v.Depth=std::max(.001f,value.cast<float>());else if(property=="Major Radius")v.MajorRadius=std::max(.001f,value.cast<float>());else if(property=="Minor Radius")v.MinorRadius=std::clamp(value.cast<float>(),.001f,v.MajorRadius);else if(property=="Segments")v.Segments=std::clamp(value.cast<std::uint32_t>(),3u,128u);else if(property=="Rings")v.Rings=std::clamp(value.cast<std::uint32_t>(),2u,128u);else if(property=="Color"){auto a=value.cast<std::array<float,4>>();v.Color={a[0],a[1],a[2],a[3]};}else if(property=="Layer Mask")v.LayerMask=static_cast<std::uint8_t>(value.cast<int>());else if(property=="Visible")v.Visible=value.cast<bool>();else if(property=="Cast Shadows")v.CastShadows=value.cast<bool>();else if(property=="Receive Shadows")v.ReceiveShadows=value.cast<bool>();else return false;return true;}
+        if(type=="Primitive Object"&&entity.HasComponent<PrimitiveObject>()){auto&v=entity.GetComponent<PrimitiveObject>();if(property=="Material Asset"){const auto text=value.cast<std::string>();UUID id;if(text!="0"&&!UUID::TryParse(text,id))return false;if(id){const auto asset=AssetManager::GetAsset(id);if(!asset||asset->SourcePath.extension()!=".matinst")return false;}v.MaterialAsset=id;}else if(property=="Shape")v.Shape=static_cast<PrimitiveShape>(value.cast<int>());else if(property=="Size"){auto a=value.cast<std::array<float,3>>();v.Size={a[0],a[1],a[2]};}else if(property=="Radius")v.Radius=std::max(.001f,value.cast<float>());else if(property=="Height")v.Height=std::max(.001f,value.cast<float>());else if(property=="Width")v.Width=std::max(.001f,value.cast<float>());else if(property=="Depth")v.Depth=std::max(.001f,value.cast<float>());else if(property=="Major Radius")v.MajorRadius=std::max(.001f,value.cast<float>());else if(property=="Minor Radius")v.MinorRadius=std::clamp(value.cast<float>(),.001f,v.MajorRadius);else if(property=="Segments")v.Segments=std::clamp(value.cast<std::uint32_t>(),3u,128u);else if(property=="Rings")v.Rings=std::clamp(value.cast<std::uint32_t>(),2u,128u);else if(property=="Color"){auto a=value.cast<std::array<float,4>>();v.Color={a[0],a[1],a[2],a[3]};}else if(property=="Layer Mask")v.LayerMask=static_cast<std::uint8_t>(value.cast<int>());else if(property=="Visible")v.Visible=value.cast<bool>();else if(property=="Cast Shadows")v.CastShadows=value.cast<bool>();else if(property=="Receive Shadows")v.ReceiveShadows=value.cast<bool>();else return false;return true;}
         if(type=="Gaussian Blur"&&entity.HasComponent<GaussianBlur>()){auto&v=entity.GetComponent<GaussianBlur>();if(property=="Enabled")v.Enabled=value.cast<bool>();else if(property=="Size")v.Size=value.cast<float>();else return false;return true;}
         if(type=="Vignette"&&entity.HasComponent<Vignette>()){auto&v=entity.GetComponent<Vignette>();if(property=="Enabled")v.Enabled=value.cast<bool>();else if(property=="Color"){auto a=value.cast<std::array<float,4>>();v.Color={a[0],a[1],a[2],a[3]};}else if(property=="Intensity")v.Intensity=value.cast<float>();else if(property=="Smoothness")v.Smoothness=value.cast<float>();else if(property=="Roundness")v.Roundness=value.cast<float>();else return false;return true;}
         if(type=="Scene Query Bounds"&&entity.HasComponent<SceneQueryBounds>()){auto&v=entity.GetComponent<SceneQueryBounds>();if(property=="Shape")v.Shape=static_cast<SceneQueryShape>(value.cast<int>());else if(property=="Center"){auto a=value.cast<std::array<float,3>>();v.Center={a[0],a[1],a[2]};}else if(property=="Extents"){auto a=value.cast<std::array<float,3>>();v.Extents={a[0],a[1],a[2]};}else if(property=="Radius")v.Radius=value.cast<float>();else if(property=="Layer Mask")v.LayerMask=value.cast<std::uint32_t>();else if(property=="Enabled")v.Enabled=value.cast<bool>();else return false;return true;}
@@ -364,6 +415,7 @@ public:
     void SetSelectionOutline(const std::vector<std::string>& ids){std::vector<UUID> selected;for(const auto& id:ids)if(!id.empty())selected.push_back(ParseUuid(id));m_engine->SetEditorSelection(std::move(selected));}
     void SetGrid(bool visible, int plane) { m_engine->SetEditorGrid(visible, plane); }
     void SetEditorIconsVisible(bool visible){m_engine->SetEditorIconsVisible(visible);}
+    void SetEditorEntityState(const std::vector<std::string>& hidden,const std::vector<std::string>& blocked){std::vector<UUID> h,b;for(const auto& id:hidden)h.push_back(ParseUuid(id));for(const auto& id:blocked)b.push_back(ParseUuid(id));m_engine->SetEditorEntityState(std::move(h),std::move(b));}
     void SetEditorOrientationVisible(bool visible){m_engine->SetEditorOrientationVisible(visible);}
     bool SetSceneRenderMode(const std::string& mode){return m_engine->SetSceneRenderMode(mode);}
     bool CreateViewport(std::uint64_t id, std::uintptr_t handle, bool scene,
@@ -505,6 +557,9 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("set_component_enabled", &Bazzalt::EditorBridge::EditorHost::SetComponentEnabled)
         .def("component_types", &Bazzalt::EditorBridge::EditorHost::ComponentTypes)
         .def("scene_info", &Bazzalt::EditorBridge::EditorHost::SceneInfo)
+        .def("scene_environment", &Bazzalt::EditorBridge::EditorHost::SceneEnvironmentInfo)
+        .def("set_scene_environment", &Bazzalt::EditorBridge::EditorHost::SetSceneEnvironment)
+        .def("set_environment_import_settings", &Bazzalt::EditorBridge::EditorHost::SetEnvironmentImportSettings)
         .def("capture_scene", &Bazzalt::EditorBridge::EditorHost::CaptureScene)
         .def("restore_scene", &Bazzalt::EditorBridge::EditorHost::RestoreScene)
         .def("create_viewport", &Bazzalt::EditorBridge::EditorHost::CreateViewport)
@@ -520,6 +575,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("set_selection_outline", &Bazzalt::EditorBridge::EditorHost::SetSelectionOutline)
         .def("set_grid", &Bazzalt::EditorBridge::EditorHost::SetGrid)
         .def("set_editor_icons_visible", &Bazzalt::EditorBridge::EditorHost::SetEditorIconsVisible)
+        .def("set_editor_entity_state", &Bazzalt::EditorBridge::EditorHost::SetEditorEntityState)
         .def("set_editor_orientation_visible", &Bazzalt::EditorBridge::EditorHost::SetEditorOrientationVisible)
         .def("set_scene_render_mode", &Bazzalt::EditorBridge::EditorHost::SetSceneRenderMode)
         .def("configure_scripts", &Bazzalt::EditorBridge::EditorHost::ConfigureScripts)

@@ -46,6 +46,7 @@ if (-not (Test-Path -LiteralPath $Bshader)) { throw "Bshader editor translator i
 Copy-Item -LiteralPath $Bshader -Destination (Join-Path $EditorTarget "Editor/bshad.dll") -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $EditorTarget "tools/filament") | Out-Null
 Copy-Item -LiteralPath (Join-Path $Root "deps/filament/bin/matc.exe") -Destination (Join-Path $EditorTarget "tools/filament/matc.exe") -Force
+Copy-Item -LiteralPath (Join-Path $Root "deps/filament/bin/cmgen.exe") -Destination (Join-Path $EditorTarget "tools/filament/cmgen.exe") -Force
 $Toolchain = Join-Path $Root "toolchain/llvm"
 if (-not (Test-Path (Join-Path $Toolchain "bin/clang++.exe"))) { throw "Bundled LLVM is missing. Run scripts/get_llvm.ps1 before production packaging." }
 New-Item -ItemType Directory -Force -Path (Join-Path $EditorTarget "toolchain") | Out-Null

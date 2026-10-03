@@ -94,7 +94,7 @@ bool Get(UUID id,const char* name,Detail::MaterialValue* value){auto* d=Material
     auto f=d->Values.find(name);if(f==d->Values.end())return false;*value=f->second;return true;}
 bool Set(UUID id,const char* name,ShaderParameterType type,const Detail::MaterialValue* value){auto* d=MaterialDefinition(id);if(!d||!value||!name)return false;
     for(const auto& p:d->Parameters)if(p.Name==name&&p.Type==type){for(float v:value->Numbers)if(!std::isfinite(v))return false;
-        if(type==ShaderParameterType::Texture2D&&value->Texture){auto a=AssetManager::GetAsset(value->Texture);if(!a)return false;const auto ext=Extension(a->SourcePath);if(ext!=".png"&&ext!=".jpg"&&ext!=".jpeg")return false;}
+        if(type==ShaderParameterType::Texture2D&&value->Texture){auto a=AssetManager::GetAsset(value->Texture);if(!a)return false;const auto ext=Extension(a->SourcePath);if(ext!=".png"&&ext!=".jpg"&&ext!=".jpeg"&&ext!=".hdr"&&ext!=".exr")return false;}
         d->Overrides[name]=*value;return true;}return false;}
 UUID Clone(UUID id,bool shader){auto* d=shader?ShaderDefinition(id):MaterialDefinition(id);if(!d)return {};auto copy=*d;copy.Transient=true;copy.Shader=shader?id:d->Shader;auto uuid=UUID::Generate();Materials.emplace(uuid,std::move(copy));return uuid;}
 Detail::MaterialServices Services{Valid,GetShader,Parameter,Get,Set,Clone};

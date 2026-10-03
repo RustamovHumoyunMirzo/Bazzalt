@@ -56,6 +56,12 @@ int main(int argc,char** argv){
         material.SetColor("baseColor",{0.7f,0.9f,0.1f,1});renderer.UpdateMesh(handle,Mat4::Identity(),mesh);
         renderScene->forEach([&](utils::Entity entity){auto ri=graphics->getRenderableManager().getInstance(entity);if(ri)assert(graphics->getRenderableManager().getMaterialInstanceAt(ri,0)->getParameter<filament::math::float4>("baseColor").y==0.9f);});
         assert(renderer.SetDebugMode("unlit"));renderer.UpdateMesh(handle,Mat4::Identity(),mesh);assert(renderer.SetDebugMode("lit"));renderer.DestroyMesh(handle);
+        PrimitiveObject primitive;primitive.MaterialAsset=asset->Id;
+        const auto primitiveHandle=renderer.CreatePrimitive(primitive);assert(primitiveHandle!=Runtime::RenderAssets::InvalidHandle);renderer.UpdatePrimitive(primitiveHandle,Mat4::Identity(),primitive);
+        int primitiveChecked=0;renderScene->forEach([&](utils::Entity entity){auto ri=graphics->getRenderableManager().getInstance(entity);if(!ri)return;auto* mi=graphics->getRenderableManager().getMaterialInstanceAt(ri,0);assert(mi->getParameter<filament::math::float4>("baseColor").y==0.9f);assert(graphics->getRenderableManager().getEnabledAttributesAt(ri,0).test(static_cast<unsigned>(filament::VertexAttribute::UV0)));++primitiveChecked;});assert(primitiveChecked==1);
+        material.SetColor("baseColor",{.1f,.3f,.6f,1});renderer.UpdatePrimitive(primitiveHandle,Mat4::Identity(),primitive);
+        renderScene->forEach([&](utils::Entity entity){auto ri=graphics->getRenderableManager().getInstance(entity);if(ri)assert(graphics->getRenderableManager().getMaterialInstanceAt(ri,0)->getParameter<filament::math::float4>("baseColor").y==0.3f);});
+        assert(renderer.SetDebugMode("unlit"));renderer.UpdatePrimitive(primitiveHandle,Mat4::Identity(),primitive);assert(renderer.SetDebugMode("lit"));renderer.DestroyPrimitive(primitiveHandle);
     }
     graphics->destroy(renderScene);filament::Engine::destroy(&graphics);
     engine.Shutdown();std::filesystem::remove_all(directory);

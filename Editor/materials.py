@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import shutil
 import sys
 import tempfile
 import uuid
@@ -23,6 +24,17 @@ COUNTS = {0:1,1:2,2:3,3:4,4:1,5:1,6:1,7:9,8:16}
 
 class MaterialError(ValueError):
     pass
+
+def _ToolTemporaryRoot()->Path:
+    root=Path(tempfile.gettempdir())
+    if os.name=="nt" and not str(root).isascii():
+        buffer=ctypes.create_unicode_buffer(32768)
+        function=ctypes.WinDLL("kernel32",use_last_error=True).GetShortPathNameW
+        function.argtypes=[ctypes.c_wchar_p,ctypes.c_wchar_p,ctypes.c_uint32];function.restype=ctypes.c_uint32
+        length=function(str(root),buffer,len(buffer))
+        if not length or length>=len(buffer) or not buffer.value.isascii():raise MaterialError("Filament tools require a writable ASCII TEMP path")
+        root=Path(buffer.value)
+    return root
 
 def _Write(path:Path,text:str):
     """Replace atomically; don't invalidate watchers when contents are unchanged."""
@@ -171,16 +183,22 @@ class MaterialCompiler:
     def CompileShader(self,reference)->dict:
         reflection=self.InspectShader(reference);asset=self.runtime.AssetInfo(reference);cache=Path(asset["cache"])
         source=Path(str(cache)+".translated.mat");output=Path(str(cache)+".filamat");state=Path(str(cache)+".build.json");tool=self._Tool("matc")
-        digest=hashlib.sha256(source.read_bytes()+str(tool.stat().st_mtime_ns).encode()+b"bazzalt-material-v1").hexdigest()
+        digest=hashlib.sha256(source.read_bytes()+str(tool.stat().st_mtime_ns).encode()+b"bazzalt-material-v2").hexdigest()
         try:previous=json.loads(state.read_text(encoding="utf-8"))
         except (OSError,ValueError):previous={}
         if previous.get("hash")==digest and output.is_file():return reflection
         if self._failures.get(asset["uuid"],(None,None))[0]==digest:raise MaterialError(self._failures[asset["uuid"]][1])
         temporary=Path(str(output)+".pending")
         try:
-            process=subprocess.run([str(tool),"--platform","desktop","--api","all","--output",str(temporary),str(source)],capture_output=True,text=True,encoding="utf-8",errors="replace",creationflags=subprocess.CREATE_NO_WINDOW if os.name=="nt" else 0)
-            if process.returncode or not temporary.is_file():
-                message=(process.stdout+process.stderr).strip() or "Filament material compilation failed";self._failures[asset["uuid"]]=(digest,message);raise MaterialError(message)
+            # matc narrows Windows argv, just like cmgen. Keep all input/output
+            # arguments ASCII and publish the artifact with Unicode-safe APIs.
+            with tempfile.TemporaryDirectory(prefix="BazzaltMaterial-",dir=_ToolTemporaryRoot()) as staging:
+                staged_source=Path(staging)/"source.mat";staged_output=Path(staging)/"compiled.filamat"
+                shutil.copyfile(source,staged_source)
+                process=subprocess.run([str(tool),"--platform","desktop","--api","all","--output",str(staged_output),str(staged_source)],capture_output=True,text=True,encoding="utf-8",errors="replace",creationflags=subprocess.CREATE_NO_WINDOW if os.name=="nt" else 0)
+                if process.returncode or not staged_output.is_file():
+                    message=(process.stdout+process.stderr).strip() or "Filament material compilation failed";self._failures[asset["uuid"]]=(digest,message);raise MaterialError(message)
+                shutil.copyfile(staged_output,temporary)
             os.replace(temporary,output);_Write(state,json.dumps({"hash":digest,"version":1}))
             self._failures.pop(asset["uuid"],None)
         finally:
@@ -210,4 +228,4 @@ class MaterialCompiler:
                 value=ValidateValue(p,data["properties"].get(p["name"],p["default"]))
                 if p["kind"]==6 and value!=ZERO:
                     texture=self.runtime.AssetInfo(value)
-                    if not texture or Path(texture["path"]).suffix.lower() not in {".png",".jpg",".jpeg"}:raise MaterialError("Material texture reference must be a project image asset")
+                    if not texture or Path(texture["path"]).suffix.lower() not in {".png",".jpg",".jpeg",".hdr",".exr"}:raise MaterialError("Material texture reference must be a project image or HDR environment asset")

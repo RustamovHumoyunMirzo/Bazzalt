@@ -7,12 +7,14 @@ from math import cos, sin
 from time import monotonic
 
 from PySide6.QtCore import QObject, QSignalBlocker, QTimer, Qt
-from PySide6.QtWidgets import QApplication, QFileDialog, QLabel, QMenu, QProgressDialog
+from PySide6.QtWidgets import QApplication, QFileDialog, QLabel, QMenu, QProgressDialog, QLineEdit, QWidgetAction
 
 from ..runtime import RuntimeService
 from ..history import SceneHistory
 from ..scripting import ScriptAttachments, ScriptCompiler, ScriptValidationError
 from ..materials import MaterialCompiler, MaterialError, ZERO, COUNTS
+from ..environments import InspectEnvironment
+from .widgets.inspector_viewport import InspectorViewport
 from .panels import ConsoleLevel
 from .panels.assets import (ENVIRONMENT_EXTENSIONS, IMAGE_EXTENSIONS,
                             MODEL_EXTENSIONS, SHADER_EXTENSIONS)
@@ -26,6 +28,7 @@ class EditorController(QObject):
         self.Window = window
         self.Runtime = runtime
         self.SelectedEntity = ""
+        self.InspectedScene = ""
         self.SelectedEntities: list[str] = []
         self.ScenePath = ""
         self._updating_inspector = False
@@ -66,6 +69,7 @@ class EditorController(QObject):
         window.Toolbar.StepRequested.connect(runtime.Step)
         window.Toolbar.GizmoModeChanged.connect(self._GizmoModeChanged)
         window.Hierarchy.SelectionChanged.connect(self.SelectEntity)
+        window.Hierarchy.EditorStateRequested.connect(self.SetEntityEditorState)
         window.AssetBrowser.SelectionCleared.connect(lambda:self.SelectEntity(None))
         window.Hierarchy.CreateRequested.connect(self.CreateEntity)
         window.Hierarchy.CreateTypedRequested.connect(self.CreateTypedEntity)
@@ -152,6 +156,8 @@ class EditorController(QObject):
         assets = self.Runtime.AssetDirectory()
         self.Window.AssetBrowser.SetProjectRoot(assets or Path(path).parent)
         project=Path(path).parent if Path(path).is_file() else Path(path)
+        project_id=str(self.Runtime.ProjectInfo().get("uuid",""));saved=self.Window._settings.get("entity_editor_state",{}).get(project_id,{})
+        self.Runtime.EditorEntityState={str(entity):{key:bool(value) for key,value in flags.items() if key in {"locked","hidden"}} for entity,flags in saved.items() if isinstance(flags,dict)} if isinstance(saved,dict) else {}
         self.ScriptCompiler=ScriptCompiler(project);self.ScriptAttachments=ScriptAttachments(project)
         self.Window.Console.AddMessage(
             self.Window.Localization.Translate("console.project_loaded", path=path)
@@ -159,14 +165,15 @@ class EditorController(QObject):
 
     def RefreshHierarchy(self) -> None:
         self.Window.Output.SetGameCameraAvailable(self.Runtime.HasActiveCamera())
-        selected = list(self.SelectedEntities)
+        selected = list(self.SelectedEntities) or ([self.InspectedScene] if self.InspectedScene else [])
         hierarchy_blocker=QSignalBlocker(self.Window.Hierarchy.Tree)
         self.Window.Hierarchy.Tree.setUpdatesEnabled(False)
         self.Window.Hierarchy.Clear()
         items = {}
         theme = "light" if self.Window.ThemeManager.GetTheme().background == "#d4d4d4" else "dark"
         root_ids={"","0","00000000-0000-0000-0000-000000000000"}
-        for scene_info in self.Runtime.LoadedScenes():
+        loaded_scenes=self.Runtime.LoadedScenes();self.Runtime.SyncEditorEntityState(loaded_scenes)
+        for scene_info in loaded_scenes:
             scene_id=str(scene_info.get("uuid",""));scene_name=str(scene_info.get("name","Untitled"))
             scene_root=self.Window.Hierarchy.AddItem(scene_name,scene_id,icon=self.Window.Resources.Icon(f"icons/{theme}/scene.svg"),kind="scene",active=bool(scene_info.get("active")))
             scene_root.setExpanded(True);pending=list(scene_info.get("entities",()))
@@ -179,6 +186,7 @@ class EditorController(QObject):
                 if not progress:
                     for entity in pending:items[entity["uuid"]]=self.Window.Hierarchy.AddItem(entity["name"],entity["uuid"],scene_root,self.Window.Resources.Icon(f"icons/{theme}/obj.svg"),"entity")
                     break
+        for entity_id,item in items.items():self.Window.Hierarchy.SetEditorState(item,self.Runtime.IsEditorLocked(entity_id),self.Runtime.IsEditorHidden(entity_id),self.Window.Resources.Icon(f"icons/{theme}/lock.svg"),self.Runtime.EditorEntityState.get(entity_id,{}))
         self.Window.Hierarchy.ApplyExpansionState(items)
         self.Window.Hierarchy.SetDirtyScenes(self._dirty_scenes)
         self.Window.Hierarchy.SetSelectedData(selected)
@@ -191,6 +199,8 @@ class EditorController(QObject):
         if isinstance(entity_id,(list,tuple)):
             self.SelectEntities([str(value) for value in entity_id]);return
         next_entity = str(entity_id or "")
+        self.InspectedScene=""
+        if self.Runtime.IsEditorLocked(next_entity):next_entity=""
         if not force and next_entity and next_entity==self.SelectedEntity and self.Window.Properties._sections:
             self._RefreshInspectorValues();self._UpdateGizmo();return
         self._updating_inspector = True
@@ -201,6 +211,8 @@ class EditorController(QObject):
         self.Window.Properties.AddComponentButton.setVisible(bool(next_entity))
         if not self.SelectedEntity:
             self.Window.Scene.Surface.SetSelection(None);self._UpdateGizmo();return
+        if any(str(scene.get("uuid"))==self.SelectedEntity for scene in self.Runtime.LoadedScenes()):
+            scene_id=self.SelectedEntity;self.InspectedScene=scene_id;self.SelectedEntity="";self.SelectedEntities=[];self.Window.Scene.Surface.SetSelection(None);self._UpdateGizmo();self._InspectScene(scene_id);return
         details = self.Runtime.EntityDetails(self.SelectedEntity)
         if not details:self._UpdateGizmo();return
         self.Window.Scene.Surface.SetSelection(details.get("world_position", details["position"]))
@@ -246,7 +258,7 @@ class EditorController(QObject):
         self._UpdateGizmo()
 
     def SelectEntities(self,entity_ids:list[str])->None:
-        unique=list(dict.fromkeys(value for value in entity_ids if value))
+        unique=list(dict.fromkeys(value for value in entity_ids if value and not self.Runtime.IsEditorLocked(value)))
         if len(unique)<=1:self.SelectEntity(unique[0] if unique else None);return
         details=[self.Runtime.EntityDetails(value) for value in unique];details=[value for value in details if value]
         if len(details)<=1:self.SelectEntity(unique[0] if details else None);return
@@ -280,7 +292,7 @@ class EditorController(QObject):
         else:self.History.Cancel()
 
     def SelectSceneBox(self,entity_ids:list[str],additive:bool=False)->None:
-        desired=list(dict.fromkeys((self._box_selection_base if additive else [])+entity_ids))
+        desired=list(dict.fromkeys(value for value in (self._box_selection_base if additive else [])+entity_ids if self.Runtime.IsEditorSelectable(value)))
         if desired==self.SelectedEntities:return
         self.SelectEntities(desired);self.Window.Hierarchy.SetSelectedData(desired)
 
@@ -303,10 +315,12 @@ class EditorController(QObject):
         return result
 
     def Undo(self)->None:
-        if self.History.Undo():self.SetDirty(True);self.RefreshHierarchy();self.SelectEntities(self.SelectedEntities)
+        scene=self.InspectedScene
+        if self.History.Undo():self.SetDirty(True);self.RefreshHierarchy();self.SelectEntity(scene,force=True) if scene else self.SelectEntities(self.SelectedEntities)
 
     def Redo(self)->None:
-        if self.History.Redo():self.SetDirty(True);self.RefreshHierarchy();self.SelectEntities(self.SelectedEntities)
+        scene=self.InspectedScene
+        if self.History.Redo():self.SetDirty(True);self.RefreshHierarchy();self.SelectEntity(scene,force=True) if scene else self.SelectEntities(self.SelectedEntities)
 
     def SelectAsset(self,path)->None:
         self.Runtime.RefreshAssets()
@@ -314,6 +328,7 @@ class EditorController(QObject):
         section=self.Window.Properties.AddComponentSection("asset",self.Window.Localization.Translate("properties.asset"),removable=False)
         for label,value in (("Name",path.name),("Type",path.suffix.lower() or "Folder"),("Path",str(path)),("Size",self._FormatAssetSize(self._AssetSize(path)))):section.AddField(self.Window.Localization.Translate(f"properties.asset_{label.lower()}") if label!="Name" else self.Window.Localization.Translate("properties.asset_name"),QLabel(value))
         if path.suffix.lower()==".matinst":self._InspectMaterial(path)
+        elif path.suffix.lower() in {".hdr",".exr",".ktx"}:self._InspectEnvironment(path)
         elif path.suffix.lower() in {".mat",".shad"}:
             try:
                 reflection=self.MaterialCompiler.InspectShader(path)
@@ -324,6 +339,70 @@ class EditorController(QObject):
     def _MaterialError(self,error)->None:
         message=self.Window.Localization.Translate("materials.failed",error=str(error))
         if message!=self._material_error:self.Window.Console.AddMessage(message,ConsoleLevel.Error,True,self.Window.Localization.Translate("materials.source"));self._material_error=message
+
+    def _InspectScene(self,scene_id):
+        tr=self.Window.Localization.Translate;self.Window.Properties.AddComponentButton.hide()
+        data=self.Runtime.SceneEnvironment(scene_id)
+        if not data:return
+        section=self.Window.Properties.AddComponentSection("scene.environment",tr("environment.section"),removable=False)
+        commit=lambda key,value:self._SetSceneEnvironment(scene_id,key,value)
+        mode=EnumInput();mode.setObjectName("SceneEnvironmentMode");mode.SetOptions(((tr("environment.map_mode"),0),(tr("environment.material_mode"),1)));mode.SetValue(data.get("mode",0));mode.currentIndexChanged.connect(lambda _:commit("mode",mode.GetValue()));section.AddField(tr("environment.mode"),mode)
+        if data.get("mode",0)==0:section.AddField(tr("environment.source"),self._AssetPicker(data["source"],{".hdr",".exr",".ktx"},lambda value:commit("source",value)))
+        else:section.AddField(tr("environment.material"),self._AssetPicker(data["material"],{".matinst"},lambda value:commit("material",value)))
+        intensity=FloatInput(minimum=0,maximum=1000000,value=data["intensity"]);intensity.valueChanged.connect(lambda value:commit("intensity",value));section.AddField(tr("environment.intensity"),intensity)
+        from math import degrees,radians
+        rotation=Vec3Input([degrees(value) for value in data["rotation"]]);rotation.ValueChanged.connect(lambda value:commit("rotation",[radians(item) for item in value]));section.AddField(tr("environment.rotation"),rotation)
+        from PySide6.QtGui import QColor
+        color=ColorInput(QColor.fromRgbF(*data["clear_color"]));color.ValueChanged.connect(lambda value:commit("clear_color",[value.redF(),value.greenF(),value.blueF(),value.alphaF()]));section.AddField(tr("environment.clear_color"),color)
+        for key in ("ibl","skybox","show_sun"):
+            field=BoolInput(data[key]);field.ValueChanged.connect(lambda value,k=key:commit(k,value));section.AddField(tr("environment."+key),field)
+        preview=InspectorViewport(empty_text=tr("environment.empty"));preview.SetClearColor(data["clear_color"])
+        color.ValueChanged.connect(preview.SetClearColor)
+        info=self.Runtime.AssetInfo(data.get("resolved_source",data["source"] if data.get("mode",0)==0 else ZERO))
+        if info:
+            try:preview.SetImage(str(InspectEnvironment(info["path"],info)["preview"]))
+            except OSError:pass
+        section.AddViewport(preview)
+
+    def SetEntityEditorState(self,entity_id,key,value):
+        if key not in {"locked","hidden"}:return
+        state=self.Runtime.EditorEntityState.setdefault(str(entity_id),{});state[key]=bool(value)
+        if not any(state.values()):self.Runtime.EditorEntityState.pop(str(entity_id),None)
+        project=str(self.Runtime.ProjectInfo().get("uuid",""))
+        if project and project!=ZERO:
+            self.Window._settings.setdefault("entity_editor_state",{})[project]=dict(self.Runtime.EditorEntityState)
+            if self.Window._settings_saver is not None:self.Window._settings_saver(self.Window._settings)
+        selected=[entity for entity in self.SelectedEntities if not self.Runtime.IsEditorLocked(entity) and not self.Runtime.IsEditorHidden(entity)]
+        self.SelectEntities(selected);self.RefreshHierarchy()
+
+    def _SetSceneEnvironment(self,scene_id,key,value):
+        active=scene_id==str(self.Runtime.SceneInfo().get("uuid"));
+        if active:self.History.Begin(self.Window.Localization.Translate("environment.history"))
+        if self.Runtime.SetSceneEnvironment(scene_id,{key:value}):
+            if active:self.History.Commit()
+            self.SetDirty(True,[scene_id]);self._PrepareUsedMaterials()
+            if key in {"mode","source","material"}:QTimer.singleShot(0,self,lambda:self.SelectEntity(scene_id,force=True) if self.InspectedScene==scene_id else None)
+        elif active:self.History.Cancel()
+
+    def _InspectEnvironment(self,path):
+        tr=self.Window.Localization.Translate;info=self.Runtime.AssetInfo(str(path))
+        try:data=InspectEnvironment(path,info)
+        except (OSError,ValueError) as error:self._MaterialError(error);return
+        section=self.Window.Properties.AddComponentSection("asset.environment",tr("environment.asset"),removable=False)
+        section.AddField(tr("environment.resolution"),QLabel(f'{data["width"]} × {data["height"]}'))
+        section.AddField(tr("environment.ibl_status"),QLabel(tr("environment.ready" if data["ibl"].is_file() or path.suffix.lower()==".ktx" else "environment.missing")))
+        settings=data["settings"]
+        resolution=EnumInput();resolution.SetOptions([(str(value),str(value)) for value in (32,64,128,256,512,1024)]);resolution.SetValue(settings.get("Resolution","128"))
+        samples=EnumInput();samples.SetOptions([(str(value),str(value)) for value in (64,128,256,512,1024)]);samples.SetValue(settings.get("Samples","256"))
+        section.AddField(tr("environment.ibl_resolution"),resolution);section.AddField(tr("environment.samples"),samples)
+        from PySide6.QtWidgets import QPushButton
+        apply=QPushButton(tr("environment.reimport"));apply.setEnabled(path.suffix.lower()!=".ktx")
+        apply.clicked.connect(lambda:self._ReimportEnvironment(path,info,resolution.currentText(),samples.currentText()));section.AddViewport(apply)
+        preview=InspectorViewport(empty_text=tr("environment.preview_missing"));preview.SetImage(str(data["preview"]));section.AddViewport(preview)
+
+    def _ReimportEnvironment(self,path,info,resolution,samples):
+        if self.Runtime.SetEnvironmentImportSettings(info["uuid"],{"Resolution":resolution,"Samples":samples}):self.SelectAsset(path)
+        else:self._MaterialError(self.Runtime.LastError())
 
     def _AssetPicker(self,value,extensions,commit):
         tr=self.Window.Localization.Translate
@@ -341,7 +420,7 @@ class EditorController(QObject):
             for parameter in reflection["parameters"]:
                 name=parameter["name"];value=data["properties"].get(name,parameter["default"]);kind=parameter["kind"]
                 commit=lambda v,p=parameter:self._SetMaterialProperty(path,data,p,v)
-                if kind==6:editor=self._AssetPicker(value,{".png",".jpg",".jpeg"},commit)
+                if kind==6:editor=self._AssetPicker(value,{".png",".jpg",".jpeg",".hdr",".exr"},commit)
                 elif kind==5:editor=BoolInput(value);editor.ValueChanged.connect(commit)
                 elif kind==4:editor=IntInput(value=value);editor.valueChanged.connect(commit)
                 elif kind==0:editor=FloatInput(value=value);editor.valueChanged.connect(commit)
@@ -375,9 +454,14 @@ class EditorController(QObject):
             if self._asset_database_dirty:self.Runtime.RefreshAssets();self._asset_database_dirty=False
             used=set();shaders=set(getattr(self.Runtime,"UsedShaderAssets",lambda:[])())
             scenes=self.Runtime.LoadedScenes()
+            for scene in scenes:
+                environment=self.Runtime.SceneEnvironment(str(scene.get("uuid","")));material=environment.get("material",ZERO)
+                if environment.get("mode",0)==1 and material!=ZERO:used.add(material)
             entities=[entity for scene in scenes for entity in scene.get("entities",[])] if scenes else self.Runtime.Entities()
             for entity in entities:
                 details=entity
+                primitive=details.get("component_data",{}).get("Primitive Object",{})
+                if details.get("component_enabled",{}).get("Primitive Object",True) and primitive.get("Material Asset",ZERO)!=ZERO:used.add(primitive["Material Asset"])
                 if not details.get("component_enabled",{}).get("Mesh",True):continue
                 mesh=details.get("component_data",{}).get("Mesh",{})
                 material=mesh.get("Material Asset",ZERO)
@@ -443,6 +527,7 @@ class EditorController(QObject):
         finally:self._updating_inspector=False
 
     def SelectSceneEntity(self,entity_id:str,additive:bool=False)->None:
+        if entity_id and not self.Runtime.IsEditorSelectable(entity_id):return
         if additive:
             selected=list(self.SelectedEntities)
             if entity_id in selected:selected.remove(entity_id)
@@ -462,7 +547,7 @@ class EditorController(QObject):
             editor=BoolInput(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
         if isinstance(value, int):
             if component=="Light" and name=="Type":
-                editor=EnumInput();editor.SetOptions((("Directional",0),("Sun",1),("Point",2),("Spot",3)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
+                editor=EnumInput();editor.SetOptions((("Directional",0),("Sun",1),("Point",2),("Spot",3)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitLightType(entity_id,editor.GetValue()));return editor
             if component=="Camera" and name=="Projection":
                 editor=EnumInput();editor.SetOptions((("Perspective",0),("Orthographic",1)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
             if component=="Camera" and name=="Aspect Mode":
@@ -479,6 +564,10 @@ class EditorController(QObject):
                 editor=UIntInput(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
             editor=IntInput(value=value);editor.valueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
         if isinstance(value, float):
+            if component=="Light":
+                bounds={"Intensity":(0,1e12),"Range":(.001,1e12),"Inner Cone":(.5,90),"Outer Cone":(.5,90),"Sun Angular Radius":(.25,20),"Sun Halo Size":(1,1e12),"Sun Halo Falloff":(1,1e12)}
+                minimum,maximum=bounds.get(name,(0,1e12))
+                editor=FloatInput(minimum=minimum,maximum=maximum,value=value);editor.valueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
             editor=FloatInput(value=value);editor.valueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
         if isinstance(value, (tuple,list)) and len(value) in (3,4) and all(isinstance(v,(int,float)) for v in value):
             if "Color" in name:
@@ -537,7 +626,13 @@ class EditorController(QObject):
         return result
 
     def _CommitComponent(self, entity_id: str, component: str, name: str, value) -> None:  # type: ignore[no-untyped-def]
-        if not self._updating_inspector and entity_id==self.SelectedEntity and self._Mutate(f"Edit {component}",lambda:self.Runtime.SetComponentProperty(entity_id,component,name,value)):self.SetDirty(True)
+        if not self._updating_inspector and entity_id==self.SelectedEntity and self._Mutate(f"Edit {component}",lambda:self.Runtime.SetComponentProperty(entity_id,component,name,value)):
+            self.SetDirty(True)
+            if component=="Light" and name!="Type":self._RefreshInspectorValues()
+
+    def _CommitLightType(self,entity_id:str,value:int)->None:
+        self._CommitComponent(entity_id,"Light","Type",value)
+        if entity_id==self.SelectedEntity:self.SelectEntity(entity_id,force=True)
 
     def _CommitPrimitiveShape(self,entity_id:str,value:int)->None:
         self._CommitComponent(entity_id,"Primitive Object","Shape",value)
@@ -570,6 +665,7 @@ class EditorController(QObject):
         self.Window.Scene.Surface._selected_entity_ids=set(self.SelectedEntities)
         self.Runtime.SetSelectionOutline(self.SelectedEntities)
         modes={GizmoMode.Select:0,GizmoMode.Translate:1,GizmoMode.Rotate:2,GizmoMode.Scale:3}
+        if self.SelectedEntity and self.Runtime.IsEditorHidden(self.SelectedEntity):self.Window.Scene.Surface.SetSelection(None);self.Runtime.SetGizmo("",0);return
         if not self._gizmos_visible:self.Runtime.SetGizmo("",0);return
         if len(self.SelectedEntities)>1:
             positions=[]
@@ -597,7 +693,7 @@ class EditorController(QObject):
         if points:
             center=tuple(sum(value[i] for value in points)/len(points) for i in range(3));self.Window.Scene.Surface.Frame(center,max(1.,max((sum((value[i]-center[i])**2 for i in range(3)))**.5 for value in points)))
     def FrameAll(self)->None:
-        points=[value.get("world_position",value.get("position")) for value in self.Runtime.Entities()];points=[value for value in points if value]
+        points=[value.get("world_position",value.get("position")) for value in self.Runtime.Entities() if not self.Runtime.IsEditorHidden(value.get("uuid",""))];points=[value for value in points if value]
         if not points:return
         center=tuple((min(value[i] for value in points)+max(value[i] for value in points))*.5 for i in range(3));radius=max(1.,max((sum((value[i]-center[i])**2 for i in range(3)))**.5 for value in points));self.Window.Scene.Surface.Frame(center,radius)
     def SetRenderMode(self,mode:str)->None:
@@ -663,6 +759,8 @@ class EditorController(QObject):
     def ShowAddComponentMenu(self) -> None:
         if not self.SelectedEntity: return
         menu = QMenu(self.Window.Properties)
+        search=QLineEdit(menu);search.setPlaceholderText(self.Window.Localization.Translate("properties.search_components"));search.setClearButtonEnabled(True)
+        search_action=QWidgetAction(menu);search_action.setDefaultWidget(search);menu.addAction(search_action)
         targets=self.SelectedEntities or [self.SelectedEntity];existing=set.intersection(*(set(self.Runtime.EntityDetails(target).get("components",())) for target in targets))
         for component_type in self.Runtime.ComponentTypes():
             action = menu.addAction(component_type); action.setEnabled(component_type not in existing)
@@ -671,10 +769,12 @@ class EditorController(QObject):
         if self.ScriptCompiler and self.ScriptCompiler.Diagnostics:
             for diagnostic in self.ScriptCompiler.Diagnostics:self._ScriptValidationFailed(diagnostic.message)
         if scripts:
-            menu.addSeparator();script_menu=menu.addMenu(self.Window.Localization.Translate("scripting.menu"))
+            menu.addSeparator();script_menu=menu
             for descriptor in scripts:
                 action=script_menu.addAction(descriptor.name);action.setToolTip(str(descriptor.path));action.setEnabled(not self.ScriptAttachments or not any(value.get("type")==descriptor.name for value in self.ScriptAttachments.For(self.SelectedEntity)));action.triggered.connect(lambda _=False,d=descriptor:self._AttachScript(d))
         button = self.Window.Properties.AddComponentButton
+        search.textChanged.connect(lambda text:[action.setVisible(all(word in action.text().casefold() for word in text.casefold().split())) for action in menu.actions() if action is not search_action and not action.isSeparator()])
+        QTimer.singleShot(0,search,search.setFocus)
         menu.exec(button.mapToGlobal(button.rect().topLeft()))
 
     def _AddComponent(self, component_type: str) -> None:
@@ -800,6 +900,7 @@ class EditorController(QObject):
 
     def _AttachScript(self,descriptor,entity_id:str|None=None)->None:
         entity_id=entity_id or self.SelectedEntity
+        if self.Runtime.IsEditorLocked(entity_id):return
         if not entity_id or not self.ScriptAttachments:return
         try:
             if self.ScriptCompiler:descriptor=self.ScriptCompiler.ValidateDescriptor(descriptor)

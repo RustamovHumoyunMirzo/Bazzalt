@@ -58,6 +58,7 @@ class RuntimeService(QObject):
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
+        self.EditorEntityState={};self.EditorParents={}
         module = _LoadNativeModule()
         self._host = module.EditorHost() if module is not None else None
 
@@ -141,26 +142,32 @@ class RuntimeService(QObject):
                     self._host.has_active_camera())
 
     def Rename(self, entity_id: str, name: str) -> bool:
+        if self.IsEditorLocked(entity_id):return False
         return bool(self._host and self._host.rename(entity_id, name))
 
     def CreateEntity(self, name: str, parent: str = "") -> str:
+        if self.IsEditorLocked(parent):return ""
         value = self._host.create_entity(name, parent) if self._host is not None else ""
         self.SceneChanged.emit(); return value
 
     def InstantiateModelPath(self, path: str | Path, parent: str = "") -> str:
+        if self.IsEditorLocked(parent):return ""
         value=self._host.instantiate_model_path(str(path),parent) if self._host is not None and hasattr(self._host,"instantiate_model_path") else ""
         if value:self.SceneChanged.emit()
         return value
 
     def DestroyEntity(self, entity_id: str) -> bool:
+        if self.IsEditorLocked(entity_id) or any(self.IsEditorLocked(child) and self._EditorDescendant(child,entity_id) for child in self.EditorParents):return False
         result = bool(self._host and self._host.destroy_entity(entity_id))
         if result: self.SceneChanged.emit()
         return result
 
     def SetTransform(self, entity_id: str, position, rotation, scale) -> bool:
+        if self.IsEditorLocked(entity_id):return False
         return bool(self._host and self._host.set_transform(entity_id, position, rotation, scale))
 
     def Translate(self, entity_id: str, delta) -> bool:
+        if self.IsEditorLocked(entity_id):return False
         return bool(self._host and self._host.translate(entity_id, delta))
 
     def AssetInfo(self, reference) -> dict:
@@ -183,6 +190,15 @@ class RuntimeService(QObject):
     def CaptureScene(self) -> bytes:
         return bytes(self._host.capture_scene()) if self._host is not None and hasattr(self._host,"capture_scene") else b""
 
+    def SceneEnvironment(self,scene_id:str)->dict:
+        return dict(self._host.scene_environment(scene_id)) if self._host is not None and hasattr(self._host,"scene_environment") else {}
+
+    def SetEnvironmentImportSettings(self,asset_id:str,values:dict)->bool:
+        return bool(self._host and hasattr(self._host,"set_environment_import_settings") and self._host.set_environment_import_settings(asset_id,values))
+
+    def SetSceneEnvironment(self,scene_id:str,values:dict)->bool:
+        return bool(self._host and hasattr(self._host,"set_scene_environment") and self._host.set_scene_environment(scene_id,values))
+
     def RestoreScene(self, snapshot: bytes) -> bool:
         result=bool(self._host and hasattr(self._host,"restore_scene") and self._host.restore_scene(snapshot))
         if result:self.SceneChanged.emit()
@@ -192,22 +208,26 @@ class RuntimeService(QObject):
         return list(self._host.component_types()) if self._host is not None and hasattr(self._host, "component_types") else []
 
     def AddComponent(self, entity_id: str, component_type: str) -> bool:
+        if self.IsEditorLocked(entity_id):return False
         result = bool(self._host and hasattr(self._host, "add_component") and self._host.add_component(entity_id, component_type))
         if result: self.SceneChanged.emit()
         return result
 
     def RemoveComponent(self, entity_id: str, component_type: str) -> bool:
+        if self.IsEditorLocked(entity_id):return False
         result=bool(self._host and hasattr(self._host,"remove_component") and self._host.remove_component(entity_id,component_type))
         if result:self.SceneChanged.emit()
         return result
 
     def SetComponentEnabled(self,entity_id:str,component_type:str,enabled:bool)->bool:
+        if self.IsEditorLocked(entity_id):return False
         # This changes component state, not scene structure. Emitting
         # SceneChanged here rebuilds the hierarchy during the checkbox click
         # and transiently clears its selection.
         return bool(self._host and hasattr(self._host,"set_component_enabled") and self._host.set_component_enabled(entity_id,component_type,enabled))
 
     def SetParent(self, entity_id: str, parent_id: str = "") -> bool:
+        if self.IsEditorLocked(entity_id) or self.IsEditorLocked(parent_id):return False
         result = bool(self._host and self._host.set_parent(entity_id, parent_id))
         if result: self.SceneChanged.emit()
         return result
@@ -228,6 +248,7 @@ class RuntimeService(QObject):
 
     def SetComponentProperty(self, entity_id: str, component: str,
                              property_name: str, value) -> bool:
+        if self.IsEditorLocked(entity_id):return False
         return bool(self._host and hasattr(self._host, "set_component_property") and
                     self._host.set_component_property(entity_id, component, property_name, value))
 
@@ -258,6 +279,25 @@ class RuntimeService(QObject):
 
     def SetEditorIconsVisible(self,visible:bool)->None:
         if self._host is not None and hasattr(self._host,"set_editor_icons_visible"):self._host.set_editor_icons_visible(visible)
+
+    def _EditorDescendant(self,entity_id,parent)->bool:
+        seen=set();current=str(entity_id)
+        while current and current not in seen:
+            if current==str(parent):return True
+            seen.add(current);current=self.EditorParents.get(current,"")
+        return False
+
+    def _EditorFlag(self,entity_id,flag)->bool:
+        return any(values.get(flag,False) and self._EditorDescendant(entity_id,parent) for parent,values in self.EditorEntityState.items())
+
+    def IsEditorLocked(self,entity_id)->bool:return self._EditorFlag(entity_id,"locked")
+    def IsEditorHidden(self,entity_id)->bool:return self._EditorFlag(entity_id,"hidden")
+    def IsEditorSelectable(self,entity_id)->bool:return not self.IsEditorLocked(entity_id) and not self.IsEditorHidden(entity_id)
+
+    def SyncEditorEntityState(self,scenes)->None:
+        self.EditorParents={str(entity["uuid"]):str(entity.get("parent", "")) for scene in scenes for entity in scene.get("entities",())}
+        if self._host is not None and hasattr(self._host,"set_editor_entity_state"):
+            self._host.set_editor_entity_state([entity for entity in self.EditorParents if self.IsEditorHidden(entity)],[entity for entity in self.EditorParents if self.IsEditorLocked(entity)])
 
     def SetSceneRenderMode(self,mode:str)->bool:
         return bool(self._host and hasattr(self._host,"set_scene_render_mode") and self._host.set_scene_render_mode(mode))

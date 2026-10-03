@@ -6,8 +6,11 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
+#include <utils/Entity.h>
 
 #include "Bazzalt/PostProcessing.h"
+#include "Bazzalt/SceneEnvironment.h"
 
 namespace filament {
 class Engine;
@@ -51,6 +54,13 @@ public:
     void SetEditorOrientationVisible(bool visible) { m_orientationVisible=visible; }
     void SetEditorGuides(const std::vector<EditorGuide>& guides);
     void Render();
+    static void ConfigureEditorFog(filament::View& view,float gridScale);
+    void SetEditorHidden(std::unordered_set<UUID> hidden){m_editorHidden=std::move(hidden);}
+    void RegisterEditorLight(UUID id,utils::Entity entity){m_editorLights[id]=entity;}
+    void UnregisterEditorLight(UUID id){m_editorLights.erase(id);}
+    void SetEnvironment(const SceneEnvironment& value);
+    bool HasEnvironmentLighting() const;
+    bool HasEnvironmentSkybox() const;
     [[nodiscard]] bool IsInitialized() const { return m_engine != nullptr; }
 
     [[nodiscard]] filament::Engine& GetEngine() const { return *m_engine; }
@@ -79,6 +89,9 @@ public:
 private:
     struct ViewportResource;
     struct GizmoResource;
+    struct EnvironmentResource;
+    std::unique_ptr<EnvironmentResource> m_environment;
+    Vec4 m_clearColor{0.055f,0.065f,0.085f,1};
     filament::Engine* m_engine = nullptr;
     std::string m_backend = "automatic";
     filament::Renderer* m_renderer = nullptr;
@@ -97,6 +110,8 @@ private:
     int m_gizmoHover = -1;
     bool m_gridVisible = true;
     bool m_orientationVisible = true;
+    std::unordered_set<UUID> m_editorHidden;
+    std::unordered_map<UUID,utils::Entity> m_editorLights;
     int m_gridPlane = 1;
     float m_gridCenterX = 0, m_gridCenterY = 0, m_gridCenterZ = 0;
     float m_gridScale = 1;

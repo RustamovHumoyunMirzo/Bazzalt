@@ -18,6 +18,8 @@ resource ownership, and extension points for game code.
    invalidation, importers, and runtime lookup.
 6. [Rendering](rendering.md) — cameras, lights, meshes, glTF, materials, and the
    private Filament backend.
+   [Scene environments](environments.md) covers HDR/EXR imports, scene lighting,
+   environment materials, and shared inspector previews.
    [Materials and shaders](materials-and-shaders.md) covers the material Inspector,
    demand-driven compilation, typed C++ handles, and script asset properties.
 7. [Math](math.md) — coordinate conventions and public math types.

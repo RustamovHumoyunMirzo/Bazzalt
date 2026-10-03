@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_set>
+#include "Bazzalt/UUID.h"
 
 #include "Bazzalt/Components/Mesh.h"
 #include "Bazzalt/Components/PrimitiveObject.h"
@@ -32,6 +34,9 @@ public:
     void DestroyPrimitive(Handle handle) { DestroyMesh(handle); }
     [[nodiscard]] bool PreparePostProcessEffect(const CustomPostProcessEffect& effect);
     void Update();
+    void SetEditorOwner(Handle handle,UUID owner);
+    void BeginEditorView(const std::unordered_set<UUID>& hidden);
+    void EndEditorView();
     bool SetDebugMode(const std::string& mode);
     void Shutdown();
 

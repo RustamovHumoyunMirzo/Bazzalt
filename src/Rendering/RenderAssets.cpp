@@ -33,6 +33,8 @@
 #include <utils/Path.h>
 
 #include "Bazzalt/AssetManager.h"
+extern "C" float* stbi_loadf_from_memory(const unsigned char*,int,int*,int*,int*,int);
+extern "C" void stbi_image_free(void*);
 #include "Runtime/MaterialLibrary.h"
 #include "Rendering/BuiltinPostProcess.h"
 #include "Rendering/PrimitiveGeometry.h"
@@ -79,6 +81,7 @@ struct RenderAssets::Impl {
         struct Original { utils::Entity Entity;std::size_t Primitive;filament::MaterialInstance* Material; };
         Kind Type = Kind::Gltf;
         UUID Asset{};
+        UUID EditorOwner{};
         std::vector<UUID> Materials;
         filament::gltfio::FilamentAsset* Gltf = nullptr;
         utils::Entity SelectedGltfEntity{};
@@ -103,6 +106,7 @@ struct RenderAssets::Impl {
     filament::gltfio::AssetLoader* GltfLoader = nullptr;
     Handle NextHandle = 1;
     std::unordered_map<Handle, Instance> Instances;
+    std::vector<utils::Entity> EditorSuspended;
     std::unordered_map<UUID, filament::Material*> Materials;
     std::unordered_map<UUID, std::vector<std::uint8_t>> MaterialPackages;
     std::unordered_map<UUID, std::filesystem::file_time_type> MaterialModified;
@@ -158,6 +162,19 @@ struct RenderAssets::Impl {
         const auto asset = AssetManager::GetAsset(id);
         if (!asset || asset->State != AssetState::Ready) return nullptr;
         const std::string extension = LowerExtension(asset->SourcePath);
+        if(extension==".hdr"||extension==".exr"){
+            auto folder=asset->CachePath;folder+=".environment";
+            const auto bytes=ReadBytes(folder/"texture"/asset->CachePath.stem()/"skybox.hdr");
+            if(bytes.empty()||bytes.size()>256u*1024u*1024u)return nullptr;
+            int width=0,height=0,channels=0;
+            float* pixels=stbi_loadf_from_memory(bytes.data(),static_cast<int>(bytes.size()),&width,&height,&channels,4);
+            if(!pixels)return nullptr;
+            if(width<1||height<1||width>16384||height>16384){stbi_image_free(pixels);return nullptr;}
+            auto* texture=filament::Texture::Builder().width(width).height(height).levels(1).sampler(filament::Texture::Sampler::SAMPLER_2D).format(filament::Texture::InternalFormat::RGBA16F).build(Engine);
+            if(!texture){stbi_image_free(pixels);return nullptr;}
+            texture->setImage(Engine,0,filament::Texture::PixelBufferDescriptor(pixels,std::size_t(width)*height*4*sizeof(float),filament::Texture::Format::RGBA,filament::Texture::Type::FLOAT,[](void* buffer,std::size_t,void*){stbi_image_free(buffer);}));
+            Textures.emplace(id,texture);return texture;
+        }
         const char* mime = extension == ".png" ? "image/png" :
             (extension == ".jpg" || extension == ".jpeg" ? "image/jpeg" : nullptr);
         const auto bytes = ReadBytes(asset->CachePath);
@@ -224,7 +241,7 @@ struct RenderAssets::Impl {
     void RegisterOverrides(Instance& value,const Mesh& component) {
         const auto apply=[&](utils::Entity entity){auto& manager=Engine.getRenderableManager();const auto ri=manager.getInstance(entity);if(!ri)return;
             for(std::size_t i=0;i<manager.getPrimitiveCount(ri);++i){const auto id=component.MaterialAsset?component.MaterialAsset:i<component.Materials.size()?component.Materials[i]:UUID{};if(id)value.Overrides.push_back({entity,i,id,manager.getMaterialInstanceAt(ri,i)});}};
-        if(value.Type==Kind::Gltf){if(value.SelectedGltfEntity)apply(value.SelectedGltfEntity);else for(std::size_t i=0;i<value.Gltf->getEntityCount();++i)apply(value.Gltf->getEntities()[i]);}else apply(value.Filamesh.renderable);
+        if(value.Type==Kind::Gltf){if(value.SelectedGltfEntity)apply(value.SelectedGltfEntity);else for(std::size_t i=0;i<value.Gltf->getEntityCount();++i)apply(value.Gltf->getEntities()[i]);}else apply(value.Type==Kind::Primitive?value.PrimitiveEntity:value.Filamesh.renderable);
         UpdateMaterials(value);
     }
     void Restore(Instance& value){if(value.DebugWireframeAdded){Scene.remove(value.Gltf->getWireframe());if(value.AddedToScene)Scene.addEntities(value.Gltf->getEntities(),value.Gltf->getEntityCount());value.DebugWireframeAdded=false;}auto& manager=Engine.getRenderableManager();for(const auto& original:value.Originals){auto instance=manager.getInstance(original.Entity);if(instance&&original.Primitive<manager.getPrimitiveCount(instance))manager.setMaterialInstanceAt(instance,original.Primitive,original.Material);}value.Originals.clear();}
@@ -374,19 +391,31 @@ void RenderAssets::DestroyMesh(Handle handle) {
 RenderAssets::Handle RenderAssets::CreatePrimitive(const PrimitiveObject& component){
     if(!m_impl||!m_impl->PrimitiveMaterial)return InvalidHandle;auto geometry=BuildPrimitiveGeometry(component);if(geometry.Vertices.empty()||geometry.Indices.empty())return InvalidHandle;
     Impl::Instance instance;instance.Type=Impl::Kind::Primitive;instance.PrimitiveMaterial=m_impl->PrimitiveMaterial->createInstance();instance.PrimitiveMaterial->setParameter("baseColor",filament::math::float4{component.Color.X,component.Color.Y,component.Color.Z,component.Color.W});
-    instance.PrimitiveVertices=filament::VertexBuffer::Builder().vertexCount(static_cast<std::uint32_t>(geometry.Vertices.size())).bufferCount(1).attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3,0,sizeof(PrimitiveVertex)).attribute(filament::VertexAttribute::TANGENTS,0,filament::VertexBuffer::AttributeType::FLOAT4,12,sizeof(PrimitiveVertex)).build(m_impl->Engine);
+    instance.PrimitiveVertices=filament::VertexBuffer::Builder().vertexCount(static_cast<std::uint32_t>(geometry.Vertices.size())).bufferCount(1).attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3,0,sizeof(PrimitiveVertex)).attribute(filament::VertexAttribute::TANGENTS,0,filament::VertexBuffer::AttributeType::FLOAT4,12,sizeof(PrimitiveVertex)).attribute(filament::VertexAttribute::UV0,0,filament::VertexBuffer::AttributeType::FLOAT2,28,sizeof(PrimitiveVertex)).build(m_impl->Engine);
     auto* vertices=new std::vector<PrimitiveVertex>(std::move(geometry.Vertices));instance.PrimitiveVertices->setBufferAt(m_impl->Engine,0,{vertices->data(),vertices->size()*sizeof(PrimitiveVertex),[](void*,size_t,void* user){delete static_cast<std::vector<PrimitiveVertex>*>(user);},vertices});
     instance.PrimitiveIndices=filament::IndexBuffer::Builder().indexCount(static_cast<std::uint32_t>(geometry.Indices.size())).bufferType(filament::IndexBuffer::IndexType::UINT).build(m_impl->Engine);auto* indices=new std::vector<std::uint32_t>(std::move(geometry.Indices));instance.PrimitiveIndices->setBuffer(m_impl->Engine,{indices->data(),indices->size()*sizeof(std::uint32_t),[](void*,size_t,void* user){delete static_cast<std::vector<std::uint32_t>*>(user);},indices});
     instance.PrimitiveEntity=m_impl->Engine.getEntityManager().create();m_impl->Engine.getTransformManager().create(instance.PrimitiveEntity);filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{geometry.Extents.X,geometry.Extents.Y,geometry.Extents.Z}}).material(0,instance.PrimitiveMaterial).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,instance.PrimitiveVertices,instance.PrimitiveIndices).castShadows(component.CastShadows).receiveShadows(component.ReceiveShadows).build(m_impl->Engine,instance.PrimitiveEntity);m_impl->Scene.addEntity(instance.PrimitiveEntity);instance.AddedToScene=true;m_impl->ApplyRenderable(instance.PrimitiveEntity,component);
-    auto handle=m_impl->NextHandle++;auto [stored,_]=m_impl->Instances.emplace(handle,std::move(instance));m_impl->ApplyDebug(stored->second);return handle;
+    auto handle=m_impl->NextHandle++;auto [stored,_]=m_impl->Instances.emplace(handle,std::move(instance));Mesh material;material.MaterialAsset=component.MaterialAsset;m_impl->RegisterOverrides(stored->second,material);m_impl->UpdateMaterials(stored->second);m_impl->ApplyDebug(stored->second);return handle;
 }
 
-void RenderAssets::UpdatePrimitive(Handle handle,const Mat4& transform,const PrimitiveObject& component){if(!m_impl)return;auto found=m_impl->Instances.find(handle);if(found==m_impl->Instances.end()||found->second.Type!=Impl::Kind::Primitive)return;auto& value=found->second;auto ti=m_impl->Engine.getTransformManager().getInstance(value.PrimitiveEntity);if(ti)m_impl->Engine.getTransformManager().setTransform(ti,ToFilamentMatrix(transform));value.PrimitiveMaterial->setParameter("baseColor",filament::math::float4{component.Color.X,component.Color.Y,component.Color.Z,component.Color.W});if(component.Visible!=value.AddedToScene){if(component.Visible)m_impl->Scene.addEntity(value.PrimitiveEntity);else m_impl->Scene.remove(value.PrimitiveEntity);value.AddedToScene=component.Visible;}m_impl->ApplyRenderable(value.PrimitiveEntity,component);}
+void RenderAssets::UpdatePrimitive(Handle handle,const Mat4& transform,const PrimitiveObject& component){if(!m_impl)return;auto found=m_impl->Instances.find(handle);if(found==m_impl->Instances.end()||found->second.Type!=Impl::Kind::Primitive)return;auto& value=found->second;auto ti=m_impl->Engine.getTransformManager().getInstance(value.PrimitiveEntity);if(ti)m_impl->Engine.getTransformManager().setTransform(ti,ToFilamentMatrix(transform));value.PrimitiveMaterial->setParameter("baseColor",filament::math::float4{component.Color.X,component.Color.Y,component.Color.Z,component.Color.W});if(component.Visible!=value.AddedToScene){if(component.Visible)m_impl->Scene.addEntity(value.PrimitiveEntity);else m_impl->Scene.remove(value.PrimitiveEntity);value.AddedToScene=component.Visible;}m_impl->ApplyRenderable(value.PrimitiveEntity,component);m_impl->UpdateMaterials(value);}
 
 void RenderAssets::Update() {
     if (m_impl && m_impl->GltfTextures) m_impl->GltfTextures->updateQueue();
     if (m_impl && m_impl->StandaloneTextures) m_impl->StandaloneTextures->updateQueue();
 }
+void RenderAssets::SetEditorOwner(Handle handle,UUID owner){if(m_impl)if(auto it=m_impl->Instances.find(handle);it!=m_impl->Instances.end())it->second.EditorOwner=owner;}
+void RenderAssets::BeginEditorView(const std::unordered_set<UUID>& hidden){
+    if(!m_impl)return;EndEditorView();
+    for(const auto& [_,value]:m_impl->Instances){
+        if(!value.AddedToScene||!hidden.contains(value.EditorOwner))continue;
+        const auto suspend=[&](utils::Entity entity){if(m_impl->Scene.hasEntity(entity))m_impl->EditorSuspended.push_back(entity);};
+        if(value.Type==Impl::Kind::Gltf){if(value.SelectedGltfEntity)suspend(value.SelectedGltfEntity);else{for(std::size_t i=0;i<value.Gltf->getEntityCount();++i)suspend(value.Gltf->getEntities()[i]);if(value.DebugWireframeAdded)suspend(value.Gltf->getWireframe());}}
+        else suspend(value.Type==Impl::Kind::Primitive?value.PrimitiveEntity:value.Filamesh.renderable);
+    }
+    for(auto entity:m_impl->EditorSuspended)m_impl->Scene.remove(entity);
+}
+void RenderAssets::EndEditorView(){if(!m_impl)return;for(auto entity:m_impl->EditorSuspended)m_impl->Scene.addEntity(entity);m_impl->EditorSuspended.clear();}
 
 bool RenderAssets::SetDebugMode(const std::string& mode){if(!m_impl||mode!="lit"&&mode!="unlit"&&mode!="wireframe"&&mode!="lighting_only"&&mode!="overdraw")return false;m_impl->DebugMode=mode;for(auto& [_,instance]:m_impl->Instances)m_impl->ApplyDebug(instance);return true;}
 

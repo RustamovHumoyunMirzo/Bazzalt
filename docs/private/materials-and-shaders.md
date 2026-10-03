@@ -2,8 +2,8 @@
 
 ## Editor workflow
 
-Create a **Shader** (`.shad`) or **Filament Shader** (`.mat`) in the Asset Browser,
-or import an existing source. Create a **Material** (`.matinst`) and select it.
+Create a **Shader** (`.shad`) in the Asset Browser, or import an existing
+shader source (`.shad` or Filament `.mat`). Create a **Material** (`.matinst`) and select it.
 The Inspector's Shader picker accepts only registered `.mat` and `.shad` assets.
 Picking or dropping a shader rebuilds the parameter fields from its declarations.
 
@@ -12,6 +12,15 @@ This picker accepts only `.matinst`, not shaders or internal compiled packages.
 The Mesh Asset must also be assigned. Clearing Material Asset restores the
 model's imported materials. A material without a shader is valid but supplies no
 rendering override.
+
+**Primitive Object → Material Asset** accepts the same `.matinst` assets, with
+project picking and drag/drop validation. The public `PrimitiveObject.MaterialAsset`
+stores the material UUID. Clearing it restores the built-in material and Color.
+Primitive geometry supplies normals/tangents and UV0 for textured shaders;
+incompatible or missing shaders fall back to the built-in material. Parameter
+edits and shader reloads update primitive instances through the same pipeline as
+meshes. Primitive serialization version 2 stores the reference; version 1 scenes
+load with no override.
 
 Model instantiation creates individual entities for glTF nodes. Material overrides
 belong to each entity's Mesh component: assigning a material to a parent does not

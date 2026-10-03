@@ -1,0 +1,15 @@
+material {
+    name : EditorGuide,
+    shadingModel : unlit,
+    blending : transparent,
+    parameters : [ { type : float4, name : color } ],
+    depthWrite : false,
+    depthCulling : true,
+    doubleSided : false
+}
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = materialParams.color;
+    }
+}

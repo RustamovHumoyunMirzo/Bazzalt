@@ -138,3 +138,36 @@ layout rules. Both dark and light themes use the same sizing tokens.
 Panel tabs load their matching SVG from `Editor/assets/icons/dark` or `light`. A theme change
 refreshes both docking styles and icons. All built-in user-facing text is resolved through
 `Editor/assets/locales/en.json`; locale changes update panel captions and controls at runtime.
+## Scene inspection and protected entities
+
+Selecting exactly one scene row opens its scene properties, including Environment,
+and hides Add Component. Scene rows are not ECS entities and cannot receive components.
+Hierarchy refreshes preserve the inspected scene. Mixed scene/entity selections
+operate on the entities, not on the scene roots.
+
+Add Component starts with a localized search input. Matching is case-insensitive
+and includes built-in and discovered script components. Components already attached
+to the entire selection stay disabled; clearing search restores the list.
+
+Each entity row reserves two compact columns at its right edge: the themed lock
+indicator (`icons/dark/lock.svg` or `icons/light/lock.svg`) and Scene visibility.
+The lock column is indicator-only: unlocked entities have no icon or invisible
+button. Use Lock/Unlock in Editor from the context menu. Click the visibility
+column or use Hide/Show in Scene View from the context menu.
+A locked entity cannot be selected, inspected, renamed,
+reparented, deleted, transformed, or edited through component controls. Protection
+inherits through descendants; unlock an ancestor to release inherited protection.
+Deleting a parent that contains locked descendants is rejected.
+
+Visibility is independent of locking. Hidden rows are dimmed; their Scene geometry,
+light contribution, icons, picking, marquee selection, outlines, and manipulation
+handles are suppressed. They can still be inspected from Hierarchy unless locked.
+Game cameras and Game rendering keep the original component visibility and light
+settings. The renderer temporarily suspends hidden resources for Scene rendering,
+then restores precisely the resources it removed before rendering Game views.
+
+These are editor authoring preferences, not runtime components or `.bscene` data.
+They autosave by project UUID and entity UUID in editor settings and do not dirty
+the scene, become undo records, or affect gameplay scripts. The public engine API
+does not expose editor selection locks. Duplicating an entity creates an unlocked,
+visible copy.

@@ -148,6 +148,7 @@ class NativeRenderSurface(QWidget):
         if right-left<=4 and bottom-top<=4:return []
         selected=[]
         for entity in self.Runtime.Entities():
+            if hasattr(self.Runtime,"IsEditorSelectable") and not self.Runtime.IsEditorSelectable(str(entity.get("uuid",""))):continue
             projected=self._Project(entity.get("world_position",entity.get("position",(0,0,0))))
             if not projected:continue
             radius=0.0;entity_id=str(entity.get("uuid","") or "")
@@ -187,6 +188,7 @@ class NativeRenderSurface(QWidget):
         try:entities=self.Runtime.Entities()
         except Exception:return ""
         for entity in entities:
+            if hasattr(self.Runtime,"IsEditorSelectable") and not self.Runtime.IsEditorSelectable(str(entity.get("uuid",""))):continue
             components=entity.get("components",())
             if "Camera" not in components and "Light" not in components:continue
             projected=self._Project(entity.get("world_position",entity.get("position",(0,0,0))))

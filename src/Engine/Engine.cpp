@@ -7,6 +7,7 @@
 #include "Rendering/RenderSystems.h"
 #include "Rendering/RenderAssets.h"
 #include "Rendering/PrimitiveGeometry.h"
+#include "Rendering/LightGuides.h"
 #include <map>
 #include <tuple>
 #include <limits>
@@ -100,6 +101,7 @@ void Engine::Update()
     if(fixedSteps > 64)m_fixedAccumulator = std::fmod(m_fixedAccumulator, double(Time::GetFixedDeltaTime()));
     m_scene->Update(m_deltaTime);
     m_scriptRuntime->Update(m_deltaTime);
+    m_renderBackend->SetEnvironment(m_scene->GetEnvironment());
     m_renderBackend->Render();
 }
 
@@ -122,16 +124,22 @@ void Engine::RenderEditorFrame()
     std::vector<RenderBackend::EditorIcon> icons;
     std::vector<RenderBackend::EditorGuide> guides;
     const auto line=[&](Vec3 a,Vec3 b,Vec4 color){guides.push_back({a.X,a.Y,a.Z,b.X,b.Y,b.Z,color.X,color.Y,color.Z,color.W});};
-    const auto ring=[&](Vec3 center,Vec3 axisA,Vec3 axisB,float radius,Vec4 color){constexpr int steps=32;Vec3 previous=center+axisA*radius;for(int i=1;i<=steps;++i){const float angle=2.0f*Pi*static_cast<float>(i)/steps;Vec3 next=center+(axisA*std::cos(angle)+axisB*std::sin(angle))*radius;line(previous,next,color);previous=next;}};
     auto cameras=m_scene->GetRegistry().view<Camera>();
-for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));const auto& camera=cameras.get<Camera>(handle);if(!camera.IsEnabled())continue;const Mat4 world=entity.GetWorldMatrix();const Vec3 p=world.TransformPoint({}),forward=world.TransformDirection({0,0,-1}).Normalized(),right=world.TransformDirection({1,0,0}).Normalized(),up=world.TransformDirection({0,1,0}).Normalized();icons.push_back({p.X,p.Y,p.Z,true});if(std::find(m_selectedObjects.begin(),m_selectedObjects.end(),entity.GetUUID())==m_selectedObjects.end())continue;float aspect=camera.AspectRatio;if(camera.AspectMode==CameraAspectMode::Automatic){const float width=std::max(1.0f,float(m_renderBackend->GetPresentationWidth())*camera.Viewport.Width),height=std::max(1.0f,float(m_renderBackend->GetPresentationHeight())*camera.Viewport.Height);aspect=width/height;}const float nearPlane=std::max(.001f,camera.NearPlane),farPlane=std::max(nearPlane+.001f,camera.FarPlane);float nearHeight,farHeight;if(camera.Projection==CameraProjection::Perspective){nearHeight=std::tan(camera.VerticalFieldOfView*.5f)*nearPlane;farHeight=std::tan(camera.VerticalFieldOfView*.5f)*farPlane;}else nearHeight=farHeight=std::max(.001f,camera.OrthographicSize*.5f);const float nearWidth=nearHeight*aspect,farWidth=farHeight*aspect;std::array<Vec3,4> nearCorners,farCorners;for(int i=0;i<4;++i){const float x=(i==0||i==3)?-1.0f:1.0f,y=i<2?-1.0f:1.0f;nearCorners[i]=p+forward*nearPlane+right*(x*nearWidth)+up*(y*nearHeight);farCorners[i]=p+forward*farPlane+right*(x*farWidth)+up*(y*farHeight);}const Vec4 color{.35f,.72f,1,.82f};for(int i=0;i<4;++i){line(nearCorners[i],nearCorners[(i+1)%4],color);line(farCorners[i],farCorners[(i+1)%4],color);line(camera.Projection==CameraProjection::Perspective?p:nearCorners[i],farCorners[i],color);}}
+for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));const auto& camera=cameras.get<Camera>(handle);if(!camera.IsEnabled()||m_editorHidden.contains(entity.GetUUID()))continue;const Mat4 world=entity.GetWorldMatrix();const Vec3 p=world.TransformPoint({}),forward=world.TransformDirection({0,0,-1}).Normalized(),right=world.TransformDirection({1,0,0}).Normalized(),up=world.TransformDirection({0,1,0}).Normalized();icons.push_back({p.X,p.Y,p.Z,true});if(std::find(m_selectedObjects.begin(),m_selectedObjects.end(),entity.GetUUID())==m_selectedObjects.end())continue;float aspect=camera.AspectRatio;if(camera.AspectMode==CameraAspectMode::Automatic){const float width=std::max(1.0f,float(m_renderBackend->GetPresentationWidth())*camera.Viewport.Width),height=std::max(1.0f,float(m_renderBackend->GetPresentationHeight())*camera.Viewport.Height);aspect=width/height;}const float nearPlane=std::max(.001f,camera.NearPlane),farPlane=std::max(nearPlane+.001f,camera.FarPlane);float nearHeight,farHeight;if(camera.Projection==CameraProjection::Perspective){nearHeight=std::tan(camera.VerticalFieldOfView*.5f)*nearPlane;farHeight=std::tan(camera.VerticalFieldOfView*.5f)*farPlane;}else nearHeight=farHeight=std::max(.001f,camera.OrthographicSize*.5f);const float nearWidth=nearHeight*aspect,farWidth=farHeight*aspect;std::array<Vec3,4> nearCorners,farCorners;for(int i=0;i<4;++i){const float x=(i==0||i==3)?-1.0f:1.0f,y=i<2?-1.0f:1.0f;nearCorners[i]=p+forward*nearPlane+right*(x*nearWidth)+up*(y*nearHeight);farCorners[i]=p+forward*farPlane+right*(x*farWidth)+up*(y*farHeight);}const Vec4 color{.35f,.72f,1,.82f};for(int i=0;i<4;++i){line(nearCorners[i],nearCorners[(i+1)%4],color);line(farCorners[i],farCorners[(i+1)%4],color);line(camera.Projection==CameraProjection::Perspective?p:nearCorners[i],farCorners[i],color);}}
     auto lights=m_scene->GetRegistry().view<Light>();
-    for(auto handle:lights){Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));const auto& light=lights.get<Light>(handle);if(!light.IsEnabled())continue;const Mat4 world=entity.GetWorldMatrix();const Vec3 p=world.TransformPoint({}),forward=world.TransformDirection({0,0,-1}).Normalized(),right=world.TransformDirection({1,0,0}).Normalized(),up=world.TransformDirection({0,1,0}).Normalized();icons.push_back({p.X,p.Y,p.Z,false});if(std::find(m_selectedObjects.begin(),m_selectedObjects.end(),entity.GetUUID())==m_selectedObjects.end())continue;const Vec4 color{light.Color.X,light.Color.Y,light.Color.Z,.82f};if(light.Type==LightType::Point){ring(p,right,up,light.Range,color);ring(p,right,forward,light.Range,color);ring(p,up,forward,light.Range,color);}else if(light.Type==LightType::Spot){const float length=std::max(.001f,light.Range),outer=std::tan(light.OuterConeAngle)*length,inner=std::tan(light.InnerConeAngle)*length;Vec3 end=p+forward*length;ring(end,right,up,outer,color);ring(end,right,up,inner,{color.X,color.Y,color.Z,.45f});for(const Vec3 offset:{right*outer,-right*outer,up*outer,-up*outer})line(p,end+offset,color);}else{const float length=std::max(3.0f,std::sqrt(std::max(0.0f,light.Intensity))*.1f),radius=std::tan(light.Type==LightType::Sun?light.SunAngularRadius:.03f)*length;Vec3 end=p+forward*length;ring(end,right,up,radius,color);line(p,end+right*radius,color);line(p,end-right*radius,color);line(p,end+up*radius,color);line(p,end-up*radius,color);}}
+    for(auto handle:lights){
+        Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));const auto& light=lights.get<Light>(handle);
+        if(!light.IsEnabled()||m_editorHidden.contains(entity.GetUUID()))continue;
+        const Mat4 world=entity.GetWorldMatrix();const Vec3 p=world.TransformPoint({});icons.push_back({p.X,p.Y,p.Z,false});
+        if(std::find(m_selectedObjects.begin(),m_selectedObjects.end(),entity.GetUUID())==m_selectedObjects.end())continue;
+        const auto lightGuides=BuildLightGuides(light,world);guides.insert(guides.end(),lightGuides.begin(),lightGuides.end());
+    }
     m_renderBackend->SetEditorIcons(m_editorIconsVisible?icons:std::vector<RenderBackend::EditorIcon>{});
     if(!m_editorIconsVisible)guides.clear();
     auto outlined=m_selectedObjects;
     if(!m_hoveredObject.IsRoot()&&std::find(outlined.begin(),outlined.end(),m_hoveredObject)==outlined.end())outlined.push_back(m_hoveredObject);
     for(UUID outlineId:outlined){
+    if(m_editorHidden.contains(outlineId)||m_editorUnselectable.contains(outlineId))continue;
     const bool selected=std::find(m_selectedObjects.begin(),m_selectedObjects.end(),outlineId)!=m_selectedObjects.end();
     const Vec4 outlineColor=selected?Vec4{.12f,.38f,1.0f,1.0f}:Vec4{.45f,.8f,1.0f,1.0f};
     Entity hovered=m_scene->GetEntity(outlineId);
@@ -145,16 +153,18 @@ for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id
     }
     }
     m_renderBackend->SetEditorGuides(guides);
+    m_renderBackend->SetEnvironment(m_scene->GetEnvironment());
     m_renderBackend->Render();
 }
 
 UUID Engine::PickEditorPrimitive(Vec3 origin,Vec3 direction){
     direction=direction.Normalized();float nearest=std::numeric_limits<float>::max();UUID result{};
     auto view=m_scene->GetRegistry().view<PrimitiveObject>();
-    for(auto handle:view){const auto& primitive=view.get<PrimitiveObject>(handle);if(!primitive.IsEnabled()||!primitive.Visible)continue;Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));Mat4 inverse;if(!entity.GetWorldMatrix().TryInverse(inverse))continue;Vec3 o=inverse.TransformPoint(origin),d=inverse.TransformDirection(direction);const auto geometry=BuildPrimitiveGeometry(primitive);
+    for(auto handle:view){const auto& primitive=view.get<PrimitiveObject>(handle);if(!primitive.IsEnabled()||!primitive.Visible)continue;Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));if(m_editorUnselectable.contains(entity.GetUUID())||m_editorHidden.contains(entity.GetUUID()))continue;Mat4 inverse;if(!entity.GetWorldMatrix().TryInverse(inverse))continue;Vec3 o=inverse.TransformPoint(origin),d=inverse.TransformDirection(direction);const auto geometry=BuildPrimitiveGeometry(primitive);
         for(std::size_t i=0;i+2<geometry.Indices.size();i+=3){Vec3 v[3];for(int j=0;j<3;++j){const auto& p=geometry.Vertices[geometry.Indices[i+j]];v[j]={p.Position[0],p.Position[1],p.Position[2]};}Vec3 e1=v[1]-v[0],e2=v[2]-v[0],p=Vec3::Cross(d,e2);float determinant=Vec3::Dot(e1,p);if(std::abs(determinant)<1e-8f)continue;float reciprocal=1/determinant;Vec3 offset=o-v[0];float u=Vec3::Dot(offset,p)*reciprocal;if(u<0||u>1)continue;Vec3 q=Vec3::Cross(offset,e1);float vcoord=Vec3::Dot(d,q)*reciprocal;if(vcoord<0||u+vcoord>1)continue;float t=Vec3::Dot(e2,q)*reciprocal;if(t>=0&&t<nearest){nearest=t;result=entity.GetUUID();}}
     }return result;
 }
+void Engine::SetEditorEntityState(std::vector<UUID> hidden,std::vector<UUID> unselectable){m_editorHidden={hidden.begin(),hidden.end()};m_editorUnselectable={unselectable.begin(),unselectable.end()};m_renderBackend->SetEditorHidden(m_editorHidden);}
 
 bool Engine::CreateEditorViewport(std::uint64_t id, std::uintptr_t nativeWindow, bool scene,
                                   std::uint32_t width, std::uint32_t height, float pixelRatio) {
@@ -348,6 +358,10 @@ std::optional<AssetInfo> Engine::FindAsset(UUID id) const
 }
 
 bool Engine::RefreshAssets() { return m_assetDatabase && m_assetDatabase->Refresh(); }
+bool Engine::SetEnvironmentImportSettings(UUID id,const PropertyMap& settings){const bool result=m_assetDatabase&&m_assetDatabase->SetEnvironmentImportSettings(id,settings);if(!result)m_lastError=m_assetDatabase?m_assetDatabase->GetLastError():"No asset database";return result;}
+PropertyMap Engine::GetAssetImportSettings(UUID id){return m_assetDatabase?m_assetDatabase->GetImportSettings(id):PropertyMap{};}
+bool Engine::HasEnvironmentLighting() const{return m_renderBackend&&m_renderBackend->HasEnvironmentLighting();}
+bool Engine::HasEnvironmentSkybox() const{return m_renderBackend&&m_renderBackend->HasEnvironmentSkybox();}
 
 std::optional<AssetInfo> Engine::FindAsset(const std::filesystem::path& path) const
 {

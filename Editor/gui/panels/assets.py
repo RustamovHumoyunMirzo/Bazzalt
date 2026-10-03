@@ -209,7 +209,7 @@ class AssetBrowserPanel(QWidget):
         if target is not None and widget is self.Browser and not target.isSelected():self.Browser.setCurrentItem(target)
         reveal_paths=[Path(target.data(0,Qt.ItemDataRole.UserRole))] if widget is self.Tree and target is not None else [Path(item.data(Qt.ItemDataRole.UserRole)) for item in self.Browser.selectedItems()]
         tr=self._localization.Translate;menu=QMenu(self);create=menu.addMenu(tr("assets.create"))
-        for key,label in (("folder","assets.folder"),("scene","assets.scene"),("cpp","assets.native_cpp"),("shader","assets.shader"),("filament_shader","materials.filament_shader"),("material","assets.material")):
+        for key,label in (("folder","assets.folder"),("scene","assets.scene"),("cpp","assets.native_cpp"),("shader","assets.shader"),("material","assets.material")):
             action=create.addAction(tr(label));action.triggered.connect(lambda _=False,k=key:self._Create(k))
         menu.addAction(tr("assets.import"),self._Import);menu.addSeparator();selected=bool(self.Browser.selectedItems()) if widget is self.Browser else False
         current=Path(self.Browser.currentItem().data(Qt.ItemDataRole.UserRole)) if widget is self.Browser and self.Browser.currentItem() else None

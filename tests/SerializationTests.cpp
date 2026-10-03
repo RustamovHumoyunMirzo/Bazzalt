@@ -38,6 +38,9 @@ int main() {
 
     Runtime::Engine sourceEngine;
     Scene& source = sourceEngine.GetScene();
+    SceneEnvironment environment;environment.SourceAsset=UUID{20,21};environment.MaterialAsset=UUID{22,23};environment.Intensity=1234;environment.Rotation={.1f,.2f,.3f};environment.ClearColor={.1f,.2f,.3f,1};environment.ImageBasedLighting=false;
+    assert(source.SetEnvironment(environment));auto invalid=environment;invalid.Intensity=-1;assert(!source.SetEnvironment(invalid));
+    invalid=environment;invalid.Mode=static_cast<SceneEnvironmentMode>(99);assert(!source.SetEnvironment(invalid));
     assert(source.GetRootEntity().GetUUID().IsRoot());
     Entity parent = source.CreateEntity(UUID{1, 1}, "Parent entity");
     Entity child = source.CreateEntity(UUID{2, 2}, "Child entity");
@@ -70,6 +73,7 @@ int main() {
     child.AddComponent<Mesh>().MeshAsset = UUID{9, 9};
     child.GetComponent<Mesh>().MaterialAsset=UUID{7,8};
     auto& primitive=child.AddComponent<PrimitiveObject>();primitive.Shape=PrimitiveShape::Torus;primitive.MajorRadius=2.0f;primitive.MinorRadius=0.4f;primitive.Segments=48;primitive.Color={0.2f,0.4f,0.8f,1.0f};
+    primitive.MaterialAsset=UUID{30,31};
 
     RegisterHealth(sourceEngine.GetSceneSerializer());
     assert(sourceEngine.SaveScene(firstScenePath));
@@ -83,6 +87,12 @@ int main() {
     Runtime::Engine restoredEngine;
     RegisterHealth(restoredEngine.GetSceneSerializer());
     assert(restoredEngine.LoadScene(preservedScenePath));
+    assert(restoredEngine.GetScene().GetEnvironment().SourceAsset==environment.SourceAsset);
+    assert(restoredEngine.GetScene().GetEnvironment().MaterialAsset==environment.MaterialAsset);
+    assert(restoredEngine.GetScene().GetEnvironment().Mode==SceneEnvironmentMode::Map);
+    assert(restoredEngine.GetScene().GetEnvironment().Intensity==1234);
+    assert(restoredEngine.GetScene().GetEnvironment().Rotation==environment.Rotation);
+    assert(!restoredEngine.GetScene().GetEnvironment().ImageBasedLighting);
     Entity restoredChild = restoredEngine.GetScene().GetEntity(UUID{2, 2});
     assert(restoredChild.GetParent().GetUUID() == UUID(1, 1));
     assert(restoredChild.GetComponent<Health>().Value == 42.5f);
@@ -107,6 +117,7 @@ int main() {
     assert(restoredChild.GetComponent<Mesh>().MeshAsset == UUID(9, 9));
     assert(restoredChild.GetComponent<Mesh>().MaterialAsset == UUID(7,8));
     const auto& restoredPrimitive=restoredChild.GetComponent<PrimitiveObject>();assert(restoredPrimitive.Shape==PrimitiveShape::Torus);assert(restoredPrimitive.MajorRadius==2.0f);assert(restoredPrimitive.MinorRadius==0.4f);assert(restoredPrimitive.Segments==48);assert(restoredPrimitive.Color.Z==0.8f);
+    assert(restoredPrimitive.MaterialAsset==primitive.MaterialAsset);
 
     ProjectMetadata& project = sourceEngine.GetProject();
     project.Name = "Serialization Test";

@@ -23,6 +23,7 @@ from .fields import (
 )
 from .menu_bar import EditorMenu, EditorMenuBar
 from .editor_toolbar import EditorToolbar, GizmoModeButton, PlayState
+from .inspector_viewport import InspectorViewport
 
 __all__ = [
     "AssetPickerInput", "BoolInput", "ColorInput", "EditorMenu", "EditorMenuBar",
@@ -30,4 +31,5 @@ __all__ = [
     "EnumInput", "FieldState", "FieldStateSupport", "FieldWidget", "FloatInput", "IntInput",
     "MultiSelectInput", "ObjectPickerInput", "PickerInput", "RangeInput", "StringInput", "UIntInput",
     "Vec2Input", "Vec3Input", "Vec4Input", "VectorInput",
+    "InspectorViewport",
 ]

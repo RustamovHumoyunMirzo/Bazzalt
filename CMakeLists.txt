@@ -84,6 +84,7 @@ endfunction()
 bazzalt_embed_post_process(gaussian_blur GaussianBlurFilamat)
 bazzalt_embed_post_process(vignette VignetteFilamat)
 bazzalt_embed_post_process(editor_gizmo EditorGizmoFilamat)
+bazzalt_embed_post_process(editor_guide EditorGuideFilamat)
 bazzalt_embed_post_process(editor_grid EditorGridFilamat)
 bazzalt_embed_post_process(editor_icon EditorIconFilamat)
 bazzalt_embed_post_process(editor_unlit EditorUnlitFilamat)
@@ -111,28 +112,7 @@ endfunction()
 bazzalt_embed_svg_icon(scene_cam SceneCameraIconRgba)
 bazzalt_embed_svg_icon(scene_light SceneLightIconRgba)
 
-set(_bazzalt_environment_dir "${_bazzalt_generated_dir}/environment")
-set(_bazzalt_environment_ibl "${_bazzalt_environment_dir}/environment_ibl.ktx")
-set(_bazzalt_environment_skybox "${_bazzalt_environment_dir}/environment_skybox.ktx")
-set(_bazzalt_environment_ibl_header "${_bazzalt_generated_dir}/default_environment_ibl.h")
-set(_bazzalt_environment_skybox_header "${_bazzalt_generated_dir}/default_environment_skybox.h")
-add_custom_command(
-    OUTPUT "${_bazzalt_environment_ibl_header}" "${_bazzalt_environment_skybox_header}"
-    COMMAND "${CMAKE_COMMAND}" -E make_directory "${_bazzalt_environment_dir}"
-    COMMAND "${BAZZALT_CMGEN_EXECUTABLE}" --quiet --size=128 --format=ktx
-            --deploy "${_bazzalt_environment_dir}" "${CMAKE_CURRENT_SOURCE_DIR}/Editor/assets/default_environ.exr"
-    COMMAND "${CMAKE_COMMAND}" -DINPUT=${_bazzalt_environment_ibl}
-            -DOUTPUT=${_bazzalt_environment_ibl_header} -DSYMBOL=DefaultEnvironmentIbl
-            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedBinary.cmake"
-    COMMAND "${CMAKE_COMMAND}" -DINPUT=${_bazzalt_environment_skybox}
-            -DOUTPUT=${_bazzalt_environment_skybox_header} -DSYMBOL=DefaultEnvironmentSkybox
-            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedBinary.cmake"
-    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Editor/assets/default_environ.exr"
-            "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedBinary.cmake"
-    VERBATIM COMMENT "Compiling and embedding the default Filament environment"
-)
-list(APPEND BAZZALT_EMBEDDED_HEADERS
-    "${_bazzalt_environment_ibl_header}" "${_bazzalt_environment_skybox_header}")
+# Environments are project assets, imported on demand; no hidden default lighting.
 
 file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
@@ -181,6 +161,7 @@ target_compile_definitions(Bazzalt PRIVATE
 target_compile_definitions(Bazzalt PRIVATE
     BAZZALT_MATC_EXECUTABLE="${BAZZALT_MATC_EXECUTABLE}"
     BAZZALT_FILAMESH_EXECUTABLE="${BAZZALT_FILAMESH_EXECUTABLE}"
+    BAZZALT_CMGEN_EXECUTABLE="${BAZZALT_CMGEN_EXECUTABLE}"
 )
 
 option(BAZZALT_BUILD_EDITOR_BRIDGE "Build the private Python editor runtime bridge" ON)
@@ -271,7 +252,7 @@ if(BUILD_TESTING)
     add_executable(BazzaltRenderingTests
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/RenderingTests.cpp"
     )
-    target_link_libraries(BazzaltRenderingTests PRIVATE Bazzalt)
+    target_link_libraries(BazzaltRenderingTests PRIVATE Bazzalt Filament::Filament)
     target_include_directories(BazzaltRenderingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     bazzalt_enable_test_assertions(BazzaltRenderingTests)
     add_test(NAME BazzaltRenderingTests COMMAND BazzaltRenderingTests)

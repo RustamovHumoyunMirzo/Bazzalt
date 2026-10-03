@@ -46,6 +46,7 @@ void Scene::DestroyEntity(Entity entity) {
 }
 
 void Scene::Clear() {
+    m_environment={};
     m_registry.clear();
     m_uuidLookup.clear();
     CreateRootEntity();

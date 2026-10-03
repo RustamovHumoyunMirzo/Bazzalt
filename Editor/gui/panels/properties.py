@@ -31,6 +31,7 @@ class ComponentSection(QFrame):
                  icon: QIcon | None = None, enabled:bool|None=None,
                  parent: QWidget | None = None) -> None:
         super().__init__(parent); self.setObjectName("ComponentSection")
+        self.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Fixed)
         layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0);layout.setSpacing(0)
         header=QWidget(self);header.setObjectName("ComponentHeaderRow");headerLayout=QHBoxLayout(header);headerLayout.setContentsMargins(3,0,2,0);headerLayout.setSpacing(3)
         self.Toggle=QToolButton(header);self.Toggle.setText(title);self.Toggle.setCheckable(True);self.Toggle.setChecked(expanded)
@@ -38,8 +39,9 @@ class ComponentSection(QFrame):
         self.Toggle.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Fixed)
         self.Toggle.setObjectName("ComponentHeader")
         self._fields:dict[str,QWidget]={};self._localization=localization;self._removable=removable
-        self.Body=QWidget(self);self.Form=QGridLayout(self.Body);self.Form.setContentsMargins(6,2,6,5)
-        self.Form.setHorizontalSpacing(14);self.Form.setVerticalSpacing(3);self.Form.setColumnStretch(1,1)
+        self.Body=QWidget(self);self.Form=QGridLayout(self.Body);self.Form.setContentsMargins(8,6,8,6)
+        self.Form.setHorizontalSpacing(14);self.Form.setVerticalSpacing(6);self.Form.setColumnStretch(1,1)
+        self.Form.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.IconLabel=QLabel(header);self.IconLabel.setObjectName("ComponentIcon");self.IconLabel.setFixedSize(16,16);self.IconLabel.setVisible(icon is not None and not icon.isNull())
         if icon is not None and not icon.isNull():self.IconLabel.setPixmap(icon.pixmap(16,16))
         headerLayout.addWidget(self.IconLabel)
@@ -63,11 +65,16 @@ class ComponentSection(QFrame):
         caption.setMinimumWidth(72);caption.setMaximumWidth(120);caption.setSizePolicy(QSizePolicy.Policy.Preferred,QSizePolicy.Policy.Fixed);caption.setAlignment(Qt.AlignmentFlag.AlignLeading|Qt.AlignmentFlag.AlignVCenter)
         editor.setParent(self.Body)
         editor.setMinimumWidth(0);editor.setMaximumWidth(260);editor.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Fixed)
-        self.Form.addWidget(caption,row,0);self.Form.addWidget(editor,row,1)
+        self.Form.setRowMinimumHeight(row,24)
+        self.Form.addWidget(caption,row,0,Qt.AlignmentFlag.AlignVCenter);self.Form.addWidget(editor,row,1,Qt.AlignmentFlag.AlignVCenter)
         self._fields[label]=editor
 
     def _Text(self,key:str,fallback:str)->str:
         return self._localization.Translate(key) if self._localization else fallback
+
+    def AddViewport(self,viewport:QWidget)->None:
+        viewport.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Fixed)
+        self.Form.addWidget(viewport,self.Form.rowCount(),0,1,2,Qt.AlignmentFlag.AlignTop)
 
     def _ShowOptions(self,button:QToolButton)->None:
         menu=QMenu(self)
@@ -105,7 +112,7 @@ class PropertiesPanel(QWidget):
         super().__init__();self.setObjectName("PropertiesPanel");self._localization=localization;self._sections:dict[str,ComponentSection]={}
         layout=QVBoxLayout(self);layout.setContentsMargins(3,3,3,3);layout.setSpacing(3)
         self.Scroll=QScrollArea(self);self.Scroll.setWidgetResizable(True);self.Scroll.setFrameShape(QFrame.Shape.NoFrame);self.Scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.Container=QWidget(self.Scroll);self.ComponentsLayout=QVBoxLayout(self.Container);self.ComponentsLayout.setContentsMargins(0,0,0,0);self.ComponentsLayout.addStretch()
+        self.Container=QWidget(self.Scroll);self.ComponentsLayout=QVBoxLayout(self.Container);self.ComponentsLayout.setContentsMargins(0,0,0,0);self.ComponentsLayout.setSpacing(6);self.ComponentsLayout.addStretch()
         self.Container.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.Container.customContextMenuRequested.connect(self._ShowContextMenu)
         self.Scroll.setWidget(self.Container);layout.addWidget(self.Scroll,1)

@@ -6,6 +6,27 @@ Rendering is described through ECS components. Public code never receives a
 Filament engine, renderer, view, entity, texture, material, buffer, or destroy
 function. Private systems translate scene data into Filament state.
 
+Editor camera/light guides and selection outlines use an embedded unlit,
+transparent material so the skybox cannot overwrite them. They do not write
+scene depth or cast/receive shadows. Camera/light guides retain depth testing
+against scene geometry; selection outlines disable it to remain readable on
+their own surfaces. These resources stay on the Scene-only editor layer and
+are not shown by Game cameras.
+
+Light guides use single-sided closed geometry and camera-relative pixel widths
+to avoid back/front alpha overdraw and subpixel shimmering. Point-light range is
+a world-space sphere and ignores transform scale. Spot-light guides show inner
+and outer half-angle cones clipped by the spherical Range boundary, rather than
+an unbounded cone. Directional lights have no finite range. Only selected lights
+show guides; black light colors do not make their editing guides invisible.
+
+The light inspector shows only type-applicable fields and updates them when Type
+changes. Its cone angles and Sun Angular Radius are degrees; public C++ angles
+remain radians. Sun radius/halo edits are applied to existing renderer lights,
+not only on creation. Halo parameters describe Filament's sun disk, not the size
+or brightness of an imported IBL image. Range controls the point/spot influence
+cutoff, not emitter size or intensity; directional/sun lights ignore Range.
+
 ## Camera
 
 ```cpp

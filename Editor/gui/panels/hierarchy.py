@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QMimeData, Qt, Signal, QTimer
 from PySide6.QtGui import QAction, QColor, QIcon, QKeySequence, QPainter, QPen
-from PySide6.QtWidgets import QAbstractItemView, QLineEdit, QMenu, QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QLineEdit, QMenu, QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator, QVBoxLayout, QWidget
 
 from ...localization import LocalizationManager
 
@@ -84,6 +84,7 @@ class HierarchyPanel(QWidget):
     ActivateSceneRequested = Signal(str)
     UnloadSceneRequested = Signal(str)
     RenameSceneRequested = Signal(str, str)
+    EditorStateRequested = Signal(str,str,bool)
 
     def __init__(self, localization: LocalizationManager, install_shortcuts: bool = True) -> None:
         super().__init__(); self._localization = localization;self._collapsed_ids:set[str]=set()
@@ -98,6 +99,9 @@ class HierarchyPanel(QWidget):
         self.Tree.customContextMenuRequested.connect(self._ShowContextMenu)
         self.Tree.itemSelectionChanged.connect(self._SelectionChanged)
         self.Tree.itemChanged.connect(self._ItemRenamed)
+        self.Tree.setColumnCount(3);self.Tree.header().setStretchLastSection(False);self.Tree.header().setSectionResizeMode(0,QHeaderView.ResizeMode.Stretch)
+        for column in (1,2):self.Tree.header().setSectionResizeMode(column,QHeaderView.ResizeMode.Fixed);self.Tree.setColumnWidth(column,24)
+        self.Tree.itemClicked.connect(self._StatusClicked)
         self.Tree.itemCollapsed.connect(self._RememberCollapsed);self.Tree.itemExpanded.connect(self._RememberExpanded)
         if install_shortcuts:self._InstallActions()
         layout.addWidget(self.Tree)
@@ -139,6 +143,23 @@ class HierarchyPanel(QWidget):
         return item
 
     def Clear(self) -> None: self.Tree.clear()
+    def SetEditorState(self,item,locked,hidden,lock_icon,local=None)->None:
+        local=local or {};item.setData(0,Qt.ItemDataRole.UserRole+6,bool(local.get("locked")));item.setData(0,Qt.ItemDataRole.UserRole+7,bool(local.get("hidden")))
+        item.setData(0,Qt.ItemDataRole.UserRole+4,bool(locked));item.setData(0,Qt.ItemDataRole.UserRole+5,bool(hidden))
+        item.setIcon(1,lock_icon if locked else QIcon());item.setText(2,"○" if hidden else "◉")
+        for column in (1,2):item.setTextAlignment(column,Qt.AlignmentFlag.AlignCenter)
+        item.setToolTip(1,self._localization.Translate("hierarchy.locked") if locked else "");item.setToolTip(2,self._localization.Translate("hierarchy.show_editor" if hidden else "hierarchy.hide_editor"))
+        if locked and not local.get("locked"):item.setToolTip(1,self._localization.Translate("hierarchy.inherited_state"))
+        if hidden and not local.get("hidden"):item.setToolTip(2,self._localization.Translate("hierarchy.inherited_state"))
+        if locked:item.setFlags(item.flags()&~(Qt.ItemFlag.ItemIsSelectable|Qt.ItemFlag.ItemIsEditable|Qt.ItemFlag.ItemIsDragEnabled|Qt.ItemFlag.ItemIsDropEnabled))
+        if hidden:item.setForeground(0,self.Tree.palette().placeholderText().color())
+
+    def _StatusClicked(self,item,column)->None:
+        if item.data(0,Qt.ItemDataRole.UserRole+1)!="entity":return
+        if column==2:
+            current=bool(item.data(0,Qt.ItemDataRole.UserRole+5))
+            if current and not item.data(0,Qt.ItemDataRole.UserRole+7):return
+            self.EditorStateRequested.emit(str(item.data(0,Qt.ItemDataRole.UserRole)),"hidden",not current)
     def SetDirtyScenes(self,scene_ids)->None:
         dirty={str(value) for value in scene_ids};blocked=self.Tree.blockSignals(True)
         for index in range(self.Tree.topLevelItemCount()):
@@ -178,7 +199,7 @@ class HierarchyPanel(QWidget):
         iterator=QTreeWidgetItemIterator(self.Tree)
         while iterator.value() is not None:
             item=iterator.value();items.append(item)
-            if item.data(0,Qt.ItemDataRole.UserRole+1)=="entity" and str(item.data(0,Qt.ItemDataRole.UserRole)) in wanted:matches.append(item)
+            if item.flags()&Qt.ItemFlag.ItemIsSelectable and str(item.data(0,Qt.ItemDataRole.UserRole)) in wanted:matches.append(item)
             iterator+=1
         # setCurrentItem can clear an existing extended selection, so establish
         # the current row first and apply the complete selection afterward.
@@ -187,6 +208,9 @@ class HierarchyPanel(QWidget):
         self.Tree.blockSignals(blocked)
 
     def _SelectionChanged(self)->None:
+        selected=self.Tree.selectedItems()
+        scenes=[item for item in selected if item.data(0,Qt.ItemDataRole.UserRole+1)=="scene"]
+        if len(selected)==1 and scenes:self.SelectionChanged.emit(scenes[0].data(0,Qt.ItemDataRole.UserRole));return
         values=self.GetSelectedData();self.SelectionChanged.emit(values if len(values)>1 else values[0] if values else None)
 
     def _InstallActions(self)->None:
@@ -216,10 +240,15 @@ class HierarchyPanel(QWidget):
 
     def _ShowContextMenu(self, position) -> None:  # type: ignore[no-untyped-def]
         item=self.Tree.itemAt(position);menu=QMenu(self)
+        locked=bool(item and item.data(0,Qt.ItemDataRole.UserRole+4))
+        if item is not None and not item.isSelected():
+            if locked:self.Tree.clearSelection()
+            else:self.Tree.setCurrentItem(item)
         scene_id=str(item.data(0,Qt.ItemDataRole.UserRole) or "") if item and item.data(0,Qt.ItemDataRole.UserRole+1)=="scene" else ""
         scene_active=bool(item.data(0,Qt.ItemDataRole.UserRole+3)) if scene_id else False
         parent = item.data(0,Qt.ItemDataRole.UserRole) if item and item.data(0,Qt.ItemDataRole.UserRole+1) in {"entity","scene"} else None
         create_menu=menu.addMenu(self._localization.Translate("hierarchy.add_new"))
+        create_menu.setEnabled(not locked)
         for title,kind in ((self._localization.Translate("hierarchy.empty"),"Entity"),("Camera","Camera"),("Light","Light")):
             action=create_menu.addAction(title);action.triggered.connect(lambda _=False,k=kind:self.CreateTypedRequested.emit(k,parent))
         primitives=create_menu.addMenu(self._localization.Translate("hierarchy.primitives"))
@@ -228,11 +257,18 @@ class HierarchyPanel(QWidget):
         menu.addSeparator();rename=menu.addAction(self._localization.Translate("hierarchy.rename"));rename.setShortcut(QKeySequence(Qt.Key.Key_F2));rename.setEnabled(item is not None and item.data(0,Qt.ItemDataRole.UserRole+1) in {"entity","scene"});rename.triggered.connect(lambda:self.Tree.editItem(item,0) if item else None)
         copy=menu.addAction(self._localization.Translate("hierarchy.copy"));copy.setShortcut(QKeySequence.StandardKey.Copy);copy.setEnabled(bool(self.GetSelectedData()));copy.triggered.connect(lambda:self.CopyRequested.emit(self.GetSelectedData()))
         paste=menu.addAction(self._localization.Translate("hierarchy.paste"));paste.setShortcut(QKeySequence.StandardKey.Paste);paste.triggered.connect(lambda:self.PasteRequested.emit(parent))
+        paste.setEnabled(not locked);rename.setEnabled(rename.isEnabled() and not locked)
         menu.addSeparator()
         if scene_id:
             activate=menu.addAction(self._localization.Translate("hierarchy.activate_scene"));activate.setEnabled(not scene_active and len(self.Tree.selectedItems())==1);activate.triggered.connect(lambda:self.ActivateSceneRequested.emit(scene_id))
             unload=menu.addAction(self._localization.Translate("hierarchy.unload_scene"));unload.setEnabled(not scene_active);unload.triggered.connect(lambda:self.UnloadSceneRequested.emit(scene_id));menu.addSeparator()
         delete=QAction(self._localization.Translate("hierarchy.delete"),menu);delete.setEnabled(item is not None and item.data(0,Qt.ItemDataRole.UserRole+1)=="entity");delete.triggered.connect(lambda:self.DeleteRequested.emit(self.GetSelectedData()));menu.addAction(delete)
+        delete.setEnabled(delete.isEnabled() and not locked)
+        if item is not None and item.data(0,Qt.ItemDataRole.UserRole+1)=="entity":
+            menu.addSeparator()
+            for key,role,on,off in (("locked",4,"hierarchy.unlock","hierarchy.lock"),("hidden",5,"hierarchy.show_editor","hierarchy.hide_editor")):
+                current=bool(item.data(0,Qt.ItemDataRole.UserRole+role));action=menu.addAction(self._localization.Translate(on if current else off));action.triggered.connect(lambda _=False,k=key,v=not current:self.EditorStateRequested.emit(str(item.data(0,Qt.ItemDataRole.UserRole)),k,v))
+                if current and not item.data(0,Qt.ItemDataRole.UserRole+role+2):action.setEnabled(False);action.setToolTip(self._localization.Translate("hierarchy.inherited_state"))
         self.ContextMenuRequested.emit(menu,self.Tree.mapToGlobal(position));menu.exec(self.Tree.mapToGlobal(position))
 
 

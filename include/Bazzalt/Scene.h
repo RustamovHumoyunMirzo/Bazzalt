@@ -21,6 +21,7 @@
 #include "Bazzalt/ModelAsset.h"
 #include "Bazzalt/SceneQuery.h"
 #include "Bazzalt/System.h"
+#include "Bazzalt/SceneEnvironment.h"
 
 namespace Bazzalt {
 
@@ -46,6 +47,8 @@ public:
     [[nodiscard]] Entity GetEntity(UUID uuid);
     [[nodiscard]] Entity GetRootEntity();
     [[nodiscard]] UUID GetUUID() const { return m_uuid; }
+    [[nodiscard]] const SceneEnvironment& GetEnvironment() const { return m_environment; }
+    bool SetEnvironment(const SceneEnvironment& value) { if(!value.IsValid())return false;m_environment=value;return true; }
     [[nodiscard]] std::size_t GetEntityCount() const;
 
     bool SetParent(Entity child, Entity parent, bool worldPositionStays = true);
@@ -161,6 +164,7 @@ public:
     [[nodiscard]] const entt::registry& GetRegistry() const { return m_registry; }
 
 private:
+    SceneEnvironment m_environment{};
     friend class SceneSerializer;
     friend class Runtime::Engine;
 

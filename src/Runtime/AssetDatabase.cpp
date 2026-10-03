@@ -251,6 +251,64 @@ public:
     }
 };
 
+class EnvironmentImporter final : public AssetImporter {
+public:
+    std::string GetName() const override { return "Bazzalt.Environment"; }
+    std::uint32_t GetVersion() const override { return 2; }
+    bool Supports(const std::filesystem::path& source) const override {
+        const auto ext=LowerExtension(source);return ext==".hdr"||ext==".exr"||ext==".ktx";
+    }
+    bool Import(const AssetImportContext& context,std::string& error) override {
+        if(!CopyAsset(context,error))return false;
+        if(LowerExtension(context.SourcePath)==".ktx")return true;
+        // cmgen's Windows CRT narrows argv and its file APIs cannot reliably open
+        // Unicode paths. Never pass project paths to the converter.
+        std::error_code code;
+        auto temporaryRoot=std::filesystem::temp_directory_path(code);
+        if(code){error="Could not locate environment import staging directory: "+code.message();return false;}
+#ifdef _WIN32
+        const auto ascii=[](const std::filesystem::path& path){const auto value=path.native();return std::all_of(value.begin(),value.end(),[](wchar_t c){return c>0&&c<128;});};
+        if(!ascii(temporaryRoot)){
+            std::array<wchar_t,32768> shortPath{};
+            const auto length=GetShortPathNameW(temporaryRoot.c_str(),shortPath.data(),static_cast<DWORD>(shortPath.size()));
+            if(length&&length<shortPath.size())temporaryRoot=std::filesystem::path(std::wstring(shortPath.data(),length));
+            if(!ascii(temporaryRoot)){error="cmgen requires an ASCII temporary directory; configure TEMP to a writable ASCII path";return false;}
+        }
+#endif
+        const auto staging=temporaryRoot/("BazzaltEnvironment-"+UUID::Generate().ToString());
+        if(!std::filesystem::create_directory(staging,code)||code){error="Could not create environment staging directory: "+code.message();return false;}
+        struct Cleanup{std::filesystem::path Path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(Path,ignored);}} cleanup{staging};
+        const auto input=staging/context.OutputPath.filename();
+        std::filesystem::copy_file(context.SourcePath,input,std::filesystem::copy_options::overwrite_existing,code);
+        if(code){error="Could not stage environment source: "+code.message();return false;}
+        auto output=input;output+=".environment";
+        std::string size="128",samples="256";
+        if(auto i=context.Settings.find("Resolution");i!=context.Settings.end())size=i->second;
+        if(auto i=context.Settings.find("Samples");i!=context.Settings.end())samples=i->second;
+        if(size!="32"&&size!="64"&&size!="128"&&size!="256"&&size!="512"&&size!="1024"){error="Invalid environment Resolution";return false;}
+        if(samples!="64"&&samples!="128"&&samples!="256"&&samples!="512"&&samples!="1024"){error="Invalid environment Samples";return false;}
+        auto tool=std::filesystem::u8path(BAZZALT_CMGEN_EXECUTABLE);
+#ifdef _WIN32
+        std::array<wchar_t,32768> executablePath{};
+        const auto length=GetModuleFileNameW(nullptr,executablePath.data(),static_cast<DWORD>(executablePath.size()));
+        if(length&&length<executablePath.size()){
+            const auto bundled=std::filesystem::path(std::wstring(executablePath.data(),length)).parent_path()/"tools"/"filament"/"cmgen.exe";
+            std::error_code code;if(std::filesystem::is_regular_file(bundled,code))tool=bundled;
+        }
+#endif
+        if(!RunTool(tool,{"--quiet","--size="+size,"--ibl-samples="+samples,"--format=ktx","--deploy",output,input},error))return false;
+        if(!RunTool(tool,{"--quiet","--size=64","--type=equirect","--format=png","--extract",output/"preview",input},error))return false;
+        if(!RunTool(tool,{"--quiet","--size="+size,"--type=equirect","--format=hdr","--extract",output/"texture",input},error))return false;
+        for(const auto& file:{output/(output.stem().string()+"_ibl.ktx"),output/(output.stem().string()+"_skybox.ktx"),output/"preview"/input.stem()/"skybox.png",output/"texture"/input.stem()/"skybox.hdr"}){
+            if(!std::filesystem::is_regular_file(file,code)||code){error="cmgen did not produce required environment output: "+PathUtf8(file.filename());return false;}
+        }
+        auto destination=context.OutputPath;destination+=".environment";
+        std::filesystem::copy(output,destination,std::filesystem::copy_options::recursive|std::filesystem::copy_options::overwrite_existing,code);
+        if(code){error="Could not publish environment cache: "+code.message();return false;}
+        return true;
+    }
+};
+
 class MaterialImporter final : public AssetImporter {
 public:
     std::string GetName() const override { return "Bazzalt.FilamentMaterial"; }
@@ -312,6 +370,7 @@ AssetDatabase::AssetDatabase() {
     RegisterImporter(std::make_unique<RawImporter>());
     RegisterImporter(std::make_unique<GltfImporter>());
     RegisterImporter(std::make_unique<TextureImporter>());
+    RegisterImporter(std::make_unique<EnvironmentImporter>());
     RegisterImporter(std::make_unique<MaterialImporter>());
     RegisterImporter(std::make_unique<FilameshImporter>());
 }
@@ -402,7 +461,12 @@ bool AssetDatabase::RegisterSource(const std::filesystem::path& source) {
         m_lastError = "No importer supports asset: " + PathUtf8(normalized);
         return false;
     }
-    const std::string sourceHash = importer->ComputeSourceHash(normalized);
+    std::string sourceHash = importer->ComputeSourceHash(normalized);
+    if(importer->GetName()=="Bazzalt.Environment"){
+        std::uint64_t hash=14695981039346656037ULL;
+        for(const auto& [key,value]:metadata.Settings)for(unsigned char c:key+"="+value+";"){hash^=c;hash*=1099511628211ULL;}
+        std::ostringstream text;text<<std::hex<<hash;sourceHash+="-"+text.str();
+    }
     if (sourceHash.empty()) { m_lastError = "Could not hash asset: " + PathUtf8(normalized); return false; }
 
     AssetInfo record;
@@ -419,6 +483,10 @@ bool AssetDatabase::RegisterSource(const std::filesystem::path& source) {
             std::filesystem::is_regular_file(candidate)) {
             record.CachePath = candidate;
             record.State = AssetState::Ready;
+            if(importer->GetName()=="Bazzalt.Environment"&&LowerExtension(normalized)!=".ktx"){
+                auto folder=candidate;folder+=".environment";
+                if(!std::filesystem::is_regular_file(folder/(folder.stem().string()+"_ibl.ktx"))||!std::filesystem::is_regular_file(folder/(folder.stem().string()+"_skybox.ktx"))||!std::filesystem::is_regular_file(folder/"preview"/candidate.stem()/"skybox.png")||!std::filesystem::is_regular_file(folder/"texture"/candidate.stem()/"skybox.hdr"))record.State=AssetState::NeedsImport;
+            }
         }
     }
     if (record.State != AssetState::Ready) {
@@ -426,8 +494,8 @@ bool AssetDatabase::RegisterSource(const std::filesystem::path& source) {
         metadataDirty = true;
     }
     if (metadataDirty && !SaveMetadata(metaPath, metadata)) return false;
-    m_byPath.emplace(PathUtf8(normalized), record.Id);
-    m_byId.emplace(record.Id, std::move(record));
+    m_byPath.insert_or_assign(PathUtf8(normalized), record.Id);
+    m_byId.insert_or_assign(record.Id, std::move(record));
     return true;
 }
 
@@ -524,6 +592,16 @@ AssetImporter* AssetDatabase::SelectImporter(const std::filesystem::path& source
 
 std::filesystem::path AssetDatabase::NormalizeSource(const std::filesystem::path& path) const {
     return std::filesystem::absolute(path).lexically_normal();
+}
+
+PropertyMap AssetDatabase::GetImportSettings(UUID id){const auto record=Find(id);Metadata metadata;if(!record||!LoadMetadata(record->MetaPath,metadata))return {};return metadata.Settings;}
+bool AssetDatabase::SetEnvironmentImportSettings(UUID id,const PropertyMap& settings){
+    const auto record=Find(id);if(!record||record->Importer!="Bazzalt.Environment"){m_lastError="Not an environment asset";return false;}
+    Metadata metadata;if(!LoadMetadata(record->MetaPath,metadata))return false;
+    const auto previous=metadata;for(const auto& [key,value]:settings){if(key!="Resolution"&&key!="Samples"){m_lastError="Unsupported environment import setting";return false;}metadata.Settings[key]=value;}
+    if(!SaveMetadata(record->MetaPath,metadata))return false;
+    if(RegisterSource(record->SourcePath))return true;
+    const auto error=m_lastError;SaveMetadata(record->MetaPath,previous);m_lastError=error;return false;
 }
 
 std::optional<AssetInfo> AssetDatabase::Find(UUID id) const {

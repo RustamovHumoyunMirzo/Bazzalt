@@ -4,6 +4,7 @@
 
 #include "Bazzalt/Component.h"
 #include "Bazzalt/Math.h"
+#include "Bazzalt/UUID.h"
 
 namespace Bazzalt {
 
@@ -23,6 +24,7 @@ struct PrimitiveObject : Component {
     std::uint32_t Segments = 32;
     std::uint32_t Rings = 16;
     Vec4 Color{0.72f, 0.72f, 0.75f, 1.0f};
+    UUID MaterialAsset{};
     std::uint8_t LayerMask = 0xff;
     bool Visible = true;
     bool CastShadows = true;
