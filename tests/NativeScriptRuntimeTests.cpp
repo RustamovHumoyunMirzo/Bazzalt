@@ -9,6 +9,9 @@ int main(int argc,char** argv){
     assert(argc==2);const auto log=std::filesystem::temp_directory_path()/"bazzalt-script-lifecycle.txt";std::error_code error;std::filesystem::remove(log,error);
     Bazzalt::Runtime::NativeScriptRuntime runtime;Bazzalt::Runtime::ScriptBinding binding;binding.Module=std::filesystem::u8path(argv[1]);binding.Entity="entity-uuid";binding.TypeName="LifecycleProbe";binding.Properties["LogPath"]=log.string();std::string message;
     Bazzalt::Runtime::TimeAccess::Reset();
+    assert(!runtime.Configure({binding,binding},message));assert(message.find("Duplicate")!=std::string::npos);
+    auto conflicting=binding;conflicting.Entity="another-entity";conflicting.Module="another-module.dll";
+    assert(!runtime.Configure({binding,conflicting},message));assert(message.find("Ambiguous")!=std::string::npos);
     assert(runtime.Configure({binding},message));assert(runtime.Start(message));
     assert(Bazzalt::Time::GetTimeScale()==0.25f);
     Bazzalt::Runtime::TimeAccess::Advance(0.064);

@@ -255,5 +255,7 @@
   "preferences.association_unassigned": "Ask on first open",
   "preferences.association_choose": "Set Application…",
   "preferences.association_reset": "Reset Selected",
-  "preferences.association_reset_all": "Reset All"
+  "preferences.association_reset_all": "Reset All",
+  "scripting.validation_failed": "Script validation failed: {error}",
+  "scripting.already_attached": "Component {name} is already attached to this entity."
 }

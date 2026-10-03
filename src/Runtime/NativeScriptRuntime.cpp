@@ -3,6 +3,8 @@
 #include "Runtime/TimeAccess.h"
 #include "Runtime/MaterialLibrary.h"
 #include <exception>
+#include <map>
+#include <set>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -21,7 +23,19 @@ struct NativeScriptRuntime::Instance {
 };
 NativeScriptRuntime::NativeScriptRuntime()=default;
 NativeScriptRuntime::~NativeScriptRuntime(){Stop();}
-bool NativeScriptRuntime::Configure(std::vector<ScriptBinding> bindings,std::string& error){if(!m_instances.empty()){error="Cannot reconfigure scripts while Play mode is running";return false;}m_bindings=std::move(bindings);error.clear();return true;}
+bool NativeScriptRuntime::Configure(std::vector<ScriptBinding> bindings,std::string& error){
+    if(!m_instances.empty()){error="Cannot reconfigure scripts while Play mode is running";return false;}
+    std::set<std::pair<std::string,std::string>> attached;
+    std::map<std::string,std::filesystem::path> types;
+    for(const auto& binding:bindings){
+        if(!attached.emplace(binding.Entity,binding.TypeName).second){error="Duplicate script component on entity: "+binding.TypeName;return false;}
+        const auto module=binding.Module.lexically_normal();
+        const auto found=types.find(binding.TypeName);
+        if(found!=types.end()&&found->second!=module){error="Ambiguous script component type: "+binding.TypeName;return false;}
+        types.emplace(binding.TypeName,module);
+    }
+    m_bindings=std::move(bindings);error.clear();return true;
+}
 bool NativeScriptRuntime::Start(std::string& error){
     Stop();error.clear();
     for(const auto& binding:m_bindings){Instance instance;

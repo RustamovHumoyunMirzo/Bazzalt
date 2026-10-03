@@ -7,6 +7,12 @@ from pathlib import Path
 _COMPONENT=re.compile(r"\bCOMPONENT\s*\(\s*([A-Za-z_]\w*)\s*\)")
 _PROPERTY=re.compile(r"\bPROPERTY\s*\(\s*([^,]+?)\s*,\s*([A-Za-z_]\w*)\s*,\s*([^,\)]+)(?:,([^\)]*))?\)")
 
+class ScriptValidationError(ValueError):pass
+
+def _CodeMask(text, strings=True):
+    pattern=r'//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\''
+    return re.sub(pattern,lambda m:re.sub(r"[^\n]"," ",m.group()) if strings or m.group().startswith(("//","/*")) else m.group(),text)
+
 @dataclass(frozen=True)
 class ScriptProperty:
     type: str; name: str; default: str; attributes: tuple[str,...]=()
@@ -26,18 +32,51 @@ class ScriptCompiler:
         self.project=Path(project).resolve();self.engine_root=Path(engine_root or Path(__file__).resolve().parents[1])
         self.app_root=Path(app_root or Path(os.path.abspath(os.path.dirname(os.sys.executable))))
         self.cache=self.project/".bazzalt"/"ScriptAssemblies";self.state_file=self.cache/"build-state.json"
+        self.Diagnostics=[]
     @staticmethod
     def Inspect(path: str|Path)->ScriptDescriptor|None:
         path=Path(path)
         try:text=path.read_text(encoding="utf-8")
         except (OSError,UnicodeError):return None
-        match=_COMPONENT.search(text)
-        if not match:return None
-        properties=tuple(ScriptProperty(m.group(1).strip(),m.group(2),m.group(3).strip(),tuple(a.strip() for a in (m.group(4) or "").split(",") if a.strip())) for m in _PROPERTY.finditer(text))
+        mask=_CodeMask(text);matches=list(_COMPONENT.finditer(mask))
+        if not matches:return None
+        if len(matches)!=1:raise ScriptValidationError(f"{path}: declare exactly one COMPONENT per source file")
+        match=matches[0];start=mask.find("{",match.end());end=start;depth=0
+        if start<0:raise ScriptValidationError(f"{path}: component {match.group(1)} has no body")
+        for end in range(start,len(mask)):
+            if mask[end]=="{":depth+=1
+            elif mask[end]=="}":
+                depth-=1
+                if depth==0:break
+        if depth:raise ScriptValidationError(f"{path}: component {match.group(1)} has an incomplete body")
+        body=_CodeMask(text,False)[start:end];body_mask=mask[start:end]
+        properties=tuple(ScriptProperty(m.group(1).strip(),m.group(2),m.group(3).strip(),tuple(a.strip() for a in (m.group(4) or "").split(",") if a.strip())) for m in _PROPERTY.finditer(body) if body_mask[m.start():].startswith("PROPERTY"))
+        names=[p.name for p in properties]
+        if len(names)!=len(set(names)):raise ScriptValidationError(f"{path}: component {match.group(1)} has duplicate PROPERTY names")
         return ScriptDescriptor(path.resolve(),match.group(1),properties)
     def Discover(self)->list[ScriptDescriptor]:
         assets=self.project/"Assets"
-        return [value for path in assets.rglob("*.cpp") if (value:=self.Inspect(path)) is not None] if assets.is_dir() else []
+        paths=sorted((path for path in assets.rglob("*") if path.is_file() and path.suffix.lower()==".cpp"),key=str) if assets.is_dir() else []
+        return self._Validate(paths)
+    def _Validate(self,paths):
+        self.Diagnostics=[];groups={}
+        for path in dict.fromkeys(Path(path).resolve() for path in paths):
+            try:descriptor=self.Inspect(path)
+            except ScriptValidationError as error:
+                self.Diagnostics.append(Diagnostic("error",str(error)));continue
+            if descriptor:groups.setdefault(descriptor.name,[]).append(descriptor)
+        result=[]
+        for name,descriptors in groups.items():
+            if len(descriptors)>1:
+                files=", ".join(str(value.path) for value in descriptors)
+                self.Diagnostics.append(Diagnostic("error",f"Ambiguous component '{name}' declared in: {files}. Rename one COMPONENT type."))
+            else:result.append(descriptors[0])
+        return result
+    def ValidateDescriptor(self,descriptor):
+        discovered=self.Discover()
+        for value in discovered:
+            if value.path==descriptor.path.resolve() and value.name==descriptor.name:return value
+        raise ScriptValidationError("\n".join(value.message for value in self.Diagnostics) or f"Invalid or missing component source: {descriptor.path}")
     def _compiler(self)->Path|None:
         name="clang++.exe" if os.name=="nt" else "clang++"
         for root in (self.app_root,self.engine_root):
@@ -45,7 +84,13 @@ class ScriptCompiler:
             if candidate.is_file():return candidate
         return None
     def Build(self, used: list[str|Path])->BuildResult:
-        descriptors=[value for path in dict.fromkeys(map(str,used)) if (value:=self.Inspect(path)) is not None]
+        used=list(dict.fromkeys(Path(path).resolve() for path in used));assets=self.project/"Assets"
+        project_sources=[path for path in assets.rglob("*") if path.is_file() and path.suffix.lower()==".cpp"] if assets.is_dir() else []
+        validated=self._Validate([*project_sources,*used]);by_path={value.path:value for value in validated}
+        if self.Diagnostics:return BuildResult(False,diagnostics=tuple(self.Diagnostics))
+        missing=[str(path) for path in used if path not in by_path]
+        if missing:return BuildResult(False,diagnostics=(Diagnostic("error","Invalid or missing component sources: "+", ".join(missing)),))
+        descriptors=[by_path[path] for path in used]
         if not descriptors:return BuildResult(True)
         compiler=self._compiler()
         if compiler is None:return BuildResult(False,diagnostics=(Diagnostic("error","Bundled LLVM/Clang toolchain is missing. Repair this editor installation.",localization_key="scripting.toolchain_missing"),))
@@ -101,17 +146,31 @@ class ScriptAttachments:
         except (OSError,json.JSONDecodeError):pass
     def Save(self):
         self.path.parent.mkdir(parents=True,exist_ok=True);self.path.write_text(json.dumps({"version":1,"entities":self.values.get("entities",{})},indent=2),encoding="utf-8")
-    def For(self,entity: str)->list[dict]:return self.values.setdefault("entities",{}).setdefault(entity,[])
+    def For(self,entity: str)->list[dict]:
+        # Legacy manifests could contain two sources with one type name. Keep
+        # only the first visible; never merge their properties or run both.
+        result=[];names=set();sources=set()
+        for value in self.values.setdefault("entities",{}).setdefault(entity,[]):
+            name=value.get("type");source=str(Path(value.get("source","")).resolve())
+            if name in names or source in sources:continue
+            names.add(name);sources.add(source);result.append(value)
+        return result
     def Attach(self,entity: str,descriptor: ScriptDescriptor)->bool:
-        entries=self.For(entity)
-        if any(Path(v["source"]).resolve()==descriptor.path for v in entries):return False
+        entries=self.values.setdefault("entities",{}).setdefault(entity,[])
+        if any(v.get("type")==descriptor.name or Path(v["source"]).resolve()==descriptor.path.resolve() for v in entries):return False
+        names=[p.name for p in descriptor.properties]
+        if len(names)!=len(set(names)):raise ScriptValidationError(f"Duplicate properties in component {descriptor.name}")
         entries.append({"source":str(descriptor.path),"type":descriptor.name,"enabled":True,"properties":{p.name:"00000000-0000-0000-0000-000000000000" if p.type.replace("Bazzalt::","").strip() in ("Material","Shader") else _Literal(p.default) for p in descriptor.properties}});self.Save();return True
     def Remove(self,entity: str,type_name: str)->bool:
-        entries=self.For(entity);remaining=[v for v in entries if v.get("type")!=type_name]
+        entries=self.values.setdefault("entities",{}).setdefault(entity,[]);remaining=[v for v in entries if v.get("type")!=type_name]
         if len(remaining)==len(entries):return False
         self.values["entities"][entity]=remaining;self.Save();return True
     def UsedSources(self)->list[str]:return list(dict.fromkeys(v.get("source","") for entries in self.values.get("entities",{}).values() for v in entries if v.get("enabled",True) and v.get("source")))
     def RuntimeBindings(self,outputs: tuple[Path,...])->list[dict]:
+        for entity,entries in self.values.get("entities",{}).items():
+            names=[value.get("type") for value in entries]
+            paths=[str(Path(value.get("source","")).resolve()) for value in entries]
+            if len(names)!=len(set(names)) or len(paths)!=len(set(paths)):raise ScriptValidationError(f"Entity {entity} has duplicate script component types or sources. Remove the duplicate component and add it again.")
         sources=self.UsedSources();modules={str(Path(source).resolve()):str(output) for source,output in zip(sources,outputs)};result=[]
         for entity,entries in self.values.get("entities",{}).items():
             for value in entries:

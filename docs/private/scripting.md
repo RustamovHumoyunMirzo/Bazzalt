@@ -20,6 +20,28 @@ Create a C++ component from the Asset Browser, then drag it onto an entity or se
 
 Pressing Play builds only enabled, attached scripts. Compiler errors and warnings appear as itemized Console messages with the `Compiler` source. A failed build does not enter Play mode.
 
+## Component identity and validation
+
+Each source file declares exactly one `COMPONENT(TypeName)`. Type names must be
+unique across project script files; renaming the file alone does not rename the
+component. For example, `code0.cpp` and `code1.cpp` cannot both declare
+`COMPONENT(MyComp)`. Rename one declaration to a distinct type. Both conflicting
+sources are excluded from Add Component until resolved, with their paths reported
+in Console. Play validates project declarations before compiling attached sources.
+
+Each property name must be unique within its component. Comments, string literals
+containing macro examples, and properties outside the component body are excluded
+from discovery. Add Component disables types already attached to the active entity;
+drag/drop and manifest attachment also reject repeated types or sources. Fields
+belong to one descriptor and are never merged by display name.
+
+Older manifests containing duplicates display only their first entry, without
+combining fields. The stored data is retained; runtime binding rejects duplicates.
+To repair these entries, remove that script component (removing all duplicate
+entries of the same type), resolve the conflicting declarations, and reattach the
+desired script. The native loader independently rejects duplicate entity/type
+bindings and one type being supplied by multiple modules.
+
 Compiled modules expose a versioned C ABI. The private native runtime validates that ABI, creates one behavior instance per enabled attachment, applies serialized inspector properties, and calls `OnCreate`, `OnUpdate`, and `OnDestroy` with deterministic reverse-order teardown. Modules are unloaded on Stop; exceptions from gameplay callbacks are isolated from the editor loop.
 
 ## Toolchain ownership

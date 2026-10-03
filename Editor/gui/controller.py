@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QApplication, QFileDialog, QLabel, QMenu, QProgres
 
 from ..runtime import RuntimeService
 from ..history import SceneHistory
-from ..scripting import ScriptAttachments, ScriptCompiler
+from ..scripting import ScriptAttachments, ScriptCompiler, ScriptValidationError
 from ..materials import MaterialCompiler, MaterialError, ZERO, COUNTS
 from .panels import ConsoleLevel
 from .panels.assets import (ENVIRONMENT_EXTENSIONS, IMAGE_EXTENSIONS,
@@ -387,7 +387,8 @@ class EditorController(QObject):
                 for entries in self.ScriptAttachments.values.get("entities",{}).values():
                     for script in entries:
                         if not script.get("enabled",True):continue
-                        descriptor=ScriptCompiler.Inspect(script["source"])
+                        try:descriptor=ScriptCompiler.Inspect(script["source"])
+                        except ScriptValidationError:continue
                         for p in descriptor.properties if descriptor else ():
                             kind=p.type.replace("Bazzalt::","").strip();value=script.get("properties",{}).get(p.name,ZERO)
                             if kind=="Material" and value not in (ZERO,"0","",None):used.add(value)
@@ -493,7 +494,8 @@ class EditorController(QObject):
 
     def _ScriptEditor(self,script:dict,name:str,value):
         commit=lambda v:self._SetScriptProperty(script,name,v)
-        descriptor=ScriptCompiler.Inspect(script.get("source",""))
+        try:descriptor=ScriptCompiler.Inspect(script.get("source",""))
+        except ScriptValidationError:descriptor=None
         prop=next((p for p in descriptor.properties if p.name==name),None) if descriptor else None
         if prop and prop.type.replace("Bazzalt::","").strip() in ("Material","Shader"):
             return self._AssetPicker(value,{".matinst"} if "Material" in prop.type else {".mat",".shad"},commit)
@@ -666,10 +668,12 @@ class EditorController(QObject):
             action = menu.addAction(component_type); action.setEnabled(component_type not in existing)
             action.triggered.connect(lambda _=False, name=component_type: self._AddComponent(name))
         scripts=self.ScriptCompiler.Discover() if self.ScriptCompiler else []
+        if self.ScriptCompiler and self.ScriptCompiler.Diagnostics:
+            for diagnostic in self.ScriptCompiler.Diagnostics:self._ScriptValidationFailed(diagnostic.message)
         if scripts:
             menu.addSeparator();script_menu=menu.addMenu(self.Window.Localization.Translate("scripting.menu"))
             for descriptor in scripts:
-                action=script_menu.addAction(descriptor.name);action.triggered.connect(lambda _=False,d=descriptor:self._AttachScript(d))
+                action=script_menu.addAction(descriptor.name);action.setToolTip(str(descriptor.path));action.setEnabled(not self.ScriptAttachments or not any(value.get("type")==descriptor.name for value in self.ScriptAttachments.For(self.SelectedEntity)));action.triggered.connect(lambda _=False,d=descriptor:self._AttachScript(d))
         button = self.Window.Properties.AddComponentButton
         menu.exec(button.mapToGlobal(button.rect().topLeft()))
 
@@ -700,7 +704,8 @@ class EditorController(QObject):
             if entity:self.History.Commit();self.SetDirty(True,[self._SceneForParent(parent_id)]);self.SelectEntity(entity)
             else:self.History.Cancel()
         elif Path(path).suffix.lower()==".cpp" and self.ScriptCompiler:
-            descriptor=self.ScriptCompiler.Inspect(path)
+            try:descriptor=self.ScriptCompiler.Inspect(path)
+            except ScriptValidationError as error:self._ScriptValidationFailed(error);return
             target=parent_id or self.SelectedEntity
             if descriptor and target:self._AttachScript(descriptor,target)
 
@@ -787,13 +792,25 @@ class EditorController(QObject):
                 self.Window.Console.AddMessage(message,level,True,tr("scripting.compiler_source"))
             if not result.success:self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
             if result.outputs and self.Window.PreferenceValue("scripting","show_compile_success",True):self.Window.Console.AddMessage(tr("scripting.compile_success",count=len(result.outputs)),ConsoleLevel.Info,True,tr("scripting.compiler_source"))
-            if not self.Runtime.ConfigureScripts(self.ScriptAttachments.RuntimeBindings(result.outputs)):
+            try:bindings=self.ScriptAttachments.RuntimeBindings(result.outputs)
+            except ScriptValidationError as error:self._ScriptValidationFailed(error);self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
+            if not self.Runtime.ConfigureScripts(bindings):
                 self.Window.Console.AddMessage(self.Runtime.LastError(),ConsoleLevel.Error,True,tr("scripting.runtime_source"));self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
         if not self.Runtime.Play():self.Window.Toolbar.SetPlayState(PlayState.Stopped)
 
     def _AttachScript(self,descriptor,entity_id:str|None=None)->None:
         entity_id=entity_id or self.SelectedEntity
-        if entity_id and self.ScriptAttachments and self.ScriptAttachments.Attach(entity_id,descriptor):self.SetDirty(True);self.SelectEntity(entity_id,force=True)
+        if not entity_id or not self.ScriptAttachments:return
+        try:
+            if self.ScriptCompiler:descriptor=self.ScriptCompiler.ValidateDescriptor(descriptor)
+            added=self.ScriptAttachments.Attach(entity_id,descriptor)
+        except ScriptValidationError as error:self._ScriptValidationFailed(error);return
+        if added:self.SetDirty(True);self.SelectEntity(entity_id,force=True)
+        else:self._ScriptValidationFailed(self.Window.Localization.Translate("scripting.already_attached",name=descriptor.name))
+
+    def _ScriptValidationFailed(self,error)->None:
+        tr=self.Window.Localization.Translate
+        self.Window.Console.AddMessage(tr("scripting.validation_failed",error=str(error)),ConsoleLevel.Error,True,tr("scripting.compiler_source"))
 
     def _SetScriptEnabled(self,script:dict,enabled:bool)->None:
         script["enabled"]=enabled
