@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 from PySide6.QtWidgets import QApplication, QWidget
 from Editor.gui.application import Editor
 from Editor.gui.preferences import PreferencesDialog, MergePreferences
+from Editor.asset_opening import ExternalAssetOpener
 from Editor.main import RestartCommand
 
 
@@ -19,6 +20,8 @@ class RestartSettingsTests(unittest.TestCase):
         parent.Runtime = SimpleNamespace(SupportedRenderingBackends=lambda: ["automatic", "vulkan", "opengl"])
         parent.GetPreferences = lambda: MergePreferences({"rendering": {"backend": "vulkan"}})
         parent.ApplyPreferences = Mock()
+        parent._settings = {}
+        parent.AssetBrowser = SimpleNamespace(ExternalOpener=ExternalAssetOpener(parent._settings))
         dialog = PreferencesDialog(parent)
         field = dialog.Controls["rendering_backend"]
         self.assertEqual([field.itemData(i) for i in range(field.count())], ["automatic", "vulkan", "opengl"])

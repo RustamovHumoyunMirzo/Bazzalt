@@ -64,7 +64,7 @@ class EditorShellTests(unittest.TestCase):
     def test_preferences_are_modal_persistent_and_applied(self) -> None:
         dialog=PreferencesDialog(self.Window)
         self.assertIs(dialog.parent(),self.Window);self.assertTrue(dialog.isModal())
-        self.assertEqual(dialog.Sections.count(),7)
+        self.assertEqual(dialog.Sections.count(),8)
         dialog.Controls["theme"].setCurrentIndex(dialog.Controls["theme"].findData("light"))
         dialog.Controls["navigation_speed"].setValue(10.0);dialog.Controls["clear_on_play"].setChecked(True)
         dialog._Apply()

@@ -81,6 +81,8 @@ class Editor(QMainWindow):
         self.Hierarchy = HierarchyPanel(self.Localization, install_shortcuts=False)
         self.Properties = PropertiesPanel(self.Localization)
         self.AssetBrowser = AssetBrowserPanel(self.Localization, self.Resources)
+        from ..asset_opening import ExternalAssetOpener
+        self.AssetBrowser.ExternalOpener = ExternalAssetOpener(self._settings, self._settings_saver)
         self._PanelWidgets = {
             "console": self.Console,
             "output": self.Output,

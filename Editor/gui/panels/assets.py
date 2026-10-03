@@ -38,7 +38,7 @@ class AssetBrowserPanel(QWidget):
     AssetsChanged=Signal()
     AssetActivated=Signal(object);AssetSelected=Signal(object);ContextMenuRequested=Signal(object,object);SelectionCleared=Signal();LoadSceneRequested=Signal(object);AssetOperationFailed=Signal(str)
     def __init__(self,localization:LocalizationManager,resources=None)->None:
-        super().__init__();self._localization=localization;self._resources=resources;self._root=None;self._folder=None;self._clipboard=[];self.SceneRenameHandler=None;self.SceneLoadedChecker=None
+        super().__init__();self._localization=localization;self._resources=resources;self._root=None;self._folder=None;self._clipboard=[];self.SceneRenameHandler=None;self.SceneLoadedChecker=None;self.ExternalOpener=None
         self._watcher=QFileSystemWatcher(self);self._watcher.directoryChanged.connect(lambda _path:self.Refresh())
         layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0)
         self.Search=QLineEdit();self.Search.setObjectName("AssetBrowserSearch");self.Search.setClearButtonEnabled(True);layout.addWidget(self.Search)
@@ -149,6 +149,7 @@ class AssetBrowserPanel(QWidget):
             self.Search.clear()
             for match in self.Tree.findItems(path.name,Qt.MatchFlag.MatchExactly|Qt.MatchFlag.MatchRecursive):
                 if Path(match.data(0,Qt.ItemDataRole.UserRole))==path:self.Tree.setCurrentItem(match);return
+        if self.ExternalOpener and self.ExternalOpener.Supports(path):self._OpenExternal([path]);return
         if path.suffix.lower()==".bscene" and callable(self.SceneLoadedChecker) and self.SceneLoadedChecker(path):return
         self.AssetActivated.emit(path)
     def _Unique(self,name):
@@ -212,6 +213,9 @@ class AssetBrowserPanel(QWidget):
             action=create.addAction(tr(label));action.triggered.connect(lambda _=False,k=key:self._Create(k))
         menu.addAction(tr("assets.import"),self._Import);menu.addSeparator();selected=bool(self.Browser.selectedItems()) if widget is self.Browser else False
         current=Path(self.Browser.currentItem().data(Qt.ItemDataRole.UserRole)) if widget is self.Browser and self.Browser.currentItem() else None
+        external=bool(self.ExternalOpener and reveal_paths and all(path.is_file() and self.ExternalOpener.Supports(path) for path in reveal_paths))
+        open_action=menu.addAction(tr("assets.open"));open_action.setVisible(external);open_action.triggered.connect(lambda _=False:self._OpenExternal(reveal_paths))
+        open_with=menu.addAction(tr("assets.open_with"));open_with.setVisible(external);open_with.triggered.connect(lambda _=False:self._OpenExternal(reveal_paths,True))
         load=menu.addAction(tr("assets.load_scene"));is_scene=bool(current and current.suffix.lower()==".bscene");load.setVisible(is_scene);load.setEnabled(bool(is_scene and not (callable(self.SceneLoadedChecker) and self.SceneLoadedChecker(current))));load.triggered.connect(lambda:self.LoadSceneRequested.emit(current) if current else None)
         rename=menu.addAction(tr("assets.rename"));rename.setEnabled(len(self.Browser.selectedItems())==1);rename.triggered.connect(lambda:self.Browser.editItem(self.Browser.currentItem()));copy=menu.addAction(tr("assets.copy"));copy.setEnabled(selected);copy.triggered.connect(self._Copy);paste=menu.addAction(tr("assets.paste"));paste.setEnabled(bool(self._clipboard));paste.triggered.connect(self._Paste);delete=menu.addAction(tr("assets.delete"));delete.setEnabled(selected);delete.triggered.connect(self._Delete);menu.addSeparator();menu.addAction(tr("assets.refresh"),self.Refresh)
         reveal_key="assets.reveal" if sys.platform=="win32" else "assets.reveal_finder" if sys.platform=="darwin" else "assets.reveal_manager"
@@ -221,5 +225,13 @@ class AssetBrowserPanel(QWidget):
     def _Reveal(self,paths)->None:
         try:RevealFiles([path for path in paths if self._InsideRoot(path)])
         except OSError as error:self.AssetOperationFailed.emit(self._localization.Translate("assets.reveal_failed",error=str(error)))
+
+    def _OpenExternal(self,paths,choose=False)->None:
+        if not self.ExternalOpener:return
+        try:
+            if any(not self._InsideRoot(path) for path in paths):raise ValueError("Asset is outside the project")
+            self.ExternalOpener.Open(paths,self.window(),self._localization,choose)
+        except (OSError,ValueError) as error:
+            self.AssetOperationFailed.emit(self._localization.Translate("assets.open_failed",error=str(error)))
 
 __all__=["AssetBrowserPanel","IMAGE_EXTENSIONS","MODEL_EXTENSIONS","SHADER_EXTENSIONS","ENVIRONMENT_EXTENSIONS"]

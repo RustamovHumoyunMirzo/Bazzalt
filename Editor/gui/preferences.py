@@ -4,13 +4,17 @@ from copy import deepcopy
 from .widgets.fields import RangeInput
 from PySide6.QtWidgets import QScrollArea
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QCheckBox,QComboBox,QDialog,QDoubleSpinBox,QFormLayout,QHBoxLayout,QLabel,QListWidget,QPushButton,QStackedWidget,QVBoxLayout,QWidget
+from PySide6.QtWidgets import QCheckBox,QComboBox,QDialog,QDoubleSpinBox,QFormLayout,QHBoxLayout,QLabel,QListWidget,QPushButton,QStackedWidget,QVBoxLayout,QWidget,QTreeWidget,QTreeWidgetItem,QMessageBox
+import sys
+from pathlib import Path
+from ..platform_services import ChooseApplication
 
 DEFAULT_PREFERENCES={"general":{"confirm_unsaved":True,"save_workspace":True},"appearance":{"theme":"dark","locale":"en"},"scene":{"navigation_speed":5.0,"grid_visible":True,"grid_plane":1},"console":{"clear_on_play":False},"scripting":{"show_compile_success":True}}
 DEFAULT_PREFERENCES["scene"].update(pivot_center=False,local_space=False,gizmos_visible=True,stats_visible=False,icons_visible=True,shading_mode=0,look_sensitivity=.35,fly_boost=3.0)
 DEFAULT_PREFERENCES["scene"]["orientation_visible"]=True
 DEFAULT_PREFERENCES["history"]={"command_limit":100,"memory_mb":128}
 DEFAULT_PREFERENCES["rendering"]={"backend":"automatic"}
+DEFAULT_PREFERENCES["file_associations"]={"remember":True}
 
 def MergePreferences(value)->dict:
     result=deepcopy(DEFAULT_PREFERENCES)
@@ -24,9 +28,10 @@ class PreferencesDialog(QDialog):
         super().__init__(editor);self.Editor=editor;self.Tr=editor.Localization.Translate
         self.setObjectName("PreferencesDialog");self.setWindowModality(Qt.WindowModality.WindowModal);self.setModal(True);self.setWindowTitle(self.Tr("preferences.title"));self.resize(680,460);self.setMinimumSize(560,380)
         root=QVBoxLayout(self);root.setContentsMargins(10,10,10,10);root.setSpacing(10);body=QHBoxLayout();body.setSpacing(10);self.Sections=QListWidget();self.Sections.setObjectName("PreferencesSections");self.Sections.setFixedWidth(155);self.Pages=QStackedWidget();body.addWidget(self.Sections);body.addWidget(self.Pages,1);root.addLayout(body,1)
-        self.Controls={};self._AddGeneral();self._AddAppearance();self._AddScene();self._AddConsole();self._AddScripting();self._AddHistory();self._AddRendering();self.Sections.currentRowChanged.connect(self.Pages.setCurrentIndex);self.Sections.setCurrentRow(0)
+        self._associations=editor.AssetBrowser.ExternalOpener.Associations()
+        self.Controls={};self._AddGeneral();self._AddAppearance();self._AddScene();self._AddConsole();self._AddScripting();self._AddHistory();self._AddRendering();self._AddFileAssociations();self.Sections.currentRowChanged.connect(self.Pages.setCurrentIndex);self.Sections.setCurrentRow(0)
         buttons=QHBoxLayout();self.Restore=QPushButton(self.Tr("preferences.restore_defaults"));self.Cancel=QPushButton(self.Tr("preferences.cancel"));self.Apply=QPushButton(self.Tr("preferences.apply"));self.Apply.setDefault(True);buttons.addWidget(self.Restore);buttons.addStretch();buttons.addWidget(self.Cancel);buttons.addWidget(self.Apply);root.addLayout(buttons)
-        self.Restore.clicked.connect(lambda:self.SetValues(DEFAULT_PREFERENCES));self.Cancel.clicked.connect(self.reject);self.Apply.clicked.connect(self._Apply);self.SetValues(editor.GetPreferences())
+        self.Restore.clicked.connect(self._RestoreDefaults);self.Cancel.clicked.connect(self.reject);self.Apply.clicked.connect(self._Apply);self.SetValues(editor.GetPreferences())
     def _Page(self,key:str)->QFormLayout:
         self.Sections.addItem(self.Tr(f"preferences.section.{key}"));page=QWidget();layout=QFormLayout(page);layout.setContentsMargins(14,12,14,12);layout.setHorizontalSpacing(20);layout.setVerticalSpacing(10);layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow);scroll=QScrollArea();scroll.setWidgetResizable(True);scroll.setWidget(page);self.Pages.addWidget(scroll);return layout
     def _AddGeneral(self):
@@ -57,6 +62,40 @@ class PreferencesDialog(QDialog):
         layout.addRow(self.Tr("preferences.rendering_backend"),backend)
         note=QLabel(self.Tr("preferences.rendering_restart_note"));note.setWordWrap(True);layout.addRow(note)
         self.Controls["rendering_backend"]=backend
+    def _AddFileAssociations(self):
+        layout=self._Page("file_associations")
+        remember=QCheckBox(self.Tr("preferences.associations_remember"));layout.addRow(remember);self.Controls["remember_associations"]=remember
+        note=QLabel(self.Tr("preferences.associations_note"));note.setWordWrap(True);layout.addRow(note)
+        self.AssociationList=QTreeWidget();self.AssociationList.setHeaderLabels([self.Tr("preferences.association_format"),self.Tr("preferences.association_application")]);self.AssociationList.setRootIsDecorated(False);self.AssociationList.setMinimumHeight(120);layout.addRow(self.AssociationList)
+        controls=QWidget();buttons=QHBoxLayout(controls);buttons.setContentsMargins(0,0,0,0)
+        self.AssociationChoose=QPushButton(self.Tr("preferences.association_choose"));self.AssociationReset=QPushButton(self.Tr("preferences.association_reset"));self.AssociationResetAll=QPushButton(self.Tr("preferences.association_reset_all"))
+        for button in (self.AssociationChoose,self.AssociationReset,self.AssociationResetAll):buttons.addWidget(button)
+        layout.addRow(controls);self.AssociationChoose.clicked.connect(self._ChooseAssociation);self.AssociationReset.clicked.connect(self._ResetAssociation);self.AssociationResetAll.clicked.connect(self._ResetAllAssociations)
+        self.AssociationList.currentItemChanged.connect(lambda *_:self._AssociationButtons());self._RefreshAssociations()
+    def _RefreshAssociations(self):
+        selected=self.AssociationList.currentItem();extension=selected.data(0,Qt.ItemDataRole.UserRole) if selected else None
+        self.AssociationList.clear()
+        for suffix in sorted(self.Editor.AssetBrowser.ExternalOpener.Extensions):
+            value=self._associations.get(suffix);app=value.get("application") if isinstance(value,dict) and value.get("platform")==sys.platform else None
+            app=app if isinstance(app,str) else None
+            text=Path(app).name if isinstance(app,str) and app else self.Tr("preferences.association_unassigned")
+            item=QTreeWidgetItem([suffix,text]);item.setData(0,Qt.ItemDataRole.UserRole,suffix);item.setToolTip(1,app or text);self.AssociationList.addTopLevelItem(item)
+            if suffix==extension:self.AssociationList.setCurrentItem(item)
+        self.AssociationList.resizeColumnToContents(0);self._AssociationButtons()
+    def _AssociationButtons(self):
+        selected=self.AssociationList.currentItem();self.AssociationChoose.setEnabled(selected is not None);self.AssociationReset.setEnabled(bool(selected and selected.data(0,Qt.ItemDataRole.UserRole) in self._associations));self.AssociationResetAll.setEnabled(bool(self._associations))
+    def _ChooseAssociation(self):
+        item=self.AssociationList.currentItem()
+        if item is None:return
+        suffix=item.data(0,Qt.ItemDataRole.UserRole)
+        try:application=ChooseApplication(self,self.Editor.Localization,suffix)
+        except (OSError,ValueError) as error:QMessageBox.warning(self,self.Tr("preferences.title"),self.Tr("assets.open_failed",error=str(error)));return
+        if application:self._associations[suffix]={"platform":sys.platform,"application":str(application)};self._RefreshAssociations()
+    def _ResetAssociation(self):
+        item=self.AssociationList.currentItem()
+        if item:self._associations.pop(item.data(0,Qt.ItemDataRole.UserRole),None);self._RefreshAssociations()
+    def _ResetAllAssociations(self):self._associations.clear();self._RefreshAssociations()
+    def _RestoreDefaults(self):self.SetValues(DEFAULT_PREFERENCES);self._ResetAllAssociations()
     @staticmethod
     def _ComboSet(combo,value):index=combo.findData(value);combo.setCurrentIndex(max(0,index))
     def SetValues(self,value:dict)->None:
@@ -66,6 +105,7 @@ class PreferencesDialog(QDialog):
         for key in ("look_sensitivity","fly_boost"):c[key].SetValue(p["scene"][key])
         for key in ("command_limit","memory_mb"):c[key].SetValue(p["history"][key])
         self._ComboSet(c["rendering_backend"],p["rendering"]["backend"])
+        c["remember_associations"].setChecked(bool(p["file_associations"]["remember"]))
     def Values(self)->dict:
         c=self.Controls;result=MergePreferences(self.Editor.GetPreferences())
         result.update(general={"confirm_unsaved":c["confirm_unsaved"].isChecked(),"save_workspace":c["save_workspace"].isChecked()},appearance={"theme":c["theme"].currentData(),"locale":c["locale"].currentData()},console={"clear_on_play":c["clear_on_play"].isChecked()},scripting={"show_compile_success":c["show_compile_success"].isChecked()})
@@ -74,7 +114,15 @@ class PreferencesDialog(QDialog):
         for key in ("look_sensitivity","fly_boost"):result["scene"][key]=c[key].GetValue()
         result["history"]={key:int(c[key].GetValue()) for key in ("command_limit","memory_mb")}
         result["rendering"]={"backend":c["rendering_backend"].currentData() or "automatic"}
+        result["file_associations"]={"remember":c["remember_associations"].isChecked()}
         return result
-    def _Apply(self)->None:self.Editor.ApplyPreferences(self.Values());self.accept()
+    def _Apply(self)->None:
+        opener=self.Editor.AssetBrowser.ExternalOpener;previous=opener.Associations()
+        self.Editor._settings[opener.SettingsKey]=deepcopy(self._associations)
+        try:self.Editor.ApplyPreferences(self.Values())
+        except (OSError,ValueError) as error:
+            self.Editor._settings[opener.SettingsKey]=previous
+            QMessageBox.warning(self,self.Tr("preferences.title"),self.Tr("assets.open_failed",error=str(error)));return
+        self.accept()
 
 __all__=["DEFAULT_PREFERENCES","MergePreferences","PreferencesDialog"]

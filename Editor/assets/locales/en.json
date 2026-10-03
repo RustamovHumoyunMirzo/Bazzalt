@@ -239,5 +239,21 @@
   "materials.source": "Material Compiler",
   "materials.failed": "Material could not be prepared: {error}",
   "materials.compiling": "Preparing used shaders and materials…",
-  "materials.filament_shader": "Filament Shader"
+  "materials.filament_shader": "Filament Shader",
+  "assets.open": "Open",
+  "assets.open_with": "Open with…",
+  "assets.open_with_title": "Open {extension} files with…",
+  "assets.application_windows_filter": "Applications (*.exe)",
+  "assets.application_mac_filter": "Applications (*.app)",
+  "assets.application_filter": "Applications (*)",
+  "assets.open_failed": "Could not open asset: {error}",
+  "preferences.section.file_associations": "File Associations",
+  "preferences.associations_remember": "Remember applications for Open and double-click",
+  "preferences.associations_note": "Open uses the saved application, or asks on first use. Open with… always asks. These associations affect only Bazzalt. Set Application explicitly assigns a program; reset makes the next Open ask again. Changes are saved with Apply.",
+  "preferences.association_format": "Format",
+  "preferences.association_application": "Application",
+  "preferences.association_unassigned": "Ask on first open",
+  "preferences.association_choose": "Set Application…",
+  "preferences.association_reset": "Reset Selected",
+  "preferences.association_reset_all": "Reset All"
 }

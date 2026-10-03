@@ -70,6 +70,61 @@ using relative paths. Metadata sidecars and symlinks are excluded. Clearing the
 query restores the current folder. Refreshing with a newly created or renamed
 asset exits search and reveals/selects that asset in its containing folder.
 
+### External application opening
+
+Double-click a `.cpp` asset, or choose **Open** from its context menu, to open it
+in an external application. On Windows the first use presents the actual native
+**Open With** application list, not File Explorer or an executable-file browser.
+When the chosen application can be identified, Bazzalt remembers it per extension
+in the editor's existing app-data settings. **Open with…** always shows the chooser;
+canceling preserves the previous choice. A missing/uninstalled application prompts
+again. Selecting multiple C++ assets chooses once and passes the remaining files
+to the identified app; Windows itself has already opened the first file. If no
+handler can be identified, each remaining file gets its own native chooser.
+Folders, scenes, models, and other asset types retain their existing behavior.
+
+Associations are editor-local and never modify OS defaults. Windows' native
+[Open With shell API](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shopenwithdialog)
+does not return the selected application. Bazzalt optionally resolves newly
+observed Windows Open With history into a validated executable path. Unchanged
+or unavailable history is not treated as proof of the user's selection: the app
+is left uncached and the next Open prompts again. A successful but unidentified
+replacement also clears an old cached choice. No OS defaults are changed.
+macOS and Linux currently retain the native application-file browser fallback.
+Arguments are passed without a command shell;
+Unicode filenames and spaces are preserved. Launch failures appear in Console and
+are not saved as successful choices. A successful process launch does not guarantee
+that the application itself will accept the file.
+
+`Editor.asset_opening.ExternalAssetOpener` owns this policy separately from import
+and compilation. `RegisterExtension(".hpp")` enables another format, or supply an
+explicit `extensions` collection when constructing the service. New formats must
+be opted in; unsupported project files are never executed automatically.
+
+### File Association preferences
+
+**Edit → Preferences → File Associations** lists supported formats and their saved
+applications (hover for the full path). By default **Open** and double-click reuse
+the saved program; if no valid program is saved they prompt. **Open with…** always
+prompts, even when a saved program exists. Successful identifiable selections replace
+the saved association; cancellation never does.
+
+- **Remember applications** enables cached opening. When off, each Open prompts;
+  existing saved choices are retained and new choices are not saved.
+- **Set Application…** explicitly assigns an executable using native program-file
+  browsing. This also provides a reliable override when Windows cannot report a
+  choice from its native application list. It does not launch a project file.
+- **Reset Selected** forgets the chosen extension. **Reset All** forgets every
+  saved association, so the next Open prompts again.
+- **Restore Defaults** restores remembering and clears associations.
+
+All preference edits, including resets, are staged until **Apply**. **Cancel**
+does not change saved associations. Settings use the existing cross-platform editor
+app-data JSON store and survive editor restarts; no OS default associations are
+modified. The service additionally exposes `Associations()`,
+`SetAssociation(extension, application)` and `ResetAssociations(extension=None)`
+for editor integrations. These operations preserve unrelated editor settings.
+
 ## Compact field sizing
 
 Single-line text, numeric, and dropdown inputs use the shared theme's
