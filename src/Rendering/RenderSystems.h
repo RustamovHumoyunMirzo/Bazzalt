@@ -57,6 +57,7 @@ private:
     struct Resource {
         RenderAssets::Handle Handle = RenderAssets::InvalidHandle;
         UUID MeshAsset{};
+        UUID MaterialAsset{};
         std::vector<UUID> Materials;
     };
     void Destroy(UUID id);

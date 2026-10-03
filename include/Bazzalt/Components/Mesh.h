@@ -6,12 +6,15 @@
 
 #include "Bazzalt/Component.h"
 #include "Bazzalt/UUID.h"
+#include "Bazzalt/Material.h"
 
 namespace Bazzalt {
 
 struct Mesh : Component {
     static constexpr std::uint32_t EntireAsset = std::numeric_limits<std::uint32_t>::max();
     UUID MeshAsset{};
+    // Optional per-entity override. Zero preserves the imported model's materials.
+    UUID MaterialAsset{};
     // glTF node index, or EntireAsset for a standalone mesh / complete model.
     std::uint32_t ModelNodeIndex = EntireAsset;
     std::vector<UUID> Materials;
@@ -19,6 +22,9 @@ struct Mesh : Component {
     bool Visible = true;
     bool CastShadows = true;
     bool ReceiveShadows = true;
+    void SetMaterial(Material material) { MaterialAsset=material.GetAssetUUID(); }
+    [[nodiscard]] Material GetMaterial() const { return Material::Load(MaterialAsset); }
+    void ClearMaterial() { MaterialAsset={};Materials.clear(); }
 };
 
 } // namespace Bazzalt

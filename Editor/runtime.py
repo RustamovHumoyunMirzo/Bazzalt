@@ -163,6 +163,15 @@ class RuntimeService(QObject):
     def Translate(self, entity_id: str, delta) -> bool:
         return bool(self._host and self._host.translate(entity_id, delta))
 
+    def AssetInfo(self, reference) -> dict:
+        return dict(self._host.asset_info(str(reference))) if self._host else {}
+
+    def RefreshAssets(self) -> bool:
+        return bool(self._host and self._host.refresh_assets())
+
+    def UsedShaderAssets(self) -> list[str]:
+        return list(self._host.used_shader_assets()) if self._host and hasattr(self._host,"used_shader_assets") else []
+
     def AssetDirectory(self) -> str:
         return self._host.asset_directory() if self._host is not None else ""
 

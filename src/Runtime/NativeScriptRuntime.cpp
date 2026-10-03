@@ -1,6 +1,7 @@
 #include "Runtime/NativeScriptRuntime.h"
 #include "Bazzalt/Script.h"
 #include "Runtime/TimeAccess.h"
+#include "Runtime/MaterialLibrary.h"
 #include <exception>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -40,6 +41,13 @@ bool NativeScriptRuntime::Start(std::string& error){
         auto bindTime=reinterpret_cast<BindTime>(dlsym(instance.Library,"BazzaltBindTimeV1"));
 #endif
         if(bindTime)bindTime(TimeAccess::GetState());
+        using BindMaterials = void (*)(Detail::MaterialServices*);
+#ifdef _WIN32
+        auto bindMaterials=reinterpret_cast<BindMaterials>(GetProcAddress(instance.Library,"BazzaltBindMaterialsV1"));
+#else
+        auto bindMaterials=reinterpret_cast<BindMaterials>(dlsym(instance.Library,"BazzaltBindMaterialsV1"));
+#endif
+        if(bindMaterials)bindMaterials(GetMaterialServices());
 #ifdef _WIN32
         instance.OnFixedUpdate=reinterpret_cast<decltype(instance.OnFixedUpdate)>(GetProcAddress(instance.Library,"BazzaltFixedUpdateV1"));
 #else

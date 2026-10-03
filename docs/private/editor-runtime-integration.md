@@ -24,11 +24,18 @@ a 16 ms Qt timer. Pause suspends automatic ticks, Next Step advances exactly one
 shuts down runtime rendering and restores the authoring snapshot. Temporary snapshots are
 removed even during host destruction.
 
-The Scene and Game panels are connected lifecycle hosts, but remain black presentation surfaces
-in this alpha. Filament currently lacks a platform swapchain/presentation handle abstraction in
-the private renderer. Embedding it is intentionally deferred rather than exposing Filament or
-letting the engine depend on Qt. The next renderer milestone should add a private native-surface
-adapter and resize/present API behind `EditorHost`.
+Scene and Game panels host native presentation surfaces through the private bridge.
+Qt supplies the OS window handle; the engine owns the Filament swapchain, views,
+cameras, resizing and presentation. Qt's `offscreen`, `minimal` and `minimalegl`
+plugins do not provide native presentation handles and never attach a swapchain.
+Headless UI/ECS tests still operate without GPU presentation. Windows additionally
+validates HWNDs before calling Filament, rejecting synthetic and destroyed handles.
+
+On accepted editor close, tick/navigation timers stop, viewports detach, gameplay
+stops, and the native host is released even if the hidden Qt widget remains alive.
+Deferred UI callbacks have QObject contexts and are canceled when their owner is
+destroyed. Delayed timer starts cannot restart a released runtime. Swapchain destruction is
+flushed before Detach returns so Qt can safely destroy or reparent its surface.
 
 `EditorController.ApplyGizmoTranslation` applies calculated editor gizmo deltas through the
 bridge to the selected C++ entity. Rotation and scale already exist in the inspector and gizmo

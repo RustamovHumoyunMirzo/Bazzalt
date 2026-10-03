@@ -41,6 +41,11 @@ New-Item -ItemType Directory -Force -Path $EditorTarget | Out-Null
 Copy-Item -Path (Join-Path $EditorBuild "*") -Destination $EditorTarget -Recurse -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $EditorTarget "Editor") | Out-Null
 Copy-Item -LiteralPath $Native.FullName -Destination (Join-Path $EditorTarget "Editor/$($Native.Name)") -Force
+$Bshader = Join-Path $Build "Editor/Release/bshad.dll"
+if (-not (Test-Path -LiteralPath $Bshader)) { throw "Bshader editor translator is missing" }
+Copy-Item -LiteralPath $Bshader -Destination (Join-Path $EditorTarget "Editor/bshad.dll") -Force
+New-Item -ItemType Directory -Force -Path (Join-Path $EditorTarget "tools/filament") | Out-Null
+Copy-Item -LiteralPath (Join-Path $Root "deps/filament/bin/matc.exe") -Destination (Join-Path $EditorTarget "tools/filament/matc.exe") -Force
 $Toolchain = Join-Path $Root "toolchain/llvm"
 if (-not (Test-Path (Join-Path $Toolchain "bin/clang++.exe"))) { throw "Bundled LLVM is missing. Run scripts/get_llvm.ps1 before production packaging." }
 New-Item -ItemType Directory -Force -Path (Join-Path $EditorTarget "toolchain") | Out-Null

@@ -357,9 +357,14 @@ class Editor(QMainWindow):
             if clicked is cancel or clicked is None:event.ignore();return
             if clicked is save and not self.Controller.SaveScene():event.ignore();return
             if clicked is not discard and clicked is not save:event.ignore();return
+        self.Controller.Timer.stop()
+        self.Scene.Surface._fly_timer.stop();self.Output.Surface._fly_timer.stop()
         self._layout_save_timer.stop();self._SaveWorkspace()
         self.Scene.Detach(); self.Output.Detach()
         self.Controller.Stop()
+        # close() hides a Qt widget; it does not destroy it. Release native GPU
+        # ownership now, before another editor can initialize its own runtime.
+        self.Runtime.Release()
         application=QApplication.instance()
         if application is not None:application.removeEventFilter(self.CursorPolicy)
         if application is not None:

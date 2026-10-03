@@ -80,7 +80,8 @@ fragment {
     assert(std::filesystem::exists(gltf->CachePath.parent_path() / "payload.bin"));
     assert(texture && texture->Importer == "Bazzalt.Texture" && texture->CachePath.extension() == ".png");
     assert(material && material->Importer == "Bazzalt.FilamentMaterial" &&
-           material->CachePath.extension() == ".filamat");
+           material->CachePath.extension() == ".mat");
+    assert(!std::filesystem::exists(std::filesystem::path(material->CachePath.string()+".filamat")));
     assert(mesh && mesh->Importer == "Bazzalt.Filamesh" && mesh->CachePath.extension() == ".filamesh");
     assert(human && human->Importer == "Bazzalt.glTF");
     const auto modelAsset = AssetManager::LoadModel(human->Id);

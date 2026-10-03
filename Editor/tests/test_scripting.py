@@ -46,4 +46,8 @@ class ScriptingTests(unittest.TestCase):
             self.assertTrue(result.outputs[0].is_file())
             self.assertEqual(compiler.Build([self.source.with_name("TimeProbe.cpp")]).outputs,result.outputs)
 
+    def test_material_behavior_has_typed_uuid_setters_and_service_binding(self):
+        descriptor=ScriptCompiler.Inspect(self.source.with_name("MaterialProbe.cpp"));wrapper=ScriptCompiler._Wrapper(descriptor)
+        self.assertIn("Bazzalt::Material::Load(id)",wrapper);self.assertIn("Bazzalt::Shader::Load(id)",wrapper);self.assertIn("BazzaltBindMaterialsV1",wrapper)
+
 if __name__=="__main__":unittest.main()

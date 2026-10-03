@@ -165,8 +165,19 @@ and `OverlapBox`.
 
 ### `Components/Mesh.h`
 
-Fields: `MeshAsset`, `Materials`, `LayerMask`, `Visible`, `CastShadows`,
+Fields: `MeshAsset`, `MaterialAsset`, `ModelNodeIndex`, `Materials`, `LayerMask`, `Visible`, `CastShadows`,
 `ReceiveShadows`.
+
+Methods: `SetMaterial(Material)`, `GetMaterial()`, `ClearMaterial()`.
+
+## `Bazzalt/Material.h` and `Bazzalt/Shader.h`
+
+UUID-based asset handles with no public renderer dependency. Material supports
+`Load`, `Create(Shader)`, `Instantiate`, `GetShader`, `HasParameter`, and typed
+getters/setters. Both handles expose `IsValid`, `GetAssetUUID`, and
+`GetParameters`. Material and Shader `PROPERTY` declarations become serialized,
+type-filtered project asset pickers. See the full
+[material API and workflow](materials-and-shaders.md).
 
 ## `Bazzalt/SceneManager.h`
 

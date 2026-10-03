@@ -1,4 +1,5 @@
 #include <Bazzalt/Script.h>
+#include <Bazzalt/Material.h>
 #include <cstring>
 #include <fstream>
 #include <string>
@@ -6,8 +7,9 @@
 COMPONENT(LifecycleProbe) {
 public:
     PROPERTY(std::string, LogPath, "")
+    PROPERTY(Bazzalt::Material, Surface, {})
     void Write(const char* value){std::ofstream(LogPath,std::ios::app)<<value<<':'<<GetEntityUUID()<<'\n';}
-    void OnCreate() override { Bazzalt::Time::SetSlowMotion(0.25f);Write("create"); }
+    void OnCreate() override { if(!Bazzalt::Detail::BoundMaterialServices)throw std::runtime_error("Material host service was not bound");if(Surface.IsValid())Surface.SetFloat("roughness",0.1f);Bazzalt::Time::SetSlowMotion(0.25f);Write("create"); }
     void OnUpdate(float delta) override { if(Bazzalt::Time::GetDeltaTime()!=delta)throw std::runtime_error("Module clock was not shared");Write("update"); }
     void OnFixedUpdate(float delta) override { if(!Bazzalt::Time::IsInFixedTimeStep()||Bazzalt::Time::GetDeltaTime()!=delta)throw std::runtime_error("Module fixed clock was not shared");Write("fixed"); }
     void OnDestroy() override { Write("destroy"); }
@@ -19,7 +21,7 @@ void Destroy(void* value){delete static_cast<LifecycleProbe*>(value);}
 void OnCreate(void* value){static_cast<LifecycleProbe*>(value)->OnCreate();}
 void OnUpdate(void* value,float delta){static_cast<LifecycleProbe*>(value)->OnUpdate(delta);}
 void OnDestroy(void* value){static_cast<LifecycleProbe*>(value)->OnDestroy();}
-bool SetProperty(void* value,const char* name,const char* text){if(std::strcmp(name,"LogPath"))return false;static_cast<LifecycleProbe*>(value)->LogPath=text;return true;}
+bool SetProperty(void* value,const char* name,const char* text){if(!std::strcmp(name,"Surface")){Bazzalt::UUID id;if(!Bazzalt::UUID::TryParse(text,id))return false;static_cast<LifecycleProbe*>(value)->Surface=Bazzalt::Material::Load(id);return true;}if(std::strcmp(name,"LogPath"))return false;static_cast<LifecycleProbe*>(value)->LogPath=text;return true;}
 const Bazzalt::ScriptModuleApi Api{Bazzalt::ScriptAbiVersion,"LifecycleProbe",Create,Destroy,OnCreate,OnUpdate,OnDestroy,SetProperty};
 }
 #ifdef _WIN32
@@ -29,4 +31,5 @@ const Bazzalt::ScriptModuleApi Api{Bazzalt::ScriptAbiVersion,"LifecycleProbe",Cr
 #endif
 extern "C" SCRIPT_EXPORT const Bazzalt::ScriptModuleApi* BazzaltGetScriptModuleV1(){return &Api;}
 extern "C" SCRIPT_EXPORT void BazzaltBindTimeV1(Bazzalt::Detail::TimeState* state){Bazzalt::ScriptRuntimeAccess::BindTime(state);}
+extern "C" SCRIPT_EXPORT void BazzaltBindMaterialsV1(Bazzalt::Detail::MaterialServices* services){Bazzalt::Detail::BoundMaterialServices=services;}
 extern "C" SCRIPT_EXPORT void BazzaltFixedUpdateV1(void* value,float delta){static_cast<LifecycleProbe*>(value)->OnFixedUpdate(delta);}

@@ -5,7 +5,7 @@ from __future__ import annotations
 from math import cos, radians, sin, tan
 
 from PySide6.QtCore import QPoint, QPointF, QRect, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QPainter, QPen, QWheelEvent
+from PySide6.QtGui import QColor, QGuiApplication, QKeyEvent, QMouseEvent, QPainter, QPen, QWheelEvent
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel,
                                QStackedLayout, QToolButton,QVBoxLayout, QWidget)
 from ..gizmos import GizmoDrag, GizmoHandle, GizmoMode, PickAxis, PickRotationAxis, Ray, Vec3
@@ -72,7 +72,7 @@ class NativeRenderSurface(QWidget):
         return None
 
     def showEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        super().showEvent(event); QTimer.singleShot(50, self._Attach)
+        super().showEvent(event); QTimer.singleShot(50, self, self._Attach)
 
     def _PixelSize(self) -> tuple[int, int]:
         ratio = self.devicePixelRatioF()
@@ -80,6 +80,9 @@ class NativeRenderSurface(QWidget):
 
     def _Attach(self) -> None:
         if self._attached or not self.isVisible() or not self.Runtime.IsAvailable(): return
+        # These Qt plugins provide synthetic WIds, not native presentation surfaces.
+        # Passing one to a graphics driver can abort the entire process.
+        if QGuiApplication.platformName().casefold() in {"offscreen","minimal","minimalegl"}:return
         # Delay native-window promotion until docking has finished constructing
         # and reparenting its tab hierarchy.
         self.setAttribute(Qt.WidgetAttribute.WA_NativeWindow)
@@ -96,6 +99,7 @@ class NativeRenderSurface(QWidget):
             width, height = self._PixelSize(); self.Runtime.ResizeViewport(self.ViewportId, width, height,self.devicePixelRatioF())
 
     def Detach(self) -> None:
+        self._DestroySelectionBand()
         if self._attached: self.Runtime.DestroyViewport(self.ViewportId); self._attached = False
 
     def _UpdateCamera(self) -> None:
@@ -436,7 +440,7 @@ class ViewportPanel(QFrame):
     def SetGameCameraAvailable(self, available: bool) -> None:
         if not hasattr(self, "_output_stack"): return
         self._output_stack.setCurrentWidget(self.Surface if available else self._no_camera)
-        if available: QTimer.singleShot(0, self.Surface._Attach)
+        if available: QTimer.singleShot(0, self.Surface, self.Surface._Attach)
 
     def resizeEvent(self,event)->None:
         super().resizeEvent(event)

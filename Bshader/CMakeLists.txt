@@ -51,7 +51,9 @@ target_include_directories(bshader
 )
 
 if(MSVC)
-    target_compile_options(bshader PRIVATE /W4 /WX)
+    # MSVC warns about standard C flexible array members even in C11 mode.
+    target_compile_options(bshader PRIVATE /W4 /WX /wd4200)
+    target_compile_definitions(bshader PRIVATE _CRT_SECURE_NO_WARNINGS)
 else()
     target_compile_options(bshader PRIVATE -Wall -Wextra -Werror)
 endif()

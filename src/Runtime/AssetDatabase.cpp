@@ -254,17 +254,14 @@ public:
 class MaterialImporter final : public AssetImporter {
 public:
     std::string GetName() const override { return "Bazzalt.FilamentMaterial"; }
-    std::uint32_t GetVersion() const override { return 1; }
+    std::uint32_t GetVersion() const override { return 2; }
     bool Supports(const std::filesystem::path& source) const override {
-        const auto extension = LowerExtension(source); return extension == ".mat" || extension == ".filamat";
+        const auto extension = LowerExtension(source); return extension == ".mat" || extension == ".shad" || extension == ".matinst" || extension == ".filamat";
     }
-    std::string GetCacheExtension(const std::filesystem::path&) const override { return ".filamat"; }
+    std::string GetCacheExtension(const std::filesystem::path& source) const override { return LowerExtension(source); }
     bool Import(const AssetImportContext& context, std::string& error) override {
-        std::error_code code; std::filesystem::create_directories(context.OutputPath.parent_path(), code);
-        if (code) { error = code.message(); return false; }
-        if (LowerExtension(context.SourcePath) == ".filamat") return CopyAsset(context, error);
-        return RunTool(BAZZALT_MATC_EXECUTABLE,
-            {"--platform", "desktop", "--api", "all", "--output", context.OutputPath, context.SourcePath}, error);
+        // Compilation is editor-owned and demand-driven, not an import side effect.
+        return CopyAsset(context, error);
     }
 };
 

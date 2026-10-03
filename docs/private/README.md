@@ -18,6 +18,8 @@ resource ownership, and extension points for game code.
    invalidation, importers, and runtime lookup.
 6. [Rendering](rendering.md) — cameras, lights, meshes, glTF, materials, and the
    private Filament backend.
+   [Materials and shaders](materials-and-shaders.md) covers the material Inspector,
+   demand-driven compilation, typed C++ handles, and script asset properties.
 7. [Math](math.md) — coordinate conventions and public math types.
 8. [Public API reference](api-reference.md) — header-by-header reference.
    [Gameplay time](time.md) covers slow motion, scaled/unscaled clocks, pause,

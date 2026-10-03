@@ -231,5 +231,13 @@
   "assets.reveal": "Show in File Explorer",
   "assets.reveal_finder": "Reveal in Finder",
   "assets.reveal_manager": "Show in File Manager",
-  "assets.reveal_failed": "Could not reveal selected assets: {error}"
+  "assets.reveal_failed": "Could not reveal selected assets: {error}",
+  "materials.title": "Material",
+  "materials.shader": "Shader",
+  "materials.parameters": "Parameters",
+  "materials.requires": "Vertex requirements",
+  "materials.source": "Material Compiler",
+  "materials.failed": "Material could not be prepared: {error}",
+  "materials.compiling": "Preparing used shaders and materials…",
+  "materials.filament_shader": "Filament Shader"
 }

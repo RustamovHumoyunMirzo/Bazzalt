@@ -12,11 +12,12 @@ from PySide6.QtWidgets import QApplication, QFileDialog, QLabel, QMenu, QProgres
 from ..runtime import RuntimeService
 from ..history import SceneHistory
 from ..scripting import ScriptAttachments, ScriptCompiler
+from ..materials import MaterialCompiler, MaterialError, ZERO, COUNTS
 from .panels import ConsoleLevel
 from .panels.assets import (ENVIRONMENT_EXTENSIONS, IMAGE_EXTENSIONS,
                             MODEL_EXTENSIONS, SHADER_EXTENSIONS)
 from .gizmos import GizmoMode, Vec3
-from .widgets import AssetPickerInput, BoolInput, ColorInput, EnumInput, FloatInput, IntInput, PlayState, StringInput, UIntInput, Vec3Input, Vec4Input
+from .widgets import AssetPickerInput, BoolInput, ColorInput, EnumInput, FloatInput, IntInput, PlayState, StringInput, UIntInput, Vec2Input, Vec3Input, Vec4Input
 
 
 class EditorController(QObject):
@@ -35,6 +36,8 @@ class EditorController(QObject):
         self._gizmos_visible=True;self._stats_frames=0;self._stats_started=monotonic()
         self._snap_modes=set();self._pivot_center=False;self._local_space=False
         self.ScriptCompiler=None;self.ScriptAttachments=None
+        self.MaterialCompiler=MaterialCompiler(runtime);self._material_check=0.0;self._material_error=""
+        self._asset_database_dirty=True
         self.History=SceneHistory(runtime,self)
         self.Timer = QTimer(self)
         self.Timer.setInterval(16)
@@ -78,6 +81,7 @@ class EditorController(QObject):
         window.Properties.AddComponentRequested.connect(self.ShowAddComponentMenu)
         window.Properties.RemoveComponentRequested.connect(self.RemoveComponent)
         window.AssetBrowser.AssetSelected.connect(self.SelectAsset)
+        window.AssetBrowser.AssetsChanged.connect(lambda:setattr(self,"_asset_database_dirty",True))
         window.AssetBrowser.AssetActivated.connect(self.ActivateAsset)
         window.AssetBrowser.LoadSceneRequested.connect(self.LoadSceneAdditive)
         window.AssetBrowser.SceneRenameHandler=self.RenameSceneAsset
@@ -104,7 +108,11 @@ class EditorController(QObject):
         if not runtime.IsAvailable():
             window.Console.AddMessage(runtime.LastError(), ConsoleLevel.Warning)
         else:
-            QTimer.singleShot(100, self.Timer.start)
+            QTimer.singleShot(100, self, self._StartTicking)
+
+    def _StartTicking(self)->None:
+        # An accepted close releases the runtime before this delayed callback.
+        if self.Runtime.IsAvailable():self.Timer.start()
 
     def OpenSceneDialog(self) -> None:
         dialog=QFileDialog(self.Window,self.Window.Localization.Translate("dialog.open_scene"),self.Runtime.AssetDirectory(),self.Window.Localization.Translate("dialog.scene_filter"))
@@ -113,6 +121,8 @@ class EditorController(QObject):
         if path and self.Runtime.LoadScene(path): self.ScenePath = path
 
     def _Tick(self) -> None:
+        if monotonic()-self._material_check>2.0:
+            self._material_check=monotonic();self._PrepareUsedMaterials()
         self.Runtime.Tick()
         self._stats_frames+=1;now=monotonic()
         if now-self._stats_started>=1.0:
@@ -299,9 +309,98 @@ class EditorController(QObject):
         if self.History.Redo():self.SetDirty(True);self.RefreshHierarchy();self.SelectEntities(self.SelectedEntities)
 
     def SelectAsset(self,path)->None:
+        self.Runtime.RefreshAssets()
         path=Path(path);self.SelectedEntity="";self.SelectedEntities=[];self.Window.Scene.Surface.SetSelection(None);self.Runtime.SetGizmo("",0);self.Window.Properties.Clear();self.Window.Properties.AddComponentButton.setVisible(False)
         section=self.Window.Properties.AddComponentSection("asset",self.Window.Localization.Translate("properties.asset"),removable=False)
         for label,value in (("Name",path.name),("Type",path.suffix.lower() or "Folder"),("Path",str(path)),("Size",self._FormatAssetSize(self._AssetSize(path)))):section.AddField(self.Window.Localization.Translate(f"properties.asset_{label.lower()}") if label!="Name" else self.Window.Localization.Translate("properties.asset_name"),QLabel(value))
+        if path.suffix.lower()==".matinst":self._InspectMaterial(path)
+        elif path.suffix.lower() in {".mat",".shad"}:
+            try:
+                reflection=self.MaterialCompiler.InspectShader(path)
+                section.AddField(self.Window.Localization.Translate("materials.parameters"),QLabel(str(len(reflection["parameters"]))))
+                section.AddField(self.Window.Localization.Translate("materials.requires"),QLabel(", ".join(reflection["requires"])))
+            except (OSError,ValueError) as error:self._MaterialError(error)
+
+    def _MaterialError(self,error)->None:
+        message=self.Window.Localization.Translate("materials.failed",error=str(error))
+        if message!=self._material_error:self.Window.Console.AddMessage(message,ConsoleLevel.Error,True,self.Window.Localization.Translate("materials.source"));self._material_error=message
+
+    def _AssetPicker(self,value,extensions,commit):
+        tr=self.Window.Localization.Translate
+        editor=AssetPickerInput(tr("properties.select_project_asset"),accepted_extensions=extensions,picker_title=tr("properties.select_project_asset"),search_placeholder=tr("properties.search_project_assets"),missing_label=tr("properties.missing_asset"))
+        editor.ConfigureAssets(self._ProjectAssets());editor.SetValue(value);editor.PickRequested.connect(editor.OpenProjectPicker);editor.ValueChanged.connect(lambda v:commit(v or ZERO));return editor
+
+    def _InspectMaterial(self,path:Path)->None:
+        tr=self.Window.Localization.Translate
+        try:
+            data=self.MaterialCompiler.ReadMaterial(path)
+            section=self.Window.Properties.AddComponentSection("material",tr("materials.title"),removable=False)
+            section.AddField(tr("materials.shader"),self._AssetPicker(data["shader"],{".mat",".shad"},lambda v:self._SetMaterialShader(path,data,v)))
+            if data["shader"]==ZERO:return
+            reflection=self.MaterialCompiler.InspectShader(data["shader"])
+            for parameter in reflection["parameters"]:
+                name=parameter["name"];value=data["properties"].get(name,parameter["default"]);kind=parameter["kind"]
+                commit=lambda v,p=parameter:self._SetMaterialProperty(path,data,p,v)
+                if kind==6:editor=self._AssetPicker(value,{".png",".jpg",".jpeg"},commit)
+                elif kind==5:editor=BoolInput(value);editor.ValueChanged.connect(commit)
+                elif kind==4:editor=IntInput(value=value);editor.valueChanged.connect(commit)
+                elif kind==0:editor=FloatInput(value=value);editor.valueChanged.connect(commit)
+                elif kind in (1,2,3):editor={1:Vec2Input,2:Vec3Input,3:Vec4Input}[kind](value);editor.ValueChanged.connect(commit)
+                else:
+                    from PySide6.QtWidgets import QWidget,QGridLayout
+                    editor=QWidget();layout=QGridLayout(editor);layout.setContentsMargins(0,0,0,0);layout.setSpacing(3);numbers=[];side=3 if kind==7 else 4
+                    for index,number in enumerate(value):
+                        field=FloatInput(value=number);numbers.append(field);layout.addWidget(field,index//side,index%side)
+                    for field in numbers:field.valueChanged.connect(lambda _,fields=numbers,fn=commit:fn([f.value() for f in fields]))
+                section.AddField(name,editor)
+        except (OSError,ValueError) as error:self._MaterialError(error)
+
+    def _SetMaterialShader(self,path,data,value)->None:
+        try:
+            updated=dict(data);updated["shader"]=value;updated["properties"]={}
+            if value!=ZERO:
+                reflection=self.MaterialCompiler.InspectShader(value)
+                updated["properties"]={p["name"]:p["default"] for p in reflection["parameters"]}
+            self.MaterialCompiler.SaveMaterial(path,updated);self._PrepareUsedMaterials();QTimer.singleShot(0,self,lambda:self.SelectAsset(path))
+        except (OSError,ValueError) as error:self._MaterialError(error)
+
+    def _SetMaterialProperty(self,path,data,parameter,value)->None:
+        try:
+            data["properties"][parameter["name"]]=value;self.MaterialCompiler.SaveMaterial(path,data);self._PrepareUsedMaterials()
+        except (OSError,ValueError) as error:self._MaterialError(error)
+
+    def _PrepareUsedMaterials(self)->bool:
+        if not self.Runtime.AssetDirectory():return True
+        try:
+            if self._asset_database_dirty:self.Runtime.RefreshAssets();self._asset_database_dirty=False
+            used=set();shaders=set(getattr(self.Runtime,"UsedShaderAssets",lambda:[])())
+            scenes=self.Runtime.LoadedScenes()
+            entities=[entity for scene in scenes for entity in scene.get("entities",[])] if scenes else self.Runtime.Entities()
+            for entity in entities:
+                details=entity
+                if not details.get("component_enabled",{}).get("Mesh",True):continue
+                mesh=details.get("component_data",{}).get("Mesh",{})
+                material=mesh.get("Material Asset",ZERO)
+                if mesh.get("Mesh Asset",ZERO)!=ZERO and material!=ZERO:used.add(material)
+                if mesh.get("Mesh Asset",ZERO)!=ZERO:used.update(v for v in mesh.get("Material Slots",[]) if v!=ZERO)
+            if self.ScriptAttachments:
+                for entries in self.ScriptAttachments.values.get("entities",{}).values():
+                    for script in entries:
+                        if not script.get("enabled",True):continue
+                        descriptor=ScriptCompiler.Inspect(script["source"])
+                        for p in descriptor.properties if descriptor else ():
+                            kind=p.type.replace("Bazzalt::","").strip();value=script.get("properties",{}).get(p.name,ZERO)
+                            if kind=="Material" and value not in (ZERO,"0","",None):used.add(value)
+                            elif kind=="Shader" and value not in (ZERO,"0","",None):shaders.add(value)
+            for material in used:
+                info=self.Runtime.AssetInfo(material)
+                if not info:continue  # Runtime-only material instances have no source asset.
+                extension=Path(info["path"]).suffix.lower()
+                if extension==".matinst":self.MaterialCompiler.PrepareMaterial(material)
+                elif extension in {".mat",".shad"}:self.MaterialCompiler.CompileShader(material)
+            for shader in shaders:self.MaterialCompiler.CompileShader(shader)
+            self._material_error="";return True
+        except (OSError,ValueError) as error:self._MaterialError(error);return False
 
     @staticmethod
     def _AssetSize(path:Path)->int:
@@ -357,6 +456,7 @@ class EditorController(QObject):
         return self.Window.Resources.Icon(f"icons/{filename}") if filename else None
 
     def _ComponentEditor(self, entity_id: str, component: str, name: str, value):  # type: ignore[no-untyped-def]
+        if name=="Material Slots":return None  # Slot UUIDs are not numeric vector fields.
         if isinstance(value, bool):
             editor=BoolInput(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
         if isinstance(value, int):
@@ -393,6 +493,10 @@ class EditorController(QObject):
 
     def _ScriptEditor(self,script:dict,name:str,value):
         commit=lambda v:self._SetScriptProperty(script,name,v)
+        descriptor=ScriptCompiler.Inspect(script.get("source",""))
+        prop=next((p for p in descriptor.properties if p.name==name),None) if descriptor else None
+        if prop and prop.type.replace("Bazzalt::","").strip() in ("Material","Shader"):
+            return self._AssetPicker(value,{".matinst"} if "Material" in prop.type else {".mat",".shad"},commit)
         if isinstance(value,bool):editor=BoolInput(value);editor.ValueChanged.connect(commit);return editor
         if isinstance(value,int):editor=IntInput(value=value);editor.valueChanged.connect(commit);return editor
         if isinstance(value,float):editor=FloatInput(value=value);editor.valueChanged.connect(commit);return editor
@@ -403,8 +507,8 @@ class EditorController(QObject):
         name=field_name.casefold()
         if "mesh" in name or "model" in name:return set(MODEL_EXTENSIONS)
         if "texture" in name or "image" in name:return set(IMAGE_EXTENSIONS)|set(ENVIRONMENT_EXTENSIONS)
-        if "material" in name:return {".mat",".matinst"}
-        if "shader" in name:return set(SHADER_EXTENSIONS)
+        if "material" in name:return {".matinst"}
+        if "shader" in name:return {".mat",".shad"}
         if "scene" in name:return {".bscene"}
         return set()
 
@@ -670,6 +774,7 @@ class EditorController(QObject):
             if entity_id==self.SelectedEntity:self.SelectEntity(entity_id,force=True)
 
     def Play(self) -> None:
+        if not self._PrepareUsedMaterials():self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
         if self.Window.PreferenceValue("console","clear_on_play",False):self.Window.Console.Clear()
         if self.ScriptCompiler and self.ScriptAttachments:
             tr=self.Window.Localization.Translate

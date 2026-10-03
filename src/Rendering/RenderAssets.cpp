@@ -17,6 +17,7 @@
 #include <filament/RenderableManager.h>
 #include <filament/Scene.h>
 #include <filament/Texture.h>
+#include <filament/TextureSampler.h>
 #include <filament/TransformManager.h>
 #include <filament/VertexBuffer.h>
 #include <filament/IndexBuffer.h>
@@ -32,6 +33,7 @@
 #include <utils/Path.h>
 
 #include "Bazzalt/AssetManager.h"
+#include "Runtime/MaterialLibrary.h"
 #include "Rendering/BuiltinPostProcess.h"
 #include "Rendering/PrimitiveGeometry.h"
 #include "editor_unlit_filamat.h"
@@ -89,6 +91,8 @@ struct RenderAssets::Impl {
         bool AddedToScene = false;
         bool DebugWireframeAdded = false;
         std::vector<Original> Originals;
+        struct Override { utils::Entity Entity;std::size_t Primitive;UUID Asset;filament::MaterialInstance* Base;filament::MaterialInstance* Value=nullptr; };
+        std::vector<Override> Overrides;
     };
 
     filament::Engine& Engine;
@@ -100,6 +104,9 @@ struct RenderAssets::Impl {
     Handle NextHandle = 1;
     std::unordered_map<Handle, Instance> Instances;
     std::unordered_map<UUID, filament::Material*> Materials;
+    std::unordered_map<UUID, std::vector<std::uint8_t>> MaterialPackages;
+    std::unordered_map<UUID, std::filesystem::file_time_type> MaterialModified;
+    std::vector<filament::Material*> RetiredMaterials;
     std::unordered_map<UUID, filament::Texture*> Textures;
     filament::Material* DebugUnlit=nullptr;filament::Material* DebugLighting=nullptr;filament::Material* DebugOverdraw=nullptr;filament::Material* DebugWireframe=nullptr;
     filament::Material* PrimitiveMaterial=nullptr;
@@ -118,7 +125,6 @@ struct RenderAssets::Impl {
 
     filament::Material* LoadMaterial(UUID id) {
         if (!id) return nullptr;
-        if (const auto found = Materials.find(id); found != Materials.end()) return found->second;
         std::vector<std::uint8_t> ownedBytes;
         const auto embedded = GetEmbeddedPostProcessShader(id);
         const std::uint8_t* data = embedded.Data;
@@ -126,12 +132,23 @@ struct RenderAssets::Impl {
         if (data == nullptr) {
             const auto asset = AssetManager::GetAsset(id);
             if (!asset || asset->State != AssetState::Ready) return nullptr;
-            ownedBytes = ReadBytes(asset->CachePath);
+            auto path=asset->CachePath;
+            const auto extension=LowerExtension(asset->SourcePath);
+            if(extension==".mat"||extension==".shad")path+=".filamat";
+            else if(extension!=".filamat")return nullptr;
+            std::error_code error;const auto modified=std::filesystem::last_write_time(path,error);
+            if(error)return nullptr;
+            if(auto found=Materials.find(id);found!=Materials.end()&&MaterialModified[id]==modified)return found->second;
+            MaterialModified[id]=modified;
+            ownedBytes = ReadBytes(path);
             data = ownedBytes.data(); size = ownedBytes.size();
         }
         if (data == nullptr || size == 0) return nullptr;
+        if(auto found=Materials.find(id);found!=Materials.end()) {
+            if(embedded.Data || MaterialPackages[id]==ownedBytes)return found->second;
+        }
         auto* material = filament::Material::Builder().package(data, size).build(Engine);
-        if (material) Materials.emplace(id, material);
+        if (material) {if(auto found=Materials.find(id);found!=Materials.end())RetiredMaterials.push_back(found->second);Materials[id]=material;MaterialPackages[id]=std::move(ownedBytes);}
         return material;
     }
 
@@ -165,6 +182,50 @@ struct RenderAssets::Impl {
         renderables.setLayerMask(instance, 0xff, component.LayerMask);
         renderables.setCastShadows(instance, component.CastShadows);
         renderables.setReceiveShadows(instance, component.ReceiveShadows);
+    }
+    void ApplyMaterialValues(filament::MaterialInstance* instance,UUID asset) {
+        auto* services=GetMaterialServices();auto material=Bazzalt::Material::Load(asset);
+        std::vector<filament::Material::ParameterInfo> actual(instance->getMaterial()->getParameterCount());instance->getMaterial()->getParameters(actual.data(),actual.size());
+        for(const auto& p:material.GetParameters()) {
+            const auto found=std::find_if(actual.begin(),actual.end(),[&](const auto& a){return p.Name==a.name;});
+            if(found==actual.end()||found->count>1||found->isSubpass)continue;
+            Detail::MaterialValue v;if(!services->Get(asset,p.Name.c_str(),&v))continue;
+            const auto* name=p.Name.c_str();using U=filament::Material::ParameterType;
+            if(p.Type==ShaderParameterType::Texture2D){if(found->isSampler&&found->samplerType==filament::Material::SamplerType::SAMPLER_2D)instance->setParameter(name,LoadTexture(v.Texture,false),filament::TextureSampler(filament::TextureSampler::MagFilter::LINEAR,filament::TextureSampler::WrapMode::REPEAT));continue;}
+            if(found->isSampler)continue;
+            switch(p.Type){
+                case ShaderParameterType::Float:if(found->type==U::FLOAT)instance->setParameter(name,v.Numbers[0]);break;
+                case ShaderParameterType::Float2:if(found->type==U::FLOAT2)instance->setParameter(name,filament::math::float2{v.Numbers[0],v.Numbers[1]});break;
+                case ShaderParameterType::Float3:if(found->type==U::FLOAT3)instance->setParameter(name,filament::math::float3{v.Numbers[0],v.Numbers[1],v.Numbers[2]});break;
+                case ShaderParameterType::Float4:if(found->type==U::FLOAT4)instance->setParameter(name,filament::math::float4{v.Numbers[0],v.Numbers[1],v.Numbers[2],v.Numbers[3]});break;
+                case ShaderParameterType::Integer:if(found->type==U::INT)instance->setParameter(name,v.Integer);break;
+                case ShaderParameterType::Boolean:if(found->type==U::BOOL)instance->setParameter(name,v.Boolean);break;
+                case ShaderParameterType::Matrix3:if(found->type==U::MAT3)instance->setParameter(name,filament::math::mat3f{filament::math::float3{v.Numbers[0],v.Numbers[1],v.Numbers[2]},filament::math::float3{v.Numbers[3],v.Numbers[4],v.Numbers[5]},filament::math::float3{v.Numbers[6],v.Numbers[7],v.Numbers[8]}});break;
+                case ShaderParameterType::Matrix4:if(found->type==U::MAT4)instance->setParameter(name,filament::math::mat4f{filament::math::float4{v.Numbers[0],v.Numbers[1],v.Numbers[2],v.Numbers[3]},filament::math::float4{v.Numbers[4],v.Numbers[5],v.Numbers[6],v.Numbers[7]},filament::math::float4{v.Numbers[8],v.Numbers[9],v.Numbers[10],v.Numbers[11]},filament::math::float4{v.Numbers[12],v.Numbers[13],v.Numbers[14],v.Numbers[15]}});break;
+                default:break;
+            }
+        }
+    }
+    void UpdateMaterials(Instance& value) {
+        for(auto& override:value.Overrides){
+            const auto material=Bazzalt::Material::Load(override.Asset);
+            auto* shader=material.IsValid()?LoadMaterial(material.GetShader().GetAssetUUID()):LoadMaterial(override.Asset);
+            if(shader&&shader->getMaterialDomain()!=filament::MaterialDomain::SURFACE)shader=nullptr;
+            if(shader){auto& manager=Engine.getRenderableManager();auto enabled=manager.getEnabledAttributesAt(manager.getInstance(override.Entity),override.Primitive);auto required=shader->getRequiredAttributes();if((enabled & required)!=required)shader=nullptr;}
+            if(shader && (!override.Value || override.Value->getMaterial()!=shader)){
+                Restore(value);auto* old=override.Value;override.Value=shader->createInstance();
+                const auto ri=Engine.getRenderableManager().getInstance(override.Entity);
+                Engine.getRenderableManager().setMaterialInstanceAt(ri,override.Primitive,override.Value);
+                if(old)Engine.destroy(old);ApplyDebug(value);
+            }else if(!shader&&override.Value){Restore(value);const auto ri=Engine.getRenderableManager().getInstance(override.Entity);Engine.getRenderableManager().setMaterialInstanceAt(ri,override.Primitive,override.Base);Engine.destroy(override.Value);override.Value=nullptr;ApplyDebug(value);}
+            if(override.Value&&material.IsValid())ApplyMaterialValues(override.Value,override.Asset);
+        }
+    }
+    void RegisterOverrides(Instance& value,const Mesh& component) {
+        const auto apply=[&](utils::Entity entity){auto& manager=Engine.getRenderableManager();const auto ri=manager.getInstance(entity);if(!ri)return;
+            for(std::size_t i=0;i<manager.getPrimitiveCount(ri);++i){const auto id=component.MaterialAsset?component.MaterialAsset:i<component.Materials.size()?component.Materials[i]:UUID{};if(id)value.Overrides.push_back({entity,i,id,manager.getMaterialInstanceAt(ri,i)});}};
+        if(value.Type==Kind::Gltf){if(value.SelectedGltfEntity)apply(value.SelectedGltfEntity);else for(std::size_t i=0;i<value.Gltf->getEntityCount();++i)apply(value.Gltf->getEntities()[i]);}else apply(value.Filamesh.renderable);
+        UpdateMaterials(value);
     }
     void Restore(Instance& value){if(value.DebugWireframeAdded){Scene.remove(value.Gltf->getWireframe());if(value.AddedToScene)Scene.addEntities(value.Gltf->getEntities(),value.Gltf->getEntityCount());value.DebugWireframeAdded=false;}auto& manager=Engine.getRenderableManager();for(const auto& original:value.Originals){auto instance=manager.getInstance(original.Entity);if(instance&&original.Primitive<manager.getPrimitiveCount(instance))manager.setMaterialInstanceAt(instance,original.Primitive,original.Material);}value.Originals.clear();}
     void ApplyDebug(Instance& value){Restore(value);if(DebugMode=="wireframe"&&value.Type==Kind::Gltf&&!value.SelectedGltfEntity&&value.AddedToScene){Scene.removeEntities(value.Gltf->getEntities(),value.Gltf->getEntityCount());Scene.addEntity(value.Gltf->getWireframe());value.DebugWireframeAdded=true;return;}filament::MaterialInstance* material=DebugMode=="unlit"?DebugUnlitInstance:DebugMode=="lighting_only"?DebugLightingInstance:DebugMode=="overdraw"?DebugOverdrawInstance:DebugMode=="wireframe"?DebugWireframeInstance:nullptr;if(!material)return;auto& manager=Engine.getRenderableManager();const auto apply=[&](utils::Entity entity){auto instance=manager.getInstance(entity);if(!instance)return;for(std::size_t primitive=0;primitive<manager.getPrimitiveCount(instance);++primitive){value.Originals.push_back({entity,primitive,manager.getMaterialInstanceAt(instance,primitive)});manager.setMaterialInstanceAt(instance,primitive,material);}};if(value.Type==Kind::Gltf){if(value.SelectedGltfEntity)apply(value.SelectedGltfEntity);else for(std::size_t i=0;i<value.Gltf->getEntityCount();++i)apply(value.Gltf->getEntities()[i]);}else apply(value.Type==Kind::Primitive?value.PrimitiveEntity:value.Filamesh.renderable);}
@@ -231,14 +292,9 @@ RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component) {
     } else if (extension == ".filamesh" || extension == ".obj" || extension == ".fbx") {
         instance.Type = Impl::Kind::Filamesh;
         filamesh::MeshReader::MaterialRegistry registry;
-        for (std::size_t index = 0; index < component.Materials.size(); ++index) {
-            if (auto* material = m_impl->LoadMaterial(component.Materials[index])) {
-                auto* materialInstance = material->createInstance();
-                instance.MaterialInstances.push_back(materialInstance);
-                const std::string name = index == 0 ? "DefaultMaterial" : "Material" + std::to_string(index);
-                registry.registerMaterialInstance(utils::CString(name.c_str()), materialInstance);
-            }
-        }
+        if(!m_impl->PrimitiveMaterial)return InvalidHandle;
+        auto* fallback=m_impl->PrimitiveMaterial->createInstance();fallback->setParameter("baseColor",filament::math::float4{1,1,1,1});instance.MaterialInstances.push_back(fallback);
+        registry.registerMaterialInstance(utils::CString("DefaultMaterial"),fallback);
         instance.Filamesh = filamesh::MeshReader::loadMeshFromFile(&m_impl->Engine,
             utils::Path(asset->CachePath.string()), registry);
         if (!instance.Filamesh.renderable) {
@@ -249,6 +305,7 @@ RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component) {
         m_impl->ApplyRenderable(instance.Filamesh.renderable, component);
     } else return InvalidHandle;
 
+    m_impl->RegisterOverrides(instance,component);
     const Handle handle = m_impl->NextHandle++;
     auto [stored,_]=m_impl->Instances.emplace(handle, std::move(instance));m_impl->ApplyDebug(stored->second);
     return handle;
@@ -258,6 +315,7 @@ void RenderAssets::UpdateMesh(Handle handle, const Mat4& transform, const Mesh& 
     if (!m_impl) return;
     const auto found = m_impl->Instances.find(handle); if (found == m_impl->Instances.end()) return;
     auto& instance = found->second;
+    m_impl->UpdateMaterials(instance);
     const utils::Entity root = instance.Type == Impl::Kind::Gltf
         ? (instance.SelectedGltfEntity ? instance.SelectedGltfEntity : instance.Gltf->getRoot())
         : instance.Filamesh.renderable;
@@ -292,6 +350,7 @@ void RenderAssets::DestroyMesh(Handle handle) {
     const auto found = m_impl->Instances.find(handle); if (found == m_impl->Instances.end()) return;
     auto& instance = found->second;
     m_impl->Restore(instance);
+    for(auto& override:instance.Overrides)if(override.Value){const auto ri=m_impl->Engine.getRenderableManager().getInstance(override.Entity);if(ri)m_impl->Engine.getRenderableManager().setMaterialInstanceAt(ri,override.Primitive,override.Base);m_impl->Engine.destroy(override.Value);}
     if (instance.Type == Impl::Kind::Gltf) {
         if (instance.AddedToScene) {
             if (instance.SelectedGltfEntity) m_impl->Scene.remove(instance.SelectedGltfEntity);
@@ -336,6 +395,7 @@ void RenderAssets::Shutdown() {
     while (!m_impl->Instances.empty()) DestroyMesh(m_impl->Instances.begin()->first);
     for (const auto& [id, texture] : m_impl->Textures) m_impl->Engine.destroy(texture);
     for (const auto& [id, material] : m_impl->Materials) m_impl->Engine.destroy(material);
+    for(auto* material:m_impl->RetiredMaterials)m_impl->Engine.destroy(material);
     for(auto* instance:{m_impl->DebugUnlitInstance,m_impl->DebugLightingInstance,m_impl->DebugOverdrawInstance,m_impl->DebugWireframeInstance})if(instance)m_impl->Engine.destroy(instance);
     for(auto* material:{m_impl->DebugUnlit,m_impl->DebugLighting,m_impl->DebugOverdraw,m_impl->DebugWireframe})if(material)m_impl->Engine.destroy(material);
     if(m_impl->PrimitiveMaterial)m_impl->Engine.destroy(m_impl->PrimitiveMaterial);

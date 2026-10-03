@@ -47,6 +47,10 @@ class EditorShellTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.Window.close()
+        # QWidget.close() only hides the window. Do not retain every editor's
+        # widgets and theme listeners throughout the offscreen suite.
+        self.Window.deleteLater()
+        self.Application.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
     def test_shared_theme_updates_docking(self) -> None:
         self.Window.Controller.RefreshHierarchy()

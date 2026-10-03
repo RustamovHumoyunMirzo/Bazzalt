@@ -35,6 +35,7 @@ class AssetNameDelegate(QStyledItemDelegate):
         super().setEditorData(editor,index)
 
 class AssetBrowserPanel(QWidget):
+    AssetsChanged=Signal()
     AssetActivated=Signal(object);AssetSelected=Signal(object);ContextMenuRequested=Signal(object,object);SelectionCleared=Signal();LoadSceneRequested=Signal(object);AssetOperationFailed=Signal(str)
     def __init__(self,localization:LocalizationManager,resources=None)->None:
         super().__init__();self._localization=localization;self._resources=resources;self._root=None;self._folder=None;self._clipboard=[];self.SceneRenameHandler=None;self.SceneLoadedChecker=None
@@ -78,6 +79,7 @@ class AssetBrowserPanel(QWidget):
         name="dir.svg" if path.is_dir() else "scene.svg" if ext==".bscene" else "nativecpp.svg" if ext in {".h",".hpp",".c",".cc",".cpp"} else "3dfiles.svg" if ext in MODEL_EXTENSIONS else "shader.svg" if ext in SHADER_EXTENSIONS else "file.svg"
         return self._resources.Icon(f"icons/abrowser/{name}") if self._resources else QIcon()
     def Refresh(self,select=None)->None:
+        self.AssetsChanged.emit()
         previous_folder=self._folder if self._folder is not None and self._InsideRoot(self._folder) else self._root
         if select and self._InsideRoot(select):
             # Newly created/renamed assets must remain visible and editable,
@@ -154,9 +156,9 @@ class AssetBrowserPanel(QWidget):
         while candidate.exists():candidate=candidate.with_name(f"{stem} {number}{suffix}");number+=1
         return candidate
     def _Create(self,kind)->None:
-        names={"folder":"New Folder","scene":"New Scene.bscene","cpp":"NewComponent.cpp","shader":"NewShader.shad","material":"NewMaterial.matinst"};path=self._Unique(names[kind])
+        names={"folder":"New Folder","scene":"New Scene.bscene","cpp":"NewComponent.cpp","shader":"NewShader.shad","filament_shader":"NewShader.mat","material":"NewMaterial.matinst"};path=self._Unique(names[kind])
         if kind=="folder":path.mkdir()
-        else:path.write_text(f'FormatVersion: 1\nSceneUUID: "{uuid.uuid4()}"\nEntities:\n' if kind=="scene" else '#include <Bazzalt/Script.h>\n\nCOMPONENT(NewComponent) {\npublic:\n    PROPERTY(float, Speed, 1.0f)\n\n    void OnUpdate(float deltaTime) override { (void)deltaTime; }\n};\n' if kind=="cpp" else "shader NewShader {\n}\n" if kind=="shader" else '{\n  "shader": null,\n  "properties": {}\n}\n',encoding="utf-8")
+        else:path.write_text(f'FormatVersion: 1\nSceneUUID: "{uuid.uuid4()}"\nEntities:\n' if kind=="scene" else '#include <Bazzalt/Script.h>\n\nCOMPONENT(NewComponent) {\npublic:\n    PROPERTY(float, Speed, 1.0f)\n\n    void OnUpdate(float deltaTime) override { (void)deltaTime; }\n};\n' if kind=="cpp" else "shader NewShader {\n    properties { roughness: float = 0.5; }\n    material { color = vec4(1.0); roughness = roughness; }\n}\n" if kind=="shader" else 'material { name: "NewShader", shadingModel: lit }\nfragment { void material(inout MaterialInputs material) { prepareMaterial(material); material.baseColor = vec4(1.0); } }\n' if kind=="filament_shader" else '{\n  "version": 1,\n  "shader": null,\n  "properties": {}\n}\n',encoding="utf-8")
         self.Refresh(path);self.Browser.editItem(self.Browser.currentItem())
     def _Import(self)->None:
         if self._folder is None:return
@@ -206,7 +208,7 @@ class AssetBrowserPanel(QWidget):
         if target is not None and widget is self.Browser and not target.isSelected():self.Browser.setCurrentItem(target)
         reveal_paths=[Path(target.data(0,Qt.ItemDataRole.UserRole))] if widget is self.Tree and target is not None else [Path(item.data(Qt.ItemDataRole.UserRole)) for item in self.Browser.selectedItems()]
         tr=self._localization.Translate;menu=QMenu(self);create=menu.addMenu(tr("assets.create"))
-        for key,label in (("folder","assets.folder"),("scene","assets.scene"),("cpp","assets.native_cpp"),("shader","assets.shader"),("material","assets.material")):
+        for key,label in (("folder","assets.folder"),("scene","assets.scene"),("cpp","assets.native_cpp"),("shader","assets.shader"),("filament_shader","materials.filament_shader"),("material","assets.material")):
             action=create.addAction(tr(label));action.triggered.connect(lambda _=False,k=key:self._Create(k))
         menu.addAction(tr("assets.import"),self._Import);menu.addSeparator();selected=bool(self.Browser.selectedItems()) if widget is self.Browser else False
         current=Path(self.Browser.currentItem().data(Qt.ItemDataRole.UserRole)) if widget is self.Browser and self.Browser.currentItem() else None

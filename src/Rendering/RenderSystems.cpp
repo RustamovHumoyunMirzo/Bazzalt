@@ -339,12 +339,12 @@ void MeshSystem::OnUpdate(Scene& scene, float) {
         alive.insert(id);
         auto found = m_resources.find(id);
         if (found != m_resources.end() &&
-            (found->second.MeshAsset != mesh.MeshAsset || found->second.Materials != mesh.Materials)) {
+            (found->second.MeshAsset != mesh.MeshAsset || found->second.MaterialAsset != mesh.MaterialAsset || found->second.Materials != mesh.Materials || found->second.Handle==RenderAssets::InvalidHandle)) {
             Destroy(id); found = m_resources.end();
         }
         if (found == m_resources.end()) {
             const auto resource = assets.CreateMesh(mesh);
-            found = m_resources.emplace(id, Resource{resource, mesh.MeshAsset, mesh.Materials}).first;
+            found = m_resources.emplace(id, Resource{resource, mesh.MeshAsset, mesh.MaterialAsset, mesh.Materials}).first;
         }
         assets.UpdateMesh(found->second.Handle, entity.GetWorldMatrix(), mesh);
     }

@@ -76,26 +76,26 @@ python -m pip install -r requirements-build.txt
 
 ## Documentation
 
-- [C++ behaviors and bundled compiler](docs/scripting.md)
+- [C++ behaviors and bundled compiler](docs/private/scripting.md)
 
-The full engine handbook and API reference live in [`docs/`](docs/README.md):
+The full engine handbook and API reference live in [`docs/`](docs/private/README.md):
 
-- [Getting started](docs/getting-started.md)
-- [Architecture and ownership](docs/architecture.md)
-- [ECS, components, and systems](docs/ecs.md)
-- [Scenes, hierarchy, and serialization](docs/scenes-and-serialization.md)
-- [Asset database and import pipeline](docs/assets.md)
-- [Rendering](docs/rendering.md)
-- [Scene queries](docs/scene-queries.md)
-- [Model hierarchies](docs/model-hierarchies.md)
-- [Math](docs/math.md)
-- [Public API reference](docs/api-reference.md)
-- [Editor runtime integration](docs/editor-runtime-integration.md)
-- [Editor panels](docs/editor-panels.md)
-- [Editor toolbar and gizmos](docs/editor-toolbar-and-gizmos.md)
-- [Hub, data, and version management](docs/hub-and-editor-data.md)
-- [Production packaging](docs/production-packaging.md)
-- [Roadmap and planned technology](docs/roadmap.md)
+- [Getting started](docs/private/getting-started.md)
+- [Architecture and ownership](docs/private/architecture.md)
+- [ECS, components, and systems](docs/private/ecs.md)
+- [Scenes, hierarchy, and serialization](docs/private/scenes-and-serialization.md)
+- [Asset database and import pipeline](docs/private/assets.md)
+- [Rendering](docs/private/rendering.md)
+- [Scene queries](docs/private/scene-queries.md)
+- [Model hierarchies](docs/private/model-hierarchies.md)
+- [Math](docs/private/math.md)
+- [Public API reference](docs/private/api-reference.md)
+- [Editor runtime integration](docs/private/editor-runtime-integration.md)
+- [Editor panels](docs/private/editor-panels.md)
+- [Editor toolbar and gizmos](docs/private/editor-toolbar-and-gizmos.md)
+- [Hub, data, and version management](docs/private/hub-and-editor-data.md)
+- [Production packaging](docs/private/production-packaging.md)
+- [Roadmap and planned technology](docs/private/roadmap.md)
 
 ## Repository layout
 

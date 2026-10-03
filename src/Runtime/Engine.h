@@ -32,6 +32,7 @@ public:
     Engine& operator=(const Engine&) = delete;
 
     bool Init();
+    bool RefreshAssets();
     static std::vector<std::string> SupportedRenderingBackends();
     bool ConfigureRenderingBackend(const std::string& backend);
     void Update();

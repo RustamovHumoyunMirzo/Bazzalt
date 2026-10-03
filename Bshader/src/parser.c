@@ -139,7 +139,10 @@ static sc_expr* sc_parse_primary(sc_parser* p) {
         sc_expect(p, SC_TOK_RPAREN, "')' after expression");
         return inner;
     }
-    if (sc_check(p, SC_TOK_IDENTIFIER)) {
+    if (sc_check(p, SC_TOK_IDENTIFIER) || sc_check(p, SC_TOK_KW_FLOAT) ||
+        sc_check(p, SC_TOK_KW_INT) || sc_check(p, SC_TOK_KW_BOOL) ||
+        sc_check(p, SC_TOK_KW_VEC2) || sc_check(p, SC_TOK_KW_VEC3) ||
+        sc_check(p, SC_TOK_KW_VEC4)) {
         sc_token id = p->current;
         sc_advance_token(p);
         if (sc_match(p, SC_TOK_LPAREN)) {

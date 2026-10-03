@@ -40,7 +40,8 @@ introduced.
 |---|---|---|
 | `.gltf`, `.glb` | `Bazzalt.glTF` | Loaded with gltfio |
 | `.png`, `.jpg`, `.jpeg` | `Bazzalt.Texture` | Filament stb decoder |
-| `.mat` | `Bazzalt.FilamentMaterial` | `matc` to `.filamat` |
+| `.mat`, `.shad` | `Bazzalt.FilamentMaterial` | Source copied; editor compiles only used shaders |
+| `.matinst` | `Bazzalt.FilamentMaterial` | Versioned JSON material; references shader and image UUIDs |
 | `.filamat` | `Bazzalt.FilamentMaterial` | Compiled package copied |
 | `.obj`, `.fbx` | `Bazzalt.Filamesh` | `filamesh` compiler |
 | `.filamesh` | `Bazzalt.Filamesh` | Runtime mesh copied |

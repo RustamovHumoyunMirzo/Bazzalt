@@ -28,6 +28,11 @@ int main() {
 
     Bazzalt::Runtime::Engine engine;
     assert(engine.Init());
+#ifdef _WIN32
+    // Synthetic offscreen IDs must be rejected before reaching Vulkan/OpenGL.
+    assert(!engine.CreateEditorViewport(1, 0, true, 64, 64));
+    assert(!engine.CreateEditorViewport(1, 1, true, 64, 64));
+#endif
 
     auto& scene = engine.GetScene();
     auto camera = scene.CreateEntity("Camera");

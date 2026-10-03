@@ -2,6 +2,11 @@
 
 #include <algorithm>
 #include <cmath>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <Windows.h>
+#endif
 
 #include <filament/Engine.h>
 #include <filament/Camera.h>
@@ -226,6 +231,10 @@ bool RenderBackend::CreateViewport(std::uint64_t id, std::uintptr_t nativeWindow
                                    ViewportKind kind, std::uint32_t width,
                                    std::uint32_t height, float pixelRatio) {
     if (!m_engine || nativeWindow == 0) return false;
+#ifdef _WIN32
+    // Reject synthetic Qt IDs and stale/destroyed HWNDs before entering Filament.
+    if(!IsWindow(reinterpret_cast<HWND>(nativeWindow)))return false;
+#endif
     DestroyViewport(id);
     auto viewport = std::make_unique<ViewportResource>();
     viewport->Kind = kind;
@@ -288,7 +297,12 @@ void RenderBackend::DestroyViewport(std::uint64_t id) {
     if (viewport.View) m_engine->destroy(viewport.View);
     if (viewport.Camera) m_engine->destroyCameraComponent(viewport.CameraEntity);
     if (viewport.CameraEntity) m_engine->getEntityManager().destroy(viewport.CameraEntity);
-    if (viewport.SwapChain) m_engine->destroy(viewport.SwapChain);
+    if (viewport.SwapChain) {
+        m_engine->destroy(viewport.SwapChain);
+        // Qt may destroy/reparent the native surface as soon as Detach returns.
+        // Complete the driver-side swapchain destruction while its HWND is alive.
+        m_engine->flushAndWait();
+    }
     m_viewports.erase(found);
 }
 

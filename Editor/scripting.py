@@ -54,7 +54,8 @@ class ScriptCompiler:
         except (OSError,json.JSONDecodeError):state={}
         outputs=[];diagnostics=[]
         for descriptor in descriptors:
-            digest=hashlib.sha256(descriptor.path.read_bytes()+b"\0bazzalt-script-abi-1-wrapper-3-time-1"+(self.engine_root/"include/Bazzalt/Time.h").read_bytes()).hexdigest()
+            headers=b"".join((self.engine_root/f"include/Bazzalt/{name}.h").read_bytes() for name in ("Time","Material","Shader"))
+            digest=hashlib.sha256(descriptor.path.read_bytes()+b"\0bazzalt-script-abi-1-wrapper-4-material-1"+headers).hexdigest()
             suffix=".dll" if os.name=="nt" else ".dylib" if os.sys.platform=="darwin" else ".so"
             output=self.cache/f"{descriptor.name}-{digest[:12]}{suffix}";outputs.append(output)
             if state.get(str(descriptor.path))==digest and output.exists():continue
@@ -76,6 +77,8 @@ class ScriptCompiler:
             kind=prop.type.replace("const","").replace("&","").strip()
             if kind in ("bool",):body=f'self->{prop.name}=std::strcmp(value,"true")==0||std::strcmp(value,"1")==0;return true;'
             elif kind in ("string","std::string"):body=f'self->{prop.name}=value;return true;'
+            elif kind in ("Material","Bazzalt::Material","Shader","Bazzalt::Shader"):
+                type_name=kind.split("::")[-1];body=f'{{Bazzalt::UUID id;if(std::strcmp(value,"0")!=0&&!Bazzalt::UUID::TryParse(value,id))return false;self->{prop.name}=Bazzalt::{type_name}::Load(id);return !id||self->{prop.name}.IsValid();}}'
             elif kind in ("Vec2","Bazzalt::Vec2"):body=f'return std::sscanf(value,"%f,%f",&self->{prop.name}.X,&self->{prop.name}.Y)==2;'
             elif kind in ("Vec3","Bazzalt::Vec3"):body=f'return std::sscanf(value,"%f,%f,%f",&self->{prop.name}.X,&self->{prop.name}.Y,&self->{prop.name}.Z)==3;'
             elif kind in ("Vec4","Bazzalt::Vec4"):body=f'return std::sscanf(value,"%f,%f,%f,%f",&self->{prop.name}.X,&self->{prop.name}.Y,&self->{prop.name}.Z,&self->{prop.name}.W)==4;'
@@ -85,6 +88,8 @@ class ScriptCompiler:
         name=descriptor.name;setter="".join(setters)
         wrapper=f'''#include <Bazzalt/Script.h>\n#include <cstdio>\n#include <cstring>\n#include <sstream>\n#include <string>\n#include "{source}"\n#if defined(_WIN32)\n#define BAZZALT_SCRIPT_EXPORT __declspec(dllexport)\n#else\n#define BAZZALT_SCRIPT_EXPORT __attribute__((visibility("default")))\n#endif\nnamespace {{\nvoid* Create(){{return new {name}();}}\nvoid Destroy(void* p){{delete static_cast<{name}*>(p);}}\nvoid OnCreate(void* p){{static_cast<{name}*>(p)->OnCreate();}}\nvoid OnUpdate(void* p,float dt){{static_cast<{name}*>(p)->OnUpdate(dt);}}\nvoid OnDestroy(void* p){{static_cast<{name}*>(p)->OnDestroy();}}\nbool SetProperty(void* p,const char* name,const char* value){{auto* self=static_cast<{name}*>(p);{setter}return false;}}\nconst Bazzalt::ScriptModuleApi Api{{Bazzalt::ScriptAbiVersion,"{name}",&Create,&Destroy,&OnCreate,&OnUpdate,&OnDestroy,&SetProperty}};\n}}\nextern "C" BAZZALT_SCRIPT_EXPORT const Bazzalt::ScriptModuleApi* BazzaltGetScriptModuleV1(){{return &Api;}}\n'''
         wrapper += '\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltBindTimeV1(Bazzalt::Detail::TimeState* state){Bazzalt::ScriptRuntimeAccess::BindTime(state);}\n'
+        wrapper = '#include <Bazzalt/Material.h>\n'+wrapper
+        wrapper += '\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltBindMaterialsV1(Bazzalt::Detail::MaterialServices* services){Bazzalt::Detail::BoundMaterialServices=services;}\n'
         wrapper += f'\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltFixedUpdateV1(void* p,float dt){{static_cast<{name}*>(p)->OnFixedUpdate(dt);}}\n'
         return wrapper.replace(f"void* Create(){{return new {name}();}}",f"void* Create(const char* entity){{auto* value=new {name}();Bazzalt::ScriptRuntimeAccess::Bind(*value,entity);return value;}}")
 
@@ -100,7 +105,7 @@ class ScriptAttachments:
     def Attach(self,entity: str,descriptor: ScriptDescriptor)->bool:
         entries=self.For(entity)
         if any(Path(v["source"]).resolve()==descriptor.path for v in entries):return False
-        entries.append({"source":str(descriptor.path),"type":descriptor.name,"enabled":True,"properties":{p.name:_Literal(p.default) for p in descriptor.properties}});self.Save();return True
+        entries.append({"source":str(descriptor.path),"type":descriptor.name,"enabled":True,"properties":{p.name:"00000000-0000-0000-0000-000000000000" if p.type.replace("Bazzalt::","").strip() in ("Material","Shader") else _Literal(p.default) for p in descriptor.properties}});self.Save();return True
     def Remove(self,entity: str,type_name: str)->bool:
         entries=self.For(entity);remaining=[v for v in entries if v.get("type")!=type_name]
         if len(remaining)==len(entries):return False

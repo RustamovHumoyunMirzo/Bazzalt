@@ -2,6 +2,7 @@
 #include "Runtime/AssetDatabase.h"
 #include "Runtime/NativeScriptRuntime.h"
 #include "Runtime/TimeAccess.h"
+#include "Runtime/MaterialLibrary.h"
 #include "Rendering/RenderBackend.h"
 #include "Rendering/RenderSystems.h"
 #include "Rendering/RenderAssets.h"
@@ -225,7 +226,7 @@ void Engine::RequestClose()
 
 bool Engine::ConfigureScripts(std::vector<ScriptBinding> bindings){return m_scriptRuntime->Configure(std::move(bindings),m_lastError);}
 bool Engine::StartScripts(){TimeAccess::Reset();m_fixedAccumulator=0.0;m_lastFrameTime=std::chrono::steady_clock::now();return m_scriptRuntime->Start(m_lastError);}
-void Engine::StopScripts(){m_scriptRuntime->Stop();}
+void Engine::StopScripts(){m_scriptRuntime->Stop();ResetRuntimeMaterials();}
 
 Scene& Engine::CreateScene()
 {
@@ -345,6 +346,8 @@ std::optional<AssetInfo> Engine::FindAsset(UUID id) const
 {
     return m_assetDatabase ? m_assetDatabase->Find(id) : std::nullopt;
 }
+
+bool Engine::RefreshAssets() { return m_assetDatabase && m_assetDatabase->Refresh(); }
 
 std::optional<AssetInfo> Engine::FindAsset(const std::filesystem::path& path) const
 {

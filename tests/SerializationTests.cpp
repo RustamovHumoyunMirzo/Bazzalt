@@ -68,6 +68,7 @@ int main() {
     child.AddComponent<Vignette>().Roundness = 0.6f;
     child.AddComponent<Light>().Type = LightType::Spot;
     child.AddComponent<Mesh>().MeshAsset = UUID{9, 9};
+    child.GetComponent<Mesh>().MaterialAsset=UUID{7,8};
     auto& primitive=child.AddComponent<PrimitiveObject>();primitive.Shape=PrimitiveShape::Torus;primitive.MajorRadius=2.0f;primitive.MinorRadius=0.4f;primitive.Segments=48;primitive.Color={0.2f,0.4f,0.8f,1.0f};
 
     RegisterHealth(sourceEngine.GetSceneSerializer());
@@ -104,6 +105,7 @@ int main() {
     assert(restoredChild.GetComponent<Vignette>().Roundness == 0.6f);
     assert(restoredChild.GetComponent<Light>().Type == LightType::Spot);
     assert(restoredChild.GetComponent<Mesh>().MeshAsset == UUID(9, 9));
+    assert(restoredChild.GetComponent<Mesh>().MaterialAsset == UUID(7,8));
     const auto& restoredPrimitive=restoredChild.GetComponent<PrimitiveObject>();assert(restoredPrimitive.Shape==PrimitiveShape::Torus);assert(restoredPrimitive.MajorRadius==2.0f);assert(restoredPrimitive.MinorRadius==0.4f);assert(restoredPrimitive.Segments==48);assert(restoredPrimitive.Color.Z==0.8f);
 
     ProjectMetadata& project = sourceEngine.GetProject();

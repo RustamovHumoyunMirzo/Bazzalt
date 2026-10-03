@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BAZZALT Docs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- Apply saved theme before paint to avoid a flash -->
+<script>try{var t=localStorage.getItem('bz-theme');if(t==='dark'||(!t&&matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark')}catch(e){}</script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.453.0/dist/umd/lucide.min.js"></script>
+<script>
+  // Tailwind config: class-based dark mode, fonts, accent colour
+  tailwind.config = { darkMode: 'class', theme: { extend: {
+    fontFamily: { sans: ['Inter','ui-sans-serif','system-ui','sans-serif'], mono: ['JetBrains Mono','ui-monospace','Menlo','monospace'] },
+    colors: { accent: '#3b82f6' } } } };
+</script>
+
+<style type="text/tailwindcss">
+  /* ---------- Prose: all page content lives inside .doc ---------- */
+  .doc h1 { @apply text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 mb-4; }
+  .doc h2 { @apply text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 mt-12 mb-3 pt-6 border-t border-zinc-200 dark:border-zinc-800 scroll-mt-6; }
+  .doc h3 { @apply text-base font-semibold text-zinc-900 dark:text-zinc-100 mt-8 mb-2 scroll-mt-6; }
+  .doc p, .doc li { @apply text-[15px] leading-7 text-zinc-600 dark:text-zinc-400; }
+  .doc p { @apply my-4; }
+  .doc .lead { @apply text-base text-zinc-600 dark:text-zinc-400; }
+  .doc ul { @apply list-disc pl-5 my-4 space-y-1; }
+  .doc a { @apply text-blue-600 dark:text-blue-400 underline underline-offset-2 decoration-blue-600/30 hover:decoration-current; }
+  .doc :not(pre) > code { @apply font-mono text-[13px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800/70 text-zinc-800 dark:text-zinc-200; }
+  .doc table { @apply w-full text-sm my-6 border-collapse; }
+  .doc th { @apply text-left font-medium text-zinc-900 dark:text-zinc-100 py-2 pr-4 border-b border-zinc-300 dark:border-zinc-700; }
+  .doc td { @apply py-2 pr-4 align-top text-zinc-600 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800; }
+  .doc pre { @apply font-mono text-[13px] leading-6 overflow-x-auto p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200; }
+
+  /* ---------- Callouts: add class info | warn | note ---------- */
+  .callout { @apply my-6 rounded-lg border px-4 py-3 text-sm; }
+  .callout p { @apply my-0 text-sm leading-6; }
+  .callout .callout-title { @apply flex items-center gap-2 font-medium mb-1 text-zinc-900 dark:text-zinc-100; }
+  .callout.info { @apply border-blue-200 bg-blue-50/60 dark:border-blue-500/25 dark:bg-blue-500/5; }
+  .callout.warn { @apply border-amber-200 bg-amber-50/60 dark:border-amber-500/25 dark:bg-amber-500/5; }
+  .callout.note { @apply border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900; }
+
+  /* ---------- Syntax tokens ---------- */
+  .tok-c { color: #71717a; font-style: italic; }
+  .tok-s { color: #a16207; } .dark .tok-s { color: #d6b36a; }
+  .tok-p { color: #7c3aed; } .dark .tok-p { color: #a78bfa; }
+  .tok-n { color: #b45309; } .dark .tok-n { color: #e0a96d; }
+  .tok-k { color: #1d4ed8; } .dark .tok-k { color: #7aa7f5; }
+  .tok-t { color: #0f766e; } .dark .tok-t { color: #5eb8ad; }
+</style>
+
+<style>
+  /* Left tree: a guide line runs down the list; the active item overlays it with a 2px accent line */
+  .tree-list { border-left: 1px solid #e4e4e7; margin-left: 0.5rem; }
+  .dark .tree-list { border-left-color: #27272a; }
+  .nav-link { display: block; margin-left: -1px; padding: 0.3rem 0.75rem; font-size: 0.875rem;
+    border-left: 2px solid transparent; color: #52525b; transition: color .15s, border-color .15s; }
+  .dark .nav-link { color: #a1a1aa; }
+  .nav-link:hover { color: #18181b; border-left-color: #d4d4d8; }
+  .dark .nav-link:hover { color: #fafafa; border-left-color: #52525b; }
+  .nav-link.active { color: #2563eb; font-weight: 500; border-left-color: #3b82f6; background: linear-gradient(90deg, rgba(59,130,246,.07), transparent); }
+  .dark .nav-link.active { color: #7aa7f5; }
+  details[open] > summary .chev { transform: rotate(90deg); }
+  summary { list-style: none; } summary::-webkit-details-marker { display: none; }
+  .toc-link { display: block; padding: 0.15rem 0 0.15rem 0.75rem; margin-left: -1px; font-size: 0.8125rem; color: #71717a; border-left: 2px solid transparent; }
+  .toc-link.sub { padding-left: 1.5rem; }
+  .toc-link:hover { color: #18181b; } .dark .toc-link:hover { color: #fafafa; }
+  .toc-link.active { color: #2563eb; border-left-color: #3b82f6; } .dark .toc-link.active { color: #7aa7f5; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  .thin-scroll { scrollbar-width: thin; scrollbar-color: #d4d4d8 transparent; }
+  .dark .thin-scroll { scrollbar-color: #3f3f46 transparent; }
+  :focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+  :root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+</style>
+</head>
+
+<body class="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans antialiased">
+
+<!-- Mobile top bar -->
+<header class="lg:hidden sticky top-0 z-30 flex items-center justify-between h-14 px-4 border-b border-zinc-200 dark:border-zinc-800 bg-white/90 dark:bg-zinc-950/90 backdrop-blur">
+  <button id="menu-btn" class="p-2 -ml-2 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800" aria-label="Open navigation"><i data-lucide="menu" class="w-5 h-5"></i></button>
+  <span class="font-semibold tracking-tight">BAZZALT</span>
+  <button class="theme-btn p-2 -mr-2 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800" aria-label="Toggle theme"><i data-lucide="sun-moon" class="w-5 h-5"></i></button>
+</header>
+<div id="overlay" class="fixed inset-0 z-30 bg-black/40 hidden lg:hidden"></div>
+
+<div class="mx-auto max-w-[90rem] flex">
+
+  <!-- ===== LEFT SIDEBAR: navigation tree ===== -->
+  <aside id="sidebar" class="fixed lg:sticky top-0 left-0 z-40 h-screen w-72 shrink-0 -translate-x-full lg:translate-x-0 transition-transform duration-200 flex flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+    <div class="px-5 pt-5 pb-3 space-y-3">
+      <div class="flex items-center justify-between">
+        <a href="#/intro" class="flex items-center gap-2 font-semibold tracking-tight text-lg">
+          <span class="grid place-items-center w-7 h-7 rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-sm font-bold">B</span>BAZZALT
+        </a>
+        <select id="version" class="text-xs rounded-md border border-zinc-200 dark:border-zinc-800 bg-transparent px-2 py-1 text-zinc-600 dark:text-zinc-400" aria-label="Version">
+          <option>v1.0.0</option><option disabled>v1.1 (upcoming)</option><option disabled>v0.9 (legacy)</option>
+        </select>
+      </div>
+      <button id="search-btn" class="w-full flex items-center gap-2 rounded-md border border-zinc-200 dark:border-zinc-800 px-3 py-1.5 text-sm text-zinc-500 hover:border-zinc-300 dark:hover:border-zinc-700">
+        <i data-lucide="search" class="w-4 h-4"></i><span class="flex-1 text-left">Search docs</span>
+        <kbd class="font-mono text-[11px] text-zinc-400">Ctrl K</kbd>
+      </button>
+    </div>
+
+    <!-- To add a page: copy one <a> below, set href="#/your-id", and add <article data-page="your-id"> in <main>. Pages without an article show a stub. -->
+    <nav id="tree" class="flex-1 overflow-y-auto thin-scroll px-5 pb-6 space-y-1">
+      <details open><summary class="flex items-center gap-1.5 py-1.5 text-sm font-medium cursor-pointer"><i data-lucide="chevron-right" class="chev w-3.5 h-3.5 transition-transform text-zinc-400"></i>Getting Started</summary>
+        <div class="tree-list">
+          <a class="nav-link" href="#/intro" data-page="intro">Introduction</a>
+          <a class="nav-link" href="#/install" data-page="install">Installation</a>
+          <a class="nav-link" href="#/structure" data-page="structure">Project Structure</a>
+        </div></details>
+      <details open><summary class="flex items-center gap-1.5 py-1.5 text-sm font-medium cursor-pointer"><i data-lucide="chevron-right" class="chev w-3.5 h-3.5 transition-transform text-zinc-400"></i>Core Systems</summary>
+        <div class="tree-list">
+          <a class="nav-link" href="#/ecs" data-page="ecs">Entity Component System</a>
+          <a class="nav-link" href="#/memory" data-page="memory">Memory Management</a>
+          <a class="nav-link" href="#/jobs" data-page="jobs">Job System</a>
+        </div></details>
+      <details open><summary class="flex items-center gap-1.5 py-1.5 text-sm font-medium cursor-pointer"><i data-lucide="chevron-right" class="chev w-3.5 h-3.5 transition-transform text-zinc-400"></i>Rendering</summary>
+        <div class="tree-list">
+          <a class="nav-link" href="#/renderer" data-page="renderer">Initializing the Renderer</a>
+          <a class="nav-link" href="#/shaders" data-page="shaders">Shader Pipelines</a>
+          <a class="nav-link" href="#/materials" data-page="materials">Materials</a>
+        </div></details>
+      <details><summary class="flex items-center gap-1.5 py-1.5 text-sm font-medium cursor-pointer"><i data-lucide="chevron-right" class="chev w-3.5 h-3.5 transition-transform text-zinc-400"></i>Physics</summary>
+        <div class="tree-list">
+          <a class="nav-link" href="#/rigidbody" data-page="rigidbody">Rigid Bodies</a>
+          <a class="nav-link" href="#/collision" data-page="collision">Collision Queries</a>
+        </div></details>
+      <details><summary class="flex items-center gap-1.5 py-1.5 text-sm font-medium cursor-pointer"><i data-lucide="chevron-right" class="chev w-3.5 h-3.5 transition-transform text-zinc-400"></i>Scripting</summary>
+        <div class="tree-list"><a class="nav-link" href="#/scripts" data-page="scripts">Native Scripts</a></div></details>
+      <details><summary class="flex items-center gap-1.5 py-1.5 text-sm font-medium cursor-pointer"><i data-lucide="chevron-right" class="chev w-3.5 h-3.5 transition-transform text-zinc-400"></i>API Reference</summary>
+        <div class="tree-list">
+          <a class="nav-link" href="#/api-renderer" data-page="api-renderer">Renderer API</a>
+          <a class="nav-link" href="#/api-entity" data-page="api-entity">Entity API</a>
+        </div></details>
+    </nav>
+
+    <div class="flex items-center justify-between px-5 py-3 border-t border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500">
+      <span>BAZZALT v1.0.0</span>
+      <button class="theme-btn flex items-center gap-1.5 hover:text-zinc-900 dark:hover:text-zinc-100" aria-label="Toggle theme"><i data-lucide="sun-moon" class="w-4 h-4"></i>Theme</button>
+    </div>
+  </aside>
+
+  <!-- ===== CENTER: content ===== -->
+  <main class="flex-1 min-w-0 px-5 sm:px-10 lg:px-14 py-10">
+    <div class="max-w-3xl mx-auto">
+      <nav id="crumbs" class="flex flex-wrap items-center gap-1.5 text-sm text-zinc-500 mb-6" aria-label="Breadcrumb"></nav>
+
+      <!-- Page: duplicate an <article> block to add a page. The id must match a sidebar link. -->
+      <article class="doc" data-page="renderer" data-title="Initializing the Renderer" hidden>
+        <h1>Initializing the Renderer</h1>
+        <p class="lead">The renderer owns the GPU device, swapchain, and frame graph. Create it once at startup and pass it to every system that draws.</p>
+
+        <h2>Creating a device</h2>
+        <p>Describe what you need in a <code>RendererDesc</code>. BAZZALT picks the best available backend and falls back in the order you list.</p>
+<pre><code data-lang="cpp">#include &lt;bazzalt/renderer.h&gt;
+
+using namespace bz;
+
+int main() {
+    Window window({ .title = "Sandbox", .width = 1600, .height = 900 });
+
+    RendererDesc desc;
+    desc.backends = { Backend::Vulkan, Backend::D3D12 };
+    desc.vsync    = true;
+    desc.msaa     = 4;   // samples per pixel
+
+    // Returns nullptr on failure; see Renderer::LastError()
+    auto renderer = Renderer::Create(window, desc);
+    if (!renderer) return 1;
+}</code></pre>
+
+        <div class="callout info"><div class="callout-title"><i data-lucide="info" class="w-4 h-4"></i>Info</div>
+          <p>The renderer must be created on the thread that owns the window.</p></div>
+
+        <h2>Frame lifecycle</h2>
+        <p>Each frame is recorded between <code>BeginFrame</code> and <code>EndFrame</code>. Submission happens inside <code>EndFrame</code>.</p>
+        <h3>Render loop</h3>
+<pre><code data-lang="cpp">while (window.IsOpen()) {
+    window.PollEvents();
+
+    renderer-&gt;BeginFrame();
+    renderer-&gt;Draw(scene.View&lt;Mesh, Transform&gt;());
+    renderer-&gt;EndFrame();
+}</code></pre>
+        <div class="callout warn"><div class="callout-title"><i data-lucide="triangle-alert" class="w-4 h-4"></i>Warning</div>
+          <p>Calling <code>Draw</code> outside a frame is undefined behavior in release builds.</p></div>
+
+        <h3>Backend support</h3>
+        <table>
+          <thead><tr><th>Backend</th><th>Platforms</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td><code>Vulkan</code></td><td>Windows, Linux</td><td>Stable</td></tr>
+            <tr><td><code>D3D12</code></td><td>Windows</td><td>Stable</td></tr>
+            <tr><td><code>Metal</code></td><td>macOS</td><td>Planned</td></tr>
+          </tbody>
+        </table>
+        <div class="callout note"><div class="callout-title"><i data-lucide="notebook-pen" class="w-4 h-4"></i>Note</div>
+          <p>Shut the renderer down by letting the <code>Ref</code> go out of scope. Resources are released in reverse creation order.</p></div>
+      </article>
+
+      <article class="doc" data-page="ecs" data-title="Entity Component System" hidden>
+        <h1>Entity Component System</h1>
+        <p class="lead">Entities are lightweight IDs. Components are plain structs stored contiguously by type, so iteration stays cache-friendly.</p>
+        <h2>Defining components</h2>
+        <p>Any trivially copyable struct can be a component.</p>
+<pre><code data-lang="cpp">struct Transform { Vec3 position; Quat rotation; Vec3 scale{1.0f}; };
+struct Velocity  { Vec3 linear; };</code></pre>
+        <h2>Creating entities</h2>
+<pre><code data-lang="cpp">Scene scene;
+Entity player = scene.Create();
+scene.Add&lt;Transform&gt;(player, { .position = {0, 1, 0} });
+scene.Add&lt;Velocity&gt;(player);</code></pre>
+        <h2>Querying</h2>
+        <p>A view visits every entity that has all of the requested components.</p>
+<pre><code data-lang="cpp">for (auto [e, t, v] : scene.View&lt;Transform, Velocity&gt;().each()) {
+    t.position += v.linear * dt;
+}</code></pre>
+        <div class="callout warn"><div class="callout-title"><i data-lucide="triangle-alert" class="w-4 h-4"></i>Warning</div>
+          <p>Adding or removing components while iterating a view invalidates it. Defer changes with <code>scene.Commands()</code>.</p></div>
+      </article>
+
+      <article class="doc" data-page="shaders" data-title="Shader Pipelines" hidden>
+        <h1>Shader Pipelines</h1>
+        <p class="lead">A pipeline binds shader stages to fixed-function state. Shaders are compiled to SPIR-V offline and loaded at runtime.</p>
+        <h2>Loading a pipeline</h2>
+<pre><code data-lang="cpp">PipelineDesc desc;
+desc.vertex   = Shader::Load("shaders/pbr.vert.spv");
+desc.fragment = Shader::Load("shaders/pbr.frag.spv");
+desc.depthTest = true;
+desc.cull      = CullMode::Back;
+
+Ref&lt;Pipeline&gt; pbr = renderer-&gt;CreatePipeline(desc);</code></pre>
+        <h2>Writing a fragment shader</h2>
+        <h3>Uniform layout</h3>
+<pre><code data-lang="glsl">#version 450
+layout(set = 0, binding = 0) uniform Camera { mat4 viewProj; vec3 eye; } cam;
+layout(location = 0) in vec3 vNormal;
+layout(location = 0) out vec4 outColor;
+
+void main() {
+    float light = max(dot(normalize(vNormal), vec3(0.3, 1.0, 0.2)), 0.0);
+    outColor = vec4(vec3(light), 1.0);
+}</code></pre>
+        <div class="callout info"><div class="callout-title"><i data-lucide="info" class="w-4 h-4"></i>Info</div>
+          <p>Run <code>bzshader --watch</code> to recompile on save and hot-reload pipelines in a running game.</p></div>
+        <table>
+          <thead><tr><th>Stage</th><th>File suffix</th><th>Required</th></tr></thead>
+          <tbody><tr><td>Vertex</td><td><code>.vert</code></td><td>Yes</td></tr><tr><td>Fragment</td><td><code>.frag</code></td><td>Yes</td></tr><tr><td>Compute</td><td><code>.comp</code></td><td>No</td></tr></tbody>
+        </table>
+      </article>
+
+      <!-- Fallback for sidebar links that have no article yet -->
+      <article class="doc" id="stub" hidden>
+        <h1 id="stub-title">Untitled</h1>
+        <div class="callout note"><div class="callout-title"><i data-lucide="notebook-pen" class="w-4 h-4"></i>Note</div><p>This page has not been written yet. Copy an <code>&lt;article data-page="..."&gt;</code> block to add content.</p></div>
+      </article>
+
+      <!-- Previous / Next -->
+      <div id="pager" class="grid grid-cols-2 gap-4 mt-16 pt-6 border-t border-zinc-200 dark:border-zinc-800"></div>
+    </div>
+  </main>
+
+  <!-- ===== RIGHT SIDEBAR: table of contents ===== -->
+  <aside class="hidden xl:block w-60 shrink-0">
+    <div class="sticky top-0 max-h-screen overflow-y-auto thin-scroll py-10 pr-6">
+      <p class="text-sm font-medium mb-3">On this page</p>
+      <div id="toc" class="border-l border-zinc-200 dark:border-zinc-800"></div>
+    </div>
+  </aside>
+</div>
+
+<!-- Search modal -->
+<div id="search-modal" class="fixed inset-0 z-50 hidden items-start justify-center pt-[15vh] px-4 bg-black/40" role="dialog" aria-modal="true" aria-label="Search">
+  <div class="w-full max-w-lg rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xl overflow-hidden">
+    <input id="search-input" type="text" placeholder="Search pages and headings" class="w-full px-4 py-3 bg-transparent text-sm border-b border-zinc-200 dark:border-zinc-800 focus:outline-none">
+    <ul id="search-results" class="max-h-72 overflow-y-auto thin-scroll p-2 text-sm"></ul>
+  </div>
+</div>
+
+<script>
+/* ===== BAZZALT docs: app.js (move this block to app.js and load it with <script src="app.js"> if you prefer) ===== */
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const links    = $$('.nav-link');
+const articles = $$('article[data-page]');
+const DEFAULT_PAGE = 'renderer';
+let spyHeads = [];
+
+/* ---------- Theme ---------- */
+$$('.theme-btn').forEach(b => b.addEventListener('click', () => {
+  const dark = document.documentElement.classList.toggle('dark');
+  try { localStorage.setItem('bz-theme', dark ? 'dark' : 'light'); } catch (e) {}
+}));
+
+/* ---------- Mobile drawer ---------- */
+const sidebar = $('#sidebar'), overlay = $('#overlay');
+const drawer = open => { sidebar.classList.toggle('-translate-x-full', !open); overlay.classList.toggle('hidden', !open); };
+$('#menu-btn').addEventListener('click', () => drawer(true));
+overlay.addEventListener('click', () => drawer(false));
+
+/* ---------- Syntax highlighting (tiny tokenizer for C++/GLSL) ---------- */
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const KW = 'auto|bool|class|const|constexpr|struct|template|typename|namespace|return|if|else|for|while|void|int|float|uint32_t|nullptr|true|false|using|static|enum|noexcept|override|virtual|new|delete|layout|uniform|in|out|set|binding|location|vec[234]|mat4';
+const TOKEN = new RegExp(`(//.*|/\\*[\\s\\S]*?\\*/)|("(?:\\\\.|[^"\\\\])*")|(^[ \\t]*#\\w+)|(\\b\\d[\\d.]*f?\\b)|(\\b(?:${KW})\\b)|(\\b[A-Z]\\w*\\b)`, 'gm');
+function highlight(src) {
+  let out = '', last = 0, m; TOKEN.lastIndex = 0;
+  while ((m = TOKEN.exec(src))) {
+    const cls = m[1] ? 'c' : m[2] ? 's' : m[3] ? 'p' : m[4] ? 'n' : m[5] ? 'k' : 't';
+    out += esc(src.slice(last, m.index)) + `<span class="tok-${cls}">${esc(m[0])}</span>`;
+    last = TOKEN.lastIndex;
+  }
+  return out + esc(src.slice(last));
+}
+
+/* ---------- Code blocks: highlight + copy button ---------- */
+const ICON_COPY  = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+const ICON_CHECK = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+$$('pre').forEach(pre => {
+  const code = $('code', pre);
+  code.innerHTML = highlight(code.textContent);
+  const wrap = document.createElement('div'); wrap.className = 'relative group my-6';
+  pre.replaceWith(wrap); wrap.appendChild(pre); pre.style.margin = '0';
+  const btn = document.createElement('button');
+  btn.className = 'absolute top-2.5 right-2.5 p-1.5 rounded-md text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 opacity-0 group-hover:opacity-100 focus:opacity-100 transition';
+  btn.setAttribute('aria-label', 'Copy code'); btn.innerHTML = ICON_COPY;
+  btn.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(code.textContent); } catch (e) { return; }
+    btn.innerHTML = ICON_CHECK; setTimeout(() => btn.innerHTML = ICON_COPY, 1600);
+  });
+  wrap.appendChild(btn);
+});
+
+/* ---------- Router: #/page-id ---------- */
+function show(id, headingText) {
+  if (!links.some(l => l.dataset.page === id)) id = DEFAULT_PAGE;
+  const link = links.find(l => l.dataset.page === id);
+  let art = articles.find(a => a.dataset.page === id);
+  if (!art) { art = $('#stub'); $('#stub-title').textContent = link.textContent; }
+  [...articles, $('#stub')].forEach(a => a.hidden = a !== art);
+
+  // Sidebar active state + make sure its group is open
+  links.forEach(l => l.classList.toggle('active', l === link));
+  link.closest('details').open = true;
+
+  // Breadcrumbs, title, pager, TOC
+  const section = link.closest('details').querySelector('summary').textContent.trim();
+  $('#crumbs').innerHTML = `<a href="#/intro" class="hover:text-zinc-900 dark:hover:text-zinc-100">Docs</a><i data-lucide="chevron-right" class="w-3.5 h-3.5"></i><span>${section}</span><i data-lucide="chevron-right" class="w-3.5 h-3.5"></i><span class="text-zinc-900 dark:text-zinc-100">${link.textContent}</span>`;
+  document.title = `${link.textContent} | BAZZALT Docs`;
+  buildPager(link); buildToc(art);
+  lucide.createIcons();
+  drawer(false);
+  window.scrollTo({ top: 0, behavior: 'instant' });
+  if (headingText) { const h = spyHeads.find(h => h.textContent === headingText); h && h.scrollIntoView(); }
+}
+function buildPager(link) {
+  const i = links.indexOf(link), prev = links[i - 1], next = links[i + 1];
+  const card = (l, dir) => l ? `<a href="#/${l.dataset.page}" class="group block rounded-lg border border-zinc-200 dark:border-zinc-800 hover:border-blue-500/60 px-4 py-3 ${dir === 'next' ? 'text-right col-start-2' : ''}"><span class="block text-xs text-zinc-500">${dir === 'next' ? 'Next' : 'Previous'}</span><span class="text-sm font-medium group-hover:text-blue-600 dark:group-hover:text-blue-400">${l.textContent}</span></a>` : '';
+  $('#pager').innerHTML = card(prev, 'prev') + card(next, 'next');
+}
+
+/* ---------- Table of contents + scroll spy ---------- */
+function buildToc(art) {
+  spyHeads = $$('h2, h3', art);
+  $('#toc').innerHTML = spyHeads.map((h, i) => {
+    h.id = h.id || `${art.dataset.page}-${i}`;
+    return `<a class="toc-link ${h.tagName === 'H3' ? 'sub' : ''}" href="#${h.id}" data-id="${h.id}">${h.textContent}</a>`;
+  }).join('');
+  $$('.toc-link').forEach(a => a.addEventListener('click', e => {
+    e.preventDefault(); document.getElementById(a.dataset.id).scrollIntoView(); // keeps the #/page route intact
+  }));
+  spy();
+}
+let ticking = false;
+function spy() {
+  let current = null;
+  spyHeads.forEach(h => { if (h.getBoundingClientRect().top < 100) current = h.id; });
+  $$('.toc-link').forEach(a => a.classList.toggle('active', a.dataset.id === current));
+  ticking = false;
+}
+window.addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(spy); } }, { passive: true });
+
+/* ---------- Search (Ctrl/Cmd+K) ---------- */
+const modal = $('#search-modal'), input = $('#search-input'), results = $('#search-results');
+const index = [
+  ...links.map(l => ({ page: l.dataset.page, title: l.textContent, where: l.closest('details').querySelector('summary').textContent.trim() })),
+  ...articles.flatMap(a => $$('h2', a).map(h => ({ page: a.dataset.page, title: h.textContent, where: a.dataset.title, heading: h.textContent })))
+];
+function renderResults() {
+  const q = input.value.trim().toLowerCase();
+  const hits = index.filter(e => !q || e.title.toLowerCase().includes(q)).slice(0, 8);
+  results.innerHTML = hits.length
+    ? hits.map(e => `<li><a href="#/${e.page}" data-h="${e.heading || ''}" class="flex justify-between gap-3 rounded-md px-3 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-800"><span>${e.title}</span><span class="text-zinc-500">${e.where}</span></a></li>`).join('')
+    : '<li class="px-3 py-6 text-center text-zinc-500">No results. Try a different term.</li>';
+}
+function openSearch(open) {
+  modal.classList.toggle('hidden', !open); modal.classList.toggle('flex', open);
+  if (open) { input.value = ''; renderResults(); input.focus(); }
+}
+$('#search-btn').addEventListener('click', () => openSearch(true));
+modal.addEventListener('click', e => { if (e.target === modal) openSearch(false); });
+input.addEventListener('input', renderResults);
+results.addEventListener('click', e => {
+  const a = e.target.closest('a'); if (!a) return;
+  e.preventDefault(); openSearch(false);
+  const id = a.getAttribute('href').slice(2);
+  history.pushState(null, '', `#/${id}`); show(id, a.dataset.h);
+});
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openSearch(true); }
+  if (e.key === 'Escape') { openSearch(false); drawer(false); }
+  if (e.key === 'Enter' && !modal.classList.contains('hidden')) { const a = $('a', results); a && a.click(); }
+});
+
+/* ---------- Boot ---------- */
+const route = () => show(location.hash.replace('#/', '') || DEFAULT_PAGE);
+window.addEventListener('hashchange', route);
+route();
+</script>
+</body>
+</html>

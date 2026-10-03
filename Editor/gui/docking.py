@@ -1237,7 +1237,7 @@ class DockingSystem(QWidget):
             splitter.setStretchFactor(index, 1)
         if node.sizes and len(node.sizes) == len(node.children):
             QTimer.singleShot(
-                0, lambda s=splitter, sizes=list(node.sizes): s.setSizes(sizes)
+                0, splitter, lambda s=splitter, sizes=list(node.sizes): s.setSizes(sizes)
             )
         splitter.splitterMoved.connect(
             lambda pos, index, s=splitter, n=node: self._splitter_moved(s,n)

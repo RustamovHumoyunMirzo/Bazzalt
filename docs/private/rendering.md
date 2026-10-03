@@ -65,7 +65,7 @@ Low, medium, and high quality use progressively larger gather kernels.
 ## Custom post-processing
 
 Custom effects are authored as Filament post-process-domain `.mat` shaders,
-imported by the asset database into `.filamat`, and referenced by UUID. Public
+compiled on demand by the editor and referenced by UUID. Public
 code never handles a Filament material or render target.
 
 ```cpp
@@ -149,10 +149,12 @@ mesh.CastShadows = true;
 mesh.ReceiveShadows = true;
 ```
 
-`MeshAsset` accepts glTF/GLB or filamesh-family asset UUIDs. `Materials` holds
-compiled `.filamat` UUIDs for filamesh overrides. Index zero is
-`DefaultMaterial`; later entries are `Material1`, `Material2`, etc. glTF owns
-its authored PBR materials/textures, so overrides currently apply to filamesh.
+`MeshAsset` accepts glTF/GLB or filamesh-family asset UUIDs. `MaterialAsset`
+accepts a `.matinst` UUID, default None, and overrides this entity's primitives.
+`Materials` supplies individual primitive slots when MaterialAsset is empty.
+Overrides apply to both glTF and filamesh. With no override, glTF keeps its
+authored PBR materials/textures. Overrides do not inherit between model nodes.
+See [Materials and shaders](materials-and-shaders.md) for the Inspector and C++ API.
 
 Changing the mesh/material UUIDs recreates the private render instance.
 Transform, visibility, layers, and shadows synchronize continuously.
