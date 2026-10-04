@@ -155,7 +155,11 @@ and LLVM source commits, plus the checksum of portable Python 3.13.2 Win32.
 
 Filament is built with the x86 MSVC toolchain, the dynamic CRT, Vulkan enabled,
 and `DIST_DIR=x86/md`. Its import tools are also compiled as Win32 executables.
-Host generator tools never enter the shipped payload. The bindings wheel helper
+Host generator tools never enter the shipped payload.
+Both Qt source builds explicitly disable the unused QtSql module; this prevents
+auto-detected database clients installed on hosted runners from introducing
+wrong-architecture PostgreSQL/MySQL plugins into the Win32 build.
+The bindings wheel helper
 checks every DLL/PYD/EXE and creates ordinary metadata and hashed RECORD entries;
 it does not supply replacement or stub Qt APIs.
 

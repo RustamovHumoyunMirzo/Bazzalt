@@ -6,6 +6,11 @@
 #include <string_view>
 #include <vector>
 
+#ifdef _WIN32
+#define NOMINMAX
+#include <Windows.h>
+#endif
+
 #include "Bazzalt/AssetManager.h"
 #include "Bazzalt/Components/Mesh.h"
 #include "Runtime/Engine.h"
@@ -77,6 +82,24 @@ fragment {
     const auto mesh = AssetManager::GetAsset(assets / "fixture.filamesh");
     const auto human = AssetManager::GetAsset(assets / "human.gltf");
     assert(gltf && gltf->Importer == "Bazzalt.glTF" && gltf->CachePath.extension() == ".gltf");
+    // Scans and public lookups must agree even when Windows supplies a short
+    // TEMP path (e.g. RUNNER~1) or callers use another spelling of the path.
+    const auto canonicalGltf = AssetManager::GetAsset(std::filesystem::weakly_canonical(assets / "empty.gltf"));
+    assert(canonicalGltf && canonicalGltf->Id == gltf->Id);
+    const auto dottedGltf = AssetManager::GetAsset(assets / ".." / "Assets" / "empty.gltf");
+    assert(dottedGltf && dottedGltf->Id == gltf->Id);
+#ifdef _WIN32
+    const auto sourcePath = (assets / "empty.gltf").wstring();
+    const auto required = GetShortPathNameW(sourcePath.c_str(), nullptr, 0);
+    if (required) {
+        std::wstring shortPath(required, L'\0');
+        const auto written = GetShortPathNameW(sourcePath.c_str(), shortPath.data(), required);
+        assert(written && written < required);
+        shortPath.resize(written);
+        const auto shortGltf = AssetManager::GetAsset(std::filesystem::path(shortPath));
+        assert(shortGltf && shortGltf->Id == gltf->Id);
+    }
+#endif
     assert(std::filesystem::exists(gltf->CachePath.parent_path() / "payload.bin"));
     assert(texture && texture->Importer == "Bazzalt.Texture" && texture->CachePath.extension() == ".png");
     assert(material && material->Importer == "Bazzalt.FilamentMaterial" &&

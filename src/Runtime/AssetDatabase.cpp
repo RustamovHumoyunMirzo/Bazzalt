@@ -591,7 +591,14 @@ AssetImporter* AssetDatabase::SelectImporter(const std::filesystem::path& source
 }
 
 std::filesystem::path AssetDatabase::NormalizeSource(const std::filesystem::path& path) const {
-    return std::filesystem::absolute(path).lexically_normal();
+    // Open() canonicalizes the project root. Lookups must resolve the same
+    // filesystem identity, including Windows 8.3 names and directory symlinks,
+    // rather than comparing a caller's spelling with the scanned long path.
+    std::error_code error;
+    const auto absolute = std::filesystem::absolute(path, error);
+    if (error) return path.lexically_normal();
+    const auto canonical = std::filesystem::weakly_canonical(absolute, error);
+    return error ? absolute.lexically_normal() : canonical;
 }
 
 PropertyMap AssetDatabase::GetImportSettings(UUID id){const auto record=Find(id);Metadata metadata;if(!record||!LoadMetadata(record->MetaPath,metadata))return {};return metadata.Settings;}

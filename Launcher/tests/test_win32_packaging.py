@@ -40,5 +40,14 @@ class Win32PackagingTests(unittest.TestCase):
             self.assertRegex(pins[name],r"^[a-f0-9]{40}$")
         self.assertRegex(pins["python_package_sha256"],r"^[a-f0-9]{64}$")
 
+    def test_qt_source_builds_disable_unused_sql_module(self):
+        root=Path(__file__).resolve().parents[2]
+        script=(root/"scripts/build_windows_x86_dependencies.ps1").read_text()
+        configurations=[line for line in script.splitlines() if line.startswith("Build $QtBase ")]
+        self.assertEqual(len(configurations),2)
+        for configuration in configurations:
+            self.assertIn("'-DFEATURE_sql=OFF'",configuration)
+        self.assertNotIn(";Sql;",script)
+
 
 if __name__=="__main__":unittest.main()

@@ -54,7 +54,9 @@ $QtBase = Join-Path $Work 'qtbase'
 Checkout 'https://github.com/qt/qtbase.git' "v$($Pins.qt_version)" $Pins.qtbase_commit $QtBase
 Import-BazzaltMsvc x86
 $Qt = Join-Path $Work 'qt-x86'
-Build $QtBase (Join-Path $Work 'qtbase-x86') $Qt @('-DQT_BUILD_TESTS=OFF','-DQT_BUILD_EXAMPLES=OFF','-DFEATURE_openssl=OFF','-DFEATURE_icu=OFF')
+# Neither product uses QtSql. Disable it explicitly so the Win32 build cannot
+# auto-detect a runner's x64 PostgreSQL/MySQL client and link mismatched plugins.
+Build $QtBase (Join-Path $Work 'qtbase-x86') $Qt @('-DQT_BUILD_TESTS=OFF','-DQT_BUILD_EXAMPLES=OFF','-DFEATURE_sql=OFF','-DFEATURE_openssl=OFF','-DFEATURE_icu=OFF')
 if ($Stage -eq 'qt') { Write-Host "Win32 Qt base: $Qt"; return }
 $Svg = Join-Path $Work 'qtsvg'
 Checkout 'https://github.com/qt/qtsvg.git' "v$($Pins.qt_version)" $Pins.qtsvg_commit $Svg
@@ -63,7 +65,7 @@ $PySide = Join-Path $Work 'pyside'
 Checkout 'https://github.com/pyside/pyside-setup.git' "v$($Pins.qt_version)" $Pins.pyside_commit $PySide
 Import-BazzaltMsvc x64
 $HostQt = Join-Path $Work 'qt-host'
-Build $QtBase (Join-Path $Work 'qtbase-host') $HostQt @('-DQT_BUILD_TESTS=OFF','-DQT_BUILD_EXAMPLES=OFF','-DFEATURE_gui=OFF','-DFEATURE_widgets=OFF','-DFEATURE_network=OFF','-DFEATURE_openssl=OFF','-DFEATURE_icu=OFF')
+Build $QtBase (Join-Path $Work 'qtbase-host') $HostQt @('-DQT_BUILD_TESTS=OFF','-DQT_BUILD_EXAMPLES=OFF','-DFEATURE_gui=OFF','-DFEATURE_widgets=OFF','-DFEATURE_network=OFF','-DFEATURE_sql=OFF','-DFEATURE_openssl=OFF','-DFEATURE_icu=OFF')
 & (Join-Path $PSScriptRoot 'get_llvm.ps1') -Version $Versions.llvm -Sha256 $Versions.llvm_sha256
 $Llvm = Join-Path $Root 'toolchain/llvm'
 $env:CLANG_INSTALL_DIR = $Llvm
