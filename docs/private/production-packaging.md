@@ -75,10 +75,14 @@ size must match. Editor packaging runs the compiled executable's
 Independent workflows: Windows Editor, Windows Core, Windows Hub. Each can be
 started manually, optionally overriding the product version. Their x64 jobs
 build/test/package the product and upload its binaries and catalog entry.
-Their separate x86 jobs upload explicitly named **support reports**, not binaries.
-They do not claim a completed Win32 port.
+Their x86 jobs now source-build matching dependencies and attempt the same
+test/package pipeline with genuine Win32 targets. They upload binaries only after
+all build, test, and architecture checks pass; support reports are no longer
+substituted for products. The complete Win32 pipeline still needs a successful
+GitHub Actions run before it is considered release-validated.
 
-Windows Release Suite builds all products plus a separate verified LLVM ZIP.
+Windows Release Suite builds both architectures of all products plus separate
+verified x64 and source-built Win32 LLVM ZIPs.
 Manual dispatch creates CI artifacts only. A `release-v*` tag additionally
 publishes a GitHub Release with the product files and `downloads.json`.
 Change versions.json before creating a new release tag. Publishing requires the
@@ -112,29 +116,51 @@ Editor Preferences > Build Tools accepts an explicit Clang++ executable and SDK
 directory. Invalid overrides do not fall back silently. Missing tools, SDKs, or
 compiler launch failures become Console diagnostics and stop Play safely.
 
-## Win32 investigation and remaining work
+## Source-built Win32 pipeline
 
 Qt 6's [supported Windows platforms](https://doc.qt.io/qt-6.10/supported-platforms.html)
 are x64/ARM64, not x86; the pinned PySide6 release supplies no win32 wheel.
-`scripts/check_x86_support.py` probes the actual win32 wheel and records the
-pip output and installed Filament SDK availability. The official Filament
-v1.77.0 Windows SDK contains x86_64 libraries only. CMake now selects x86 for a
-real 32-bit target and fails clearly when matching libraries are absent.
+The official Filament v1.77.0 Windows SDK also contains x86_64 libraries only.
+The Win32 jobs therefore cannot use those precompiled packages. CMake selects
+`x86` for a real 32-bit target and fails when matching libraries are absent.
 
-A genuine port needs source-built Qt, Shiboken/PySide6, and Filament plus
-transitive dependencies, with 32-bit Python. Filament's distribution directory
-defaults to host architecture; a source Win32 experiment must set `DIST_ARCH=x86`
-rather than install mislabeled x64 libraries. See its
-[pinned build configuration](https://github.com/google/filament/blob/v1.77.0/CMakeLists.txt)
-and [building guide](https://github.com/google/filament/blob/v1.77.0/BUILDING.md).
-There is no general pointer-size prohibition in the inspected SDK headers,
-but that is **not** evidence that the full Win32 renderer or GUI builds/runs.
+`releases/windows-x86.json` pins the QtBase, QtSvg, PySide/Shiboken, Filament,
+and LLVM source commits, plus the checksum of portable Python 3.13.2 Win32.
+`scripts/build_windows_x86_dependencies.ps1` runs on the Actions worker:
 
-After producing and testing matching custom dependencies, configure a separate
-Win32 CMake tree with `-A Win32 -DBAZZALT_FILAMENT_DIR=<custom-sdk>` and run the
-same packager with 32-bit Python and `-Architecture x86`. A 32-bit host also
-requires compatible import/compiler executables. Shipping x86 remains blocked
-until native, GUI, renderer, and installer tests pass; TODO 3 remains partial.
+- `gui` builds Qt/QtSvg Win32, a separate minimal x64 Qt/Shiboken generator,
+  and genuine Win32 PySide bindings; it builds architecture-audited wheels and
+  performs a Qt Widgets/SVG smoke test with 32-bit Python.
+- `filament` builds only the native renderer dependencies needed by Core.
+  Core's SVG build-time generator uses host Python/Qt, not shipped GUI libraries.
+- `all` prepares the Editor's GUI and native renderer dependencies.
+
+Filament is built with the x86 MSVC toolchain, the dynamic CRT, Vulkan enabled,
+and `DIST_DIR=x86/md`. Its import tools are also compiled as Win32 executables.
+Host generator tools never enter the shipped payload. The bindings wheel helper
+checks every DLL/PYD/EXE and creates ordinary metadata and hashed RECORD entries;
+it does not supply replacement or stub Qt APIs.
+
+`scripts/build_windows_x86_llvm.ps1` builds actual Win32 Clang and LLD with an
+`i686-pc-windows-msvc` target and resource headers, then audits and packages them
+as a separate tools download. The Win32 compiler is not bundled into Editor.
+
+Product jobs configure a separate CMake tree with `-A Win32`, run native tests,
+run the GUI regression suite where applicable, and invoke the common packager
+with 32-bit Python, `-Architecture x86`, and `-FilamentDirectory` pointing to the
+source-built SDK. Editor packaging additionally checks the packaged native runtime.
+The Hub job creates an independent x86 Inno Setup installer containing only Hub.
+Release publication waits for **both architectures** of every product and tool
+package. A failed upstream port/build never produces a mislabeled x86 release.
+
+These are large **CI builds**, not automatic local developer setup. Both source
+build scripts refuse execution outside GitHub Actions unless a developer explicitly
+opts in with `-AllowLocalBuild`. Trigger Windows Editor/Core/Hub or Windows Release
+Suite in Actions to validate the setup. Only source, pins, scripts, and workflows
+belong in the repository; dependency build/cache directories remain ignored.
+Local dependency compilation was stopped at the owner's request. Successful
+partial compilation is not proof of a working Win32 Editor/renderer/installer;
+TODO 3 remains pending end-to-end CI validation.
 
 ## Compiled resources and release hygiene
 

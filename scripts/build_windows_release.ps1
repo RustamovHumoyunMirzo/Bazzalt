@@ -4,6 +4,7 @@ param(
     [string]$Version = '',
     [string]$BuildDirectory = 'build',
     [string]$OutputDirectory = 'dist/releases',
+    [string]$FilamentDirectory = 'deps/filament',
     [string]$DownloadBaseUrl = ''
 )
 $ErrorActionPreference = 'Stop'
@@ -13,6 +14,7 @@ if (-not $Version) { $Version = $Versions.$Product }
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Version must be major.minor.patch' }
 $Build = [IO.Path]::GetFullPath((Join-Path $Root $BuildDirectory))
 $Output = [IO.Path]::GetFullPath((Join-Path $Root $OutputDirectory))
+$Filament = [IO.Path]::GetFullPath((Join-Path $Root $FilamentDirectory))
 $env:NUITKA_CACHE_DIR = Join-Path $Build 'NuitkaCache'
 $PythonBits = (python -c 'import struct; print(struct.calcsize("P") * 8)').Trim()
 if ($LASTEXITCODE -ne 0 -or $PythonBits -ne $(if ($Architecture -eq 'x64') {'64'} else {'32'})) {
@@ -62,7 +64,7 @@ if ($Product -eq 'core') {
         Copy-ReleaseSDK (Join-Path $Stage 'ScriptSDK')
         New-Item -ItemType Directory -Path (Join-Path $Stage 'tools/filament') -Force | Out-Null
         foreach ($Tool in @('matc.exe','cmgen.exe','filamesh.exe')) {
-            Copy-Item -LiteralPath (Join-Path $Root "deps/filament/bin/$Tool") -Destination (Join-Path $Stage 'tools/filament')
+            Copy-Item -LiteralPath (Join-Path $Filament "bin/$Tool") -Destination (Join-Path $Stage 'tools/filament')
         }
         @{version=$Version;core_version=$Versions.core;architecture=$Architecture;executable='Bazzalt.exe';project_format_max=1} | ConvertTo-Json | Set-Content (Join-Path $Stage 'editor.json') -Encoding utf8
         $Check = Start-Process -FilePath (Join-Path $Stage 'Bazzalt.exe') -ArgumentList '--check-runtime' -WorkingDirectory $Stage -WindowStyle Hidden -Wait -PassThru

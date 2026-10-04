@@ -9,6 +9,7 @@ pytest-cache-files-*/
 /dist/
 /nuitka-crash-report.xml
 /deps/
+/toolchain/
 .bazzalt/
 TODO.md
 /bazzalt/_editor_resources_rc.py

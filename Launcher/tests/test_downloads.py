@@ -59,7 +59,7 @@ class DownloadTests(unittest.TestCase):
     def test_catalog_validation(self):
         for change in ({"url":"http://example.org"},{"sha256":"bad"},{"id":"../escape"},{"size":True},{"version":"bad"}):
             with self.subTest(change=change),self.assertRaises((ValueError,TypeError)):ValidateEntry(self.MakeEntry()|change)
-        value={"schema_version":1,"downloads":[self.MakeEntry()]}
+        value={"schema_version":1,"downloads":[self.MakeEntry()|{"architecture":"x64" if struct.calcsize("P")==8 else "x86"}]}
         with patch("Launcher.downloads.urlopen",return_value=Response(json.dumps(value).encode())):
             self.assertEqual(len(FetchCatalog("https://example.org/catalog")),1)
 
