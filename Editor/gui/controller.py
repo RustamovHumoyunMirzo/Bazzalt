@@ -132,7 +132,9 @@ class EditorController(QObject):
         self.GameInput.SyncFocus()
         if monotonic()-self._material_check>2.0:
             self._material_check=monotonic();self._PrepareUsedMaterials()
-        self.Runtime.Tick()
+        if self.Runtime.Tick() is False:
+            self.Timer.stop()
+            return
         if self._play_authoring is not None and not self.Runtime.IsPlaying():self._RestorePlayAuthoring()
         self._stats_frames+=1;now=monotonic()
         if now-self._stats_started>=1.0:

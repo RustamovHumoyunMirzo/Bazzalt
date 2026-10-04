@@ -18,8 +18,10 @@
 #include <utils/EntityManager.h>
 
 #include "Bazzalt/Scene.h"
+#include "Bazzalt/AssetManager.h"
 #include "Bazzalt/Components/GaussianBlur.h"
 #include "Bazzalt/Components/Vignette.h"
+#include "Bazzalt/Components/ModelInstance.h"
 #include "Rendering/BuiltinPostProcess.h"
 #include "Rendering/RenderBackend.h"
 #include "Rendering/LightParameters.h"
@@ -345,14 +347,28 @@ void MeshSystem::OnUpdate(Scene& scene, float) {
         const auto& mesh = view.get<Mesh>(handle);
         if (!mesh.IsEnabled()) continue;
         alive.insert(id);
+        UUID modelOwner{};
+        if (mesh.ModelNodeIndex != Mesh::EntireAsset) {
+            for (auto ancestor=entity.GetParent(); ancestor; ancestor=ancestor.GetParent()) {
+                if (const auto* model=ancestor.TryGetComponent<ModelInstance>(); model && model->ModelAsset==mesh.MeshAsset) {
+                    modelOwner=ancestor.GetUUID(); break;
+                }
+                if (ancestor.GetUUID().IsRoot()) break;
+            }
+        }
+        const auto asset = AssetManager::GetAsset(mesh.MeshAsset);
+        const auto cachePath = asset ? asset->CachePath : std::filesystem::path{};
         auto found = m_resources.find(id);
         if (found != m_resources.end() &&
-            (found->second.MeshAsset != mesh.MeshAsset || found->second.MaterialAsset != mesh.MaterialAsset || found->second.Materials != mesh.Materials || found->second.Handle==RenderAssets::InvalidHandle)) {
+            (found->second.MeshAsset != mesh.MeshAsset || found->second.MaterialAsset != mesh.MaterialAsset || found->second.Materials != mesh.Materials ||
+             found->second.ModelOwner != modelOwner || found->second.ModelNodeIndex != mesh.ModelNodeIndex || found->second.CachePath != cachePath)) {
             Destroy(id); found = m_resources.end();
         }
         if (found == m_resources.end()) {
-            const auto resource = assets.CreateMesh(mesh);
-            found = m_resources.emplace(id, Resource{resource, mesh.MeshAsset, mesh.MaterialAsset, mesh.Materials}).first;
+            // Failed loads remain recorded until an asset/component changes,
+            // rather than repeatedly reparsing a bad model every editor tick.
+            const auto resource = assets.CreateMesh(mesh,modelOwner);
+            found = m_resources.emplace(id, Resource{resource, mesh.MeshAsset, mesh.MaterialAsset, mesh.Materials,modelOwner,mesh.ModelNodeIndex,cachePath}).first;
         }
         assets.UpdateMesh(found->second.Handle, entity.GetWorldMatrix(), mesh);
         assets.SetEditorOwner(found->second.Handle,id);

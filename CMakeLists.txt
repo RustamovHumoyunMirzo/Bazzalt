@@ -312,6 +312,11 @@ if(BUILD_TESTING)
     target_include_directories(BazzaltRenderingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     bazzalt_enable_test_assertions(BazzaltRenderingTests)
     add_test(NAME BazzaltRenderingTests COMMAND BazzaltRenderingTests)
+    add_executable(BazzaltModelRenderingTests tests/ModelRenderingTests.cpp)
+    target_link_libraries(BazzaltModelRenderingTests PRIVATE Bazzalt Filament::Filament)
+    target_include_directories(BazzaltModelRenderingTests PRIVATE src)
+    bazzalt_enable_test_assertions(BazzaltModelRenderingTests)
+    add_test(NAME BazzaltModelRenderingTests COMMAND BazzaltModelRenderingTests)
 
     add_executable(BazzaltAssetPipelineTests
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/AssetPipelineTests.cpp"

@@ -6,6 +6,10 @@
 #include <fstream>
 #include <limits>
 #include <string>
+#include <string_view>
+#include <cstring>
+#include <ryml.hpp>
+#include <ryml_std.hpp>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -64,6 +68,66 @@ std::string LowerExtension(const std::filesystem::path& path) {
     return result;
 }
 
+std::string PathUtf8(const std::filesystem::path& path) {
+    const auto bytes = path.u8string();
+    return {reinterpret_cast<const char*>(bytes.data()), bytes.size()};
+}
+
+std::vector<std::uint8_t> ReadGltfResource(const std::filesystem::path& source, std::string_view uri) {
+    const auto relative=std::filesystem::u8path(uri).lexically_normal();
+    if (relative.empty() || relative.is_absolute() || relative.has_root_name() ||
+        *relative.begin()==".." || uri.find(':')!=std::string_view::npos) return {};
+    const auto base=std::filesystem::weakly_canonical(source.parent_path());
+    const auto path=std::filesystem::weakly_canonical(base/relative);
+    const auto inside=path.lexically_relative(base);
+    if (inside.empty() || inside.is_absolute() || *inside.begin()=="..") return {};
+    return ReadBytes(path);
+}
+
+// Desktop cgltf ignores ResourceLoader's URI cache for geometry buffers and
+// uses narrow fopen. Embed external buffers in memory, leaving cached files
+// untouched. Images are supplied separately through addResourceData.
+bool EmbedGltfBuffers(std::vector<std::uint8_t>& bytes, const std::filesystem::path& source) {
+    const bool binary=LowerExtension(source)==".glb";
+    auto word=[&](std::size_t offset) { std::uint32_t value=0;std::memcpy(&value,bytes.data()+offset,4);return value; };
+    std::size_t start=0,length=bytes.size(),tail=bytes.size();
+    if (binary) {
+        if(bytes.size()<20 || word(0)!=0x46546c67 || word(4)!=2 || word(12)>bytes.size()-20 || word(16)!=0x4e4f534a) return false;
+        start=20;length=word(12);tail=start+length;
+    }
+    auto tree=ryml::parse_in_arena(ryml::csubstr(reinterpret_cast<const char*>(bytes.data()+start),length));
+    auto root=tree.rootref();
+    if(!root.has_child("buffers"))return true;
+    bool changed=false;
+    constexpr char alphabet[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    for(auto buffer:root["buffers"].children()) {
+        if(!buffer.has_child("uri"))continue;
+        auto field=buffer["uri"];auto value=field.val();std::string uri(value.str,value.len);
+        if(std::string_view(uri).starts_with("data:"))continue;
+        auto data=ReadGltfResource(source,uri);if(data.empty())return false;
+        std::string encoded="data:application/octet-stream;base64,";
+        encoded.reserve(encoded.size()+((data.size()+2)/3)*4);
+        for(std::size_t i=0;i<data.size();i+=3) {
+            const std::uint32_t packed=(std::uint32_t(data[i])<<16)|
+                (i+1<data.size()?std::uint32_t(data[i+1])<<8:0)|(i+2<data.size()?data[i+2]:0);
+            encoded+=alphabet[(packed>>18)&63];encoded+=alphabet[(packed>>12)&63];
+            encoded+=i+1<data.size()?alphabet[(packed>>6)&63]:'=';
+            encoded+=i+2<data.size()?alphabet[packed&63]:'=';
+        }
+        field.set_val(tree.copy_to_arena(ryml::to_csubstr(encoded)));changed=true;
+    }
+    if(!changed)return true;
+    auto json=ryml::emitrs_json<std::string>(tree);
+    if(!binary){bytes.assign(json.begin(),json.end());return true;}
+    while(json.size()%4)json+=' ';
+    if(json.size()>std::numeric_limits<std::uint32_t>::max()-20-(bytes.size()-tail))return false;
+    std::vector<std::uint8_t> packed(bytes.begin(),bytes.begin()+20);
+    packed.insert(packed.end(),json.begin(),json.end());packed.insert(packed.end(),bytes.begin()+tail,bytes.end());
+    auto write=[&](std::size_t offset,std::uint32_t value){std::memcpy(packed.data()+offset,&value,4);};
+    write(8,static_cast<std::uint32_t>(packed.size()));write(12,static_cast<std::uint32_t>(json.size()));
+    bytes=std::move(packed);return true;
+}
+
 filament::math::mat4f ToFilamentMatrix(const Mat4& value) {
     for (const float element : value.Values)
         if (!std::isfinite(element)) return filament::math::mat4f{};
@@ -84,6 +148,7 @@ struct RenderAssets::Impl {
         UUID EditorOwner{};
         std::vector<UUID> Materials;
         filament::gltfio::FilamentAsset* Gltf = nullptr;
+        std::shared_ptr<filament::gltfio::FilamentAsset> GltfOwner;
         utils::Entity SelectedGltfEntity{};
         filamesh::MeshReader::Mesh Filamesh{};
         utils::Entity PrimitiveEntity{};
@@ -104,6 +169,12 @@ struct RenderAssets::Impl {
     filament::gltfio::TextureProvider* GltfTextures = nullptr;
     filament::gltfio::TextureProvider* StandaloneTextures = nullptr;
     filament::gltfio::AssetLoader* GltfLoader = nullptr;
+    struct CachedModel {
+        UUID Asset;
+        std::filesystem::path CachePath;
+        std::weak_ptr<filament::gltfio::FilamentAsset> Resource;
+    };
+    std::unordered_map<UUID, CachedModel> Models;
     Handle NextHandle = 1;
     std::unordered_map<Handle, Instance> Instances;
     std::vector<utils::Entity> EditorSuspended;
@@ -267,6 +338,10 @@ bool RenderAssets::PreparePostProcessEffect(const CustomPostProcessEffect& effec
 }
 
 RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component) {
+    return CreateMesh(component, {});
+}
+
+RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component, UUID modelInstance) {
     if (!m_impl || !component.MeshAsset) return InvalidHandle;
     const auto asset = AssetManager::GetAsset(component.MeshAsset);
     if (!asset || asset->State != AssetState::Ready) return InvalidHandle;
@@ -276,22 +351,61 @@ RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component) {
     const std::string extension = LowerExtension(asset->SourcePath);
     if (extension == ".gltf" || extension == ".glb") {
         if (!m_impl->GltfLoader || !m_impl->GltfTextures) return InvalidHandle;
-        const auto bytes = ReadBytes(asset->CachePath);
-        if (bytes.empty() || bytes.size() > std::numeric_limits<std::uint32_t>::max()) return InvalidHandle;
         instance.Type = Impl::Kind::Gltf;
-        instance.Gltf = m_impl->GltfLoader->createAsset(bytes.data(), static_cast<std::uint32_t>(bytes.size()));
-        if (!instance.Gltf) return InvalidHandle;
-        const std::string cachedSource = asset->CachePath.string();
-        filament::gltfio::ResourceLoader resources({&m_impl->Engine, cachedSource.c_str(), true});
-        resources.addTextureProvider("image/png", m_impl->GltfTextures);
-        resources.addTextureProvider("image/jpeg", m_impl->GltfTextures);
-        if (!resources.loadResources(instance.Gltf)) {
-            m_impl->GltfLoader->destroyAsset(instance.Gltf); return InvalidHandle;
+        bool shared = modelInstance && component.ModelNodeIndex != Mesh::EntireAsset;
+        if (shared) {
+            auto found = m_impl->Models.find(modelInstance);
+            if (found != m_impl->Models.end() && found->second.Asset == component.MeshAsset &&
+                found->second.CachePath == asset->CachePath)
+                instance.GltfOwner = found->second.Resource.lock();
         }
-        instance.Gltf->releaseSourceData();
+        if (instance.GltfOwner && component.ModelNodeIndex < instance.GltfOwner->getEntityCount()) {
+            const auto entity=instance.GltfOwner->getEntities()[component.ModelNodeIndex];
+            for (const auto& [_, existing] : m_impl->Instances) {
+                if (existing.GltfOwner==instance.GltfOwner && existing.SelectedGltfEntity==entity) {
+                    // A duplicated child is an independent object, not a second
+                    // controller for the same native transform/material slots.
+                    instance.GltfOwner.reset();shared=false;break;
+                }
+            }
+        }
+        if (!instance.GltfOwner) {
+            // Convert before allocation, and own every created asset immediately:
+            // exceptions, invalid node indices and failed resource loads cannot
+            // leave material instances alive until engine destruction.
+            const std::string cachedSource = PathUtf8(asset->CachePath);
+            auto bytes = ReadBytes(asset->CachePath);
+            if (bytes.empty() || !EmbedGltfBuffers(bytes,asset->CachePath)) return InvalidHandle;
+            if (bytes.empty() || bytes.size() > std::numeric_limits<std::uint32_t>::max()) return InvalidHandle;
+            auto* loaded = m_impl->GltfLoader->createAsset(bytes.data(), static_cast<std::uint32_t>(bytes.size()));
+            if (!loaded) return InvalidHandle;
+            instance.GltfOwner = {loaded, [impl=m_impl.get()](auto* value) {
+                impl->Scene.removeEntities(value->getEntities(), value->getEntityCount());
+                impl->GltfLoader->destroyAsset(value);
+            }};
+            filament::gltfio::ResourceLoader resources({&m_impl->Engine, cachedSource.c_str(), true});
+            resources.addTextureProvider("image/png", m_impl->GltfTextures);
+            resources.addTextureProvider("image/jpeg", m_impl->GltfTextures);
+            // Read external files through std::filesystem's native Unicode path
+            // support instead of relying on a third-party narrow fopen.
+            for (std::size_t index=0; index<loaded->getResourceUriCount(); ++index) {
+                const auto* uri=loaded->getResourceUris()[index];
+                if (!uri || std::string_view(uri).starts_with("data:")) continue;
+                auto data=std::make_unique<std::vector<std::uint8_t>>(ReadGltfResource(asset->CachePath,uri));
+                if (data->empty()) return InvalidHandle;
+                auto* storage=data.release();
+                resources.addResourceData(uri, {storage->data(), storage->size(), [](void*,std::size_t,void* user) {
+                    delete static_cast<std::vector<std::uint8_t>*>(user);
+                }, storage});
+            }
+            if (!resources.loadResources(loaded)) return InvalidHandle;
+            loaded->releaseSourceData();
+            if (shared) m_impl->Models.insert_or_assign(modelInstance, Impl::CachedModel{component.MeshAsset,asset->CachePath,instance.GltfOwner});
+        }
+        instance.Gltf = instance.GltfOwner.get();
         if (component.ModelNodeIndex != Mesh::EntireAsset) {
             if (component.ModelNodeIndex >= instance.Gltf->getEntityCount()) {
-                m_impl->GltfLoader->destroyAsset(instance.Gltf); return InvalidHandle;
+                return InvalidHandle;
             }
             instance.SelectedGltfEntity = instance.Gltf->getEntities()[component.ModelNodeIndex];
             auto& transforms = m_impl->Engine.getTransformManager();
@@ -313,7 +427,7 @@ RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component) {
         auto* fallback=m_impl->PrimitiveMaterial->createInstance();fallback->setParameter("baseColor",filament::math::float4{1,1,1,1});instance.MaterialInstances.push_back(fallback);
         registry.registerMaterialInstance(utils::CString("DefaultMaterial"),fallback);
         instance.Filamesh = filamesh::MeshReader::loadMeshFromFile(&m_impl->Engine,
-            utils::Path(asset->CachePath.string()), registry);
+            utils::Path(PathUtf8(asset->CachePath)), registry);
         if (!instance.Filamesh.renderable) {
             for (auto* material : instance.MaterialInstances) m_impl->Engine.destroy(material);
             return InvalidHandle;
@@ -373,7 +487,7 @@ void RenderAssets::DestroyMesh(Handle handle) {
             if (instance.SelectedGltfEntity) m_impl->Scene.remove(instance.SelectedGltfEntity);
             else m_impl->Scene.removeEntities(instance.Gltf->getEntities(), instance.Gltf->getEntityCount());
         }
-        m_impl->GltfLoader->destroyAsset(instance.Gltf);
+        instance.GltfOwner.reset();
     } else if(instance.Type == Impl::Kind::Filamesh) {
         if (instance.AddedToScene) m_impl->Scene.remove(instance.Filamesh.renderable);
         m_impl->Engine.destroy(instance.Filamesh.renderable);
@@ -403,6 +517,11 @@ void RenderAssets::UpdatePrimitive(Handle handle,const Mat4& transform,const Pri
 void RenderAssets::Update() {
     if (m_impl && m_impl->GltfTextures) m_impl->GltfTextures->updateQueue();
     if (m_impl && m_impl->StandaloneTextures) m_impl->StandaloneTextures->updateQueue();
+    if (m_impl) {
+        for (auto it=m_impl->Models.begin(); it!=m_impl->Models.end();) {
+            if (it->second.Resource.expired()) it=m_impl->Models.erase(it); else ++it;
+        }
+    }
 }
 void RenderAssets::SetEditorOwner(Handle handle,UUID owner){if(m_impl)if(auto it=m_impl->Instances.find(handle);it!=m_impl->Instances.end())it->second.EditorOwner=owner;}
 void RenderAssets::BeginEditorView(const std::unordered_set<UUID>& hidden){
@@ -422,6 +541,7 @@ bool RenderAssets::SetDebugMode(const std::string& mode){if(!m_impl||mode!="lit"
 void RenderAssets::Shutdown() {
     if (!m_impl) return;
     while (!m_impl->Instances.empty()) DestroyMesh(m_impl->Instances.begin()->first);
+    m_impl->Models.clear();
     for (const auto& [id, texture] : m_impl->Textures) m_impl->Engine.destroy(texture);
     for (const auto& [id, material] : m_impl->Materials) m_impl->Engine.destroy(material);
     for(auto* material:m_impl->RetiredMaterials)m_impl->Engine.destroy(material);

@@ -59,6 +59,7 @@ class RuntimeService(QObject):
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self.EditorEntityState={};self.EditorParents={}
+        self._tick_error = ""
         module = _LoadNativeModule()
         self._host = module.EditorHost() if module is not None else None
 
@@ -66,6 +67,7 @@ class RuntimeService(QObject):
         return self._host is not None
 
     def LastError(self) -> str:
+        if self._tick_error: return self._tick_error
         if self._host is not None: return self._host.last_error()
         return f"Native editor runtime could not be loaded: {_NATIVE_LOAD_ERROR or 'module not found'}"
 
@@ -334,8 +336,17 @@ class RuntimeService(QObject):
     def Step(self) -> None:
         if self._host is not None: self._host.step()
 
-    def Tick(self) -> None:
-        if self._host is not None: self._host.tick()
+    def Tick(self) -> bool:
+        if self._tick_error: return False
+        try:
+            if self._host is not None: self._host.tick()
+        except Exception as error:
+            # Circuit-break a faulty native frame. Keep save/close and the Qt UI
+            # responsive instead of throwing and retrying at timer frequency.
+            self._tick_error = str(error) or type(error).__name__
+            self.ErrorOccurred.emit(self._tick_error)
+            return False
+        return True
 
     def Stop(self) -> None:
         if self._host is not None: self._host.stop(); self.SceneChanged.emit()

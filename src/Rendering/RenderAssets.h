@@ -27,6 +27,7 @@ public:
     RenderAssets& operator=(const RenderAssets&) = delete;
 
     [[nodiscard]] Handle CreateMesh(const Mesh& component);
+    [[nodiscard]] Handle CreateMesh(const Mesh& component, UUID modelInstance);
     void UpdateMesh(Handle handle, const Mat4& transform, const Mesh& component);
     void DestroyMesh(Handle handle);
     [[nodiscard]] Handle CreatePrimitive(const PrimitiveObject& component);

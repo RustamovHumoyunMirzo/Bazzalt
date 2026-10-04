@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <filesystem>
 
 #include <utils/Entity.h>
 
@@ -59,6 +60,9 @@ private:
         UUID MeshAsset{};
         UUID MaterialAsset{};
         std::vector<UUID> Materials;
+        UUID ModelOwner{};
+        std::uint32_t ModelNodeIndex = Mesh::EntireAsset;
+        std::filesystem::path CachePath;
     };
     void Destroy(UUID id);
     RenderBackend& m_backend;

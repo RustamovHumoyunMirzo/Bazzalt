@@ -462,7 +462,8 @@ void RenderBackend::SetEnvironment(const SceneEnvironment& value) {
                 return ktxreader::Ktx1Reader::createTexture(m_engine,bundle.release(),false);
             };
             filament::math::float3 sh[9]{};
-            auto ibl=folder/(stem.string()+"_ibl.ktx"),sky=folder/(stem.string()+"_skybox.ktx");
+            auto iblName=stem,skyName=stem;iblName+="_ibl.ktx";skyName+="_skybox.ktx";
+            auto ibl=folder/iblName,sky=folder/skyName;
             if(path.extension()==".ktx")ibl=sky=path;
             m_environment->Reflections=load(ibl,sh);m_environment->SkyTexture=load(sky,nullptr);
             if(m_environment->Reflections)m_environment->Light=filament::IndirectLight::Builder().reflections(m_environment->Reflections).irradiance(3,sh).intensity(value.Intensity).build(*m_engine);
