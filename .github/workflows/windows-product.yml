@@ -64,7 +64,7 @@ jobs:
         run: |
           python -m unittest discover -s Launcher/tests -v
           if ($LASTEXITCODE -ne 0) { throw 'Hub/download tests failed' }
-          python -m unittest Editor.tests.test_scripting Editor.tests.test_compiled_resources Editor.tests.test_file_association_preferences Editor.tests.test_restart_settings Editor.tests.test_runtime_tick_failure -v
+          python -m unittest Editor.tests.test_scripting Editor.tests.test_compiled_resources Editor.tests.test_file_association_preferences Editor.tests.test_restart_settings Editor.tests.test_runtime_tick_failure Editor.tests.test_viewport_gesture_priority Editor.tests.test_diagnostics -v
           if ($LASTEXITCODE -ne 0) { throw 'Resource/compiler/preferences tests failed' }
       - name: Install Inno Setup
         if: inputs.product == 'hub'

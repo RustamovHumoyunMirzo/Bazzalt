@@ -3,7 +3,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import unittest
 from unittest.mock import Mock
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QApplication
 from Editor.gui.panels.viewport import NativeRenderSurface
@@ -14,6 +14,19 @@ class ViewportGesturePriorityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.App = QApplication.instance() or QApplication([])
+
+    def test_model_marquee_uses_mesh_bounds_not_distant_node_origin(self):
+        runtime=Mock();runtime.IsEditorSelectable.return_value=True
+        runtime.Entities.return_value=[
+            {"uuid":"mesh","components":["Mesh","Model Node"],"world_position":(1000,1000,0),"mesh_bounds":((-1,-1,0),(1,1,0))},
+            {"uuid":"group","components":["Model Node"],"world_position":(0,0,0)},
+            {"uuid":"model","components":["Model Instance"],"world_position":(0,0,0)},
+        ]
+        surface=NativeRenderSurface(runtime,True);surface.resize(640,480)
+        surface._Project=lambda p:(320+p[0]*20,240-p[1]*20,10)
+        self.assertEqual(surface._EntitiesInSelectionBox(QPoint(305,225),QPoint(335,255)),["mesh"])
+        runtime.EntityDetails.assert_not_called() # Avoid hundreds of native calls during a drag.
+        surface.close()
 
     def test_handles_win_over_unselected_geometry_for_all_transform_modes(self):
         for mode in (GizmoMode.Translate, GizmoMode.Scale, GizmoMode.Rotate):

@@ -344,7 +344,7 @@ void MeshSystem::OnUpdate(Scene& scene, float) {
     for (const auto handle : view) {
         Entity entity = scene.GetEntity(static_cast<Entity::Id>(handle));
         const UUID id = entity.GetUUID();
-        const auto& mesh = view.get<Mesh>(handle);
+        auto& mesh = view.get<Mesh>(handle);
         if (!mesh.IsEnabled()) continue;
         alive.insert(id);
         UUID modelOwner{};
@@ -369,6 +369,8 @@ void MeshSystem::OnUpdate(Scene& scene, float) {
             // rather than repeatedly reparsing a bad model every editor tick.
             const auto resource = assets.CreateMesh(mesh,modelOwner);
             found = m_resources.emplace(id, Resource{resource, mesh.MeshAsset, mesh.MaterialAsset, mesh.Materials,modelOwner,mesh.ModelNodeIndex,cachePath}).first;
+            const auto slots=assets.GetMaterialSlotCount(resource);
+            if(slots&&mesh.Materials.empty()){mesh.Materials.resize(slots);found->second.Materials=mesh.Materials;}
         }
         assets.UpdateMesh(found->second.Handle, entity.GetWorldMatrix(), mesh);
         assets.SetEditorOwner(found->second.Handle,id);

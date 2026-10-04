@@ -21,6 +21,7 @@ struct ModelAssetNode {
     Quaternion Rotation{};
     Vec3 Scale{1.0f};
     std::vector<std::uint32_t> Children;
+    std::vector<std::string> MaterialNames;
 
     [[nodiscard]] bool HasMesh() const { return MeshIndex != NoMesh; }
 };

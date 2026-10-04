@@ -166,6 +166,17 @@ std::optional<ModelAsset> AssetManager::LoadModel(UUID id) {
                                                   : "Node " + std::to_string(index);
             if (source.has_child("mesh") && !ReadIndex(source["mesh"], node.MeshIndex))
                 return std::nullopt;
+            if(node.HasMesh()) {
+                if(!root.has_child("meshes")||node.MeshIndex>=root["meshes"].num_children())return std::nullopt;
+                const auto mesh=root["meshes"][node.MeshIndex];
+                if(mesh.has_child("primitives"))for(const auto primitive:mesh["primitives"].children()){
+                    std::string name="Default Material";std::uint32_t material=0;
+                    if(primitive.has_child("material")&&ReadIndex(primitive["material"],material)&&root.has_child("materials")&&material<root["materials"].num_children()){
+                        const auto value=root["materials"][material];name=value.has_child("name")?NodeText(value["name"]):"Material "+std::to_string(material);
+                    }
+                    node.MaterialNames.push_back(std::move(name));
+                }
+            }
             if (source.has_child("children")) for (const auto child : source["children"].children()) {
                 std::uint32_t childIndex = 0;
                 if (!ReadIndex(child, childIndex) || childIndex >= model.Nodes.size()) return std::nullopt;

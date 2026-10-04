@@ -14,6 +14,7 @@
 namespace filament { class Engine; class Scene; }
 
 namespace Bazzalt::Runtime {
+struct ModelGeometry;
 
 // Private UUID-to-GPU bridge. Renderer ownership never crosses the public API.
 class RenderAssets final {
@@ -36,6 +37,9 @@ public:
     [[nodiscard]] bool PreparePostProcessEffect(const CustomPostProcessEffect& effect);
     void Update();
     void SetEditorOwner(Handle handle,UUID owner);
+    struct EditorMeshGeometry { UUID Owner;Mat4 World;std::shared_ptr<const ModelGeometry> Geometry; };
+    [[nodiscard]] std::vector<EditorMeshGeometry> GetEditorMeshes() const;
+    [[nodiscard]] std::size_t GetMaterialSlotCount(Handle handle) const;
     void BeginEditorView(const std::unordered_set<UUID>& hidden);
     void EndEditorView();
     bool SetDebugMode(const std::string& mode);

@@ -8,6 +8,7 @@
 #include "Rendering/RenderSystems.h"
 #include "Rendering/RenderAssets.h"
 #include "Rendering/PrimitiveGeometry.h"
+#include "Rendering/ModelGeometry.h"
 #include "Rendering/LightGuides.h"
 #include <map>
 #include <tuple>
@@ -168,6 +169,25 @@ for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id
         for(const auto& [_,edge]:edges)if(edge.Count==1||(edge.Front&&edge.Back)){line(edge.A,edge.B,outlineColor);guides.back().Outline=true;}
     }
     }
+    // Imported models participate in the same selection pipeline as primitives.
+    // Selecting a model root outlines its renderable descendants as well.
+    for(const auto& mesh:m_renderBackend->GetAssets().GetEditorMeshes()) {
+        if(m_editorHidden.contains(mesh.Owner)||m_editorUnselectable.contains(mesh.Owner))continue;
+        bool selected=false,hovered=false;
+        for(auto entity=m_scene->GetEntity(mesh.Owner);entity;entity=entity.GetParent()){
+            auto id=entity.GetUUID();selected|=std::find(m_selectedObjects.begin(),m_selectedObjects.end(),id)!=m_selectedObjects.end();hovered|=id==m_hoveredObject;
+            if(id.IsRoot())break;
+        }
+        if(!selected&&!hovered)continue;
+        const Vec4 color=selected?Vec4{.12f,.38f,1,1}:Vec4{.45f,.8f,1,1};
+        Mat4 inverse;if(!mesh.World.TryInverse(inverse))continue;
+        const Vec3 eye=inverse.TransformPoint(m_hoverEye);
+        std::vector<bool> front;front.reserve(mesh.Geometry->Triangles.size());
+        for(const auto& triangle:mesh.Geometry->Triangles)front.push_back(Vec3::Dot(Vec3::Cross(triangle.B-triangle.A,triangle.C-triangle.A),eye-triangle.A)>=0);
+        for(const auto& edge:mesh.Geometry->Edges){bool a=false,b=false;for(auto face:edge.Faces){a|=front[face];b|=!front[face];}
+            if(edge.Faces.size()==1||(a&&b)){line(mesh.World.TransformPoint(edge.A),mesh.World.TransformPoint(edge.B),color);guides.back().Outline=true;}
+        }
+    }
     m_renderBackend->SetEditorGuides(guides);
 }
 
@@ -176,9 +196,30 @@ UUID Engine::PickEditorPrimitive(Vec3 origin,Vec3 direction){
     auto view=m_scene->GetRegistry().view<PrimitiveObject>();
     for(auto handle:view){const auto& primitive=view.get<PrimitiveObject>(handle);if(!primitive.IsEnabled()||!primitive.Visible)continue;Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));if(m_editorUnselectable.contains(entity.GetUUID())||m_editorHidden.contains(entity.GetUUID()))continue;Mat4 inverse;if(!entity.GetWorldMatrix().TryInverse(inverse))continue;Vec3 o=inverse.TransformPoint(origin),d=inverse.TransformDirection(direction);const auto geometry=BuildPrimitiveGeometry(primitive);
         for(std::size_t i=0;i+2<geometry.Indices.size();i+=3){Vec3 v[3];for(int j=0;j<3;++j){const auto& p=geometry.Vertices[geometry.Indices[i+j]];v[j]={p.Position[0],p.Position[1],p.Position[2]};}Vec3 e1=v[1]-v[0],e2=v[2]-v[0],p=Vec3::Cross(d,e2);float determinant=Vec3::Dot(e1,p);if(std::abs(determinant)<1e-8f)continue;float reciprocal=1/determinant;Vec3 offset=o-v[0];float u=Vec3::Dot(offset,p)*reciprocal;if(u<0||u>1)continue;Vec3 q=Vec3::Cross(offset,e1);float vcoord=Vec3::Dot(d,q)*reciprocal;if(vcoord<0||u+vcoord>1)continue;float t=Vec3::Dot(e2,q)*reciprocal;if(t>=0&&t<nearest){nearest=t;result=entity.GetUUID();}}
-    }return result;
+    }
+    if(m_isInitialized)for(const auto& mesh:m_renderBackend->GetAssets().GetEditorMeshes()){
+        if(m_editorHidden.contains(mesh.Owner)||m_editorUnselectable.contains(mesh.Owner))continue;
+        Mat4 inverse;if(!mesh.World.TryInverse(inverse))continue;
+        if(mesh.Geometry->Raycast(inverse.TransformPoint(origin),inverse.TransformDirection(direction),nearest))result=mesh.Owner;
+    }
+    return result;
 }
 void Engine::SetEditorEntityState(std::vector<UUID> hidden,std::vector<UUID> unselectable){m_editorHidden={hidden.begin(),hidden.end()};m_editorUnselectable={unselectable.begin(),unselectable.end()};m_renderBackend->SetEditorHidden(m_editorHidden);}
+
+std::unordered_map<UUID,std::pair<Vec3,Vec3>> Engine::GetEditorMeshBounds() const {
+    std::unordered_map<UUID,std::pair<Vec3,Vec3>> result;
+    // Hierarchy / theme refreshes run before the first Qt viewport creates the
+    // renderer. There are no loaded GPU meshes yet, and GetAssets is invalid.
+    if(!m_isInitialized)return result;
+    for(const auto& mesh:m_renderBackend->GetAssets().GetEditorMeshes()){
+        if(m_editorHidden.contains(mesh.Owner)||mesh.Geometry->Nodes.empty())continue;
+        const auto& local=mesh.Geometry->Nodes.front();Vec3 minimum{std::numeric_limits<float>::max()},maximum{-std::numeric_limits<float>::max()};
+        for(int corner=0;corner<8;++corner){auto p=mesh.World.TransformPoint({corner&1?local.Max.X:local.Min.X,corner&2?local.Max.Y:local.Min.Y,corner&4?local.Max.Z:local.Min.Z});minimum={std::min(minimum.X,p.X),std::min(minimum.Y,p.Y),std::min(minimum.Z,p.Z)};maximum={std::max(maximum.X,p.X),std::max(maximum.Y,p.Y),std::max(maximum.Z,p.Z)};}
+        for(auto entity=m_scene->GetEntity(mesh.Owner);entity&&!entity.GetUUID().IsRoot();entity=entity.GetParent()){
+            auto [it,added]=result.emplace(entity.GetUUID(),std::pair{minimum,maximum});if(!added){auto& [a,b]=it->second;a={std::min(a.X,minimum.X),std::min(a.Y,minimum.Y),std::min(a.Z,minimum.Z)};b={std::max(b.X,maximum.X),std::max(b.Y,maximum.Y),std::max(b.Z,maximum.Z)};}
+        }
+    }return result;
+}
 
 bool Engine::CreateEditorViewport(std::uint64_t id, std::uintptr_t nativeWindow, bool scene,
                                   std::uint32_t width, std::uint32_t height, float pixelRatio) {

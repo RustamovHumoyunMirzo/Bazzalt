@@ -54,7 +54,11 @@ int main() {
     WriteText(assets / "human.gltf",
         R"({"asset":{"version":"2.0"},"nodes":[{"name":"Arm","children":[1]},)"
         R"({"name":"Hand","mesh":0,"translation":[0,2,0]},{"name":"Head"}],)"
-        R"("scenes":[{"nodes":[0,2]}],"scene":0})");
+        R"("scenes":[{"nodes":[0,2]}],"scene":0,"buffers":[{"uri":"human.bin","byteLength":36}],)"
+        R"("bufferViews":[{"buffer":0,"byteLength":36}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","min":[0,0,0],"max":[1,1,0]}],)"
+        R"("meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}]})");
+    const std::array<float,9> triangle{0,0,0,1,0,0,0,1,0};
+    WriteText(assets/"human.bin",std::string_view(reinterpret_cast<const char*>(triangle.data()),sizeof(triangle)));
     WriteText(assets / "payload.bin", "x");
     WritePng(assets / "white.png");
     WriteText(assets / "unlit.mat", R"(material {
@@ -111,6 +115,7 @@ fragment {
     assert(modelAsset && modelAsset->Nodes.size() == 3 && modelAsset->Roots.size() == 2);
     assert(modelAsset->Nodes[0].Children == std::vector<std::uint32_t>{1});
     assert(modelAsset->Nodes[1].Name == "Hand" && modelAsset->Nodes[1].HasMesh());
+    assert(modelAsset->Nodes[1].MaterialNames.size()==1);
     assert(modelAsset->Nodes[1].StablePath == "Arm/Hand");
     const auto instance = engine.GetScene().InstantiateModel(human->Id);
     assert(instance.GetChildren().size() == 2);

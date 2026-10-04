@@ -106,6 +106,8 @@ def main(arguments:list[str]|None=None)->int:
     app=QApplication(sys.argv if arguments is None else [sys.argv[0],*arguments]);app.setStyle("Fusion");app.setApplicationName("BAZZALT Editor");app.setOrganizationName("BAZZALT");app.setQuitOnLastWindowClosed(False)
     if options.check_runtime:
         runtime=RuntimeService();return 0 if runtime.IsAvailable() else 3
+    from Editor.diagnostics import StartDiagnostics
+    StartDiagnostics(DataPaths.Logs())
     try:version=Version.Parse(options.editor_version)
     except ValueError as error:QMessageBox.critical(None,"Invalid Editor Version",str(error));return 2
     store=_EditorSettings();settings=store.Load();session=EditorSession(app,options.project.resolve(),version,settings,store.Save)

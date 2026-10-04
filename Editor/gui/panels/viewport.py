@@ -149,10 +149,21 @@ class NativeRenderSurface(QWidget):
         selected=[]
         for entity in self.Runtime.Entities():
             if hasattr(self.Runtime,"IsEditorSelectable") and not self.Runtime.IsEditorSelectable(str(entity.get("uuid",""))):continue
+            entity_id=str(entity.get("uuid","") or "")
+            components=entity.get("components",())
+            if "Mesh" in components:
+                bounds=entity.get("mesh_bounds")
+                if bounds:
+                    minimum,maximum=bounds
+                    points=[self._Project(tuple(maximum[i] if corner&(1<<i) else minimum[i] for i in range(3))) for corner in range(8)]
+                    points=[value for value in points if value is not None]
+                    if points and max(p[0] for p in points)>=left and min(p[0] for p in points)<=right and max(p[1] for p in points)>=top and min(p[1] for p in points)<=bottom:selected.append(entity_id)
+                continue
+            if "Model Node" in components or "Model Instance" in components:continue
             projected=self._Project(entity.get("world_position",entity.get("position",(0,0,0))))
             if not projected:continue
             radius=0.0;entity_id=str(entity.get("uuid","") or "")
-            details=self.Runtime.EntityDetails(entity_id) if entity_id else {};primitive=details.get("component_data",{}).get("Primitive Object")
+            details=entity;primitive=details.get("component_data",{}).get("Primitive Object")
             if primitive:
                 scale=details.get("scale",(1,1,1));shape=int(primitive.get("Shape",0))
                 if shape==0:size=primitive.get("Size",(1,1,1));world_radius=.5*sum((float(size[i])*abs(float(scale[i])))**2 for i in range(3))**.5

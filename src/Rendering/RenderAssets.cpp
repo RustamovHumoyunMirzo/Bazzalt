@@ -42,6 +42,7 @@ extern "C" void stbi_image_free(void*);
 #include "Runtime/MaterialLibrary.h"
 #include "Rendering/BuiltinPostProcess.h"
 #include "Rendering/PrimitiveGeometry.h"
+#include "Rendering/ModelGeometry.h"
 #include "editor_unlit_filamat.h"
 #include "editor_lighting_only_filamat.h"
 #include "editor_overdraw_filamat.h"
@@ -97,10 +98,19 @@ bool EmbedGltfBuffers(std::vector<std::uint8_t>& bytes, const std::filesystem::p
     }
     auto tree=ryml::parse_in_arena(ryml::csubstr(reinterpret_cast<const char*>(bytes.data()+start),length));
     auto root=tree.rootref();
-    if(!root.has_child("buffers"))return true;
     bool changed=false;
+    // Filament partitions its entity list into renderable / non-renderable
+    // nodes. Never use that list's offset as a glTF source node index.
+    if(root.has_child("nodes")) {
+        std::size_t index=0;
+        for(auto node:root["nodes"].children()) {
+            const auto name="__bazzalt_node_"+std::to_string(index++);
+            node["name"] << name;
+        }
+        changed=true;
+    }
     constexpr char alphabet[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    for(auto buffer:root["buffers"].children()) {
+    if(root.has_child("buffers"))for(auto buffer:root["buffers"].children()) {
         if(!buffer.has_child("uri"))continue;
         auto field=buffer["uri"];auto value=field.val();std::string uri(value.str,value.len);
         if(std::string_view(uri).starts_with("data:"))continue;
@@ -126,6 +136,12 @@ bool EmbedGltfBuffers(std::vector<std::uint8_t>& bytes, const std::filesystem::p
     auto write=[&](std::size_t offset,std::uint32_t value){std::memcpy(packed.data()+offset,&value,4);};
     write(8,static_cast<std::uint32_t>(packed.size()));write(12,static_cast<std::uint32_t>(json.size()));
     bytes=std::move(packed);return true;
+}
+
+utils::Entity SourceNode(filament::gltfio::FilamentAsset& asset,std::uint32_t index) {
+    utils::Entity entity{};
+    const auto name="__bazzalt_node_"+std::to_string(index);
+    return asset.getEntitiesByName(name.c_str(),&entity,1)==1?entity:utils::Entity{};
 }
 
 filament::math::mat4f ToFilamentMatrix(const Mat4& value) {
@@ -161,6 +177,8 @@ struct RenderAssets::Impl {
         std::vector<Original> Originals;
         struct Override { utils::Entity Entity;std::size_t Primitive;UUID Asset;filament::MaterialInstance* Base;filament::MaterialInstance* Value=nullptr; };
         std::vector<Override> Overrides;
+        std::shared_ptr<ModelGeometryAsset> Geometry;
+        std::uint32_t SourceIndex=Mesh::EntireAsset;
     };
 
     filament::Engine& Engine;
@@ -175,6 +193,8 @@ struct RenderAssets::Impl {
         std::weak_ptr<filament::gltfio::FilamentAsset> Resource;
     };
     std::unordered_map<UUID, CachedModel> Models;
+    struct CachedGeometry { std::filesystem::path Path;std::weak_ptr<ModelGeometryAsset> Geometry; };
+    std::unordered_map<UUID,CachedGeometry> GeometryCache;
     Handle NextHandle = 1;
     std::unordered_map<Handle, Instance> Instances;
     std::vector<utils::Entity> EditorSuspended;
@@ -352,6 +372,9 @@ RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component, UUID modelI
     if (extension == ".gltf" || extension == ".glb") {
         if (!m_impl->GltfLoader || !m_impl->GltfTextures) return InvalidHandle;
         instance.Type = Impl::Kind::Gltf;
+        instance.SourceIndex=component.ModelNodeIndex;
+        if(auto found=m_impl->GeometryCache.find(component.MeshAsset);found!=m_impl->GeometryCache.end()&&found->second.Path==asset->CachePath)
+            instance.Geometry=found->second.Geometry.lock();
         bool shared = modelInstance && component.ModelNodeIndex != Mesh::EntireAsset;
         if (shared) {
             auto found = m_impl->Models.find(modelInstance);
@@ -359,8 +382,8 @@ RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component, UUID modelI
                 found->second.CachePath == asset->CachePath)
                 instance.GltfOwner = found->second.Resource.lock();
         }
-        if (instance.GltfOwner && component.ModelNodeIndex < instance.GltfOwner->getEntityCount()) {
-            const auto entity=instance.GltfOwner->getEntities()[component.ModelNodeIndex];
+        if (instance.GltfOwner) {
+            const auto entity=SourceNode(*instance.GltfOwner,component.ModelNodeIndex);
             for (const auto& [_, existing] : m_impl->Instances) {
                 if (existing.GltfOwner==instance.GltfOwner && existing.SelectedGltfEntity==entity) {
                     // A duplicated child is an independent object, not a second
@@ -376,6 +399,7 @@ RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component, UUID modelI
             const std::string cachedSource = PathUtf8(asset->CachePath);
             auto bytes = ReadBytes(asset->CachePath);
             if (bytes.empty() || !EmbedGltfBuffers(bytes,asset->CachePath)) return InvalidHandle;
+            if(!instance.Geometry){instance.Geometry=ReadModelGeometry(bytes);m_impl->GeometryCache.insert_or_assign(component.MeshAsset,Impl::CachedGeometry{asset->CachePath,instance.Geometry});}
             if (bytes.empty() || bytes.size() > std::numeric_limits<std::uint32_t>::max()) return InvalidHandle;
             auto* loaded = m_impl->GltfLoader->createAsset(bytes.data(), static_cast<std::uint32_t>(bytes.size()));
             if (!loaded) return InvalidHandle;
@@ -404,10 +428,8 @@ RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component, UUID modelI
         }
         instance.Gltf = instance.GltfOwner.get();
         if (component.ModelNodeIndex != Mesh::EntireAsset) {
-            if (component.ModelNodeIndex >= instance.Gltf->getEntityCount()) {
-                return InvalidHandle;
-            }
-            instance.SelectedGltfEntity = instance.Gltf->getEntities()[component.ModelNodeIndex];
+            instance.SelectedGltfEntity = SourceNode(*instance.Gltf,component.ModelNodeIndex);
+            if (!instance.SelectedGltfEntity || !m_impl->Engine.getRenderableManager().hasComponent(instance.SelectedGltfEntity)) return InvalidHandle;
             auto& transforms = m_impl->Engine.getTransformManager();
             const auto selectedTransform = transforms.getInstance(instance.SelectedGltfEntity);
             if (selectedTransform) transforms.setParent(selectedTransform, {});
@@ -524,6 +546,31 @@ void RenderAssets::Update() {
     }
 }
 void RenderAssets::SetEditorOwner(Handle handle,UUID owner){if(m_impl)if(auto it=m_impl->Instances.find(handle);it!=m_impl->Instances.end())it->second.EditorOwner=owner;}
+std::size_t RenderAssets::GetMaterialSlotCount(Handle handle) const {
+    if(!m_impl)return 0;auto found=m_impl->Instances.find(handle);if(found==m_impl->Instances.end())return 0;
+    const auto& value=found->second;auto& manager=m_impl->Engine.getRenderableManager();std::size_t count=0;
+    const auto inspect=[&](utils::Entity entity){auto renderable=manager.getInstance(entity);if(renderable)count=std::max(count,manager.getPrimitiveCount(renderable));};
+    if(value.Type==Impl::Kind::Gltf){if(value.SelectedGltfEntity)inspect(value.SelectedGltfEntity);else for(std::size_t i=0;i<value.Gltf->getEntityCount();++i)inspect(value.Gltf->getEntities()[i]);}
+    else inspect(value.Type==Impl::Kind::Primitive?value.PrimitiveEntity:value.Filamesh.renderable);
+    return count;
+}
+std::vector<RenderAssets::EditorMeshGeometry> RenderAssets::GetEditorMeshes() const {
+    std::vector<EditorMeshGeometry> result;if(!m_impl)return result;
+    auto& transforms=m_impl->Engine.getTransformManager();
+    for(const auto& [_,value]:m_impl->Instances){
+        if(value.Type!=Impl::Kind::Gltf||!value.AddedToScene||!value.Geometry)continue;
+        const auto append=[&](std::uint32_t index){
+            if(index>=value.Geometry->SourceNodes.size())return;
+            auto geometry=value.Geometry->SourceNodes[index];if(!geometry||geometry->Triangles.empty())return;
+            auto entity=SourceNode(*value.Gltf,index);auto transform=transforms.getInstance(entity);if(!transform)return;
+            const auto& native=transforms.getWorldTransform(transform);Mat4 world;
+            for(int column=0;column<4;++column)for(int row=0;row<4;++row)world(row,column)=native[column][row];
+            result.push_back({value.EditorOwner,world,std::move(geometry)});
+        };
+        if(value.SourceIndex!=Mesh::EntireAsset)append(value.SourceIndex);
+        else for(std::uint32_t index=0;index<value.Geometry->SourceNodes.size();++index)append(index);
+    }return result;
+}
 void RenderAssets::BeginEditorView(const std::unordered_set<UUID>& hidden){
     if(!m_impl)return;EndEditorView();
     for(const auto& [_,value]:m_impl->Instances){
@@ -542,6 +589,7 @@ void RenderAssets::Shutdown() {
     if (!m_impl) return;
     while (!m_impl->Instances.empty()) DestroyMesh(m_impl->Instances.begin()->first);
     m_impl->Models.clear();
+    m_impl->GeometryCache.clear();
     for (const auto& [id, texture] : m_impl->Textures) m_impl->Engine.destroy(texture);
     for (const auto& [id, material] : m_impl->Materials) m_impl->Engine.destroy(material);
     for(auto* material:m_impl->RetiredMaterials)m_impl->Engine.destroy(material);

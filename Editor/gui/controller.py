@@ -715,13 +715,21 @@ class EditorController(QObject):
         self.Window.MenuBar.GizmosAction.setChecked(bool(visible));self._UpdateGizmo()
     def FocusSelected(self)->None:
         points=[]
+        snapshots={value["uuid"]:value for value in self.Runtime.Entities()}
         for entity in self.SelectedEntities or ([self.SelectedEntity] if self.SelectedEntity else []):
+            bounds=snapshots.get(entity,{}).get("mesh_bounds")
+            if bounds:points.extend(bounds);continue
             details=self.Runtime.EntityDetails(entity)
             if details:points.append(details.get("world_position",details.get("position")))
         if points:
             center=tuple(sum(value[i] for value in points)/len(points) for i in range(3));self.Window.Scene.Surface.Frame(center,max(1.,max((sum((value[i]-center[i])**2 for i in range(3)))**.5 for value in points)))
     def FrameAll(self)->None:
-        points=[value.get("world_position",value.get("position")) for value in self.Runtime.Entities() if not self.Runtime.IsEditorHidden(value.get("uuid",""))];points=[value for value in points if value]
+        points=[]
+        for value in self.Runtime.Entities():
+            if self.Runtime.IsEditorHidden(value.get("uuid","")):continue
+            if value.get("mesh_bounds"):points.extend(value["mesh_bounds"])
+            else:points.append(value.get("world_position",value.get("position")))
+        points=[value for value in points if value]
         if not points:return
         center=tuple((min(value[i] for value in points)+max(value[i] for value in points))*.5 for i in range(3));radius=max(1.,max((sum((value[i]-center[i])**2 for i in range(3)))**.5 for value in points));self.Window.Scene.Surface.Frame(center,radius)
     def SetRenderMode(self,mode:str)->None:

@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <map>
+#include <tuple>
+#include <limits>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -65,7 +68,11 @@ struct RenderBackend::ViewportResource {
 
 struct RenderBackend::GizmoResource {
     struct Icon { utils::Entity Entity; filament::MaterialInstance* Instance=nullptr; };
-    struct Guide { utils::Entity Entity; filament::MaterialInstance* Instance=nullptr; };
+    struct Guide {
+        utils::Entity Entity;filament::MaterialInstance* Instance=nullptr;
+        filament::VertexBuffer* Vertices=nullptr;filament::IndexBuffer* Indices=nullptr;
+        std::uint32_t Capacity=0;
+    };
     filament::Material* Material = nullptr;
     filament::Material* GuideMaterial = nullptr;
     std::array<filament::VertexBuffer*, 3> Vertices{};
@@ -169,7 +176,15 @@ bool RenderBackend::Initialize(bool headless) {
     else if(m_backend=="metal")backend=filament::Engine::Backend::METAL;
     else if(m_backend=="webgpu")backend=filament::Engine::Backend::WEBGPU;
     if(headless)backend=filament::Engine::Backend::NOOP;
-    m_engine = filament::Engine::create(backend);
+    // An editor must handle imported models and multiple views, not just the
+    // tiny demonstration scenes that Filament's default arenas are sized for.
+    filament::Engine::Config config;
+    if(!headless){
+        config.perFrameCommandsSizeMB=16;config.perRenderPassArenaSizeMB=24;
+        config.minCommandBufferSizeMB=8;config.commandBufferSizeMB=32;
+        config.driverHandleArenaSizeMB=8;
+    }
+    m_engine = filament::Engine::create(backend,nullptr,nullptr,&config);
     if (m_engine == nullptr) return false;
     m_renderer = m_engine->createRenderer();
     m_scene = m_engine->createScene();
@@ -401,31 +416,53 @@ void RenderBackend::SetEditorIcons(const std::vector<EditorIcon>& icons) {
 
 void RenderBackend::SetEditorGuides(const std::vector<EditorGuide>& guides){
     if(!m_gizmo||!m_engine)return;
-    while(m_gizmo->Guides.size()>guides.size()){auto value=m_gizmo->Guides.back();m_scene->remove(value.Entity);m_engine->destroy(value.Entity);m_engine->getEntityManager().destroy(value.Entity);if(value.Instance)m_engine->destroy(value.Instance);m_gizmo->Guides.pop_back();}
-    // Transparent guides render after the skybox, without polluting scene depth.
-    while(m_gizmo->Guides.size()<guides.size()){GizmoResource::Guide value;value.Instance=m_gizmo->GuideMaterial->createInstance();value.Instance->setDepthWrite(false);value.Instance->setDepthCulling(true);value.Entity=m_engine->getEntityManager().create();m_engine->getTransformManager().create(value.Entity);filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{1,1,1}}).material(0,value.Instance).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,m_gizmo->HelperVertices,m_gizmo->HelperIndices).culling(false).castShadows(false).receiveShadows(false).layerMask(0xff,0x80).priority(6).build(*m_engine,value.Entity);m_scene->addEntity(value.Entity);m_gizmo->Guides.push_back(value);}
-    auto& transforms=m_engine->getTransformManager();
-    for(std::size_t i=0;i<guides.size();++i){
-        const auto& line=guides[i];auto& value=m_gizmo->Guides[i];
-        value.Instance->setParameter("color",filament::math::float4{line.R,line.G,line.B,line.A});
-        // Selection outlines sit above their own surface, avoiding coplanar
-        // depth rejection on thin planes. Other camera/light guides use depth.
-        value.Instance->setDepthCulling(!line.Outline);
-        auto instance=m_engine->getRenderableManager().getInstance(value.Entity);
-        m_engine->getRenderableManager().setLayerMask(instance,0xff,0x80);
+    // Batch strokes by color/depth policy. One renderable per edge exhausts
+    // command/handle arenas when selecting a detailed model.
+    using Key=std::tuple<bool,float,float,float,float>;
+    std::map<Key,std::vector<filament::math::float3>> batches;
+    const ViewportResource* sceneViewport=nullptr;
+    for(const auto& [_,viewport]:m_viewports)if(viewport->Kind==ViewportKind::Scene){sceneViewport=viewport.get();break;}
+    for(const auto& line:guides){
+        const float fields[]={line.AX,line.AY,line.AZ,line.BX,line.BY,line.BZ,line.R,line.G,line.B,line.A};
+        if(!std::all_of(std::begin(fields),std::end(fields),[](float v){return std::isfinite(v);}))continue;
         filament::math::float3 a{line.AX,line.AY,line.AZ},b{line.BX,line.BY,line.BZ},delta=b-a;
-        float lengthValue=length(delta);if(!std::isfinite(a.x)||!std::isfinite(a.y)||!std::isfinite(a.z)||!std::isfinite(b.x)||!std::isfinite(b.y)||!std::isfinite(b.z)||!std::isfinite(lengthValue)||lengthValue<1e-6f){m_scene->remove(value.Entity);continue;}
-        m_scene->addEntity(value.Entity);auto x=normalize(delta);
-        auto helper=std::abs(x.y)<.99f?filament::math::float3{0,1,0}:filament::math::float3{1,0,0};
-        auto z=normalize(cross(x,helper));auto y=normalize(cross(z,x));float thickness=.0125f;
-        for(const auto& [_,viewport]:m_viewports)if(viewport->Kind==ViewportKind::Scene){
-            const float depth=std::max(.05f,length(viewport->Eye-(a+b)*.5f));
-            // Camera-relative stroke width, also for light/camera guides.
-            const float pixels=line.Outline?1.5f:1.0f;
-            thickness=depth*2.0f*std::tan(.5235988f)*pixels*viewport->PixelRatio/std::max(1u,viewport->Height);break;
-        }
-        filament::math::mat4f matrix{filament::math::float4{x*(lengthValue*.5f),0},filament::math::float4{y*thickness,0},filament::math::float4{z*thickness,0},filament::math::float4{(a+b)*.5f,1}};
-        transforms.setTransform(transforms.getInstance(value.Entity),matrix);
+        float lengthValue=length(delta);if(!std::isfinite(lengthValue)||lengthValue<1e-6f)continue;
+        auto x=delta*.5f;auto direction=delta/lengthValue;
+        auto helper=std::abs(direction.y)<.99f?filament::math::float3{0,1,0}:filament::math::float3{1,0,0};
+        float thickness=.0125f;
+        if(sceneViewport){const float depth=std::max(.05f,length(sceneViewport->Eye-(a+b)*.5f));thickness=depth*2.f*std::tan(.5235988f)*(line.Outline?1.5f:1.f)*sceneViewport->PixelRatio/std::max(1u,sceneViewport->Height);}
+        auto z=normalize(cross(direction,helper))*thickness,y=normalize(cross(z,direction))*thickness,center=(a+b)*.5f;
+        auto& vertices=batches[{line.Outline,line.R,line.G,line.B,line.A}];
+        for(int corner=0;corner<8;++corner)vertices.push_back(center+x*(corner&1?1.f:-1.f)+y*(corner&2?1.f:-1.f)+z*(corner&4?1.f:-1.f));
+    }
+    const auto destroy=[&](GizmoResource::Guide& value){m_scene->remove(value.Entity);m_engine->destroy(value.Entity);m_engine->getEntityManager().destroy(value.Entity);if(value.Instance)m_engine->destroy(value.Instance);if(value.Vertices)m_engine->destroy(value.Vertices);if(value.Indices)m_engine->destroy(value.Indices);};
+    while(m_gizmo->Guides.size()>batches.size()){destroy(m_gizmo->Guides.back());m_gizmo->Guides.pop_back();}
+    while(m_gizmo->Guides.size()<batches.size()){
+        GizmoResource::Guide value;value.Instance=m_gizmo->GuideMaterial->createInstance();value.Instance->setDepthWrite(false);
+        value.Entity=m_engine->getEntityManager().create();m_engine->getTransformManager().create(value.Entity);m_gizmo->Guides.push_back(value);
+    }
+    constexpr std::uint32_t cube[]={0,2,1,1,2,3,4,5,6,5,7,6,0,1,4,1,5,4,2,6,3,3,6,7,0,4,2,2,4,6,1,3,5,3,7,5};
+    auto& manager=m_engine->getRenderableManager();std::size_t batchIndex=0;
+    for(auto& [key,vertices]:batches){
+        auto& value=m_gizmo->Guides[batchIndex++];const auto [outline,r,g,b,a]=key;
+        const auto strokes=vertices.size()/8;
+        if(strokes>std::numeric_limits<std::uint32_t>::max()/36)throw std::length_error("Editor guide batch is too large");
+        const auto count=static_cast<std::uint32_t>(strokes*36);
+        value.Instance->setParameter("color",filament::math::float4{r,g,b,a});value.Instance->setDepthCulling(!outline);
+        if(value.Capacity<strokes){
+            manager.destroy(value.Entity);
+            if(value.Vertices)m_engine->destroy(value.Vertices);if(value.Indices)m_engine->destroy(value.Indices);
+            value.Capacity=static_cast<std::uint32_t>(strokes);
+            value.Vertices=filament::VertexBuffer::Builder().vertexCount(value.Capacity*8).bufferCount(1).attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3).build(*m_engine);
+            value.Indices=filament::IndexBuffer::Builder().indexCount(value.Capacity*36).bufferType(filament::IndexBuffer::IndexType::UINT).build(*m_engine);
+            auto* indices=new std::vector<std::uint32_t>;indices->reserve(value.Capacity*36);
+            for(std::uint32_t stroke=0;stroke<value.Capacity;++stroke)for(auto index:cube)indices->push_back(stroke*8+index);
+            value.Indices->setBuffer(*m_engine,{indices->data(),indices->size()*sizeof(std::uint32_t),[](void*,size_t,void* user){delete static_cast<std::vector<std::uint32_t>*>(user);},indices});
+            filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{1,1,1}}).material(0,value.Instance).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,value.Vertices,value.Indices,0,count).culling(false).castShadows(false).receiveShadows(false).layerMask(0xff,0x80).priority(6).build(*m_engine,value.Entity);
+        }else manager.setGeometryAt(manager.getInstance(value.Entity),0,filament::RenderableManager::PrimitiveType::TRIANGLES,value.Vertices,value.Indices,0,count);
+        auto* storage=new std::vector<filament::math::float3>(std::move(vertices));
+        value.Vertices->setBufferAt(*m_engine,0,{storage->data(),storage->size()*sizeof(filament::math::float3),[](void*,size_t,void* user){delete static_cast<std::vector<filament::math::float3>*>(user);},storage});
+        m_scene->addEntity(value.Entity);
     }
 }
 
@@ -537,7 +574,7 @@ void RenderBackend::Shutdown() {
         if(m_gizmo->GridInstance)m_engine->destroy(m_gizmo->GridInstance);if(m_gizmo->GridVertices)m_engine->destroy(m_gizmo->GridVertices);if(m_gizmo->GridIndices)m_engine->destroy(m_gizmo->GridIndices);if(m_gizmo->GridMaterial)m_engine->destroy(m_gizmo->GridMaterial);
         for(int i=0;i<3;++i){if(m_gizmo->HelperScene)m_gizmo->HelperScene->remove(m_gizmo->HelperEntities[i]);m_engine->destroy(m_gizmo->HelperEntities[i]);m_engine->getEntityManager().destroy(m_gizmo->HelperEntities[i]);if(m_gizmo->HelperInstances[i])m_engine->destroy(m_gizmo->HelperInstances[i]);}
         for(auto& icon:m_gizmo->Icons){m_scene->remove(icon.Entity);m_engine->destroy(icon.Entity);m_engine->getEntityManager().destroy(icon.Entity);if(icon.Instance)m_engine->destroy(icon.Instance);}m_gizmo->Icons.clear();
-        for(auto& guide:m_gizmo->Guides){m_scene->remove(guide.Entity);m_engine->destroy(guide.Entity);m_engine->getEntityManager().destroy(guide.Entity);if(guide.Instance)m_engine->destroy(guide.Instance);}m_gizmo->Guides.clear();
+        for(auto& guide:m_gizmo->Guides){m_scene->remove(guide.Entity);m_engine->destroy(guide.Entity);m_engine->getEntityManager().destroy(guide.Entity);if(guide.Instance)m_engine->destroy(guide.Instance);if(guide.Vertices)m_engine->destroy(guide.Vertices);if(guide.Indices)m_engine->destroy(guide.Indices);}m_gizmo->Guides.clear();
         if(m_gizmo->IconVertices)m_engine->destroy(m_gizmo->IconVertices);if(m_gizmo->IconIndices)m_engine->destroy(m_gizmo->IconIndices);if(m_gizmo->CameraIconTexture)m_engine->destroy(m_gizmo->CameraIconTexture);if(m_gizmo->LightIconTexture)m_engine->destroy(m_gizmo->LightIconTexture);if(m_gizmo->IconMaterial)m_engine->destroy(m_gizmo->IconMaterial);
         if(m_gizmo->HelperVertices)m_engine->destroy(m_gizmo->HelperVertices);if(m_gizmo->HelperIndices)m_engine->destroy(m_gizmo->HelperIndices);if(m_gizmo->HelperScene)m_engine->destroy(m_gizmo->HelperScene);
         for(auto* value:m_gizmo->Vertices)if(value)m_engine->destroy(value);

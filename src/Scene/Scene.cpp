@@ -237,6 +237,8 @@ Entity Scene::InstantiateModel(const ModelAsset& model, Entity parent, std::stri
                 auto& mesh = entity.AddComponent<Mesh>();
                 mesh.MeshAsset = model.Id;
                 mesh.ModelNodeIndex = node.SourceIndex;
+                // Zero slot overrides retain the model's original PBR material.
+                mesh.Materials.resize(node.MaterialNames.size());
             }
             entities.push_back(entity);
         }

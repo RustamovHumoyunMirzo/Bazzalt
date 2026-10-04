@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <charconv>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -107,6 +108,8 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
     }
     if (const auto* mesh=entity.TryGetComponent<Mesh>()) { py::dict v;v["Mesh Asset"]=mesh->MeshAsset.ToString();v["Model Node Index"]=mesh->ModelNodeIndex;v["Material Asset"]=mesh->MaterialAsset.ToString();py::list slots;for(UUID id:mesh->Materials)slots.append(id.ToString());v["Material Slots"]=slots;v["Material Count"]=static_cast<int>(mesh->Materials.size());v["Layer Mask"]=mesh->LayerMask;v["Visible"]=mesh->Visible;v["Cast Shadows"]=mesh->CastShadows;v["Receive Shadows"]=mesh->ReceiveShadows;data["Mesh"]=v; }
     if(const auto* primitive=entity.TryGetComponent<PrimitiveObject>()){py::dict v;v["Shape"]=static_cast<int>(primitive->Shape);switch(primitive->Shape){case PrimitiveShape::Cube:v["Size"]=py::make_tuple(primitive->Size.X,primitive->Size.Y,primitive->Size.Z);break;case PrimitiveShape::Sphere:v["Radius"]=primitive->Radius;v["Segments"]=primitive->Segments;v["Rings"]=primitive->Rings;break;case PrimitiveShape::Cylinder:v["Radius"]=primitive->Radius;v["Height"]=primitive->Height;v["Segments"]=primitive->Segments;break;case PrimitiveShape::Capsule:v["Radius"]=primitive->Radius;v["Height"]=primitive->Height;v["Segments"]=primitive->Segments;v["Rings"]=primitive->Rings;break;case PrimitiveShape::Plane:v["Width"]=primitive->Width;v["Depth"]=primitive->Depth;break;case PrimitiveShape::Cone:v["Radius"]=primitive->Radius;v["Height"]=primitive->Height;v["Segments"]=primitive->Segments;break;case PrimitiveShape::Torus:v["Major Radius"]=primitive->MajorRadius;v["Minor Radius"]=primitive->MinorRadius;v["Segments"]=primitive->Segments;v["Rings"]=primitive->Rings;break;}v["Color"]=py::make_tuple(primitive->Color.X,primitive->Color.Y,primitive->Color.Z,primitive->Color.W);v["Material Asset"]=primitive->MaterialAsset.ToString();v["Layer Mask"]=primitive->LayerMask;v["Visible"]=primitive->Visible;v["Cast Shadows"]=primitive->CastShadows;v["Receive Shadows"]=primitive->ReceiveShadows;data["Primitive Object"]=v;}
+    if(const auto* mesh=entity.TryGetComponent<Mesh>())for(std::size_t index=0;index<mesh->Materials.size();++index)
+        data["Mesh"].cast<py::dict>()[py::str("Material Slot "+std::to_string(index)+" Asset")]=mesh->Materials[index].ToString();
     if (const auto* model=entity.TryGetComponent<ModelInstance>()){py::dict v;v["Model Asset"]=model->ModelAsset.ToString();data["Model Instance"]=v;}
     if (const auto* node=entity.TryGetComponent<ModelNode>()){py::dict v;v["Model Asset"]=node->ModelAsset.ToString();v["Source Index"]=node->SourceIndex;v["Mesh Index"]=node->MeshIndex;v["Stable Path"]=node->StablePath;v["Has Mesh"]=node->HasMesh;data["Model Node"]=v;}
     if (const auto* blur=entity.TryGetComponent<GaussianBlur>()) { py::dict v;v["Size"]=blur->Size;data["Gaussian Blur"]=v; }
@@ -230,9 +233,15 @@ public:
 
     py::list SceneEntities(Scene& scene) {
         py::list result;
+        const auto meshBounds=(&scene==&m_engine->GetScene())?m_engine->GetEditorMeshBounds():std::unordered_map<UUID,std::pair<Vec3,Vec3>>{};
         std::function<void(Entity)> append = [&](Entity parent) {
             for (Entity child : parent.GetChildren()) {
-                result.append(SnapshotEntity(scene, child));
+                auto snapshot=SnapshotEntity(scene,child);
+                if(auto found=meshBounds.find(child.GetUUID());found!=meshBounds.end()){
+                    const auto& [minimum,maximum]=found->second;
+                    snapshot["mesh_bounds"]=py::make_tuple(py::make_tuple(minimum.X,minimum.Y,minimum.Z),py::make_tuple(maximum.X,maximum.Y,maximum.Z));
+                }
+                result.append(snapshot);
                 append(child);
             }
         };
@@ -410,6 +419,15 @@ public:
                 else return false;
             }
             stored=Runtime::SanitizeLight(v);return true;
+        }
+        if(type=="Mesh"&&entity.HasComponent<Mesh>()&&property.starts_with("Material Slot ")&&property.ends_with(" Asset")){
+            auto& mesh=entity.GetComponent<Mesh>();const auto indexText=std::string_view(property).substr(14,property.size()-20);std::size_t index=0;
+            const auto parsed=std::from_chars(indexText.data(),indexText.data()+indexText.size(),index);
+            if(parsed.ec!=std::errc{}||parsed.ptr!=indexText.data()+indexText.size()||index>=mesh.Materials.size())return false;
+            const auto text=value.cast<std::string>();UUID id;
+            if(text!="0"&&!UUID::TryParse(text,id))return false;
+            if(id){const auto asset=AssetManager::GetAsset(id);if(!asset||asset->SourcePath.extension()!=".matinst")return false;}
+            mesh.Materials[index]=id;return true;
         }
         if(type=="Mesh"&&entity.HasComponent<Mesh>()){auto&v=entity.GetComponent<Mesh>();if((property=="Mesh Asset"||property=="Material Asset")){const auto text=value.cast<std::string>();UUID id;if(text!="0"&&!UUID::TryParse(text,id)){const auto asset=AssetManager::GetAsset(std::filesystem::u8path(text));if(!asset)return false;id=asset->Id;}if(property=="Mesh Asset")v.MeshAsset=id;else {if(id){const auto asset=AssetManager::GetAsset(id);if(!asset||asset->SourcePath.extension()!=".matinst")return false;}v.MaterialAsset=id;}}else if(property=="Model Node Index")v.ModelNodeIndex=value.cast<std::uint32_t>();else if(property=="Visible")v.Visible=value.cast<bool>();else if(property=="Cast Shadows")v.CastShadows=value.cast<bool>();else if(property=="Receive Shadows")v.ReceiveShadows=value.cast<bool>();else if(property=="Layer Mask")v.LayerMask=static_cast<std::uint8_t>(value.cast<int>());else return false;return true;}
         if(type=="Primitive Object"&&entity.HasComponent<PrimitiveObject>()){auto&v=entity.GetComponent<PrimitiveObject>();if(property=="Material Asset"){const auto text=value.cast<std::string>();UUID id;if(text!="0"&&!UUID::TryParse(text,id))return false;if(id){const auto asset=AssetManager::GetAsset(id);if(!asset||asset->SourcePath.extension()!=".matinst")return false;}v.MaterialAsset=id;}else if(property=="Shape")v.Shape=static_cast<PrimitiveShape>(value.cast<int>());else if(property=="Size"){auto a=value.cast<std::array<float,3>>();v.Size={a[0],a[1],a[2]};}else if(property=="Radius")v.Radius=std::max(.001f,value.cast<float>());else if(property=="Height")v.Height=std::max(.001f,value.cast<float>());else if(property=="Width")v.Width=std::max(.001f,value.cast<float>());else if(property=="Depth")v.Depth=std::max(.001f,value.cast<float>());else if(property=="Major Radius")v.MajorRadius=std::max(.001f,value.cast<float>());else if(property=="Minor Radius")v.MinorRadius=std::clamp(value.cast<float>(),.001f,v.MajorRadius);else if(property=="Segments")v.Segments=std::clamp(value.cast<std::uint32_t>(),3u,128u);else if(property=="Rings")v.Rings=std::clamp(value.cast<std::uint32_t>(),2u,128u);else if(property=="Color"){auto a=value.cast<std::array<float,4>>();v.Color={a[0],a[1],a[2],a[3]};}else if(property=="Layer Mask")v.LayerMask=static_cast<std::uint8_t>(value.cast<int>());else if(property=="Visible")v.Visible=value.cast<bool>();else if(property=="Cast Shadows")v.CastShadows=value.cast<bool>();else if(property=="Receive Shadows")v.ReceiveShadows=value.cast<bool>();else return false;return true;}
