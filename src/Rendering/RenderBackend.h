@@ -36,6 +36,7 @@ public:
     RenderBackend& operator=(const RenderBackend&) = delete;
 
     bool Initialize();
+    bool Initialize(bool headless);
     static std::vector<std::string> SupportedBackends();
     bool ConfigureBackend(const std::string& backend);
     void Shutdown();

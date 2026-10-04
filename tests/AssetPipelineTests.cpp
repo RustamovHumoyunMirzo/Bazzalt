@@ -94,7 +94,7 @@ fragment {
     assert(std::filesystem::file_size(material->CachePath) > 0);
     assert(std::filesystem::file_size(mesh->CachePath) > 0);
 
-    assert(engine.Init());
+    assert(engine.Init(true));
     auto model = engine.GetScene().CreateEntity("glTF model");
     model.AddComponent<Mesh>().MeshAsset = gltf->Id;
     engine.Update();

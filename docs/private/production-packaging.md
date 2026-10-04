@@ -80,6 +80,16 @@ status, not a hard-coded passing label. Superseded runs on the same ref are
 cancelled to avoid unnecessary dependency builds. These checks run entirely on
 Actions workers, not the developer's machine.
 
+Windowless native rendering/resource tests explicitly use Filament's NOOP driver
+instead of requiring a GPU on hosted workers. This exercises real resource
+managers, materials, and teardown, but is not a pixel-rendering test. Normal editor
+and game initialization still uses the selected native graphics backend. Test-only
+diagnostics route Windows assertions to stderr and print unhandled exceptions;
+they do not suppress assertions or turn failures into successful tests. Both
+architecture jobs preserve verbose CTest logs and JUnit reports in separate
+`test-logs-windows-*` artifacts even when testing fails. These diagnostics are
+excluded from the Release Suite's product-artifact download pattern.
+
 Independent workflows: Windows Editor, Windows Core, Windows Hub. Each can be
 started manually, optionally overriding the product version. Their x64 jobs
 build/test/package the product and upload its binaries and catalog entry.

@@ -43,7 +43,9 @@ Engine::~Engine()
     AssetManager::Unbind(this);
 }
 
-bool Engine::Init()
+bool Engine::Init() { return Init(false); }
+
+bool Engine::Init(bool headless)
 {
     if (m_isInitialized)
     {
@@ -53,7 +55,7 @@ bool Engine::Init()
 
     std::cout << "[Engine] Initializing Core Subsystems...\n";
 
-    if (!m_renderBackend->Initialize())
+    if (!m_renderBackend->Initialize(headless))
     {
         m_lastError = "Could not initialize the Filament rendering backend";
         std::cerr << "[Engine] " << m_lastError << "\n";

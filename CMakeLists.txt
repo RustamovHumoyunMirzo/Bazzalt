@@ -179,6 +179,11 @@ target_include_directories(Bazzalt
 target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE SDL3::SDL3-static ryml::ryml Filament::Filament ${CMAKE_DL_LIBS})
 
 target_compile_features(Bazzalt PUBLIC cxx_std_20)
+if(MSVC)
+    # Public API strings and checked-in sources use UTF-8, regardless of the
+    # developer/CI machine's ANSI code page (including Unicode path literals).
+    target_compile_options(Bazzalt PUBLIC /utf-8)
+endif()
 # Match these flags to the linked Filament SDK when using a custom build.
 option(BAZZALT_FILAMENT_OPENGL "SDK contains the OpenGL backend" ON)
 if(APPLE)
@@ -251,6 +256,7 @@ endif()
 include(CTest)
 if(BUILD_TESTING)
     function(bazzalt_enable_test_assertions target)
+        target_sources(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests/TestDiagnostics.cpp")
         if(WIN32)
             add_custom_command(TARGET ${target} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE_DIR:${target}>/$<TARGET_FILE_NAME:Bazzalt>")

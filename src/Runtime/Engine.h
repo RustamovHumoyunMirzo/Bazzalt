@@ -32,7 +32,10 @@ public:
     Engine(const Engine&) = delete;
     Engine& operator=(const Engine&) = delete;
 
+    // Windowless native tests use real Filament resource managers with its NOOP
+    // driver. Editor/game hosts retain native rendering by default.
     bool Init();
+    bool Init(bool headless);
     bool RefreshAssets();
     bool SetEnvironmentImportSettings(UUID id,const PropertyMap& settings);
     PropertyMap GetAssetImportSettings(UUID id);

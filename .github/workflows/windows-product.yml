@@ -47,8 +47,17 @@ jobs:
         run: |
           cmake --build build --config Release --parallel 2
           if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
-          ctest --test-dir build -C Release --output-on-failure
+          ctest --test-dir build -C Release --verbose --output-on-failure --output-junit "$PWD/build/native-tests.xml"
           if ($LASTEXITCODE -ne 0) { throw 'Native tests failed' }
+      - name: Preserve native test diagnostics
+        if: always() && inputs.product != 'hub'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-logs-windows-${{ inputs.product }}-x64
+          path: |
+            build/Testing/Temporary/*.log
+            build/native-tests.xml
+          if-no-files-found: ignore
       - name: Test Hub, installs, tools, and resources
         env:
           QT_QPA_PLATFORM: offscreen
@@ -119,8 +128,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Win32 CMake configuration failed' }
           cmake --build build/x86 --config Release --parallel 2
           if ($LASTEXITCODE -ne 0) { throw 'Win32 runtime build failed' }
-          ctest --test-dir build/x86 -C Release --output-on-failure
+          ctest --test-dir build/x86 -C Release --verbose --output-on-failure --output-junit "$PWD/build/x86/native-tests.xml"
           if ($LASTEXITCODE -ne 0) { throw 'Win32 native tests failed' }
+      - name: Preserve Win32 native test diagnostics
+        if: always() && inputs.product != 'hub'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-logs-windows-${{ inputs.product }}-x86
+          path: |
+            build/x86/Testing/Temporary/*.log
+            build/x86/native-tests.xml
+          if-no-files-found: ignore
       - name: Test actual Win32 GUI and tools
         if: inputs.product != 'core'
         env:

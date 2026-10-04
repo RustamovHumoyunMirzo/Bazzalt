@@ -75,7 +75,7 @@ int main() {
     assert(customEffect.Parameters.size() == 2);
 
     Bazzalt::Runtime::Engine engine;
-    assert(engine.Init());
+    assert(engine.Init(true));
 #ifdef _WIN32
     // Synthetic offscreen IDs must be rejected before reaching Vulkan/OpenGL.
     assert(!engine.CreateEditorViewport(1, 0, true, 64, 64));
@@ -113,7 +113,7 @@ int main() {
     engine.SetEditorEntityState({primitive.GetUUID()}, {});assert(engine.PickEditorPrimitive({0,0,5},{0,0,-1}).IsRoot());
     engine.SetEditorEntityState({}, {});assert(engine.PickEditorPrimitive({0,0,5},{0,0,-1})==primitive.GetUUID());
     engine.Shutdown();
-    Bazzalt::Runtime::RenderBackend backend;assert(backend.Initialize());auto& assets=backend.GetAssets();
+    Bazzalt::Runtime::RenderBackend backend;assert(backend.Initialize(true));auto& assets=backend.GetAssets();
     {
         Bazzalt::Scene lights;auto& system=lights.AddSystem<Bazzalt::Runtime::LightSystem>(backend);
         auto entity=lights.CreateEntity("Live light");auto& value=entity.AddComponent<Bazzalt::Light>();

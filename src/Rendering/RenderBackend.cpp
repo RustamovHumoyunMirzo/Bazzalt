@@ -159,13 +159,16 @@ bool RenderBackend::ConfigureBackend(const std::string& backend) {
     m_backend=backend;return true;
 }
 
-bool RenderBackend::Initialize() {
+bool RenderBackend::Initialize() { return Initialize(false); }
+
+bool RenderBackend::Initialize(bool headless) {
     if (m_engine != nullptr) return true;
     auto backend=filament::Engine::Backend::DEFAULT;
     if(m_backend=="opengl")backend=filament::Engine::Backend::OPENGL;
     else if(m_backend=="vulkan")backend=filament::Engine::Backend::VULKAN;
     else if(m_backend=="metal")backend=filament::Engine::Backend::METAL;
     else if(m_backend=="webgpu")backend=filament::Engine::Backend::WEBGPU;
+    if(headless)backend=filament::Engine::Backend::NOOP;
     m_engine = filament::Engine::create(backend);
     if (m_engine == nullptr) return false;
     m_renderer = m_engine->createRenderer();
