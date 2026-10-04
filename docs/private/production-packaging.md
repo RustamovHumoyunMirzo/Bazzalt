@@ -55,6 +55,50 @@ the editor beneath the Hub's version directory, and generate its manifest. The H
 uses Qt WebEngine to render `Launcher/index.html`; Qt WebChannel exposes only the
 project/version operations implemented by `HubBridge`.
 
+## Compiled application resources
+
+Production builds no longer copy `Editor/assets`, `Launcher/index.html`, or
+`Launcher/BazzaltLogo.svg` into the installation. Before Nuitka runs,
+`scripts/compile_resources.py` invokes PySide6's Qt resource compiler and creates
+three generated Python resource modules: editor assets, Hub HTML/branding, and
+shared branding. Nuitka includes these modules as compiled code; the resource
+byte arrays live in the programs rather than as raw SVG, JSON, HTML, or GLB files.
+Generated modules are ignored by Git. Regenerate them on every production build
+so changed icons, locales, layouts, and future assets are included automatically.
+
+```powershell
+python scripts/compile_resources.py
+python -m unittest Editor.tests.test_compiled_resources
+python scripts/compile_resources.py --audit dist/production/bazzalt_hub.dist
+```
+
+Qt resolves editor assets through `:/bazzalt/editor/...`, Hub content through
+`qrc:/bazzalt/hub/index.html`, and shared branding through
+`:/bazzalt/branding/BazzaltLogo.svg`. Relative Hub images still resolve normally,
+and the WebChannel script continues using Qt's built-in resource URL. Theme
+stylesheet icons also use the resource service, not installation file paths.
+The original docking icons remain in their existing compiled Qt package.
+
+`ResourceManager.Path()` returns a Qt-compatible filename. `ReadBytes()` and
+`ReadText()` read either source files or compiled resources; `Icon()` and
+`Pixmap()` work in both modes. `Resolve()` preserves its Path return value in
+source mode and returns a Qt resource string in compiled mode. Explicit custom
+resource roots remain file-based for development and testing. Source launches
+continue using editable files without regeneration. Set
+`BAZZALT_COMPILED_RESOURCES=1` only to test compiled-resource loading from source.
+Production never falls back to raw files if its generated resource module is
+missing: it reports a repair/rebuild error.
+
+Distribution and installer audits reject raw application resources, including
+stale resources inside managed editor-version directories. Use a clean output
+directory if an older distribution fails this check. The audit does not delete
+anything. Public C++ SDK headers, editor manifests, mutable user settings,
+project assets, and Qt/Chromium's vendor runtime files remain ordinary files;
+they are not immutable Bazzalt UI resources.
+
+Embedding is packaging, not encryption: someone inspecting the executable can
+extract resource data. Do not store credentials or secrets in these resources.
+
 The Hub build is a self-contained directory-mode distribution. This is preferable
 for Qt WebEngine production deployment because its helper process and resources
 remain installed once instead of being unpacked on every launch. The editor is a

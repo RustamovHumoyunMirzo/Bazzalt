@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QWidget
-
-ASSET_ROOT = Path(__file__).resolve().parent / "assets" / "icons"
-
+from .resources import ResourceManager
 
 @dataclass(slots=True)
 class Theme:
@@ -106,9 +103,10 @@ def BuildStyleSheet(theme: Theme) -> str:
     """Return the single style sheet used by the application and floating UI."""
     t = theme
     icon_theme = "light" if t.background.lower() == "#d4d4d4" else "dark"
-    check_icon = (ASSET_ROOT / icon_theme / "check_selected.svg").as_posix()
-    branch_closed = (ASSET_ROOT / icon_theme / "tree_closed.svg").as_posix()
-    branch_open = (ASSET_ROOT / icon_theme / "tree_open.svg").as_posix()
+    resources = ResourceManager()
+    check_icon = resources.Path(f"icons/{icon_theme}/check_selected.svg").replace("\\", "/")
+    branch_closed = resources.Path(f"icons/{icon_theme}/tree_closed.svg").replace("\\", "/")
+    branch_open = resources.Path(f"icons/{icon_theme}/tree_open.svg").replace("\\", "/")
     combo_arrow = branch_open
     return f"""
     QWidget {{ color: {t.text}; selection-background-color: {t.selection}; font-size: 12px; }}

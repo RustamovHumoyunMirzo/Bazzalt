@@ -12,16 +12,20 @@ cmake --build "$BUILD" --config Release --target _bazzalt_runtime
 NATIVE=$(find "$BUILD" -type f \( -name '_bazzalt_runtime*.so' -o -name '_bazzalt_runtime*.pyd' \) | head -n 1)
 [ -n "$NATIVE" ] || { echo 'Could not find _bazzalt_runtime' >&2; exit 1; }
 mkdir -p "$OUTPUT"
+python "$ROOT/scripts/compile_resources.py" --build-directory "$BUILD/CompiledResources"
 python -m nuitka --mode=standalone --assume-yes-for-downloads --enable-plugin=pyside6 \
-  --include-data-file="$ROOT/Launcher/index.html=Launcher/index.html" --include-data-file="$ROOT/Launcher/BazzaltLogo.svg=Launcher/BazzaltLogo.svg" --output-filename=BazzaltHub \
+  --include-module=bazzalt._hub_resources_rc --include-module=bazzalt._branding_resources_rc --output-filename=BazzaltHub \
   --output-dir="$OUTPUT" "$ROOT/bazzalt_hub.py"
 python -m nuitka --mode=standalone --assume-yes-for-downloads --enable-plugin=pyside6 \
-  --include-data-dir="$ROOT/Editor/assets=Editor/assets" --include-data-file="$ROOT/Launcher/BazzaltLogo.svg=Launcher/BazzaltLogo.svg" --output-filename=Bazzalt \
+  --include-module=bazzalt._editor_resources_rc --include-module=bazzalt._branding_resources_rc --output-filename=Bazzalt \
   --output-dir="$OUTPUT" "$ROOT/bazzalt_editor.py"
 HUB="$OUTPUT/bazzalt_hub.dist"
+python "$ROOT/scripts/compile_resources.py" --audit "$HUB"
+python "$ROOT/scripts/compile_resources.py" --audit "$OUTPUT/bazzalt_editor.dist"
 TARGET="$HUB/versions/$VERSION_FOLDER"
 mkdir -p "$TARGET/Editor"
 cp -R "$OUTPUT/bazzalt_editor.dist/." "$TARGET/"
 cp "$NATIVE" "$TARGET/Editor/"
 printf '{\n  "version": "%s",\n  "executable": "Bazzalt",\n  "project_format_max": 1\n}\n' "$VERSION" > "$TARGET/editor.json"
+python "$ROOT/scripts/compile_resources.py" --audit "$HUB"
 printf 'Production bundle: %s\n' "$HUB"

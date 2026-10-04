@@ -19,6 +19,8 @@ $Required = @(
     (Join-Path $Bundle "versions/$VersionFolder/editor.json")
 )
 foreach ($Path in $Required) { if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "Missing production file: $Path" } }
+python (Join-Path $Root "scripts/compile_resources.py") --audit $Bundle
+if ($LASTEXITCODE -ne 0) { throw "Installer input contains raw application resources. Rebuild the production bundle." }
 
 if (-not $InnoCompiler) {
     $Command = Get-Command ISCC.exe -ErrorAction SilentlyContinue

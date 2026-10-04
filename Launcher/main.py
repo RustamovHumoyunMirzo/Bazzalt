@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QApplication, QFileDialog, QMainWindow
 
 from bazzalt.settings import DataPaths
 from bazzalt.branding import LogoIcon
+from bazzalt.resources import Package
 from .catalog import CURRENT_EDITOR_VERSION, HubCatalog
 
 try:
@@ -115,7 +116,8 @@ class HubWindow(QMainWindow):
         self.Channel = QWebChannel(self.View.page()); self.Bridge = HubBridge(self.Catalog, self)
         self.Channel.registerObject("hub", self.Bridge); self.View.page().setWebChannel(self.Channel)
         self.setCentralWidget(self.View)
-        self.View.load(QUrl.fromLocalFile(str((Path(__file__).resolve().parent / "index.html").resolve())))
+        self.Resources = Package("hub")
+        self.View.load(self.Resources.Url("index.html"))
 
 
 def main() -> int:

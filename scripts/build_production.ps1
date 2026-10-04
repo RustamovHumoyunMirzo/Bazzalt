@@ -22,17 +22,21 @@ $Native = Get-ChildItem -Path (Join-Path $Build "Editor/Release") -File -ErrorAc
 if (-not $Native) { throw "Could not find the built _bazzalt_runtime module" }
 
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
+python (Join-Path $Root "scripts/compile_resources.py") --build-directory (Join-Path $Build "CompiledResources")
+if ($LASTEXITCODE -ne 0) { throw "Application resource compilation failed" }
 python -m nuitka --mode=standalone --assume-yes-for-downloads --enable-plugin=pyside6 `
-    --include-data-file="$Root/Launcher/index.html=Launcher/index.html" `
-    --include-data-file="$Root/Launcher/BazzaltLogo.svg=Launcher/BazzaltLogo.svg" `
+    --include-module=bazzalt._hub_resources_rc --include-module=bazzalt._branding_resources_rc `
     --windows-console-mode=disable --output-filename=BazzaltHub.exe --output-dir=$Output "$Root/bazzalt_hub.py"
 if ($LASTEXITCODE -ne 0) { throw "BazzaltHub compilation failed" }
 
 python -m nuitka --mode=standalone --assume-yes-for-downloads --enable-plugin=pyside6 --windows-console-mode=disable `
-    --include-data-dir="$Root/Editor/assets=Editor/assets" `
-    --include-data-file="$Root/Launcher/BazzaltLogo.svg=Launcher/BazzaltLogo.svg" `
+    --include-module=bazzalt._editor_resources_rc --include-module=bazzalt._branding_resources_rc `
     --output-filename=Bazzalt.exe --output-dir=$Output "$Root/bazzalt_editor.py"
 if ($LASTEXITCODE -ne 0) { throw "Bazzalt editor compilation failed" }
+python (Join-Path $Root "scripts/compile_resources.py") --audit (Join-Path $Output "bazzalt_hub.dist")
+if ($LASTEXITCODE -ne 0) { throw "Hub distribution contains raw application resources; use a clean output directory" }
+python (Join-Path $Root "scripts/compile_resources.py") --audit (Join-Path $Output "bazzalt_editor.dist")
+if ($LASTEXITCODE -ne 0) { throw "Editor distribution contains raw application resources; use a clean output directory" }
 
 $Hub = Join-Path $Output "bazzalt_hub.dist"
 $EditorBuild = Join-Path $Output "bazzalt_editor.dist"
@@ -59,6 +63,8 @@ Copy-Item -LiteralPath (Join-Path $Root "include") -Destination (Join-Path $Edit
 $Manifest = @{ version=$Version; executable="Bazzalt.exe"; project_format_max=1 } | ConvertTo-Json
 $Utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText((Join-Path $EditorTarget "editor.json"), $Manifest, $Utf8WithoutBom)
+python (Join-Path $Root "scripts/compile_resources.py") --audit $Hub
+if ($LASTEXITCODE -ne 0) { throw "A managed editor payload contains raw resources; use a clean output directory" }
 $RuntimeCheck = Start-Process -FilePath (Join-Path $EditorTarget "Bazzalt.exe") `
     -ArgumentList "--check-runtime" -WorkingDirectory $EditorTarget -WindowStyle Hidden -Wait -PassThru
 if ($RuntimeCheck.ExitCode -ne 0) { throw "Packaged editor could not load _bazzalt_runtime (exit $($RuntimeCheck.ExitCode))" }
