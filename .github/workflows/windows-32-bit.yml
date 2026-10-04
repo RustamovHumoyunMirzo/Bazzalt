@@ -1,0 +1,20 @@
+name: Windows 32-bit
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-32-bit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    uses: ./.github/workflows/windows-product.yml
+    with:
+      product: editor
+      architecture: x86

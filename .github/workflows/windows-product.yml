@@ -8,10 +8,15 @@ on:
       version:
         default: ''
         type: string
+      architecture:
+        description: 'Architecture to build: both, x86, or x64'
+        default: both
+        type: string
 permissions:
   contents: read
 jobs:
   x64:
+    if: inputs.architecture == 'both' || inputs.architecture == 'x64'
     runs-on: windows-2022
     timeout-minutes: 120
     steps:
@@ -74,6 +79,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
   x86:
+    if: inputs.architecture == 'both' || inputs.architecture == 'x86'
     runs-on: windows-2022
     timeout-minutes: 350
     steps:

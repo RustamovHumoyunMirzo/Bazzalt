@@ -1,5 +1,7 @@
 # BAZZALT
 
+[![Windows 32-bit](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/windows-32-bit.yml/badge.svg?event=push)](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/windows-32-bit.yml)
+[![Windows 64-bit](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/windows-64-bit.yml/badge.svg?event=push)](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/windows-64-bit.yml)
 
 BAZZALT is an editor-first C++20 game engine in active alpha development. It
 combines a native runtime with a PySide6 editor and Hub while keeping low-level

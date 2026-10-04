@@ -72,6 +72,14 @@ size must match. Editor packaging runs the compiled executable's
 
 ## GitHub workflows and downloads
 
+Windows 32-bit and Windows 64-bit run on every push and pull request, and can
+also be started manually. Each calls the shared product pipeline for only its
+architecture, building the engine/editor, running native and Python tests, and
+checking the packaged runtime. README badges show GitHub's actual push-workflow
+status, not a hard-coded passing label. Superseded runs on the same ref are
+cancelled to avoid unnecessary dependency builds. These checks run entirely on
+Actions workers, not the developer's machine.
+
 Independent workflows: Windows Editor, Windows Core, Windows Hub. Each can be
 started manually, optionally overriding the product version. Their x64 jobs
 build/test/package the product and upload its binaries and catalog entry.
