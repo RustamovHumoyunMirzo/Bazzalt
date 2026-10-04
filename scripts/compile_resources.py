@@ -18,7 +18,7 @@ def Compile(root: Path = ROOT, build: Path | None = None) -> list[Path]:
     if not files: raise RuntimeError("Editor assets are missing")
     packages = {
         "editor": [(path.relative_to(assets).as_posix(), path) for path in files],
-        "hub": [(name, root / "Launcher" / name) for name in ("index.html", "BazzaltLogo.svg")],
+        "hub": [("BazzaltLogo.svg", root / "Launcher/BazzaltLogo.svg")],
         "branding": [("BazzaltLogo.svg", root / "Launcher/BazzaltLogo.svg")],
     }
     outputs = []

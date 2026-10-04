@@ -14,6 +14,7 @@ NATIVE=$(find "$BUILD" -type f \( -name '_bazzalt_runtime*.so' -o -name '_bazzal
 mkdir -p "$OUTPUT"
 python "$ROOT/scripts/compile_resources.py" --build-directory "$BUILD/CompiledResources"
 python -m nuitka --mode=standalone --assume-yes-for-downloads --enable-plugin=pyside6 \
+  --nofollow-import-to=PySide6.QtWebEngineCore,PySide6.QtWebEngineWidgets,PySide6.QtWebChannel \
   --include-module=bazzalt._hub_resources_rc --include-module=bazzalt._branding_resources_rc --output-filename=BazzaltHub \
   --output-dir="$OUTPUT" "$ROOT/bazzalt_hub.py"
 python -m nuitka --mode=standalone --assume-yes-for-downloads --enable-plugin=pyside6 \

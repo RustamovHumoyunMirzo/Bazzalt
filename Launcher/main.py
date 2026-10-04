@@ -7,16 +7,13 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QUrl, Signal, Slot
-from PySide6.QtWebChannel import QWebChannel
-from PySide6.QtWebEngineCore import QWebEnginePage
-from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWidgets import QApplication, QFileDialog, QMainWindow
+from PySide6.QtCore import QObject, Signal, Slot
+from PySide6.QtWidgets import QApplication, QFileDialog
 
 from bazzalt.settings import DataPaths
 from bazzalt.branding import LogoIcon
-from bazzalt.resources import Package
 from .catalog import CURRENT_EDITOR_VERSION, HubCatalog
+from .ui import NativeHubWindow
 
 try:
     __compiled__
@@ -28,9 +25,14 @@ except NameError:
 class HubBridge(QObject):
     StateChanged = Signal()
     OperationFailed = Signal(str)
+    ProjectAdded = Signal(str)
 
     def __init__(self, catalog: HubCatalog, parent: QObject | None = None) -> None:
         super().__init__(parent); self.Catalog = catalog
+
+    def ProjectsRoot(self) -> Path:
+        value=self.Catalog.Data.get("preferences",{}).get("projects_root","")
+        return Path(value).expanduser().resolve() if value else DataPaths.Projects()
 
     def _State(self) -> dict:
         projects = []
@@ -42,7 +44,7 @@ class HubBridge(QObject):
             projects.append(project)
         editors = [{key: item.get(key) for key in ("version", "project_format_max")}
                    for item in self.Catalog.Data["editors"]]
-        return {"projects": projects, "editors": editors, "projectsRoot": str(DataPaths.Projects()),
+        return {"projects": projects, "editors": editors, "projectsRoot": str(self.ProjectsRoot()),
                 "currentVersion": CURRENT_EDITOR_VERSION}
 
     @Slot(result=str)
@@ -51,19 +53,19 @@ class HubBridge(QObject):
     @Slot(str, result=str)
     def SuggestedProjectPath(self, name: str) -> str:
         safe = "".join(character for character in name if character.isalnum() or character in "_-")
-        return str(DataPaths.Projects() / (safe or "NewProject"))
+        return str(self.ProjectsRoot() / (safe or "NewProject"))
 
     @Slot(result=str)
     def BrowseProjectLocation(self) -> str:
-        DataPaths.Projects().mkdir(parents=True, exist_ok=True)
-        return QFileDialog.getExistingDirectory(None, "Project Location", str(DataPaths.Projects()))
+        return QFileDialog.getExistingDirectory(self.parent(), "Project Location", str(self.ProjectsRoot()))
 
     @Slot(result=bool)
     def AddExistingProject(self) -> bool:
-        path, _ = QFileDialog.getOpenFileName(None, "Add Project", str(DataPaths.Projects()),
+        path, _ = QFileDialog.getOpenFileName(self.parent(), "Add Project", str(self.ProjectsRoot()),
                                               "BAZZALT Projects (*.bproject)")
         if not path: return False
-        try: self.Catalog.AddProject(path); self.StateChanged.emit(); return True
+        try:
+            record=self.Catalog.AddProject(path); self.StateChanged.emit(); self.ProjectAdded.emit(record["id"]); return True
         except (OSError, ValueError) as error: self.OperationFailed.emit(str(error)); return False
 
     @Slot(str, str, str, result=bool)
@@ -71,8 +73,10 @@ class HubBridge(QObject):
         try:
             destination = Path(path).expanduser().resolve()
             if destination.name != name.strip(): raise ValueError("project path must end with the project name")
-            self.Catalog.CreateProject(destination.parent, name, version)
-            self.StateChanged.emit(); return True
+            if not any(editor["version"]==version for editor in self.Catalog.Data["editors"]):
+                raise ValueError("Select an installed editor version before creating a project")
+            record=self.Catalog.CreateProject(destination.parent, name, version)
+            self.StateChanged.emit(); self.ProjectAdded.emit(record["id"]); return True
         except (OSError, ValueError) as error: self.OperationFailed.emit(str(error)); return False
 
     @Slot(str, result=bool)
@@ -85,39 +89,33 @@ class HubBridge(QObject):
     def LaunchProject(self, project_id: str, requested_version: str) -> bool:
         project = next((item for item in self.Catalog.Data["projects"] if item.get("id") == project_id), None)
         if project is None: self.OperationFailed.emit("Project is no longer registered"); return False
+        if not Path(project["path"]).is_file(): self.OperationFailed.emit("The project file no longer exists. Locate it again using Add Project."); return False
         compatible = self.Catalog.CompatibleEditors(project)
         editor = next((item for item in compatible if item["version"] == requested_version), None)
-        if editor is None: editor = compatible[0] if compatible else None
+        if editor is None and not requested_version: editor = compatible[0] if compatible else None
         if editor is None: self.OperationFailed.emit("No compatible BAZZALT editor is installed"); return False
         root = Path(editor["root"])
         command = ([editor["command"], "-m", "Editor"] if editor.get("development")
                    else [str(root / editor["command"])])
         command += ["--project", project["path"], "--editor-version", editor["version"]]
         try:
-            subprocess.Popen(command, cwd=root, close_fds=True)
+            subprocess.Popen(command, cwd=root, close_fds=True,
+                             creationflags=subprocess.CREATE_NO_WINDOW if os.name=="nt" else 0)
             project["last_editor"] = editor["version"]
             project["last_opened"] = datetime.now(timezone.utc).isoformat()
             self.Catalog.Save(); self.StateChanged.emit(); return True
         except OSError as error: self.OperationFailed.emit(str(error)); return False
 
 
-class LocalPage(QWebEnginePage):
-    def acceptNavigationRequest(self, url: QUrl, navigation_type, is_main_frame: bool) -> bool:
-        return url.isLocalFile() or url.scheme() in {"qrc", "data", "about"}
-
-
-class HubWindow(QMainWindow):
-    def __init__(self) -> None:
-        super().__init__(); self.setWindowTitle("BAZZALT Hub");self.setWindowIcon(LogoIcon("#707070"));self.resize(1180, 760)
-        self.Catalog = HubCatalog(); self.Catalog.DiscoverEditors()
-        if not IS_COMPILED and not getattr(sys, "frozen", False) and os.environ.get("BAZZALT_PRODUCTION") != "1":
-            self.Catalog.RegisterDevelopmentEditor(Path(__file__).resolve().parent.parent)
-        self.View = QWebEngineView(self); self.View.setPage(LocalPage(self.View))
-        self.Channel = QWebChannel(self.View.page()); self.Bridge = HubBridge(self.Catalog, self)
-        self.Channel.registerObject("hub", self.Bridge); self.View.page().setWebChannel(self.Channel)
-        self.setCentralWidget(self.View)
-        self.Resources = Package("hub")
-        self.View.load(self.Resources.Url("index.html"))
+class HubWindow(NativeHubWindow):
+    def __init__(self, catalog: HubCatalog | None = None) -> None:
+        supplied=catalog is not None
+        catalog=catalog or HubCatalog()
+        versions=catalog.Data.get("preferences",{}).get("versions_root","")
+        catalog.DiscoverEditors(Path(versions) if versions else None)
+        if not supplied and not IS_COMPILED and not getattr(sys,"frozen",False) and os.environ.get("BAZZALT_PRODUCTION")!="1":
+            catalog.RegisterDevelopmentEditor(Path(__file__).resolve().parent.parent)
+        super().__init__(catalog, HubBridge(catalog))
 
 
 def main() -> int:

@@ -49,13 +49,13 @@ class CompiledResourcesTests(unittest.TestCase):
         resources=ResourcePackage("editor",ROOT/"build/nonexistent-resource-root",compiled=True)
         self.assertIn("Save Project",resources.ReadText("locales/en.json"))
 
-    def test_hub_html_and_relative_logo_are_qrc_resources(self):
+    def test_native_hub_branding_is_compiled_without_html(self):
         hub=Package("hub",compiled=True)
-        url=hub.Url("index.html")
+        url=hub.Url("BazzaltLogo.svg")
         self.assertEqual(url.scheme(),"qrc")
-        self.assertIn("qrc:///qtwebchannel/qwebchannel.js",hub.ReadText("index.html"))
-        logo=url.resolved(hub.Url("BazzaltLogo.svg"))
-        self.assertTrue(QFile.exists(":"+logo.path()))
+        self.assertTrue(QFile.exists(":"+url.path()))
+        self.assertEqual(hub.ReadBytes("BazzaltLogo.svg"),(ROOT/"Launcher/BazzaltLogo.svg").read_bytes())
+        with self.assertRaises(FileNotFoundError):hub.ReadText("index.html")
 
     def test_unsafe_and_missing_paths_fail_in_both_modes(self):
         for compiled in (False,True):

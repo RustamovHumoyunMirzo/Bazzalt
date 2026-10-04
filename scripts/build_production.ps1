@@ -25,6 +25,7 @@ New-Item -ItemType Directory -Force -Path $Output | Out-Null
 python (Join-Path $Root "scripts/compile_resources.py") --build-directory (Join-Path $Build "CompiledResources")
 if ($LASTEXITCODE -ne 0) { throw "Application resource compilation failed" }
 python -m nuitka --mode=standalone --assume-yes-for-downloads --enable-plugin=pyside6 `
+    --nofollow-import-to=PySide6.QtWebEngineCore,PySide6.QtWebEngineWidgets,PySide6.QtWebChannel `
     --include-module=bazzalt._hub_resources_rc --include-module=bazzalt._branding_resources_rc `
     --windows-console-mode=disable --output-filename=BazzaltHub.exe --output-dir=$Output "$Root/bazzalt_hub.py"
 if ($LASTEXITCODE -ne 0) { throw "BazzaltHub compilation failed" }

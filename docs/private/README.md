@@ -4,6 +4,9 @@ This handbook documents the engine as it exists in the repository. It explains
 the public game-facing API, private editor/runtime boundary, persistent formats,
 resource ownership, and extension points for game code.
 
+The standalone [native Hub](native-hub.md) manages projects and installed editor
+versions using platform-native Qt Widgets, independently of the editor UI.
+
 ## Read in this order
 
 1. [Getting started](getting-started.md) — dependencies, building, linking, and

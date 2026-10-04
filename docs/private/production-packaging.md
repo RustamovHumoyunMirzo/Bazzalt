@@ -52,17 +52,17 @@ cmake -S . -B build -DBAZZALT_BUILD_EDITOR_BRIDGE=ON
 On Unix-like systems use `./scripts/build_production.sh 1.0.0`. Both scripts first
 build the C++/pybind11 engine bridge, compile the Hub and editor with Nuitka, place
 the editor beneath the Hub's version directory, and generate its manifest. The Hub
-uses Qt WebEngine to render `Launcher/index.html`; Qt WebChannel exposes only the
-project/version operations implemented by `HubBridge`.
+uses native Qt Widgets and a signal-based controller for project/version
+operations. It does not load HTML, WebEngine, WebChannel, or editor widgets.
 
 ## Compiled application resources
 
 Production builds no longer copy `Editor/assets`, `Launcher/index.html`, or
 `Launcher/BazzaltLogo.svg` into the installation. Before Nuitka runs,
 `scripts/compile_resources.py` invokes PySide6's Qt resource compiler and creates
-three generated Python resource modules: editor assets, Hub HTML/branding, and
+three generated Python resource modules: editor assets, Hub branding, and
 shared branding. Nuitka includes these modules as compiled code; the resource
-byte arrays live in the programs rather than as raw SVG, JSON, HTML, or GLB files.
+byte arrays live in the programs rather than as raw SVG, JSON, or GLB files.
 Generated modules are ignored by Git. Regenerate them on every production build
 so changed icons, locales, layouts, and future assets are included automatically.
 
@@ -72,10 +72,9 @@ python -m unittest Editor.tests.test_compiled_resources
 python scripts/compile_resources.py --audit dist/production/bazzalt_hub.dist
 ```
 
-Qt resolves editor assets through `:/bazzalt/editor/...`, Hub content through
-`qrc:/bazzalt/hub/index.html`, and shared branding through
-`:/bazzalt/branding/BazzaltLogo.svg`. Relative Hub images still resolve normally,
-and the WebChannel script continues using Qt's built-in resource URL. Theme
+Qt resolves editor assets through `:/bazzalt/editor/...`, Hub branding through
+`:/bazzalt/hub/BazzaltLogo.svg`, and shared branding through
+`:/bazzalt/branding/BazzaltLogo.svg`. The Hub no longer contains a web page. Theme
 stylesheet icons also use the resource service, not installation file paths.
 The original docking icons remain in their existing compiled Qt package.
 
@@ -99,9 +98,8 @@ they are not immutable Bazzalt UI resources.
 Embedding is packaging, not encryption: someone inspecting the executable can
 extract resource data. Do not store credentials or secrets in these resources.
 
-The Hub build is a self-contained directory-mode distribution. This is preferable
-for Qt WebEngine production deployment because its helper process and resources
-remain installed once instead of being unpacked on every launch. The editor is a
+The Hub build is a self-contained directory-mode distribution using Qt Widgets;
+Chromium/WebEngine helper processes are not part of the Hub. The editor is a
 managed version directory rather than an independently installed application.
 
 ## Windows installer
