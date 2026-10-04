@@ -911,7 +911,9 @@ class EditorController(QObject):
         if self.ScriptCompiler and self.ScriptAttachments:
             tr=self.Window.Localization.Translate
             progress=QProgressDialog(tr("scripting.compiling"),None,0,0,self.Window);progress.setWindowModality(Qt.WindowModality.WindowModal);progress.setCancelButton(None);progress.show();QApplication.processEvents()
-            try:result=self.ScriptCompiler.Build(self.ScriptAttachments.UsedSources())
+            try:
+                self.ScriptCompiler.Tools=self.Window.GetPreferences().get("tools",{})
+                result=self.ScriptCompiler.Build(self.ScriptAttachments.UsedSources())
             finally:progress.close()
             for diagnostic in result.diagnostics:
                 level=ConsoleLevel.Error if diagnostic.level=="error" else ConsoleLevel.Warning if diagnostic.level=="warning" else ConsoleLevel.Info

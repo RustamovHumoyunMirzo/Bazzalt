@@ -46,6 +46,13 @@ Compiled modules expose a versioned C ABI. The private native runtime validates 
 
 ## Toolchain ownership
 
-End users do not need a system compiler. Editor distributions carry a pinned private LLVM/Clang installation at `toolchain/llvm`. Engine developers install it with `scripts/get_llvm.ps1` on Windows or `scripts/get_llvm.sh` on supported POSIX hosts. Production packaging fails if that toolchain is absent, preventing a broken editor release.
+Hub downloads a pinned LLVM package separately into shared application data at
+`BAZZALT/data/Tools/llvm`. Editor versions share it rather than bundling copies.
+Windows users also install Microsoft's C++ Build Tools and Windows SDK through
+its separate official installer. Preferences > Build Tools can override the
+Clang++ executable and matching Script SDK directory. Missing tools produce
+Console errors and stop Play without crashing. Engine developers can still use
+`scripts/get_llvm.ps1` (verified checksum required) or `scripts/get_llvm.sh` for
+the source-development toolchain. See [production packaging](production-packaging.md).
 
 `Behavior` exposes lifecycle callbacks only. It intentionally does not expose engine initialization, event pumping, rendering presentation, or shutdown.

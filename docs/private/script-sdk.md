@@ -59,7 +59,7 @@ compiled modules. Existing optional V1 service exports remain accepted.
 
 Built-in component hashes are explicit, compiler-independent EnTT IDs so a
 Clang gameplay module and MSVC engine access the same component pools.
-User-defined components use the bundled script compiler's ordinary EnTT IDs.
+User-defined components use the shared script compiler's ordinary EnTT IDs.
 Define shared custom types in a common header and compile modules with the same
 SDK/toolchain. Engine systems are not exported as public loop controls.
 

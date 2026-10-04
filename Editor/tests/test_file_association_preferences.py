@@ -31,7 +31,7 @@ class FileAssociationPreferencesTests(unittest.TestCase):
     def tearDown(self):
         self.Dialog.close();self.Editor.close();self.Editor.deleteLater();self.App.sendPostedEvents(None,QEvent.Type.DeferredDelete)
     def test_section_lists_choices_and_reset_cancel_changes_nothing(self):
-        self.assertEqual(self.Dialog.Sections.item(7).text(),"File Associations")
+        self.assertIn("File Associations",[self.Dialog.Sections.item(index).text() for index in range(self.Dialog.Sections.count())])
         self.assertEqual(self.Dialog.AssociationList.topLevelItem(0).text(0),".cpp")
         before=deepcopy(self.Editor._settings)
         self.Dialog.AssociationList.setCurrentItem(self.Dialog.AssociationList.topLevelItem(0))
@@ -52,5 +52,13 @@ class FileAssociationPreferencesTests(unittest.TestCase):
         self.Dialog.Restore.click();self.assertEqual(self.Dialog._associations,{})
         self.assertTrue(self.Editor.AssetBrowser.ExternalOpener.Associations())
         self.Dialog._Apply();self.assertFalse(self.Editor.AssetBrowser.ExternalOpener.Associations())
+    def test_build_tool_overrides_are_localized_staged_and_saved(self):
+        self.assertIn("Build Tools",[self.Dialog.Sections.item(index).text() for index in range(self.Dialog.Sections.count())])
+        self.Dialog.Controls["compiler_path"].setText("C:/Tools/LLVM/bin/clang++.exe")
+        self.Dialog.Controls["sdk_path"].setText("C:/SDKs/Bazzalt")
+        self.assertEqual(self.Editor.GetPreferences()["tools"]["compiler_path"],"")
+        self.Dialog._Apply()
+        self.assertEqual(self.Editor.GetPreferences()["tools"],{"compiler_path":"C:/Tools/LLVM/bin/clang++.exe","sdk_path":"C:/SDKs/Bazzalt"})
+        self.Editor.Save.assert_called_once()
 
 if __name__=="__main__":unittest.main()

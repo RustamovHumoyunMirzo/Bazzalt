@@ -7,7 +7,9 @@
 #ifndef InstallerOutputDir
   #define InstallerOutputDir "..\dist\installer"
 #endif
-#define EditorFolder "bazzalt_" + StringChange(AppVersion, ".", "_")
+#ifndef TargetArchitecture
+  #define TargetArchitecture "x64"
+#endif
 
 [Setup]
 AppId={{D563105B-0545-4D36-8A48-6AE8EF8E6CB8}
@@ -24,8 +26,12 @@ DefaultDirName={autopf}\BAZZALT Hub
 DefaultGroupName=BAZZALT
 DisableProgramGroupPage=yes
 PrivilegesRequired=admin
+#if TargetArchitecture == "x64"
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+#else
+ArchitecturesAllowed=x86compatible
+#endif
 MinVersion=10.0.17763
 OutputDir={#InstallerOutputDir}
 OutputBaseFilename=BazzaltHub-Setup
@@ -48,10 +54,6 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
-
-[InstallDelete]
-; Clean only the version being replaced. Other installed editor versions survive an update.
-Type: filesandordirs; Name: "{app}\versions\{#EditorFolder}"
 
 [Files]
 Source: "{#BundleDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

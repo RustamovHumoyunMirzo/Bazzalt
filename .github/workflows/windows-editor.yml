@@ -1,0 +1,17 @@
+name: Windows Editor
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Editor version (empty uses releases/versions.json)'
+        default: ''
+  push:
+    tags: ['editor-v*']
+permissions:
+  contents: read
+jobs:
+  build:
+    uses: ./.github/workflows/windows-product.yml
+    with:
+      product: editor
+      version: ${{ inputs.version || '' }}

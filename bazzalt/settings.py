@@ -26,6 +26,8 @@ class DataPaths:
     def Editors(cls) -> Path: return cls.Root() / "Editors"
     @classmethod
     def Logs(cls) -> Path: return cls.Root() / "Logs"
+    @classmethod
+    def Tools(cls) -> Path: return cls.Root() / "Tools"
     @staticmethod
     def Projects() -> Path:
         base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation)

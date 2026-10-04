@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "editor": "0.5.0",
+  "core": "0.5.0",
+  "hub": "1.0.0",
+  "python": "3.13.2",
+  "pyside": "6.10.2",
+  "llvm": "22.1.0",
+  "llvm_sha256": "2dd6a6c990865f98766dec58cce1cbfba48e5affc0098e5b1fff96c2f1d23e81"
+}

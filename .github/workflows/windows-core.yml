@@ -1,0 +1,17 @@
+name: Windows Core
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Core version (empty uses releases/versions.json)'
+        default: ''
+  push:
+    tags: ['core-v*']
+permissions:
+  contents: read
+jobs:
+  build:
+    uses: ./.github/workflows/windows-product.yml
+    with:
+      product: core
+      version: ${{ inputs.version || '' }}

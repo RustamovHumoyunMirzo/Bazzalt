@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 set -eu
-VERSION="${1:-1.0.0}"
+VERSION="${1:-0.5.0}"
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 BUILD="$ROOT/build"
 OUTPUT="$ROOT/dist/production"
@@ -23,10 +23,16 @@ python -m nuitka --mode=standalone --assume-yes-for-downloads --enable-plugin=py
 HUB="$OUTPUT/bazzalt_hub.dist"
 python "$ROOT/scripts/compile_resources.py" --audit "$HUB"
 python "$ROOT/scripts/compile_resources.py" --audit "$OUTPUT/bazzalt_editor.dist"
-TARGET="$HUB/versions/$VERSION_FOLDER"
+TARGET="$OUTPUT/bazzalt_editor.dist"
 mkdir -p "$TARGET/Editor"
-cp -R "$OUTPUT/bazzalt_editor.dist/." "$TARGET/"
 cp "$NATIVE" "$TARGET/Editor/"
+cp -R "$BUILD/ScriptSDK" "$TARGET/"
+for LIBRARY in "$BUILD/Editor/libBazzalt.so" "$BUILD/Editor/libBazzalt.dylib"; do
+  if [ -f "$LIBRARY" ]; then cp "$LIBRARY" "$TARGET/Editor/"; fi
+done
+for LIBRARY in "$BUILD/Editor/libbshad.so" "$BUILD/Editor/libbshad.dylib"; do
+  if [ -f "$LIBRARY" ]; then cp "$LIBRARY" "$TARGET/Editor/"; fi
+done
 printf '{\n  "version": "%s",\n  "executable": "Bazzalt",\n  "project_format_max": 1\n}\n' "$VERSION" > "$TARGET/editor.json"
 python "$ROOT/scripts/compile_resources.py" --audit "$HUB"
-printf 'Production bundle: %s\n' "$HUB"
+printf 'Independent Hub: %s\nManaged Editor: %s\n' "$HUB" "$TARGET"

@@ -9,7 +9,11 @@ from pathlib import Path
 from bazzalt.settings import DataPaths, ReadProjectMetadata, SettingsStore, Version
 
 HUB_SCHEMA_VERSION = 2
-CURRENT_EDITOR_VERSION = "1.0.0"
+CURRENT_EDITOR_VERSION = "0.5.0"
+HUB_VERSION = "1.0.0"
+# Existing source-development projects used the unreleased 1.0.0 placeholder.
+# Keep that development registration compatible; shipped versions come from editor.json.
+DEVELOPMENT_EDITOR_VERSION = "1.0.0"
 CURRENT_PROJECT_FORMAT = 1
 
 
@@ -34,8 +38,8 @@ class HubCatalog:
     def Save(self) -> None: self.Store.Save(self.Data)
 
     def RegisterDevelopmentEditor(self, root: Path) -> None:
-        if any(item.get("version") == CURRENT_EDITOR_VERSION for item in self.Data["editors"]): return
-        self.Data["editors"].append({"version": CURRENT_EDITOR_VERSION, "root": str(root.resolve()),
+        if any(item.get("development") for item in self.Data["editors"]): return
+        self.Data["editors"].append({"version": DEVELOPMENT_EDITOR_VERSION, "root": str(root.resolve()),
                                       "command": sys.executable, "project_format_max": CURRENT_PROJECT_FORMAT,
                                       "development": True})
         self.Save()
@@ -51,7 +55,8 @@ class HubCatalog:
                     value = json.loads((root / "editor.json").read_text(encoding="utf-8-sig"))
                     version = str(value["version"]); Version.Parse(version)
                     executable = str(value.get("executable", "Bazzalt.exe" if os.name == "nt" else "Bazzalt"))
-                    if not (root / executable).is_file(): continue
+                    target = (root / executable).resolve()
+                    if not target.is_relative_to(root.resolve()) or not target.is_file(): continue
                     discovered.append({"version": version, "root": str(root.resolve()), "command": executable,
                                        "project_format_max": int(value.get("project_format_max", 1)),
                                        "development": False})
@@ -89,7 +94,7 @@ class HubCatalog:
         project = root / f"{name.strip()}.bproject"
         project.write_text(
             f'FormatVersion: {CURRENT_PROJECT_FORMAT}\nProjectUUID: "{uuid.uuid4()}"\n'
-            f'Name: "{name.strip()}"\nAssetDirectory: "Assets"\nStartupScene: ""\n'
+            f'Name: {json.dumps(name.strip(), ensure_ascii=False)}\nAssetDirectory: "Assets"\nStartupScene: ""\n'
             f'Properties:\n  "engine.version": "{editor_version}"\n', encoding="utf-8")
         return self.AddProject(project)
 

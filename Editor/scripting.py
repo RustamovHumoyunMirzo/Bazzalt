@@ -27,12 +27,13 @@ class BuildResult:
     success: bool; outputs: tuple[Path,...]=(); diagnostics: tuple[Diagnostic,...]=()
 
 class ScriptCompiler:
-    """Incremental compiler using only the toolchain shipped beside the editor."""
-    def __init__(self, project: str|Path, engine_root: str|Path|None=None, app_root: str|Path|None=None):
+    """Incremental compiler using shared Hub tools or explicit local overrides."""
+    def __init__(self, project: str|Path, engine_root: str|Path|None=None, app_root: str|Path|None=None, tools: dict|None=None):
         self.project=Path(project).resolve();self.engine_root=Path(engine_root or Path(__file__).resolve().parents[1])
         self.app_root=Path(app_root or Path(os.path.abspath(os.path.dirname(os.sys.executable))))
         self.cache=self.project/".bazzalt"/"ScriptAssemblies";self.state_file=self.cache/"build-state.json"
         self.Diagnostics=[]
+        self.Tools = dict(tools or {})
     @staticmethod
     def Inspect(path: str|Path)->ScriptDescriptor|None:
         path=Path(path)
@@ -78,13 +79,12 @@ class ScriptCompiler:
             if value.path==descriptor.path.resolve() and value.name==descriptor.name:return value
         raise ScriptValidationError("\n".join(value.message for value in self.Diagnostics) or f"Invalid or missing component source: {descriptor.path}")
     def _compiler(self)->Path|None:
-        name="clang++.exe" if os.name=="nt" else "clang++"
-        for root in (self.app_root,self.engine_root):
-            candidate=root/"toolchain"/"llvm"/"bin"/name
-            if candidate.is_file():return candidate
-        return None
+        from bazzalt.tools import FindCompiler
+        return FindCompiler(self.Tools.get("compiler_path", ""), (self.app_root,self.engine_root))
     def _sdk(self)->Path|None:
-        for root in (self.app_root/"ScriptSDK",self.engine_root/"build"/"ScriptSDK"):
+        override = self.Tools.get("sdk_path", "")
+        roots = (Path(override).expanduser(),) if override else (self.app_root/"ScriptSDK",self.engine_root/"build"/"ScriptSDK")
+        for root in roots:
             if (root/"include/Bazzalt/Scene.h").is_file() and (root/"include/entt/entity/registry.hpp").is_file():return root
         return None
     def _link_library(self,sdk:Path)->Path|None:
@@ -95,6 +95,12 @@ class ScriptCompiler:
                 if candidate.is_file():return candidate
         return None
     def Build(self, used: list[str|Path])->BuildResult:
+        try:
+            return self._Build(used)
+        except (OSError, ValueError) as error:
+            return BuildResult(False, diagnostics=(Diagnostic("error", str(error)),))
+
+    def _Build(self, used: list[str|Path])->BuildResult:
         used=list(dict.fromkeys(Path(path).resolve() for path in used));assets=self.project/"Assets"
         project_sources=[path for path in assets.rglob("*") if path.is_file() and path.suffix.lower()==".cpp"] if assets.is_dir() else []
         validated=self._Validate([*project_sources,*used]);by_path={value.path:value for value in validated}
@@ -104,7 +110,7 @@ class ScriptCompiler:
         descriptors=[by_path[path] for path in used]
         if not descriptors:return BuildResult(True)
         compiler=self._compiler()
-        if compiler is None:return BuildResult(False,diagnostics=(Diagnostic("error","Bundled LLVM/Clang toolchain is missing. Repair this editor installation.",localization_key="scripting.toolchain_missing"),))
+        if compiler is None:return BuildResult(False,diagnostics=(Diagnostic("error","Build tools are missing. Install them in Hub or set a compiler path in Preferences.",localization_key="scripting.toolchain_missing"),))
         sdk=self._sdk();library=self._link_library(sdk) if sdk else None
         if not library:return BuildResult(False,diagnostics=(Diagnostic("error","The matching Bazzalt script SDK/link library is missing. Rebuild or repair this editor installation.",localization_key="scripting.sdk_missing"),))
         self.cache.mkdir(parents=True,exist_ok=True)
@@ -113,7 +119,10 @@ class ScriptCompiler:
         outputs=[];diagnostics=[]
         headers=b"".join(str(path.relative_to(sdk)).encode()+path.read_bytes() for path in sorted((sdk/"include").rglob("*.h")))
         headers+=b"".join(str(path.relative_to(sdk)).encode()+path.read_bytes() for path in sorted((sdk/"include").rglob("*.hpp")))
-        sdk_digest=hashlib.sha256(headers+library.read_bytes()).digest()
+        import struct
+        compiler_stat=compiler.stat()
+        compiler_identity=f"{compiler.resolve()}:{compiler_stat.st_size}:{compiler_stat.st_mtime_ns}:{struct.calcsize('P')}".encode("utf-8")
+        sdk_digest=hashlib.sha256(headers+library.read_bytes()+compiler_identity).digest()
         for descriptor in descriptors:
             digest=hashlib.sha256(descriptor.path.read_bytes()+b"\0bazzalt-script-linked-sdk-1"+sdk_digest).hexdigest()
             suffix=".dll" if os.name=="nt" else ".dylib" if os.sys.platform=="darwin" else ".so"
@@ -122,6 +131,9 @@ class ScriptCompiler:
             wrapper=self.cache/f"{descriptor.name}-{digest[:12]}.module.cpp"
             wrapper.write_text(self._Wrapper(descriptor),encoding="utf-8")
             command=[str(compiler),"-std=c++20","-shared","-fvisibility=hidden",f"-I{sdk/'include'}",str(wrapper),str(library),"-o",str(output)]
+            if os.name=="nt":
+                import struct
+                command.append("--target=" + ("x86_64" if struct.calcsize("P")==8 else "i686") + "-pc-windows-msvc")
             if os.name=="nt":command.extend(["-fms-runtime-lib=dll","-D_ITERATOR_DEBUG_LEVEL=0"])
             else:
                 command.extend(["-fPIC",f"-Wl,-rpath,{sdk/'lib'}"])

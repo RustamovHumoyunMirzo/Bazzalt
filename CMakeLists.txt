@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.16)
-project(BAZZALT VERSION 1.0.0 LANGUAGES C CXX)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/releases/versions.json" _bazzalt_versions)
+string(REGEX MATCH "\"core\"[ \t\r\n]*:[ \t\r\n]*\"([0-9]+\\.[0-9]+\\.[0-9]+)\"" _bazzalt_core_version "${_bazzalt_versions}")
+if(NOT _bazzalt_core_version)
+    message(FATAL_ERROR "releases/versions.json must declare a semantic core version")
+endif()
+project(BAZZALT VERSION "${CMAKE_MATCH_1}" LANGUAGES C CXX)
 find_package(Python COMPONENTS Interpreter REQUIRED)
 
 set(CMAKE_CXX_STANDARD 20)

@@ -16,8 +16,10 @@ The shared desktop package supplies only branding, paths, settings, and versions
 - **Editors:** installed versions, installation paths, supported project formats,
   and development/installed status. Refresh rescans manifests. Locate Editors
   selects a versions root; double-click opens the installation directory.
-  Downloads are not invented by this interface: installations still use the
-  existing manifest-based catalog.
+  The download area loads a trusted HTTPS release catalog, installs verified
+  editor/Core/LLVM ZIPs with progress and cancellation, and links to Microsoft's
+  separate C++ Build Tools installer. See [production packaging](production-packaging.md)
+  for release workflows, shared storage, validation, and current x86 limitations.
 - **Preferences:** default projects parent directory, removal confirmation,
   remembered window size/position, and read-only storage locations. Changes use
   the existing versioned, atomic Hub settings store, not browser localStorage.

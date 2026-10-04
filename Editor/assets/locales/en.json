@@ -167,7 +167,7 @@
   "scripting.compiling": "Compiling game scripts…",
   "scripting.compiler_source": "Compiler",
   "scripting.runtime_source": "Runtime",
-  "scripting.toolchain_missing": "Bundled LLVM/Clang toolchain is missing. Repair this editor installation.",
+  "scripting.toolchain_missing": "Build tools are missing. Install LLVM and Windows C++ Build Tools from Hub, or configure a local compiler in Preferences > Build Tools.",
   "scripting.sdk_missing": "The matching Bazzalt script SDK/link library is missing. Rebuild or repair this editor installation.",
   "scripting.compile_success": "Compiled {count} script module(s).",
   "preferences.title": "Preferences",
@@ -289,5 +289,11 @@
   "hierarchy.inherited_state": "Inherited from a parent. Change the parent’s editor state.",
   "environment.mode": "Source Type",
   "environment.map_mode": "Environment Map",
-  "environment.material_mode": "Material"
+  "environment.material_mode": "Material",
+  "preferences.section.tools": "Build Tools",
+  "preferences.compiler_path": "Clang++ executable",
+  "preferences.sdk_path": "Script SDK directory",
+  "preferences.tools_automatic": "Automatic (shared Hub tools / editor SDK)",
+  "preferences.tools_browse": "Browse…",
+  "preferences.tools_note": "Build tools are shared by all editor versions. Windows also needs MSVC C++ Build Tools and a Windows SDK. Empty paths use automatic discovery; invalid overrides report compiler errors rather than falling back."
 }

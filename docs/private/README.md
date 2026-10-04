@@ -6,6 +6,8 @@ resource ownership, and extension points for game code.
 
 The standalone [native Hub](native-hub.md) manages projects and installed editor
 versions using platform-native Qt Widgets, independently of the editor UI.
+See [production packaging and downloads](production-packaging.md) for Windows
+release workflows, shared build tools, and architecture support.
 
 ## Read in this order
 

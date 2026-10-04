@@ -71,12 +71,13 @@ Use the matching `.sh` scripts on Linux or macOS. For Windows production builds:
 
 ```powershell
 python -m pip install -r requirements-build.txt
-./scripts/build_production.ps1 -Version 1.0.0 -CreateInstaller
+./scripts/build_production.ps1 -Product all
 ```
 
 ## Documentation
 
-- [C++ behaviors and bundled compiler](docs/private/scripting.md)
+- [C++ behaviors and shared build tools](docs/private/scripting.md)
+- [Windows releases, Hub downloads, and packaging](docs/private/production-packaging.md)
 
 The full engine handbook and API reference live in [`docs/`](docs/private/README.md):
 

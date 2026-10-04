@@ -8,12 +8,13 @@ from PySide6.QtWidgets import (
     QApplication, QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QFrame, QGroupBox, QHBoxLayout, QHeaderView,
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMenu,
-    QMessageBox, QPushButton, QStackedWidget, QStyle, QTableView, QVBoxLayout, QWidget,
+    QMessageBox, QPushButton, QStackedWidget, QStyle, QTableView, QVBoxLayout, QWidget, QProgressBar,
 )
 from bazzalt.branding import LogoIcon
 from bazzalt.resources import Package
 from bazzalt.settings import DataPaths, Version
-from .catalog import CURRENT_EDITOR_VERSION
+from .catalog import CURRENT_EDITOR_VERSION, HUB_VERSION
+from .downloads import DEFAULT_CATALOG, DownloadWorker
 
 ID_ROLE = Qt.ItemDataRole.UserRole
 SORT_ROLE = int(ID_ROLE) + 1
@@ -84,7 +85,7 @@ class NativeHubWindow(QMainWindow):
         self.Navigation.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         for text,standard in (("Projects",QStyle.StandardPixmap.SP_DirIcon),("Editors",QStyle.StandardPixmap.SP_ComputerIcon),("Preferences",QStyle.StandardPixmap.SP_FileDialogDetailedView)):
             item=QListWidgetItem(self.style().standardIcon(standard),text);item.setSizeHint(QSize(140,40));self.Navigation.addItem(item)
-        side.addWidget(self.Navigation,1);side.addWidget(Muted(f"Hub {CURRENT_EDITOR_VERSION}\nNative desktop application",sidebar))
+        side.addWidget(self.Navigation,1);side.addWidget(Muted(f"Hub {HUB_VERSION}\nNative desktop application",sidebar))
         separator=QFrame(root);separator.setFrameShape(QFrame.Shape.VLine);layout.addWidget(sidebar);layout.addWidget(separator)
         self.Pages=QStackedWidget(root);layout.addWidget(self.Pages,1)
         self.BuildProjects();self.BuildEditors();self.BuildPreferences();self.BuildActions()
@@ -125,6 +126,15 @@ class NativeHubWindow(QMainWindow):
         self.EditorNotice=Muted("No editor versions installed. Locate a folder containing version directories and editor.json manifests.",page);layout.addWidget(self.EditorNotice)
         refresh.clicked.connect(self.RescanEditors);locate.clicked.connect(self.LocateEditors)
         self.EditorTable.doubleClicked.connect(self.RevealEditor)
+        downloads=QGroupBox("Download Editors and Build Tools",page);dl=QVBoxLayout(downloads)
+        row=QHBoxLayout();self.CatalogUrl=QLineEdit(self.Catalog.Data.get("preferences",{}).get("download_catalog",DEFAULT_CATALOG),downloads);self.CatalogUrl.setPlaceholderText("HTTPS release catalog URL");self.CheckDownloads=QPushButton("Check Downloads",downloads);row.addWidget(self.CatalogUrl,1);row.addWidget(self.CheckDownloads);dl.addLayout(row)
+        self.DownloadList=QComboBox(downloads);self.DownloadList.setMinimumContentsLength(20);dl.addWidget(self.DownloadList)
+        row=QHBoxLayout();self.InstallDownload=QPushButton("Download and Install",downloads);self.InstallDownload.setEnabled(False);self.CancelDownload=QPushButton("Cancel",downloads);self.CancelDownload.setEnabled(False);row.addWidget(self.InstallDownload);row.addWidget(self.CancelDownload)
+        windows_tools=QPushButton("Windows C++ Build Tools…",downloads);row.addWidget(windows_tools);dl.addLayout(row)
+        self.DownloadProgress=QProgressBar(downloads);self.DownloadProgress.setRange(0,100);self.DownloadProgress.hide();dl.addWidget(self.DownloadProgress)
+        dl.addWidget(Muted("Editors include the Core SDK. LLVM is installed separately and shared by all editor versions. Windows also requires Microsoft's C++ Build Tools and Windows SDK.",downloads));layout.addWidget(downloads)
+        self.DownloadWorker=None;self.CheckDownloads.clicked.connect(self.FetchDownloads);self.InstallDownload.clicked.connect(self.InstallSelectedDownload);self.CancelDownload.clicked.connect(self.CancelInstall)
+        windows_tools.clicked.connect(lambda:QDesktopServices.openUrl(QUrl("https://visualstudio.microsoft.com/visual-cpp-build-tools/")))
 
     def BuildPreferences(self):
         page,layout=self.Page("Preferences","Hub settings. The interface follows your operating system’s appearance.")
@@ -152,7 +162,7 @@ class NativeHubWindow(QMainWindow):
             action=view.addAction(title);action.triggered.connect(lambda checked=False,i=index:self.Navigation.setCurrentRow(i))
         refresh=view.addAction("Refresh Editors");refresh.setShortcut(QKeySequence("F5"));refresh.triggered.connect(self.RescanEditors)
         find=QAction("Find Projects",self);find.setShortcut(QKeySequence.StandardKey.Find);find.triggered.connect(lambda:(self.Navigation.setCurrentRow(0),self.Search.setFocus()));self.addAction(find)
-        help_menu=self.menuBar().addMenu("&Help");about=help_menu.addAction("About BAZZALT Hub");about.triggered.connect(lambda:QMessageBox.about(self,"BAZZALT Hub",f"BAZZALT Hub {CURRENT_EDITOR_VERSION}\nProject and editor-version management.\nBuilt with native Qt Widgets."))
+        help_menu=self.menuBar().addMenu("&Help");about=help_menu.addAction("About BAZZALT Hub");about.triggered.connect(lambda:QMessageBox.about(self,"BAZZALT Hub",f"BAZZALT Hub {HUB_VERSION}\nProject and editor-version management.\nBuilt with native Qt Widgets."))
 
     def VersionsRoot(self):
         value=self.Catalog.Data.get("preferences",{}).get("versions_root","");return Path(value) if value else DataPaths.Versions()
@@ -245,6 +255,38 @@ class NativeHubWindow(QMainWindow):
         try:self.Catalog.DiscoverEditors(self.VersionsRoot());self.Refresh();self.statusBar().showMessage("Editor installations refreshed",4000)
         except (OSError,ValueError) as error:self.ShowError(str(error))
 
+    def _StartDownloadWorker(self,worker):
+        self.DownloadWorker=worker;self.CheckDownloads.setEnabled(False);self.InstallDownload.setEnabled(False);self.CancelDownload.setEnabled(True);self.DownloadProgress.setValue(0);self.DownloadProgress.show()
+        worker.Progress.connect(self.DownloadProgress.setValue);worker.Failed.connect(self.ShowError);worker.finished.connect(self._DownloadFinished);worker.start()
+
+    def _DownloadFinished(self):
+        worker=self.DownloadWorker;self.DownloadWorker=None;self.CheckDownloads.setEnabled(True);self.InstallDownload.setEnabled(self.DownloadList.count()>0);self.CancelDownload.setEnabled(False);self.DownloadProgress.hide()
+        if worker:worker.deleteLater()
+
+    def FetchDownloads(self):
+        if self.DownloadWorker:return
+        url=self.CatalogUrl.text().strip();self.SavePreference("download_catalog",url)
+        worker=DownloadWorker(self,catalog_url=url);worker.CatalogLoaded.connect(self._DownloadsLoaded);self._StartDownloadWorker(worker)
+
+    def _DownloadsLoaded(self,entries):
+        self.DownloadList.clear()
+        for entry in entries:
+            if entry["product"] in {"editor","llvm","core"}:self.DownloadList.addItem(f"{entry['product'].title()} {entry['version']} — {entry['architecture']} ({entry['size']/1024**2:.0f} MB)",entry)
+        self.statusBar().showMessage("Download catalog loaded" if entries else "No compatible downloads are published yet",5000)
+
+    def InstallSelectedDownload(self):
+        entry=self.DownloadList.currentData()
+        if not entry or self.DownloadWorker:return
+        root=self.VersionsRoot()
+        # Program Files is normally read-only for Hub. Use shared per-user storage
+        # for downloads unless the user explicitly configured another location.
+        if not self.Catalog.Data.get("preferences",{}).get("versions_root"):
+            root=DataPaths.Editors();self.SavePreference("versions_root",str(root))
+        worker=DownloadWorker(self,entry=entry,versions=root);worker.Completed.connect(lambda path:(self.RescanEditors(),self.statusBar().showMessage("Installed: "+path,6000)));self._StartDownloadWorker(worker)
+
+    def CancelInstall(self):
+        if self.DownloadWorker:self.DownloadWorker.requestInterruption();self.CancelDownload.setEnabled(False)
+
     def LocateEditors(self):
         folder=QFileDialog.getExistingDirectory(self,"Editor Versions Folder",str(self.VersionsRoot()))
         if folder:self.SavePreference("versions_root",folder);self.RescanEditors()
@@ -275,5 +317,7 @@ class NativeHubWindow(QMainWindow):
                 for row in range(self.ProjectModel.rowCount()):self.ProjectModel.item(row,0).setIcon(icon)
 
     def closeEvent(self,event):
+        if self.DownloadWorker and self.DownloadWorker.isRunning():
+            self.CancelInstall();self.statusBar().showMessage("Cancelling download; close again when it finishes",5000);event.ignore();return
         if self.RememberWindow.isChecked():self.SavePreference("window_geometry",bytes(self.saveGeometry().toBase64()).decode())
         super().closeEvent(event)

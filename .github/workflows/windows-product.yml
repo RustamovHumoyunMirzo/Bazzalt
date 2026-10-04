@@ -1,0 +1,90 @@
+name: Windows product builder
+on:
+  workflow_call:
+    inputs:
+      product:
+        required: true
+        type: string
+      version:
+        default: ''
+        type: string
+permissions:
+  contents: read
+jobs:
+  x64:
+    runs-on: windows-2022
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13.2'
+          architecture: x64
+      - name: Python build dependencies
+        run: python -m pip install -r requirements-build.txt PySide6==6.10.2 pybind11==3.0.2
+      - name: Fetch pinned native dependencies
+        if: inputs.product != 'hub'
+        shell: pwsh
+        run: |
+          & scripts/get_entt.ps1
+          & scripts/get_rapidyaml.ps1
+          & scripts/get_sdl3.ps1
+          & scripts/get_filament.ps1
+      - name: Configure native runtime
+        if: inputs.product != 'hub'
+        shell: pwsh
+        run: |
+          $bridge = if ('${{ inputs.product }}' -eq 'editor') {'ON'} else {'OFF'}
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 "-DPython_EXECUTABLE=$((Get-Command python).Source)" "-DBAZZALT_BUILD_EDITOR_BRIDGE=$bridge" -DBUILD_TESTING=ON
+          if ($LASTEXITCODE -ne 0) { throw 'CMake configuration failed' }
+      - name: Build and test core
+        if: inputs.product != 'hub'
+        run: |
+          cmake --build build --config Release --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
+          ctest --test-dir build -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { throw 'Native tests failed' }
+      - name: Test Hub, installs, tools, and resources
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python -m unittest discover -s Launcher/tests -v
+          if ($LASTEXITCODE -ne 0) { throw 'Hub/download tests failed' }
+          python -m unittest Editor.tests.test_scripting Editor.tests.test_compiled_resources Editor.tests.test_file_association_preferences Editor.tests.test_restart_settings -v
+          if ($LASTEXITCODE -ne 0) { throw 'Resource/compiler/preferences tests failed' }
+      - name: Install Inno Setup
+        if: inputs.product == 'hub'
+        run: choco install innosetup --yes --no-progress
+      - name: Package independent product
+        shell: pwsh
+        env:
+          PRODUCT: ${{ inputs.product }}
+          VERSION: ${{ inputs.version }}
+          RELEASE_REF: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          & scripts/build_windows_release.ps1 -Product $env:PRODUCT -Version $env:VERSION -Architecture x64 -DownloadBaseUrl "https://github.com/$env:REPOSITORY/releases/download/$env:RELEASE_REF"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-${{ inputs.product }}-x64
+          path: |
+            dist/releases/*.zip
+            dist/releases/*-Setup.exe
+            dist/releases/*.json
+          if-no-files-found: error
+          retention-days: 30
+  x86-support:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13.2'
+      - name: Investigate genuine Win32 prerequisites
+        run: python scripts/check_x86_support.py --output build/x86-support
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-${{ inputs.product }}-x86-support-report-NOT-BINARIES
+          path: build/x86-support
+          if-no-files-found: error

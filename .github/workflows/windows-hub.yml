@@ -1,0 +1,17 @@
+name: Windows Hub
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Hub version (empty uses releases/versions.json)'
+        default: ''
+  push:
+    tags: ['hub-v*']
+permissions:
+  contents: read
+jobs:
+  build:
+    uses: ./.github/workflows/windows-product.yml
+    with:
+      product: hub
+      version: ${{ inputs.version || '' }}

@@ -1,5 +1,6 @@
 param(
     [string]$Version = "1.0.0",
+    [ValidateSet('x64','x86')][string]$Architecture = 'x64',
     [string]$BundleDirectory = "dist/production/bazzalt_hub.dist",
     [string]$OutputDirectory = "dist/installer",
     [string]$InnoCompiler = ""
@@ -10,15 +11,14 @@ $BundleInput = if ([System.IO.Path]::IsPathRooted($BundleDirectory)) { $BundleDi
 $OutputInput = if ([System.IO.Path]::IsPathRooted($OutputDirectory)) { $OutputDirectory } else { Join-Path $Root $OutputDirectory }
 $Bundle = [System.IO.Path]::GetFullPath($BundleInput)
 $Output = [System.IO.Path]::GetFullPath($OutputInput)
-$VersionFolder = "bazzalt_" + $Version.Replace('.', '_')
 
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must use major.minor.patch" }
 $Required = @(
-    (Join-Path $Bundle "BazzaltHub.exe"),
-    (Join-Path $Bundle "versions/$VersionFolder/Bazzalt.exe"),
-    (Join-Path $Bundle "versions/$VersionFolder/editor.json")
+    (Join-Path $Bundle "BazzaltHub.exe")
 )
 foreach ($Path in $Required) { if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "Missing production file: $Path" } }
+python -c "import sys; sys.path.insert(0, r'$PSScriptRoot'); from release_artifacts import Audit; from pathlib import Path; Audit(Path(r'$Bundle'), '$Architecture', 'hub')"
+if ($LASTEXITCODE -ne 0) { throw 'Installer must contain only Hub binaries of the requested architecture' }
 python (Join-Path $Root "scripts/compile_resources.py") --audit $Bundle
 if ($LASTEXITCODE -ne 0) { throw "Installer input contains raw application resources. Rebuild the production bundle." }
 
@@ -38,10 +38,11 @@ if (-not $InnoCompiler) { throw "Inno Setup 6 was not found. Install it with: wi
 
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
 $Script = Join-Path $Root "installer/BazzaltHub.iss"
-& $InnoCompiler "/DAppVersion=$Version" "/DBundleDir=$Bundle" `
-    "/DInstallerOutputDir=$Output" "/FBazzaltHub-Setup" $Script
+$OutputName = "BazzaltHub-$Version-windows-$Architecture-Setup"
+& $InnoCompiler "/DAppVersion=$Version" "/DTargetArchitecture=$Architecture" "/DBundleDir=$Bundle" `
+    "/DInstallerOutputDir=$Output" "/F$OutputName" $Script
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed with exit code $LASTEXITCODE" }
 
-$Installer = Join-Path $Output "BazzaltHub-Setup.exe"
+$Installer = Join-Path $Output "$OutputName.exe"
 if (-not (Test-Path -LiteralPath $Installer -PathType Leaf)) { throw "Installer output was not created" }
 Write-Host "Installer: $Installer"

@@ -2,7 +2,7 @@
 from __future__ import annotations
 from copy import deepcopy
 from .widgets.fields import RangeInput
-from PySide6.QtWidgets import QScrollArea
+from PySide6.QtWidgets import QScrollArea, QLineEdit, QFileDialog
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QCheckBox,QComboBox,QDialog,QDoubleSpinBox,QFormLayout,QHBoxLayout,QLabel,QListWidget,QPushButton,QStackedWidget,QVBoxLayout,QWidget,QTreeWidget,QTreeWidgetItem,QMessageBox
 import sys
@@ -15,6 +15,7 @@ DEFAULT_PREFERENCES["scene"]["orientation_visible"]=True
 DEFAULT_PREFERENCES["history"]={"command_limit":100,"memory_mb":128}
 DEFAULT_PREFERENCES["rendering"]={"backend":"automatic"}
 DEFAULT_PREFERENCES["file_associations"]={"remember":True}
+DEFAULT_PREFERENCES["tools"]={"compiler_path":"","sdk_path":""}
 
 def MergePreferences(value)->dict:
     result=deepcopy(DEFAULT_PREFERENCES)
@@ -29,7 +30,7 @@ class PreferencesDialog(QDialog):
         self.setObjectName("PreferencesDialog");self.setWindowModality(Qt.WindowModality.WindowModal);self.setModal(True);self.setWindowTitle(self.Tr("preferences.title"));self.resize(680,460);self.setMinimumSize(560,380)
         root=QVBoxLayout(self);root.setContentsMargins(10,10,10,10);root.setSpacing(10);body=QHBoxLayout();body.setSpacing(10);self.Sections=QListWidget();self.Sections.setObjectName("PreferencesSections");self.Sections.setFixedWidth(155);self.Pages=QStackedWidget();body.addWidget(self.Sections);body.addWidget(self.Pages,1);root.addLayout(body,1)
         self._associations=editor.AssetBrowser.ExternalOpener.Associations()
-        self.Controls={};self._AddGeneral();self._AddAppearance();self._AddScene();self._AddConsole();self._AddScripting();self._AddHistory();self._AddRendering();self._AddFileAssociations();self.Sections.currentRowChanged.connect(self.Pages.setCurrentIndex);self.Sections.setCurrentRow(0)
+        self.Controls={};self._AddGeneral();self._AddAppearance();self._AddScene();self._AddConsole();self._AddScripting();self._AddTools();self._AddHistory();self._AddRendering();self._AddFileAssociations();self.Sections.currentRowChanged.connect(self.Pages.setCurrentIndex);self.Sections.setCurrentRow(0)
         buttons=QHBoxLayout();self.Restore=QPushButton(self.Tr("preferences.restore_defaults"));self.Cancel=QPushButton(self.Tr("preferences.cancel"));self.Apply=QPushButton(self.Tr("preferences.apply"));self.Apply.setDefault(True);buttons.addWidget(self.Restore);buttons.addStretch();buttons.addWidget(self.Cancel);buttons.addWidget(self.Apply);root.addLayout(buttons)
         self.Restore.clicked.connect(self._RestoreDefaults);self.Cancel.clicked.connect(self.reject);self.Apply.clicked.connect(self._Apply);self.SetValues(editor.GetPreferences())
     def _Page(self,key:str)->QFormLayout:
@@ -62,6 +63,15 @@ class PreferencesDialog(QDialog):
         layout.addRow(self.Tr("preferences.rendering_backend"),backend)
         note=QLabel(self.Tr("preferences.rendering_restart_note"));note.setWordWrap(True);layout.addRow(note)
         self.Controls["rendering_backend"]=backend
+    def _AddTools(self):
+        layout=self._Page("tools")
+        for key in ("compiler_path","sdk_path"):
+            row=QHBoxLayout();field=QLineEdit();field.setPlaceholderText(self.Tr("preferences.tools_automatic"));button=QPushButton(self.Tr("preferences.tools_browse"));row.addWidget(field,1);row.addWidget(button)
+            def choose(checked=False, key=key, field=field):
+                path=QFileDialog.getOpenFileName(self,self.Tr("preferences."+key),field.text())[0] if key=="compiler_path" else QFileDialog.getExistingDirectory(self,self.Tr("preferences."+key),field.text())
+                if path:field.setText(path)
+            button.clicked.connect(choose);layout.addRow(self.Tr("preferences."+key),row);self.Controls[key]=field
+        note=QLabel(self.Tr("preferences.tools_note"));note.setWordWrap(True);layout.addRow(note)
     def _AddFileAssociations(self):
         layout=self._Page("file_associations")
         remember=QCheckBox(self.Tr("preferences.associations_remember"));layout.addRow(remember);self.Controls["remember_associations"]=remember
@@ -106,6 +116,7 @@ class PreferencesDialog(QDialog):
         for key in ("command_limit","memory_mb"):c[key].SetValue(p["history"][key])
         self._ComboSet(c["rendering_backend"],p["rendering"]["backend"])
         c["remember_associations"].setChecked(bool(p["file_associations"]["remember"]))
+        for key in ("compiler_path","sdk_path"):c[key].setText(str(p["tools"][key]))
     def Values(self)->dict:
         c=self.Controls;result=MergePreferences(self.Editor.GetPreferences())
         result.update(general={"confirm_unsaved":c["confirm_unsaved"].isChecked(),"save_workspace":c["save_workspace"].isChecked()},appearance={"theme":c["theme"].currentData(),"locale":c["locale"].currentData()},console={"clear_on_play":c["clear_on_play"].isChecked()},scripting={"show_compile_success":c["show_compile_success"].isChecked()})
@@ -115,6 +126,7 @@ class PreferencesDialog(QDialog):
         result["history"]={key:int(c[key].GetValue()) for key in ("command_limit","memory_mb")}
         result["rendering"]={"backend":c["rendering_backend"].currentData() or "automatic"}
         result["file_associations"]={"remember":c["remember_associations"].isChecked()}
+        result["tools"]={key:c[key].text().strip() for key in ("compiler_path","sdk_path")}
         return result
     def _Apply(self)->None:
         opener=self.Editor.AssetBrowser.ExternalOpener;previous=opener.Associations()
