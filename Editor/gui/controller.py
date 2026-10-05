@@ -185,7 +185,7 @@ class EditorController(QObject):
         for scene_info in loaded_scenes:
             scene_id=str(scene_info.get("uuid",""));scene_name=str(scene_info.get("name","Untitled"))
             scene_root=self.Window.Hierarchy.AddItem(scene_name,scene_id,icon=self.Window.Resources.Icon(f"icons/{theme}/scene.svg"),kind="scene",active=bool(scene_info.get("active")))
-            scene_root.setExpanded(True);pending=list(scene_info.get("entities",()))
+            scene_root.setExpanded(self.Window.Hierarchy._DefaultExpanded(scene_id,scene_root));pending=list(scene_info.get("entities",()))
             while pending:
                 progress=False
                 for entity in list(pending):
@@ -911,7 +911,7 @@ class EditorController(QObject):
         scene_id=str(self.Runtime.EntityDetails(entity_id).get("scene_uuid",""))
         if self._Mutate("Reparent entity",lambda:self.Runtime.SetParent(entity_id,parent_id)):
             self.SetDirty(True,[scene_id])
-            self.Window.Hierarchy.ExpandData(parent_id)
+            if self.Window.Hierarchy.ExpandNewItems:self.Window.Hierarchy.ExpandData(parent_id)
             if entity_id==self.SelectedEntity:self.SelectEntity(entity_id,force=True)
 
     def Play(self) -> None:

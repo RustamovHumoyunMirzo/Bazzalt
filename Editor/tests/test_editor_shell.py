@@ -64,13 +64,17 @@ class EditorShellTests(unittest.TestCase):
     def test_preferences_are_modal_persistent_and_applied(self) -> None:
         dialog=PreferencesDialog(self.Window)
         self.assertIs(dialog.parent(),self.Window);self.assertTrue(dialog.isModal())
-        self.assertEqual(dialog.Sections.count(),8)
+        self.assertEqual(dialog.Sections.count(),9) # Includes file associations.
+        self.assertEqual(dialog.Sections.count(),dialog.Pages.count())
+        dialog.Controls["expand_new_hierarchy_items"].setChecked(True)
         dialog.Controls["theme"].setCurrentIndex(dialog.Controls["theme"].findData("light"))
         dialog.Controls["navigation_speed"].setValue(10.0);dialog.Controls["clear_on_play"].setChecked(True)
         dialog._Apply()
         self.assertEqual(self.Window.GetPreferences()["appearance"]["theme"],"light")
         self.assertEqual(self.Window.Scene.Surface._move_speed,10.0)
         self.assertTrue(self.Window.PreferenceValue("console","clear_on_play"))
+        self.assertTrue(self.Window.Hierarchy.ExpandNewItems)
+        self.assertTrue(self.Window.PreferenceValue("general","expand_new_hierarchy_items"))
         self.assertEqual(self.Window.MenuBar.PreferencesAction.text(),"Preferences…")
 
     def test_scene_toolbar_autosaves_and_preferences_restore_history_limits(self) -> None:
@@ -710,7 +714,7 @@ class EditorShellTests(unittest.TestCase):
             return None
         parent_item=find(parent);child_item=find(child)
         self.assertIsNotNone(parent_item);self.assertIsNotNone(child_item);self.assertIs(child_item.parent(),parent_item)
-        self.assertTrue(parent_item.isExpanded())
+        self.assertFalse(parent_item.isExpanded()) # New object groups start collapsed.
         parent_item.setExpanded(False);self.Window.Controller.RefreshHierarchy()
         self.assertFalse(find(parent).isExpanded())
         find(parent).setExpanded(True);self.Window.Controller.RefreshHierarchy()

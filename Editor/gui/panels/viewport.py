@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from math import cos, radians, sin, tan
+from math import cos, isfinite, radians, sin, tan
 
 from PySide6.QtCore import QPoint, QPointF, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QGuiApplication, QKeyEvent, QMouseEvent, QPainter, QPen, QWheelEvent
@@ -51,6 +51,7 @@ class NativeRenderSurface(QWidget):
         self._gizmo_drag = None; self._hover_handle = None; self._last_delta = Vec3(); self._last_angle=0.0;self._last_scale=Vec3(1,1,1)
         self._orientation_animation=None
         self._orientation_visible=True
+        self._has_scene_pointer=False
         self._high_level_selection=False
         self._selection_box_start=None
         self._selection_box_additive=False;self._selection_band=None
@@ -227,6 +228,17 @@ class NativeRenderSurface(QWidget):
         ray=self._Ray(point)
         return self._SelectionTarget(self.Runtime.PickPrimitive((ray.Origin.X,ray.Origin.Y,ray.Origin.Z),(ray.Direction.X,ray.Direction.Y,ray.Direction.Z)))
 
+    def PlacementPosition(self,plane:int,excluded=()):
+        if not self._has_scene_pointer:return None
+        ray=self._Ray(self._last);origin=(ray.Origin.X,ray.Origin.Y,ray.Origin.Z);direction=(ray.Direction.X,ray.Direction.Y,ray.Direction.Z)
+        hit=self.Runtime.RaycastEditor(origin,direction,excluded)
+        if hit is not None and all(isfinite(value) for value in hit):return tuple(hit)
+        axis={0:2,1:1,2:0}.get(plane,1)
+        if abs(direction[axis])<1e-6:return None
+        distance=-origin[axis]/direction[axis]
+        if distance<0 or not isfinite(distance):return None
+        return tuple(origin[i]+direction[i]*distance for i in range(3))
+
     def _PickGizmo(self, point: QPoint):
         if self._selection is None or self._mode is GizmoMode.Select:return None
         ray=self._Ray(point);depth=(Vec3(*self._eye)-self._selection).Length();world_per_pixel=depth*2.*tan(radians(30.))/max(1,self.height());length=world_per_pixel*96.;tolerance=world_per_pixel*11.
@@ -285,6 +297,7 @@ class NativeRenderSurface(QWidget):
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         self._last = event.position().toPoint(); self.setFocus()
+        if self.IsScene:self._has_scene_pointer=True
         if self.IsScene:self.Runtime.SetObjectHover("",self._eye)
         if self.IsScene and event.button()==Qt.MouseButton.RightButton:self._keys.clear();self._fly_navigation=False;self._navigating=True;self.NavigationChanged.emit(True);event.accept();return
         if self.IsScene and event.button()==Qt.MouseButton.LeftButton and self._PickOrientation(self._last):event.accept();return
@@ -305,6 +318,7 @@ class NativeRenderSurface(QWidget):
             event.accept();return
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        if self.IsScene:self._has_scene_pointer=True
         if not self.IsScene: return
         current = event.position().toPoint(); delta = current - self._last; self._last = current
         if self._selection_box_start is not None and event.buttons()&Qt.MouseButton.LeftButton:

@@ -74,6 +74,7 @@ class EditorMenuBar(QMenuBar):
     PreferencesRequested = Signal()
     ProjectSettingsRequested = Signal()
     EditCommandRequested = Signal(str)
+    ObjectCommandRequested = Signal(str)
     ResetWorkspaceRequested = Signal()
     MaximizeViewportRequested = Signal(bool)
     CameraPresetRequested = Signal(str)
@@ -100,6 +101,7 @@ class EditorMenuBar(QMenuBar):
 
         self.FileMenu = self._AddTopLevelMenu("")
         self.EditMenu = self._AddTopLevelMenu("")
+        self.ObjectMenu = self._AddTopLevelMenu("")
         self.ViewMenu = self._AddTopLevelMenu("")
         self.WindowMenu = self._AddTopLevelMenu("")
         self.HelpMenu = self._AddTopLevelMenu("")
@@ -107,6 +109,7 @@ class EditorMenuBar(QMenuBar):
         self._BuildFileMenu()
         self._BuildEditMenu()
         self._BuildViewMenu()
+        self._BuildObjectMenu()
         self._BuildWindowMenu()
         self._BuildHelpMenu()
         self._localization.LocaleChanged.connect(lambda _: self._Retranslate())
@@ -189,6 +192,19 @@ class EditorMenuBar(QMenuBar):
         self.AboutAction = about = self.HelpMenu.addAction("")
         about.setEnabled(False)
 
+    def _BuildObjectMenu(self)->None:
+        self.ObjectMenus={};self.ObjectActions={}
+        groups={
+            "selection":("select_all","deselect_all","invert","select_parent","select_children","select_descendants","select_siblings"),
+            "placement":("place_cursor","view_center","align_view","center_origin","reset_rotation","reset_scale"),
+            "snapping":("snap_grid","project_grid"),
+        }
+        self.ObjectModeMenu=self.ObjectMenu.AddSubMenu("")
+        for group,commands in groups.items():
+            menu=self.ObjectMenu.AddSubMenu("");self.ObjectMenus[group]=menu
+            for command in commands:
+                action=menu.addAction("");action.triggered.connect(lambda _=False,key=command:self.ObjectCommandRequested.emit(key));self.ObjectActions[command]=action
+
     def _RefreshWindowMenu(self) -> None:
         self.WindowMenu.clear()
         reset = self.WindowMenu.addAction(self._localization.Translate("action.reset_workspace"))
@@ -218,6 +234,9 @@ class EditorMenuBar(QMenuBar):
         tr = self._localization.Translate
         self.FileMenu.setTitle(tr("menu.file"))
         self.EditMenu.setTitle(tr("menu.edit"))
+        self.ObjectMenu.setTitle(tr("menu.object"));self.ObjectModeMenu.setTitle(tr("object.modes"))
+        for key,menu in self.ObjectMenus.items():menu.setTitle(tr("object.menu."+key))
+        for key,action in self.ObjectActions.items():action.setText(tr("object."+key))
         self.ViewMenu.setTitle(tr("menu.view"))
         self.WindowMenu.setTitle(tr("menu.window"))
         self.HelpMenu.setTitle(tr("menu.help"))

@@ -1,5 +1,27 @@
 # Editor panels
 
+## Hierarchy helpers and model icons
+
+The three-dot menu beside Hierarchy search offers Expand/Collapse All,
+Expand/Collapse Selected, Reveal Selected, and Clear Search. Newly inserted
+object groups start collapsed. Preferences > General > Expand newly added
+hierarchy objects changes that default. Manual expansion choices survive refresh;
+scene headers initially stay open, and collapsed scene headers stay collapsed.
+Reparenting no longer forcibly opens the drop target unless that preference is on.
+
+Hierarchy helpers and Inspector component options share `OptionsButton`, using
+`icons/dark/menu_dots.svg` or `icons/light/menu_dots.svg` and refreshing on palette
+changes. The button has no text-glyph fallback masquerading as a menu icon.
+
+Asset Browser generates isometric geometry thumbnails asynchronously for GLB,
+glTF, and OBJ. glTF node transforms and base material colors are honored; textures,
+skin poses, sparse accessors, and compressed geometry are not previewed by this
+lightweight renderer. Other formats and unreadable geometry retain their model
+icon. Thumbnail generation never touches the active scene or native swapchains.
+Work is bounded, uses one worker, and caches 128 results per session; source file
+changes invalidate the cache key. Icons update in place without changing folder,
+selection, or item size. External glTF buffers must stay inside the model folder.
+
 BAZZALT creates its standard panels inside `Editor.gui.application.Editor`. They share the
 same `ThemeManager`, `ResourceManager`, and `LocalizationManager` as the menu and docking
 system. The initial workspace places Hierarchy on the left, Scene and Output in the center,

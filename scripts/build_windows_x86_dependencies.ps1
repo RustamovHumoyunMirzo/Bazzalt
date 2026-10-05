@@ -34,6 +34,10 @@ function Build([string]$Source, [string]$Directory, [string]$Prefix, [string[]]$
     $Commit=(& git -C $Source rev-parse HEAD).Trim()
     if ($LASTEXITCODE -ne 0) { throw "Cannot identify dependency source: $Source" }
     $Identity=@($Commit,(Get-Command cl).Source)+$Options
+    # Source compatibility patches are part of the installed SDK's identity.
+    $SourceDiff=(& git -C $Source diff --no-ext-diff --binary) -join "`n"
+    if ($LASTEXITCODE -ne 0) { throw "Cannot identify dependency patches: $Source" }
+    $Identity+=([Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($SourceDiff))))
     $Stamp=Join-Path $Prefix ("bazzalt-build-"+[IO.Path]::GetFileName($Directory)+'.json')
     $Expected=ConvertTo-Json -InputObject $Identity -Compress
     if ((Test-Path -LiteralPath $Stamp) -and ([IO.File]::ReadAllText($Stamp) -eq $Expected)) {
@@ -48,6 +52,7 @@ function Build([string]$Source, [string]$Directory, [string]$Prefix, [string[]]$
 function Build-Filament {
     $Filament = Join-Path $Work 'filament-source'
     Checkout 'https://github.com/google/filament.git' 'v1.77.0' $Pins.filament_commit $Filament
+    Checked $HostPython @((Join-Path $PSScriptRoot 'patch_filament_win32.py'),$Filament)
     Import-BazzaltMsvc x86
     Build $Filament (Join-Path $Work 'filament-x86-build') (Join-Path $Work 'filament-x86') @('-DDIST_ARCH=x86','-DDIST_DIR=x86/md','-DUSE_STATIC_CRT=OFF','-DFILAMENT_BUILD_FILAMAT=ON','-DFILAMENT_BUILD_TESTING=OFF','-DSPIRV_SKIP_TESTS=ON','-DFILAMENT_SUPPORTS_VULKAN=ON','-DFILAMENT_SUPPORTS_WEBGPU=OFF')
 }

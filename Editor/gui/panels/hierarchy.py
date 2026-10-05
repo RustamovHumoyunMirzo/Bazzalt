@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from PySide6.QtCore import QMimeData, Qt, Signal, QTimer
 from PySide6.QtGui import QAction, QColor, QIcon, QKeySequence, QPainter, QPen
-from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QLineEdit, QMenu, QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QHBoxLayout, QLineEdit, QMenu, QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator, QVBoxLayout, QWidget
 
 from ...localization import LocalizationManager
+from ..widgets.options_button import OptionsButton
 
 
 class HierarchyTree(QTreeWidget):
@@ -87,9 +88,11 @@ class HierarchyPanel(QWidget):
     EditorStateRequested = Signal(str,str,bool)
 
     def __init__(self, localization: LocalizationManager, install_shortcuts: bool = True) -> None:
-        super().__init__(); self._localization = localization;self._collapsed_ids:set[str]=set()
+        super().__init__(); self._localization = localization;self._collapsed_ids:set[str]=set();self._expanded_ids:set[str]=set();self.ExpandNewItems=False
         layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0)
-        self.Search=QLineEdit();self.Search.setObjectName("HierarchySearch");self.Search.setClearButtonEnabled(True);layout.addWidget(self.Search)
+        row=QHBoxLayout();row.setContentsMargins(0,0,2,0);row.setSpacing(2)
+        self.Search=QLineEdit();self.Search.setObjectName("HierarchySearch");self.Search.setClearButtonEnabled(True);row.addWidget(self.Search,1)
+        self.Options=OptionsButton(self);self.Options.clicked.connect(self._ShowHelpers);row.addWidget(self.Options);layout.addLayout(row)
         self._search_expansion=None;self._filter_timer=QTimer(self);self._filter_timer.setSingleShot(True);self._filter_timer.timeout.connect(self.ApplySearch)
         self.Tree=HierarchyTree();self.Tree.setHeaderHidden(True);self.Tree.setRootIsDecorated(True);self.Tree.setItemsExpandable(True);self.Tree.setIndentation(14);self.Tree.setUniformRowHeights(True);self.Tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);self.Tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.Tree.setDragEnabled(True);self.Tree.setAcceptDrops(True);self.Tree.setDropIndicatorShown(True);self.Tree.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop);self.Tree.setDefaultDropAction(Qt.DropAction.CopyAction);self.Tree.setSupportedDragActions(Qt.DropAction.CopyAction)
@@ -110,6 +113,30 @@ class HierarchyPanel(QWidget):
 
     def _RetranslateSearch(self)->None:
         self.Search.setPlaceholderText(self._localization.Translate("hierarchy.search"));self.Search.setToolTip(self._localization.Translate("hierarchy.search_hint"))
+        self.Options.setToolTip(self._localization.Translate("hierarchy.helpers"))
+
+    def _ShowHelpers(self):
+        menu=QMenu(self)
+        for key,callback in (("expand_all",lambda:self.SetAllExpanded(True)),("collapse_all",lambda:self.SetAllExpanded(False)),("expand_selected",lambda:self.SetSelectedExpanded(True)),("collapse_selected",lambda:self.SetSelectedExpanded(False)),("reveal_selected",self.RevealSelected),("clear_search",self.Search.clear)):
+            action=menu.addAction(self._localization.Translate("hierarchy."+key));action.triggered.connect(callback)
+        menu.exec(self.Options.mapToGlobal(self.Options.rect().bottomLeft()))
+
+    def SetAllExpanded(self,expanded):
+        iterator=QTreeWidgetItemIterator(self.Tree)
+        while iterator.value() is not None:
+            item=iterator.value()
+            if item.childCount():item.setExpanded(expanded)
+            iterator+=1
+
+    def SetSelectedExpanded(self,expanded):
+        for item in self.Tree.selectedItems():item.setExpanded(expanded)
+
+    def RevealSelected(self):
+        self.Search.clear()
+        for item in self.Tree.selectedItems():
+            parent=item.parent()
+            while parent is not None:parent.setExpanded(True);parent=parent.parent()
+            self.Tree.scrollToItem(item)
 
     def ApplySearch(self,*_args)->None:
         terms=self.Search.text().casefold().split();items=[];iterator=QTreeWidgetItemIterator(self.Tree)
@@ -122,7 +149,7 @@ class HierarchyPanel(QWidget):
             visible=not terms or own or ancestor_matches or any(children);item.setHidden(not visible)
             if terms and any(children):item.setExpanded(True)
             elif not terms and self._search_expansion is not None:
-                value=str(item.data(0,Qt.ItemDataRole.UserRole));item.setExpanded(self._search_expansion.get(value,item.data(0,Qt.ItemDataRole.UserRole+1)=="scene" or value not in self._collapsed_ids))
+                value=str(item.data(0,Qt.ItemDataRole.UserRole));item.setExpanded(self._search_expansion.get(value,self._DefaultExpanded(value,item)))
             return visible
         for index in range(self.Tree.topLevelItemCount()):visit(self.Tree.topLevelItem(index))
         if not terms:self._search_expansion=None
@@ -177,6 +204,7 @@ class HierarchyPanel(QWidget):
         return values
     def ExpandData(self,value)->None:
         self._collapsed_ids.discard(str(value or ""))
+        self._expanded_ids.add(str(value or ""))
         iterator=QTreeWidgetItemIterator(self.Tree)
         while iterator.value() is not None:
             item=iterator.value()
@@ -184,13 +212,18 @@ class HierarchyPanel(QWidget):
             iterator+=1
     def ApplyExpansionState(self,items:dict[str,QTreeWidgetItem])->None:
         for value,item in items.items():
-            if item.childCount():item.setExpanded(str(value) not in self._collapsed_ids)
+            if item.childCount():item.setExpanded(self._DefaultExpanded(str(value),item))
+    def _DefaultExpanded(self,value,item):
+        if value in self._collapsed_ids:return False
+        if value in self._expanded_ids:return True
+        return item.data(0,Qt.ItemDataRole.UserRole+1)=="scene" or self.ExpandNewItems
     def _RememberCollapsed(self,item)->None:
         if self.Search.text().strip():return
-        if item.data(0,Qt.ItemDataRole.UserRole+1)=="entity":self._collapsed_ids.add(str(item.data(0,Qt.ItemDataRole.UserRole)))
+        value=str(item.data(0,Qt.ItemDataRole.UserRole));self._collapsed_ids.add(value);self._expanded_ids.discard(value)
     def _RememberExpanded(self,item)->None:
         if self.Search.text().strip():return
         self._collapsed_ids.discard(str(item.data(0,Qt.ItemDataRole.UserRole) or ""))
+        self._expanded_ids.add(str(item.data(0,Qt.ItemDataRole.UserRole) or ""))
     def GetSelectedData(self):
         values=[item.data(0,Qt.ItemDataRole.UserRole) for item in self.Tree.selectedItems() if item.data(0,Qt.ItemDataRole.UserRole+1)=="entity"]
         return values

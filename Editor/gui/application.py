@@ -25,6 +25,7 @@ from .panels import (
 from .widgets import EditorMenuBar, EditorToolbar
 from .controller import EditorController
 from .cursor_policy import EditorCursorPolicy
+from .object_tools import ObjectTools
 
 
 class Editor(QMainWindow):
@@ -112,6 +113,7 @@ class Editor(QMainWindow):
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.Toolbar)
         self.setCentralWidget(self.Docking)
         self.Controller = EditorController(self, self.Runtime)
+        self.ObjectTools=ObjectTools(self)
         self.MenuBar.EditCommandRequested.connect(self.ExecuteEditCommand)
         self.MenuBar.EditMenu.aboutToShow.connect(self.RefreshEditActions)
         application.focusChanged.connect(self.RefreshEditActions)
@@ -230,6 +232,7 @@ class Editor(QMainWindow):
         self._applying_preferences=True
         value=MergePreferences(preferences);self._settings["preferences"]=value
         appearance=value["appearance"]
+        self.Hierarchy.ExpandNewItems=bool(value["general"]["expand_new_hierarchy_items"])
         self.ThemeManager.SetTheme(Theme.light() if appearance["theme"]=="light" else Theme.dark())
         if appearance["locale"]!=self.Localization.GetLocale():self.Localization.SetLocale(appearance["locale"])
         scene=value["scene"];self.Runtime.SetGrid(scene["grid_visible"],scene["grid_plane"])
@@ -371,6 +374,7 @@ class Editor(QMainWindow):
             if clicked is not discard and clicked is not save:event.ignore();return
         self.Controller.Timer.stop()
         self.Controller.GameInput.Close()
+        self.ObjectTools.Close()
         self.Scene.Surface._fly_timer.stop();self.Output.Surface._fly_timer.stop()
         self._layout_save_timer.stop();self._SaveWorkspace()
         self.Scene.Detach(); self.Output.Detach()

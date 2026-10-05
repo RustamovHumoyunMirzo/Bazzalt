@@ -182,17 +182,19 @@ for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id
     m_renderBackend->SetEditorGuides(guides);
 }
 
-UUID Engine::PickEditorPrimitive(Vec3 origin,Vec3 direction){
+UUID Engine::PickEditorPrimitive(Vec3 origin,Vec3 direction,Vec3* hitPosition,const std::unordered_set<UUID>& excluded){
     direction=direction.Normalized();float nearest=std::numeric_limits<float>::max();UUID result{};
+    const auto ignored=[&](UUID id){if(excluded.empty())return false;for(auto entity=m_scene->GetEntity(id);entity&&!entity.GetUUID().IsRoot();entity=entity.GetParent())if(excluded.contains(entity.GetUUID()))return true;return false;};
     auto view=m_scene->GetRegistry().view<PrimitiveObject>();
-    for(auto handle:view){const auto& primitive=view.get<PrimitiveObject>(handle);if(!primitive.IsEnabled()||!primitive.Visible)continue;Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));if(m_editorUnselectable.contains(entity.GetUUID())||m_editorHidden.contains(entity.GetUUID()))continue;Mat4 inverse;if(!entity.GetWorldMatrix().TryInverse(inverse))continue;Vec3 o=inverse.TransformPoint(origin),d=inverse.TransformDirection(direction);const auto geometry=BuildPrimitiveGeometry(primitive);
+    for(auto handle:view){const auto& primitive=view.get<PrimitiveObject>(handle);if(!primitive.IsEnabled()||!primitive.Visible)continue;Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));if(m_editorUnselectable.contains(entity.GetUUID())||m_editorHidden.contains(entity.GetUUID())||ignored(entity.GetUUID()))continue;Mat4 inverse;if(!entity.GetWorldMatrix().TryInverse(inverse))continue;Vec3 o=inverse.TransformPoint(origin),d=inverse.TransformDirection(direction);const auto geometry=BuildPrimitiveGeometry(primitive);
         for(std::size_t i=0;i+2<geometry.Indices.size();i+=3){Vec3 v[3];for(int j=0;j<3;++j){const auto& p=geometry.Vertices[geometry.Indices[i+j]];v[j]={p.Position[0],p.Position[1],p.Position[2]};}Vec3 e1=v[1]-v[0],e2=v[2]-v[0],p=Vec3::Cross(d,e2);float determinant=Vec3::Dot(e1,p);if(std::abs(determinant)<1e-8f)continue;float reciprocal=1/determinant;Vec3 offset=o-v[0];float u=Vec3::Dot(offset,p)*reciprocal;if(u<0||u>1)continue;Vec3 q=Vec3::Cross(offset,e1);float vcoord=Vec3::Dot(d,q)*reciprocal;if(vcoord<0||u+vcoord>1)continue;float t=Vec3::Dot(e2,q)*reciprocal;if(t>=0&&t<nearest){nearest=t;result=entity.GetUUID();}}
     }
     if(m_isInitialized)for(const auto& mesh:m_renderBackend->GetAssets().GetEditorMeshes()){
-        if(m_editorHidden.contains(mesh.Owner)||m_editorUnselectable.contains(mesh.Owner))continue;
+        if(m_editorHidden.contains(mesh.Owner)||m_editorUnselectable.contains(mesh.Owner)||ignored(mesh.Owner))continue;
         Mat4 inverse;if(!mesh.World.TryInverse(inverse))continue;
         if(mesh.Geometry->Raycast(inverse.TransformPoint(origin),inverse.TransformDirection(direction),nearest))result=mesh.Owner;
     }
+    if(hitPosition&&!result.IsRoot())*hitPosition=origin+direction*nearest;
     return result;
 }
 void Engine::SetEditorEntityState(std::vector<UUID> hidden,std::vector<UUID> unselectable){m_editorHidden={hidden.begin(),hidden.end()};m_editorUnselectable={unselectable.begin(),unselectable.end()};m_renderBackend->SetEditorHidden(m_editorHidden);}

@@ -447,6 +447,7 @@ public:
     }
     void SetGizmoHover(int axis) { m_engine->SetEditorGizmoHover(axis); }
     std::string PickPrimitive(const std::array<float,3>& origin,const std::array<float,3>& direction){auto id=m_engine->PickEditorPrimitive({origin[0],origin[1],origin[2]},{direction[0],direction[1],direction[2]});return id.IsRoot()?std::string{}:id.ToString();}
+    py::object RaycastEditor(const std::array<float,3>& origin,const std::array<float,3>& direction,const std::vector<std::string>& excluded){std::unordered_set<UUID> ignored;for(const auto& value:excluded)if(!value.empty())ignored.insert(ParseUuid(value));Vec3 position;const auto id=m_engine->PickEditorPrimitive({origin[0],origin[1],origin[2]},{direction[0],direction[1],direction[2]},&position,ignored);if(id.IsRoot())return py::none();return py::make_tuple(position.X,position.Y,position.Z);}
     void SetObjectHover(const std::string& id,const std::array<float,3>& eye){m_engine->SetEditorObjectHover(id.empty()?UUID{}:ParseUuid(id),{eye[0],eye[1],eye[2]});}
     void SetSelectionOutline(const std::vector<std::string>& ids){std::vector<UUID> selected;for(const auto& id:ids)if(!id.empty())selected.push_back(ParseUuid(id));m_engine->SetEditorSelection(std::move(selected));}
     void SetGrid(bool visible, int plane) { m_engine->SetEditorGrid(visible, plane); }
@@ -622,6 +623,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("set_gizmo_position", &Bazzalt::EditorBridge::EditorHost::SetGizmoPosition)
         .def("set_gizmo_hover", &Bazzalt::EditorBridge::EditorHost::SetGizmoHover)
         .def("pick_primitive", &Bazzalt::EditorBridge::EditorHost::PickPrimitive)
+        .def("raycast_editor", &Bazzalt::EditorBridge::EditorHost::RaycastEditor)
         .def("set_object_hover", &Bazzalt::EditorBridge::EditorHost::SetObjectHover)
         .def("set_selection_outline", &Bazzalt::EditorBridge::EditorHost::SetSelectionOutline)
         .def("set_grid", &Bazzalt::EditorBridge::EditorHost::SetGrid)

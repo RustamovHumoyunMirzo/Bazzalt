@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from ...localization import LocalizationManager
+from ..widgets.options_button import OptionsButton
 
 
 class CenteredCheckBox(QCheckBox):
@@ -52,7 +53,7 @@ class ComponentSection(QFrame):
         self.Enabled.toggled.connect(self.EnabledChanged)
         enabledLayout.addWidget(self.Enabled,0,Qt.AlignmentFlag.AlignCenter)
         headerLayout.addWidget(enabledSlot);headerLayout.addWidget(self.Toggle,1)
-        options=QToolButton(header);options.setObjectName("ComponentOptionsButton");options.setText("⋮");options.clicked.connect(lambda:self._ShowOptions(options));headerLayout.addWidget(options)
+        options=OptionsButton(header);options.setObjectName("ComponentOptionsButton");options.setToolTip(localization.Translate("hierarchy.helpers") if localization else "Options");options.clicked.connect(lambda:self._ShowOptions(options));headerLayout.addWidget(options)
         layout.addWidget(header);layout.addWidget(self.Body)
         self.Toggle.toggled.connect(self.SetExpanded);self.SetExpanded(expanded)
 

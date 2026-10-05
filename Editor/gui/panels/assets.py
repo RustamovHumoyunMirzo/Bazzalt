@@ -10,6 +10,7 @@ from PySide6.QtGui import QColor,QIcon,QLinearGradient,QPainter,QPixmap,QRadialG
 from PySide6.QtWidgets import (QAbstractItemView,QFileDialog,QLineEdit,QListWidget,QListWidgetItem,QMenu,QSplitter,QStyledItemDelegate,QTreeWidget,QTreeWidgetItem,QVBoxLayout,QWidget)
 from ...localization import LocalizationManager
 from ...platform_services import RevealFiles
+from ...model_thumbnails import ModelThumbnailCache
 
 IMAGE_EXTENSIONS={".png",".jpg",".jpeg",".bmp",".gif",".webp"}
 MODEL_EXTENSIONS={".gltf",".glb",".obj",".fbx",".dae",".filamesh"}
@@ -40,6 +41,8 @@ class AssetBrowserPanel(QWidget):
     def __init__(self,localization:LocalizationManager,resources=None)->None:
         super().__init__();self._localization=localization;self._resources=resources;self._root=None;self._folder=None;self._clipboard=[];self.SceneRenameHandler=None;self.DirectoryRenameHandler=None;self.SceneLoadedChecker=None;self.ExternalOpener=None
         self._watcher=QFileSystemWatcher(self);self._watcher.directoryChanged.connect(lambda _path:self.Refresh())
+        self._thumbnails=ModelThumbnailCache(self);self._thumbnails.Ready.connect(self._ThumbnailReady)
+        self._thumbnail_timer=QTimer(self);self._thumbnail_timer.setSingleShot(True);self._thumbnail_timer.timeout.connect(self._RequestVisibleThumbnails)
         layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0)
         self.Search=QLineEdit();self.Search.setObjectName("AssetBrowserSearch");self.Search.setClearButtonEnabled(True);layout.addWidget(self.Search)
         self._search_timer=QTimer(self);self._search_timer.setSingleShot(True);self._search_timer.setInterval(150);self._search_timer.timeout.connect(self._PopulateBrowser)
@@ -49,6 +52,7 @@ class AssetBrowserPanel(QWidget):
         self.Tree=QTreeWidget();self.Tree.setHeaderHidden(True);self.Tree.currentItemChanged.connect(self._FolderSelected);self.Tree.itemChanged.connect(self._TreeItemRenamed)
         self.Browser=AssetList();self.Browser.setItemDelegate(AssetNameDelegate(self.Browser));self.Browser.setViewMode(QListWidget.ViewMode.IconMode);self.Browser.setIconSize(QSize(48,48));self.Browser.setGridSize(QSize(104,86));self.Browser.setResizeMode(QListWidget.ResizeMode.Adjust);self.Browser.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.Browser.setUniformItemSizes(True);self.Browser.setWordWrap(False);self.Browser.setTextElideMode(Qt.TextElideMode.ElideMiddle);self.Browser.setSpacing(2);self.Browser.setMovement(QListWidget.Movement.Static)
+        self.Browser.verticalScrollBar().valueChanged.connect(lambda _:self._thumbnail_timer.start(0))
         # QListView::setMovement resets drag/drop mode, so drag-source setup
         # must be applied after all icon-layout configuration.
         self.Browser.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly);self.Browser.setDragEnabled(True);self.Browser.setDefaultDropAction(Qt.DropAction.CopyAction);self.Browser.setSupportedDragActions(Qt.DropAction.CopyAction)
@@ -69,6 +73,9 @@ class AssetBrowserPanel(QWidget):
         except (OSError,ValueError):return False
     def _Icon(self,path):
         path=Path(path);ext=path.suffix.lower()
+        if ext in MODEL_EXTENSIONS:
+            image=self._thumbnails.Request(path)
+            if image is not None and not image.isNull():return QIcon(QPixmap.fromImage(image))
         if ext in IMAGE_EXTENSIONS:
             icon=QIcon(str(path))
             if not icon.isNull():return icon
@@ -78,6 +85,25 @@ class AssetBrowserPanel(QWidget):
             pixmap=QPixmap(64,64);gradient=QLinearGradient(0,0,0,64);gradient.setColorAt(0,QColor("#456f9b"));gradient.setColorAt(.55,QColor("#d4b678"));gradient.setColorAt(1,QColor("#252d25"));painter=QPainter(pixmap);painter.fillRect(pixmap.rect(),gradient);painter.end();return QIcon(pixmap)
         name="dir.svg" if path.is_dir() else "scene.svg" if ext==".bscene" else "nativecpp.svg" if ext in {".h",".hpp",".c",".cc",".cpp"} else "3dfiles.svg" if ext in MODEL_EXTENSIONS else "shader.svg" if ext in SHADER_EXTENSIONS else "file.svg"
         return self._resources.Icon(f"icons/abrowser/{name}") if self._resources else QIcon()
+    def _ThumbnailReady(self,path,image):
+        self._thumbnail_timer.start(0)
+        if image.isNull():return
+        current=self._thumbnails.Request(path)
+        if current is None or current.cacheKey()!=image.cacheKey():return
+        blocked=self.Browser.blockSignals(True)
+        for index in range(self.Browser.count()):
+            item=self.Browser.item(index)
+            if str(item.data(Qt.ItemDataRole.UserRole))==path:item.setIcon(QIcon(QPixmap.fromImage(image)))
+        self.Browser.blockSignals(blocked)
+    def _RequestVisibleThumbnails(self):
+        blocked=self.Browser.blockSignals(True)
+        try:
+            for index in range(self.Browser.count()):
+                item=self.Browser.item(index);path=Path(item.data(Qt.ItemDataRole.UserRole))
+                if path.suffix.lower() not in MODEL_EXTENSIONS or not self.Browser.visualItemRect(item).intersects(self.Browser.viewport().rect()):continue
+                image=self._thumbnails.Request(path)
+                if image is not None and not image.isNull():item.setIcon(QIcon(QPixmap.fromImage(image)))
+        finally:self.Browser.blockSignals(blocked)
     def Refresh(self,select=None)->None:
         self.AssetsChanged.emit()
         previous_folder=self._folder if self._folder is not None and self._InsideRoot(self._folder) else self._root

@@ -64,7 +64,7 @@ jobs:
         run: |
           python -m unittest discover -s Launcher/tests -v
           if ($LASTEXITCODE -ne 0) { throw 'Hub/download tests failed' }
-          python -m unittest Editor.tests.test_scripting Editor.tests.test_compiled_resources Editor.tests.test_file_association_preferences Editor.tests.test_restart_settings Editor.tests.test_runtime_tick_failure Editor.tests.test_viewport_gesture_priority Editor.tests.test_diagnostics -v
+          python -m unittest Editor.tests.test_scripting Editor.tests.test_compiled_resources Editor.tests.test_file_association_preferences Editor.tests.test_restart_settings Editor.tests.test_runtime_tick_failure Editor.tests.test_viewport_gesture_priority Editor.tests.test_object_tools Editor.tests.test_browser_hierarchy_helpers Editor.tests.test_diagnostics -v
           if ($LASTEXITCODE -ne 0) { throw 'Resource/compiler/preferences tests failed' }
       - name: Install Inno Setup
         if: inputs.product == 'hub'
@@ -145,7 +145,7 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: build/win32-bootstrap/python-package
-          key: win32-gui-v1-${{ runner.os }}-${{ steps.toolchain.outputs.version }}-${{ hashFiles('releases/windows-x86.json', 'scripts/build_windows_x86_dependencies.ps1', 'scripts/windows_toolchain.ps1', 'scripts/package_pyside_win32.py', 'requirements-build.txt') }}
+          key: win32-gui-v1-${{ runner.os }}-${{ steps.toolchain.outputs.version }}-${{ hashFiles('releases/windows-x86.json', 'releases/versions.json', 'scripts/build_windows_x86_dependencies.ps1', 'scripts/windows_toolchain.ps1', 'scripts/get_llvm.ps1', 'scripts/package_pyside_win32.py', 'requirements-build.txt') }}
       - name: Build real Win32 PySide bindings
         if: steps.gui-cache.outputs.cache-hit != 'true'
         run: ./scripts/build_windows_x86_dependencies.ps1 -Stage gui -Parallel 2
@@ -185,7 +185,7 @@ jobs:
           path: |
             build/win32-bootstrap/filament-x86
             build/win32-bootstrap/python-package
-          key: win32-filament-v1-${{ runner.os }}-${{ steps.toolchain.outputs.version }}-${{ hashFiles('releases/windows-x86.json', 'scripts/build_windows_x86_dependencies.ps1', 'scripts/windows_toolchain.ps1') }}
+          key: win32-filament-v1-${{ runner.os }}-${{ steps.toolchain.outputs.version }}-${{ hashFiles('releases/windows-x86.json', 'scripts/build_windows_x86_dependencies.ps1', 'scripts/patch_filament_win32.py', 'scripts/windows_toolchain.ps1') }}
       - name: Build Filament only, parallel to Qt and PySide
         if: steps.filament-cache.outputs.cache-hit != 'true'
         run: ./scripts/build_windows_x86_dependencies.ps1 -Stage filament -Parallel 2

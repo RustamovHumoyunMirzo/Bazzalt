@@ -136,6 +136,20 @@ compiler launch failures become Console diagnostics and stop Play safely.
 
 ## Source-built Win32 pipeline
 
+Filament v1.77.0 receives a small, exact-context source patch before compilation:
+its shader-module debug name uses an integer conversion when Vulkan defines
+non-dispatchable handles as `uint64_t` on Win32, and retains pointer conversion
+on 64-bit platforms. `scripts/patch_filament_win32.py` is idempotent and rejects
+unexpected upstream context. Both its contents and the source diff participate
+in dependency cache/build identities; changing the patch cannot reuse an old SDK.
+
+Pinned LLVM bootstrap downloads use the official release archive URL directly
+and still require SHA-256 verification. They do not need GitHub release API
+discovery, avoiding rate limits on shared CI runner IPs. Unpinned discovery uses
+`GH_TOKEN` or `GITHUB_TOKEN` when available. No large dependencies are built locally
+as part of these regression checks; handle conversion tests compile a tiny,
+header-free syntax fixture for both architectures.
+
 Qt 6's [supported Windows platforms](https://doc.qt.io/qt-6.10/supported-platforms.html)
 are x64/ARM64, not x86; the pinned PySide6 release supplies no win32 wheel.
 The official Filament v1.77.0 Windows SDK also contains x86_64 libraries only.

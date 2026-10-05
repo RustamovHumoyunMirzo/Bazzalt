@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from enum import Enum
+from .options_button import OptionsButton
 
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPaintEvent
@@ -328,7 +329,7 @@ class PickerInput(FieldWidget):
         self.Display.setReadOnly(True)
         self.Display.setAlignment(Qt.AlignmentFlag.AlignLeading|Qt.AlignmentFlag.AlignVCenter)
         self.Display.setPlaceholderText(placeholder)
-        self.PickButton = QPushButton("…",self)
+        self.PickButton = OptionsButton(self)
         self.PickButton.setObjectName("PickerButton")
         self.ClearButton = QPushButton("×",self)
         self.ClearButton.setObjectName("PickerClearButton")

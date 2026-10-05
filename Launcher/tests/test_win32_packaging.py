@@ -6,9 +6,12 @@ import re
 import tempfile
 import unittest
 import zipfile
+import shutil
+import subprocess
 
 from scripts.package_pyside_win32 import Wheel
 from Launcher.tests.test_downloads import PE
+from scripts.patch_filament_win32 import Patch, OLD, NEW
 
 
 class Win32PackagingTests(unittest.TestCase):
@@ -81,6 +84,55 @@ class Win32PackagingTests(unittest.TestCase):
         self.assertIn("Reusing verified completed installation",script)
         self.assertLess(script.index("Checked cmake @('--install'"),script.index("[IO.File]::WriteAllText($Stamp"))
         self.assertIn("Large dependency builds belong in GitHub Actions",script)
+
+    def test_filament_handle_patch_is_exact_idempotent_and_part_of_cache(self):
+        source=self.Root/"filament/backend/src/vulkan/VulkanAsyncHandles.cpp";source.parent.mkdir(parents=True)
+        source.write_text("before\n"+OLD+"\nafter\n",encoding="utf-8")
+        self.assertTrue(Patch(self.Root));self.assertIn(NEW,source.read_text());self.assertFalse(Patch(self.Root))
+        source.write_text("upstream changed",encoding="utf-8")
+        with self.assertRaises(ValueError):Patch(self.Root)
+        root=Path(__file__).resolve().parents[2];script=(root/"scripts/build_windows_x86_dependencies.ps1").read_text()
+        self.assertIn("patch_filament_win32.py",script);self.assertIn("$SourceDiff",script)
+        self.assertIn("scripts/patch_filament_win32.py",(root/".github/workflows/windows-product.yml").read_text())
+
+    def test_patched_vulkan_handle_conversion_compiles_for_x86_and_x64(self):
+        root=Path(__file__).resolve().parents[2];local=root/"toolchain/llvm/bin/clang++.exe"
+        compiler=str(local) if local.exists() else shutil.which("clang++")
+        powershell=shutil.which("pwsh") if not compiler else None
+        if not compiler and not powershell:self.skipTest("No compiler available for small syntax checks")
+        for target,pointers in (("i686-pc-windows-msvc",0),("x86_64-pc-windows-msvc",1)):
+            with self.subTest(target=target):
+                source=self.Root/"handles.cpp"
+                source.write_text(f"#define VK_USE_64_BIT_PTR_DEFINES {pointers}\n"+"""
+using uint64_t=unsigned long long;
+#if VK_USE_64_BIT_PTR_DEFINES
+using VkShaderModule=struct ShaderModule*;
+#else
+using VkShaderModule=uint64_t;
+#endif
+enum VkObjectType {VK_OBJECT_TYPE_SHADER_MODULE};
+struct DebugUtils {void setName(VkObjectType,uint64_t,char const*) const;};
+struct Context {DebugUtils const& getDebugUtils() const;};
+struct Name {char const* c_str() const;};
+void test(Context const& context,VkShaderModule module,Name const& name) {
+"""+NEW+"\n}\n",encoding="utf-8")
+                if compiler:
+                    command=[compiler,"--target="+target,"-std=c++17","-fsyntax-only",str(source)]
+                else:
+                    toolchain=str(root/"scripts/windows_toolchain.ps1").replace("'","''");filename=str(source).replace("'","''")
+                    arch="x64" if pointers else "x86"
+                    command=[powershell,"-NoProfile","-Command",f". '{toolchain}'; Import-BazzaltMsvc {arch}; & cl /nologo /Zs /std:c++17 '{filename}'; exit $LASTEXITCODE"]
+                result=subprocess.run(command,capture_output=True,text=True)
+                self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+
+    def test_pinned_llvm_download_does_not_require_release_api(self):
+        root=Path(__file__).resolve().parents[2];script=(root/"scripts/get_llvm.ps1").read_text()
+        pinned=script.split("if ($Sha256) {",1)[1].split("} else {",1)[0]
+        self.assertIn("releases/download/llvmorg-$Version/clang+llvm-$Version",pinned)
+        self.assertNotIn("Invoke-RestMethod",pinned)
+        self.assertIn("Invoke-WebRequest $DownloadUrl",script)
+        self.assertIn("LLVM archive SHA-256 mismatch",script)
+        self.assertIn('$Headers.Authorization="Bearer $Token"',script)
 
 
 if __name__=="__main__":unittest.main()

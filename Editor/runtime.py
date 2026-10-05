@@ -272,6 +272,9 @@ class RuntimeService(QObject):
     def SetObjectHover(self,entity_id:str,eye)->None:
         if self._host is not None and hasattr(self._host,"set_object_hover"):self._host.set_object_hover(entity_id,eye)
 
+    def RaycastEditor(self,origin,direction,excluded=()):
+        return self._host.raycast_editor(origin,direction,list(excluded)) if self._host is not None and hasattr(self._host,"raycast_editor") else None
+
     def SetSelectionOutline(self,entity_ids)->None:
         if self._host is not None and hasattr(self._host,"set_selection_outline"):self._host.set_selection_outline(entity_ids)
 

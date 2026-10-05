@@ -6,7 +6,7 @@ from enum import Enum
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
 from PySide6.QtGui import (
-    QAction, QActionGroup, QColor, QIcon, QPainter, QPaintEvent, QPixmap, QPolygon,
+    QAction, QActionGroup, QColor, QIcon, QKeySequence, QPainter, QPaintEvent, QPixmap, QPolygon,
 )
 from PySide6.QtWidgets import QSizePolicy, QStyle, QToolBar, QToolButton, QWidget
 
@@ -134,8 +134,9 @@ class EditorToolbar(QToolBar):
         self.ModeActions: dict[GizmoMode, QAction] = {}
         mode_group = QActionGroup(self)
         mode_group.setExclusive(True)
-        for mode in GizmoMode:
+        for number,mode in enumerate(GizmoMode,1):
             action = QAction(self.ModeMenu)
+            action.setShortcut(QKeySequence(str(number)));action.setShortcutContext(Qt.ShortcutContext.WindowShortcut);action.setAutoRepeat(False)
             action.setCheckable(True)
             action.setData(mode)
             action.triggered.connect(lambda checked=False, value=mode:

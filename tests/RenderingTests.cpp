@@ -166,10 +166,14 @@ int main(int argc,char** argv) {
     engine.Update();
     auto primitive=scene.CreateEntity("Pick target");primitive.AddComponent<Bazzalt::PrimitiveObject>();
     assert(engine.PickEditorPrimitive({0,0,5},{0,0,-1})==primitive.GetUUID());
+    Bazzalt::Vec3 placement;
+    assert(engine.PickEditorPrimitive({0,0,5},{0,0,-1},&placement)==primitive.GetUUID());
+    assert(std::abs(placement.Z-.5f)<.001f);
     engine.SetEditorEntityState({}, {primitive.GetUUID()});assert(engine.PickEditorPrimitive({0,0,5},{0,0,-1}).IsRoot());
     engine.SetEditorEntityState({primitive.GetUUID()}, {});assert(engine.PickEditorPrimitive({0,0,5},{0,0,-1}).IsRoot());
     engine.SetEditorEntityState({}, {});assert(engine.PickEditorPrimitive({0,0,5},{0,0,-1})==primitive.GetUUID());
     auto parent=scene.CreateEntity("Outline parent");primitive.SetParent(parent);
+    assert(engine.PickEditorPrimitive({0,0,5},{0,0,-1},nullptr,{parent.GetUUID()}).IsRoot());
     using OutlineCheck=Bazzalt::Runtime::EditorOutlineTestAccess;
     engine.SetEditorSelection({});engine.SetEditorObjectHover({},{});
     OutlineCheck::Check(engine,{},{});

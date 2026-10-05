@@ -13,6 +13,7 @@ DEFAULT_PREFERENCES={"general":{"confirm_unsaved":True,"save_workspace":True},"a
 DEFAULT_PREFERENCES["scene"].update(pivot_center=False,local_space=False,gizmos_visible=True,stats_visible=False,icons_visible=True,shading_mode=0,look_sensitivity=.35,fly_boost=3.0)
 DEFAULT_PREFERENCES["scene"]["orientation_visible"]=True
 DEFAULT_PREFERENCES["scene"]["high_level_selection"]=False
+DEFAULT_PREFERENCES["general"]["expand_new_hierarchy_items"]=False
 DEFAULT_PREFERENCES["history"]={"command_limit":100,"memory_mb":128}
 DEFAULT_PREFERENCES["rendering"]={"backend":"automatic"}
 DEFAULT_PREFERENCES["file_associations"]={"remember":True}
@@ -38,6 +39,7 @@ class PreferencesDialog(QDialog):
         self.Sections.addItem(self.Tr(f"preferences.section.{key}"));page=QWidget();layout=QFormLayout(page);layout.setContentsMargins(14,12,14,12);layout.setHorizontalSpacing(20);layout.setVerticalSpacing(10);layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow);scroll=QScrollArea();scroll.setWidgetResizable(True);scroll.setWidget(page);self.Pages.addWidget(scroll);return layout
     def _AddGeneral(self):
         layout=self._Page("general");confirm=QCheckBox(self.Tr("preferences.confirm_unsaved"));workspace=QCheckBox(self.Tr("preferences.save_workspace"));layout.addRow(confirm);layout.addRow(workspace);self.Controls.update(confirm_unsaved=confirm,save_workspace=workspace)
+        expand=QCheckBox(self.Tr("preferences.expand_new_hierarchy_items"));layout.addRow(expand);self.Controls["expand_new_hierarchy_items"]=expand
     def _AddAppearance(self):
         layout=self._Page("appearance");theme=QComboBox();theme.addItem(self.Tr("action.theme_dark"),"dark");theme.addItem(self.Tr("action.theme_light"),"light");locale=QComboBox();locale.addItem(self.Tr("preferences.language_english"),"en");layout.addRow(self.Tr("preferences.theme"),theme);layout.addRow(self.Tr("preferences.language"),locale);self.Controls.update(theme=theme,locale=locale)
     def _AddScene(self):
@@ -110,6 +112,7 @@ class PreferencesDialog(QDialog):
     @staticmethod
     def _ComboSet(combo,value):index=combo.findData(value);combo.setCurrentIndex(max(0,index))
     def SetValues(self,value:dict)->None:
+        self.Controls["expand_new_hierarchy_items"].setChecked(bool(MergePreferences(value)["general"]["expand_new_hierarchy_items"]))
         p=MergePreferences(value);c=self.Controls;c["confirm_unsaved"].setChecked(bool(p["general"]["confirm_unsaved"]));c["save_workspace"].setChecked(bool(p["general"]["save_workspace"]));self._ComboSet(c["theme"],p["appearance"]["theme"]);self._ComboSet(c["locale"],p["appearance"]["locale"]);c["navigation_speed"].setValue(float(p["scene"]["navigation_speed"]));c["grid_visible"].setChecked(bool(p["scene"]["grid_visible"]));self._ComboSet(c["grid_plane"],int(p["scene"]["grid_plane"]));c["clear_on_play"].setChecked(bool(p["console"]["clear_on_play"]));c["show_compile_success"].setChecked(bool(p["scripting"]["show_compile_success"]))
         for key in ("pivot_center","local_space","gizmos_visible","stats_visible","icons_visible","orientation_visible","high_level_selection"):c[key].setChecked(bool(p["scene"][key]))
         self._ComboSet(c["shading_mode"],p["scene"]["shading_mode"])
@@ -122,6 +125,7 @@ class PreferencesDialog(QDialog):
         c=self.Controls;result=MergePreferences(self.Editor.GetPreferences())
         result.update(general={"confirm_unsaved":c["confirm_unsaved"].isChecked(),"save_workspace":c["save_workspace"].isChecked()},appearance={"theme":c["theme"].currentData(),"locale":c["locale"].currentData()},console={"clear_on_play":c["clear_on_play"].isChecked()},scripting={"show_compile_success":c["show_compile_success"].isChecked()})
         result["scene"].update(navigation_speed=c["navigation_speed"].value(),grid_visible=c["grid_visible"].isChecked(),grid_plane=c["grid_plane"].currentData(),shading_mode=c["shading_mode"].currentData())
+        result["general"]["expand_new_hierarchy_items"]=c["expand_new_hierarchy_items"].isChecked()
         for key in ("pivot_center","local_space","gizmos_visible","stats_visible","icons_visible","orientation_visible","high_level_selection"):result["scene"][key]=c[key].isChecked()
         for key in ("look_sensitivity","fly_boost"):result["scene"][key]=c[key].GetValue()
         result["history"]={key:int(c[key].GetValue()) for key in ("command_limit","memory_mb")}
