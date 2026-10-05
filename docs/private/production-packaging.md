@@ -142,6 +142,11 @@ non-dispatchable handles as `uint64_t` on Win32, and retains pointer conversion
 on 64-bit platforms. `scripts/patch_filament_win32.py` is idempotent and rejects
 unexpected upstream context. Both its contents and the source diff participate
 in dependency cache/build identities; changing the patch cannot reuse an old SDK.
+The same patch preserves `VKAPI_PTR` on all three Vulkan `enumerate` helper
+function-pointer signatures. Win32 Vulkan API pointers use `__stdcall`; leaving
+the helpers at the default `__cdecl` prevents template deduction even when every
+parameter and return type otherwise matches. Tiny syntax fixtures exercise all
+three overload shapes with the Vulkan calling convention on x86 and x64.
 
 Pinned LLVM bootstrap downloads use the official release archive URL directly
 and still require SHA-256 verification. They do not need GitHub release API

@@ -87,13 +87,37 @@ class Win32PackagingTests(unittest.TestCase):
 
     def test_filament_handle_patch_is_exact_idempotent_and_part_of_cache(self):
         source=self.Root/"filament/backend/src/vulkan/VulkanAsyncHandles.cpp";source.parent.mkdir(parents=True)
+        helper=source.parent/"utils/Helper.h";helper.parent.mkdir()
+        helper.write_text("VkResult (*first)\nVkResult (*second)\nVkResult (*third)\n",encoding="utf-8")
         source.write_text("before\n"+OLD+"\nafter\n",encoding="utf-8")
         self.assertTrue(Patch(self.Root));self.assertIn(NEW,source.read_text());self.assertFalse(Patch(self.Root))
+        self.assertEqual(helper.read_text().count("VkResult (VKAPI_PTR *"),3)
         source.write_text("upstream changed",encoding="utf-8")
         with self.assertRaises(ValueError):Patch(self.Root)
         root=Path(__file__).resolve().parents[2];script=(root/"scripts/build_windows_x86_dependencies.ps1").read_text()
         self.assertIn("patch_filament_win32.py",script);self.assertIn("$SourceDiff",script)
         self.assertIn("scripts/patch_filament_win32.py",(root/".github/workflows/windows-product.yml").read_text())
+
+    def test_enumerate_calling_convention_compiles_for_win32_vulkan_functions(self):
+        root=Path(__file__).resolve().parents[2];powershell=shutil.which("pwsh")
+        if not powershell:self.skipTest("MSVC environment unavailable")
+        source=self.Root/"enumerate.cpp"
+        source.write_text("""
+#define VKAPI_PTR __stdcall
+using uint32_t=unsigned int;
+enum VkResult { Success };
+template<class Out> void enumerate(VkResult (VKAPI_PTR *fn)(uint32_t*,Out*)) {}
+template<class In,class Out> void enumerate(VkResult (VKAPI_PTR *fn)(In,uint32_t*,Out*),In) {}
+template<class A,class B,class Out> void enumerate(VkResult (VKAPI_PTR *fn)(A,B,uint32_t*,Out*),A,B) {}
+VkResult VKAPI_PTR first(uint32_t*,int*);
+VkResult VKAPI_PTR second(int,uint32_t*,int*);
+VkResult VKAPI_PTR third(int,int,uint32_t*,int*);
+void test(){enumerate(first);enumerate(second,1);enumerate(third,1,2);}
+""",encoding="utf-8")
+        toolchain=str(root/"scripts/windows_toolchain.ps1").replace("'","''");filename=str(source).replace("'","''")
+        for arch in ("x86","x64"):
+            result=subprocess.run([powershell,"-NoProfile","-Command",f". '{toolchain}'; Import-BazzaltMsvc {arch}; & cl /nologo /Zs /std:c++17 '{filename}'; exit $LASTEXITCODE"],capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
 
     def test_patched_vulkan_handle_conversion_compiles_for_x86_and_x64(self):
         root=Path(__file__).resolve().parents[2];local=root/"toolchain/llvm/bin/clang++.exe"

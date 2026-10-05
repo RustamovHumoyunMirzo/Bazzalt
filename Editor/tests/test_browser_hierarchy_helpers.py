@@ -4,9 +4,11 @@ import json
 import struct
 import tempfile
 import unittest
+from time import monotonic, sleep
+from threading import Event
+from unittest.mock import patch
 from pathlib import Path
 from PySide6.QtCore import Qt
-from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 from Editor.gui.panels.hierarchy import HierarchyPanel
 from Editor.gui.panels.assets import AssetBrowserPanel
@@ -23,6 +25,16 @@ class BrowserHierarchyHelpersTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.App=QApplication.instance() or QApplication([])
     def setUp(self):self.Resources=ResourceManager();self.Locale=LocalizationManager(self.Resources)
+
+    def _WaitFor(self,predicate,timeout=5):
+        deadline=monotonic()+timeout
+        while not predicate() and monotonic()<deadline:
+            self.App.processEvents()
+            # Yield Python's GIL as well as pumping Qt. Repeated native qWait
+            # calls can starve a Python QRunnable on some PySide/CI builds.
+            sleep(.01)
+        self.App.processEvents()
+        return predicate()
 
     def test_object_menu_has_only_modes_selection_placement_snapping(self):
         menu=EditorMenuBar(ThemeManager(self.App),self.Locale)
@@ -52,13 +64,37 @@ class BrowserHierarchyHelpersTests(unittest.TestCase):
             path=Path(folder)/"mesh.obj";path.write_text("v -1 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n",encoding="utf-8")
             image=RenderModelThumbnail(path);self.assertFalse(image.isNull());self.assertEqual(image.width(),96)
             self.assertTrue(any(image.pixelColor(x,y).alpha() for x in range(96) for y in range(96)))
-            panel=AssetBrowserPanel(self.Locale,self.Resources);panel.SetProjectRoot(folder);item=panel.Browser.item(0);old=item.icon().cacheKey();item.setSelected(True)
-            for _ in range(100):
-                QTest.qWait(10)
-                if item.icon().cacheKey()!=old:break
-            self.assertNotEqual(item.icon().cacheKey(),old);self.assertTrue(item.isSelected());self.assertEqual(panel.CurrentFolder(),Path(folder))
-            path.write_text("broken",encoding="utf-8");self.assertTrue(RenderModelThumbnail(path).isNull())
-            panel.deleteLater()
+            panel=AssetBrowserPanel(self.Locale,self.Resources);completed=[]
+            panel._thumbnails.Ready.connect(lambda name,image:completed.append((name,image)))
+            try:
+                panel.SetProjectRoot(folder);item=panel.Browser.item(0);old=item.icon().cacheKey();item.setSelected(True)
+                self.assertTrue(self._WaitFor(lambda:bool(completed)),f"Thumbnail worker did not complete; pending={panel._thumbnails._pending}")
+                self.assertEqual(completed[0][0],str(path));self.assertFalse(completed[0][1].isNull(),"Thumbnail generation returned an empty image")
+                self.assertNotEqual(item.icon().cacheKey(),old,"Worker completed but browser did not apply the thumbnail")
+                self.assertTrue(item.isSelected());self.assertEqual(panel.CurrentFolder(),Path(folder))
+                path.write_text("broken",encoding="utf-8");self.assertTrue(RenderModelThumbnail(path).isNull())
+            finally:
+                panel._thumbnails._pool.waitForDone(5000);panel.deleteLater()
+
+    def test_delayed_worker_delivers_completion_on_gui_thread(self):
+        from Editor.model_thumbnails import ModelThumbnailCache
+        from PySide6.QtCore import QThread
+        gate=Event();started=Event();completed=[]
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/"mesh.obj";path.write_text("v -1 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n",encoding="utf-8")
+            cache=ModelThumbnailCache()
+            cache.Ready.connect(lambda name,image:completed.append((name,image,QThread.currentThread())))
+            def delayed(path):
+                started.set()
+                if not gate.wait(5):raise TimeoutError("test worker gate not released")
+                return RenderModelThumbnail(path)
+            try:
+                with patch("Editor.model_thumbnails.RenderModelThumbnail",side_effect=delayed):
+                    self.assertIsNone(cache.Request(path));self.assertTrue(self._WaitFor(started.is_set));self.assertFalse(completed)
+                    gate.set();self.assertTrue(self._WaitFor(lambda:bool(completed)))
+                self.assertFalse(completed[0][1].isNull());self.assertEqual(completed[0][2],self.App.thread())
+                self.assertIsNotNone(cache.Request(path))
+            finally:gate.set();cache._pool.waitForDone(5000);cache.deleteLater()
 
     def test_glb_node_transforms_and_invalid_geometry(self):
         with tempfile.TemporaryDirectory() as folder:

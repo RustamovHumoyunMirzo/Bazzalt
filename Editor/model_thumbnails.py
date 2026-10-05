@@ -10,7 +10,7 @@ import struct
 from collections import OrderedDict
 from pathlib import Path
 from urllib.parse import unquote
-from PySide6.QtCore import QObject, QPointF, QRunnable, QThreadPool, Qt, Signal
+from PySide6.QtCore import QObject, QPointF, QRunnable, QThreadPool, Qt, Signal, Slot
 from PySide6.QtGui import QColor, QImage, QPainter, QPolygonF
 
 MAX_BYTES=128*1024*1024
@@ -147,7 +147,7 @@ class ModelThumbnailCache(QObject):
     Ready=Signal(str,object)
     def __init__(self,parent=None):
         super().__init__(parent);self._cache=OrderedDict();self._pending=set();self._signals=_Signals()
-        self._signals.Ready.connect(self._Finished);self._pool=QThreadPool();self._pool.setMaxThreadCount(1)
+        self._signals.Ready.connect(self._Finished,Qt.ConnectionType.QueuedConnection);self._pool=QThreadPool();self._pool.setMaxThreadCount(1)
     def Request(self,path):
         path=Path(path)
         if path.suffix.lower() not in {".glb",".gltf",".obj"}:return None
@@ -162,6 +162,7 @@ class ModelThumbnailCache(QObject):
         if key not in self._pending and len(self._pending)<64:
             self._pending.add(key);self._pool.start(_Work(key,path,self._signals))
         return None
+    @Slot(object,object)
     def _Finished(self,key,image):
         self._pending.discard(key);self._cache[key]=image
         while len(self._cache)>128:self._cache.popitem(last=False)
