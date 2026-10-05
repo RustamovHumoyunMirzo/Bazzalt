@@ -22,6 +22,7 @@
 #include <chrono>
 #include <cmath>
 #include <stdexcept>
+#include <cstdlib>
 
 namespace Bazzalt::Runtime {
 
@@ -127,13 +128,18 @@ void Engine::RenderEditorFrame()
     // Editor and paused frames must not accumulate a giant gameplay delta.
     m_lastFrameTime = std::chrono::steady_clock::now();
     ProcessPendingSceneLoad();
+    const bool profile=std::getenv("BAZZALT_PROFILE_FRAME")!=nullptr;
+    const auto start=std::chrono::steady_clock::now();
     m_scene->UpdateSystem<CameraSystem>();
     m_scene->UpdateSystem<LightSystem>();
     m_scene->UpdateSystem<MeshSystem>();
     m_scene->UpdateSystem<PrimitiveSystem>();
+    const auto systems=std::chrono::steady_clock::now();
     UpdateEditorOverlays();
+    const auto overlays=std::chrono::steady_clock::now();
     m_renderBackend->SetEnvironment(m_scene->GetEnvironment());
     m_renderBackend->Render();
+    if(profile){const auto end=std::chrono::steady_clock::now();const auto ms=[](auto a,auto b){return std::chrono::duration<double,std::milli>(b-a).count();};std::cout<<"FRAME systems="<<ms(start,systems)<<" overlays="<<ms(systems,overlays)<<" render="<<ms(overlays,end)<<" ms\n";}
 }
 
 void Engine::UpdateEditorOverlays()
@@ -153,41 +159,26 @@ for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id
     }
     m_renderBackend->SetEditorIcons(m_editorIconsVisible?icons:std::vector<RenderBackend::EditorIcon>{});
     if(!m_editorIconsVisible)guides.clear();
-    auto outlined=m_selectedObjects;
-    if(!m_hoveredObject.IsRoot()&&std::find(outlined.begin(),outlined.end(),m_hoveredObject)==outlined.end())outlined.push_back(m_hoveredObject);
-    for(UUID outlineId:outlined){
-    if(m_editorHidden.contains(outlineId)||m_editorUnselectable.contains(outlineId))continue;
-    const bool selected=std::find(m_selectedObjects.begin(),m_selectedObjects.end(),outlineId)!=m_selectedObjects.end();
-    const Vec4 outlineColor=selected?Vec4{.12f,.38f,1.0f,1.0f}:Vec4{.45f,.8f,1.0f,1.0f};
-    Entity hovered=m_scene->GetEntity(outlineId);
-    if(hovered)if(const auto* primitive=hovered.TryGetComponent<PrimitiveObject>();primitive&&primitive->IsEnabled()&&primitive->Visible){
-        const auto geometry=BuildPrimitiveGeometry(*primitive);const auto world=hovered.GetWorldMatrix();
-        using Point=std::tuple<int,int,int>;using Key=std::pair<Point,Point>;
-        struct Edge{Vec3 A,B;bool Front=false,Back=false;int Count=0;};std::map<Key,Edge> edges;
-        const auto point=[](Vec3 p){return Point{int(std::round(p.X*10000)),int(std::round(p.Y*10000)),int(std::round(p.Z*10000))};};
-        for(std::size_t i=0;i+2<geometry.Indices.size();i+=3){Vec3 vertices[3];for(int j=0;j<3;++j){const auto& v=geometry.Vertices[geometry.Indices[i+j]];vertices[j]=world.TransformPoint({v.Position[0],v.Position[1],v.Position[2]});}const auto normal=Vec3::Cross(vertices[1]-vertices[0],vertices[2]-vertices[0]);if(normal.LengthSquared()<1e-12f)continue;bool front=Vec3::Dot(normal,m_hoverEye-vertices[0])>=0;for(int j=0;j<3;++j){Vec3 a=vertices[j],b=vertices[(j+1)%3];auto pa=point(a),pb=point(b);if(pb<pa){std::swap(pa,pb);std::swap(a,b);}auto& edge=edges[{pa,pb}];edge.A=a;edge.B=b;edge.Front|=front;edge.Back|=!front;++edge.Count;}}
-        for(const auto& [_,edge]:edges)if(edge.Count==1||(edge.Front&&edge.Back)){line(edge.A,edge.B,outlineColor);guides.back().Outline=true;}
-    }
-    }
-    // Imported models participate in the same selection pipeline as primitives.
-    // Selecting a model root outlines its renderable descendants as well.
-    for(const auto& mesh:m_renderBackend->GetAssets().GetEditorMeshes()) {
-        if(m_editorHidden.contains(mesh.Owner)||m_editorUnselectable.contains(mesh.Owner))continue;
+    std::unordered_set<UUID> selectedOwners,hoveredOwners;
+    auto objects=m_scene->GetRegistry().view<Transform>();
+    for(auto handle:objects){
+        Entity object=m_scene->GetEntity(static_cast<Entity::Id>(handle));
+        const UUID owner=object.GetUUID();
+        if(!object.HasComponent<Mesh>()&&!object.HasComponent<PrimitiveObject>())continue;
+        if(m_editorHidden.contains(owner)||m_editorUnselectable.contains(owner))continue;
         bool selected=false,hovered=false;
-        for(auto entity=m_scene->GetEntity(mesh.Owner);entity;entity=entity.GetParent()){
-            auto id=entity.GetUUID();selected|=std::find(m_selectedObjects.begin(),m_selectedObjects.end(),id)!=m_selectedObjects.end();hovered|=id==m_hoveredObject;
+        for(auto entity=object;entity;entity=entity.GetParent()){
+            // UUID zero is the scene root AND the no-hover sentinel. Never
+            // classify an object by that ancestor, or clearing hover marks
+            // the entire scene as hovered.
+            auto id=entity.GetUUID();
             if(id.IsRoot())break;
+            selected|=std::find(m_selectedObjects.begin(),m_selectedObjects.end(),id)!=m_selectedObjects.end();
+            hovered|=!m_hoveredObject.IsRoot()&&id==m_hoveredObject;
         }
-        if(!selected&&!hovered)continue;
-        const Vec4 color=selected?Vec4{.12f,.38f,1,1}:Vec4{.45f,.8f,1,1};
-        Mat4 inverse;if(!mesh.World.TryInverse(inverse))continue;
-        const Vec3 eye=inverse.TransformPoint(m_hoverEye);
-        std::vector<bool> front;front.reserve(mesh.Geometry->Triangles.size());
-        for(const auto& triangle:mesh.Geometry->Triangles)front.push_back(Vec3::Dot(Vec3::Cross(triangle.B-triangle.A,triangle.C-triangle.A),eye-triangle.A)>=0);
-        for(const auto& edge:mesh.Geometry->Edges){bool a=false,b=false;for(auto face:edge.Faces){a|=front[face];b|=!front[face];}
-            if(edge.Faces.size()==1||(a&&b)){line(mesh.World.TransformPoint(edge.A),mesh.World.TransformPoint(edge.B),color);guides.back().Outline=true;}
-        }
+        if(selected)selectedOwners.insert(owner);else if(hovered)hoveredOwners.insert(owner);
     }
+    m_renderBackend->SetEditorOutline(std::move(selectedOwners),std::move(hoveredOwners));
     m_renderBackend->SetEditorGuides(guides);
 }
 

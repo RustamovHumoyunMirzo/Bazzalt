@@ -12,6 +12,7 @@ from ..platform_services import ChooseApplication
 DEFAULT_PREFERENCES={"general":{"confirm_unsaved":True,"save_workspace":True},"appearance":{"theme":"dark","locale":"en"},"scene":{"navigation_speed":5.0,"grid_visible":True,"grid_plane":1},"console":{"clear_on_play":False},"scripting":{"show_compile_success":True}}
 DEFAULT_PREFERENCES["scene"].update(pivot_center=False,local_space=False,gizmos_visible=True,stats_visible=False,icons_visible=True,shading_mode=0,look_sensitivity=.35,fly_boost=3.0)
 DEFAULT_PREFERENCES["scene"]["orientation_visible"]=True
+DEFAULT_PREFERENCES["scene"]["high_level_selection"]=False
 DEFAULT_PREFERENCES["history"]={"command_limit":100,"memory_mb":128}
 DEFAULT_PREFERENCES["rendering"]={"backend":"automatic"}
 DEFAULT_PREFERENCES["file_associations"]={"remember":True}
@@ -41,7 +42,7 @@ class PreferencesDialog(QDialog):
         layout=self._Page("appearance");theme=QComboBox();theme.addItem(self.Tr("action.theme_dark"),"dark");theme.addItem(self.Tr("action.theme_light"),"light");locale=QComboBox();locale.addItem(self.Tr("preferences.language_english"),"en");layout.addRow(self.Tr("preferences.theme"),theme);layout.addRow(self.Tr("preferences.language"),locale);self.Controls.update(theme=theme,locale=locale)
     def _AddScene(self):
         layout=self._Page("scene");speed=QDoubleSpinBox();speed.setRange(.1,100.0);speed.setDecimals(1);speed.setSuffix("×");grid=QCheckBox(self.Tr("preferences.grid_visible"));plane=QComboBox();plane.addItem("XY",0);plane.addItem("XZ",1);plane.addItem("YZ",2);layout.addRow(self.Tr("preferences.navigation_speed"),speed);layout.addRow(grid);layout.addRow(self.Tr("preferences.grid_plane"),plane);self.Controls.update(navigation_speed=speed,grid_visible=grid,grid_plane=plane)
-        for key in ("pivot_center","local_space","gizmos_visible","stats_visible","icons_visible","orientation_visible"):
+        for key in ("pivot_center","local_space","gizmos_visible","stats_visible","icons_visible","orientation_visible","high_level_selection"):
             field=QCheckBox(self.Tr(f"preferences.{key}"));layout.addRow(field);self.Controls[key]=field
         shading=QComboBox()
         for index,name in enumerate(("Lit","Unlit","Wireframe","Lighting Only","Overdraw")):shading.addItem(name,index)
@@ -110,7 +111,7 @@ class PreferencesDialog(QDialog):
     def _ComboSet(combo,value):index=combo.findData(value);combo.setCurrentIndex(max(0,index))
     def SetValues(self,value:dict)->None:
         p=MergePreferences(value);c=self.Controls;c["confirm_unsaved"].setChecked(bool(p["general"]["confirm_unsaved"]));c["save_workspace"].setChecked(bool(p["general"]["save_workspace"]));self._ComboSet(c["theme"],p["appearance"]["theme"]);self._ComboSet(c["locale"],p["appearance"]["locale"]);c["navigation_speed"].setValue(float(p["scene"]["navigation_speed"]));c["grid_visible"].setChecked(bool(p["scene"]["grid_visible"]));self._ComboSet(c["grid_plane"],int(p["scene"]["grid_plane"]));c["clear_on_play"].setChecked(bool(p["console"]["clear_on_play"]));c["show_compile_success"].setChecked(bool(p["scripting"]["show_compile_success"]))
-        for key in ("pivot_center","local_space","gizmos_visible","stats_visible","icons_visible","orientation_visible"):c[key].setChecked(bool(p["scene"][key]))
+        for key in ("pivot_center","local_space","gizmos_visible","stats_visible","icons_visible","orientation_visible","high_level_selection"):c[key].setChecked(bool(p["scene"][key]))
         self._ComboSet(c["shading_mode"],p["scene"]["shading_mode"])
         for key in ("look_sensitivity","fly_boost"):c[key].SetValue(p["scene"][key])
         for key in ("command_limit","memory_mb"):c[key].SetValue(p["history"][key])
@@ -121,7 +122,7 @@ class PreferencesDialog(QDialog):
         c=self.Controls;result=MergePreferences(self.Editor.GetPreferences())
         result.update(general={"confirm_unsaved":c["confirm_unsaved"].isChecked(),"save_workspace":c["save_workspace"].isChecked()},appearance={"theme":c["theme"].currentData(),"locale":c["locale"].currentData()},console={"clear_on_play":c["clear_on_play"].isChecked()},scripting={"show_compile_success":c["show_compile_success"].isChecked()})
         result["scene"].update(navigation_speed=c["navigation_speed"].value(),grid_visible=c["grid_visible"].isChecked(),grid_plane=c["grid_plane"].currentData(),shading_mode=c["shading_mode"].currentData())
-        for key in ("pivot_center","local_space","gizmos_visible","stats_visible","icons_visible","orientation_visible"):result["scene"][key]=c[key].isChecked()
+        for key in ("pivot_center","local_space","gizmos_visible","stats_visible","icons_visible","orientation_visible","high_level_selection"):result["scene"][key]=c[key].isChecked()
         for key in ("look_sensitivity","fly_boost"):result["scene"][key]=c[key].GetValue()
         result["history"]={key:int(c[key].GetValue()) for key in ("command_limit","memory_mb")}
         result["rendering"]={"backend":c["rendering_backend"].currentData() or "automatic"}

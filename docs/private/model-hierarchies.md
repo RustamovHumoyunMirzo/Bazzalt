@@ -68,14 +68,19 @@ scenes discover missing slots when the renderer loads their meshes.
 Editor ray selection tests triangles, not oversized model bounds. Static glTF
 triangle lists, strips, and fans with standard position/index accessors use
 shared CPU geometry and a BVH. Hover outlines are light blue, selected outlines
-blue; selecting a model root outlines its renderable descendants. These helpers
+blue; selecting a model root fills one GPU mask for its renderable descendants
+and outlines only the combined silhouette, not each child's internal borders.
+The contour has a three-logical-pixel radius with a filled, round dilation
+kernel to avoid gaps around thin geometry. Manipulation handles render
+in a separate final overlay pass above this contour. These helpers
 remain Scene-view-only and respect entity visibility/locking. Framing and
 marquee selection use transformed mesh bounds rather than node origins.
 
 CPU editor geometry currently does not decode Draco/meshopt-only payloads,
 sparse accessors, or animated skin/morph deformation. Filament rendering still
 supports its own glTF capabilities; exports with ordinary, non-sparse static
-geometry provide exact editor triangle picking and outlines.
+geometry provide exact editor triangle picking. GPU outlines use the actual
+rendered geometry and do not depend on the CPU picking decoder.
 
 ## Native crash diagnostics
 
@@ -85,8 +90,12 @@ directory. The previous session is retained as `editor-runtime.previous.log`.
 This includes native abort output that cannot be caught by Python exceptions.
 
 Model bounds queries before renderer initialization or after shutdown return
-empty results. Detailed-model outline strokes are batched by color/depth policy,
-not emitted as individual renderables. Interactive rendering uses larger
+empty results. Outlines use a filled render target and one fullscreen contour
+pass; no per-frame triangle-edge traversal or per-edge renderables are needed.
+Camera/light guides are actual GPU line primitives, clipped by the camera and
+batched by color/depth policy. They do not use distance-scaled world-space boxes
+(which can turn long frustum edges into huge strips near their origin).
+Interactive rendering uses larger
 Filament command, render-pass, and driver-handle arenas than headless tests.
 
 To exercise native presentation rather than only CPU/NOOP behavior:

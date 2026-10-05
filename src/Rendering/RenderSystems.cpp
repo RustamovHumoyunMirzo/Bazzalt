@@ -162,7 +162,9 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
         });
         const auto& depthOfField = camera.PostProcessing.DepthOfField;
         const auto* blur = entity.TryGetComponent<GaussianBlur>();
-        const bool blurEnabled = camera.PostProcessing.Enabled && blur && blur->IsEnabled() &&
+        // The legacy blur fallback uses Filament's DoF stage. It must never
+        // replace an explicitly enabled camera DoF's focus or lens controls.
+        const bool blurEnabled = camera.PostProcessing.Enabled && !depthOfField.Enabled && blur && blur->IsEnabled() &&
             FiniteOr(blur->Size, 0.0f) > 0.0f;
         const float blurRadius = blurEnabled
             ? std::clamp(FiniteOr(blur->Size, 1.0f), 0.0f, 32.0f) : 0.0f;
@@ -177,13 +179,18 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
             FiniteOr(depthOfField.Sensitivity, 100.0f) * std::exp2(exposureCompensation),
             10.0f, 204800.0f);
         resource.Camera->setFocusDistance(focusDistance);
-        resource.Camera->setExposure(aperture, shutterSpeed, sensitivity);
+        // Filament couples its physical aperture to exposure and CoC. Our DoF
+        // aperture is an artistic lens control, not a brightness control:
+        // keep exposure at the established f/16 baseline and apply the inverse
+        // f-stop ratio to CoC instead (lens blur is proportional to 1 / f-stop).
+        constexpr float exposureAperture=16.0f;
+        resource.Camera->setExposure(exposureAperture, shutterSpeed, sensitivity);
         std::uint8_t ringCount = 5;
         if (depthOfField.Quality == DepthOfFieldQuality::Low) ringCount = 3;
         else if (depthOfField.Quality == DepthOfFieldQuality::High) ringCount = 7;
         resource.View->setDepthOfFieldOptions({
             .cocScale = blurEnabled ? std::max(1.0f, blurRadius) :
-                std::max(0.0f, FiniteOr(depthOfField.CocScale, 1.0f)),
+                std::max(0.0f, FiniteOr(depthOfField.CocScale, 1.0f)) * exposureAperture / aperture,
             .cocAspectRatio = std::max(0.01f, FiniteOr(depthOfField.CocAspectRatio, 1.0f)),
             .maxApertureDiameter = blurEnabled ? std::max(0.01f, blurRadius * 0.01f) :
                 std::max(0.0f, FiniteOr(depthOfField.MaxApertureDiameter, 0.01f)),

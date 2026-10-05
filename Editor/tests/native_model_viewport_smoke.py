@@ -7,6 +7,7 @@ import faulthandler
 import shutil
 import sys
 import tempfile
+from time import perf_counter
 from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QWidget
@@ -43,7 +44,7 @@ def main():
                 if frame==4:
                     mesh=next(entity for entity in runtime.Entities() if "Mesh" in entity.get("components",()))
                     window.Controller.SelectEntity(mesh["uuid"])
-                window.Controller._Tick();QTest.qWait(10);print("EDITOR FRAME",frame,flush=True)
+                started=perf_counter();window.Controller._Tick();elapsed=perf_counter()-started;QTest.qWait(10);print("EDITOR FRAME",frame,round(elapsed*1000,2),"ms",flush=True)
             window.Controller.IsDirty=False;window.Controller._dirty_scenes.clear()
             window.close();app.processEvents();runtime.Release();del host
             return 0
@@ -59,6 +60,12 @@ def main():
         host.set_selection_outline([identity])
         for frame in range(4):host.tick();app.processEvents();print("SELECTED",frame,flush=True)
         host.set_selection_outline([])
+        # Exercise long camera frustum edges near their apex: these must remain
+        # clipped raster lines, never midpoint-scaled world-space boxes.
+        camera=host.create_entity("Guide camera","");assert host.add_component(camera,"Camera")
+        host.set_selection_outline([camera])
+        from PySide6.QtTest import QTest
+        for frame in range(4):host.tick();QTest.qWait(20);print("CAMERA GUIDES",frame,flush=True)
         host.resize_viewport(1,480,360,1.)
         for frame in range(4):host.tick();app.processEvents();print("RESIZED",frame,flush=True)
         host.destroy_viewport(1);del host;surface.close();app.processEvents()

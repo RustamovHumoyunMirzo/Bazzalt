@@ -130,7 +130,7 @@ class Editor(QMainWindow):
         initial=self._settings.get("preferences")
         if not isinstance(initial,dict):initial=MergePreferences(None);initial["appearance"]["theme"]=str(self._settings.get("theme","dark"))
         self.ApplyPreferences(initial,save=False)
-        for control,signal,key in ((self.Scene.PivotMode,"currentIndexChanged","pivot_center"),(self.Scene.LocalToggle,"toggled","local_space"),(self.Scene.GridToggle,"toggled","grid_visible"),(self.Scene.GridPlane,"currentIndexChanged","grid_plane"),(self.Scene.GizmoToggle,"toggled","gizmos_visible"),(self.Scene.StatsToggle,"toggled","stats_visible"),(self.Scene.ShadingMode,"currentIndexChanged","shading_mode"),(self.MenuBar.IconsAction,"toggled","icons_visible")):
+        for control,signal,key in ((self.Scene.HighLevelToggle,"toggled","high_level_selection"),(self.Scene.PivotMode,"currentIndexChanged","pivot_center"),(self.Scene.LocalToggle,"toggled","local_space"),(self.Scene.GridToggle,"toggled","grid_visible"),(self.Scene.GridPlane,"currentIndexChanged","grid_plane"),(self.Scene.GizmoToggle,"toggled","gizmos_visible"),(self.Scene.StatsToggle,"toggled","stats_visible"),(self.Scene.ShadingMode,"currentIndexChanged","shading_mode"),(self.MenuBar.IconsAction,"toggled","icons_visible")):
             getattr(control,signal).connect(lambda value,k=key:self._SaveScenePreference(k,bool(value) if k=="pivot_center" else value))
 
     def _SaveScenePreference(self,key,value)->None:
@@ -235,6 +235,7 @@ class Editor(QMainWindow):
         scene=value["scene"];self.Runtime.SetGrid(scene["grid_visible"],scene["grid_plane"])
         self.Scene.GridToggle.setChecked(bool(scene["grid_visible"]));self.Scene.GridPlane.setCurrentIndex(int(scene["grid_plane"]))
         self.Scene.Surface.SetMoveSpeed(scene["navigation_speed"])
+        self.Scene.HighLevelToggle.setChecked(bool(scene["high_level_selection"]));self.Scene.Surface.SetHighLevelSelection(bool(scene["high_level_selection"]))
         self.Scene.PivotMode.setCurrentIndex(1 if scene["pivot_center"] else 0);self.Scene.LocalToggle.setChecked(bool(scene["local_space"]))
         self.Scene.GizmoToggle.setChecked(bool(scene["gizmos_visible"]));self.Scene.StatsToggle.setChecked(bool(scene["stats_visible"]))
         self.MenuBar.IconsAction.setChecked(bool(scene["icons_visible"]));self.Runtime.SetEditorIconsVisible(bool(scene["icons_visible"]))

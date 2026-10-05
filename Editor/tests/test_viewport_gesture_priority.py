@@ -28,6 +28,27 @@ class ViewportGesturePriorityTests(unittest.TestCase):
         runtime.EntityDetails.assert_not_called() # Avoid hundreds of native calls during a drag.
         surface.close()
 
+    def test_high_level_selection_resolves_hover_click_and_marquee(self):
+        runtime=Mock();runtime.IsEditorSelectable.return_value=True
+        runtime.EditorParents={"mesh":"group","group":"model","model":"","other":""}
+        runtime.PickPrimitive.return_value="mesh"
+        runtime.Entities.return_value=[{"uuid":value,"components":["Mesh"],"mesh_bounds":((-1,-1,0),(1,1,0))} for value in ("mesh","group","other")]
+        surface=NativeRenderSurface(runtime,True);surface.resize(640,480)
+        surface._Project=lambda p:(320+p[0]*20,240-p[1]*20,10)
+        self.assertEqual(surface._PickSceneObject(QPoint(320,240)),"mesh")
+        surface.SetHighLevelSelection(True)
+        self.assertEqual(surface._PickSceneObject(QPoint(320,240)),"model")
+        self.assertEqual(surface._EntitiesInSelectionBox(QPoint(305,225),QPoint(335,255)),["model","other"])
+        runtime.EntityDetails.assert_not_called()
+        runtime.IsEditorSelectable.side_effect=lambda value:value!="model"
+        self.assertEqual(surface._SelectionTarget("mesh"),"")
+        runtime.IsEditorSelectable.return_value=True;runtime.IsEditorSelectable.side_effect=None
+        runtime.EditorParents["model"]="mesh" # Broken graphs cannot hang input.
+        self.assertIn(surface._SelectionTarget("mesh"),runtime.EditorParents)
+        surface.SetHighLevelSelection(False)
+        self.assertEqual(surface._SelectionTarget("mesh"),"mesh")
+        surface.close()
+
     def test_handles_win_over_unselected_geometry_for_all_transform_modes(self):
         for mode in (GizmoMode.Translate, GizmoMode.Scale, GizmoMode.Rotate):
             with self.subTest(mode=mode):

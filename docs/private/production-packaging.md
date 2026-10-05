@@ -146,7 +146,8 @@ The Win32 jobs therefore cannot use those precompiled packages. CMake selects
 and LLVM source commits, plus the checksum of portable Python 3.13.2 Win32.
 `scripts/build_windows_x86_dependencies.ps1` runs on the Actions worker:
 
-- `gui` builds Qt/QtSvg Win32, a separate minimal x64 Qt/Shiboken generator,
+- `qt` builds the installed Win32 Qt base and QtSvg SDK.
+- `gui` reuses the completed Qt/QtSvg installation, builds a separate minimal x64 Qt/Shiboken generator,
   and genuine Win32 PySide bindings; it builds architecture-audited wheels and
   performs a Qt Widgets/SVG smoke test with 32-bit Python.
 - `filament` builds only the native renderer dependencies needed by Core.
@@ -183,6 +184,30 @@ belong in the repository; dependency build/cache directories remain ignored.
 Local dependency compilation was stopped at the owner's request. Successful
 partial compilation is not proof of a working Win32 Editor/renderer/installer;
 TODO 3 remains pending end-to-end CI validation.
+
+### Win32 job duration and caching
+
+The reusable product workflow no longer puts every source build and packaging
+step into a single 350-minute job. It uses four stages:
+
+1. `x86-qt`: Qt base and SVG, up to 350 minutes.
+2. `x86-gui`: depends on Qt; builds generators and PySide, up to 350 minutes.
+3. `x86-filament`: independent of Qt/PySide, up to 350 minutes.
+4. `x86`: downloads the completed runtimes/SDKs, tests and packages the product,
+   up to 120 minutes. Core skips GUI stages; Hub skips Filament.
+
+Each dependency stage caches only its completed installation, keyed by pinned
+sources, build/packaging scripts and MSVC toolset version. There are no fuzzy
+restore keys. Exact completed-installation stamps stop the GUI stage from
+recompiling Qt after its SDK is downloaded. Fresh products still build and test
+on every commit; cached dependencies do not skip product tests.
+
+Intermediate artifacts have one-day retention and product-qualified names to
+avoid collisions in release workflows. Cache misses still perform real source
+builds; cache availability is an optimization, not a requirement. If one
+individual dependency stage itself reaches the time limit, split that stage
+further or use a more capable runner. This job structure has been statically
+validated locally, but timing must be verified by an actual Actions run.
 
 ## Compiled resources and release hygiene
 

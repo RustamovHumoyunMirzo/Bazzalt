@@ -1,0 +1,12 @@
+material {
+    name : EditorSelectionMask,
+    shadingModel : unlit,
+    parameters : [ { type : float4, name : color } ],
+    doubleSided : true
+}
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = materialParams.color;
+    }
+}

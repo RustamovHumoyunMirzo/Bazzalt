@@ -1,0 +1,36 @@
+material {
+    name : EditorSelectionOutline,
+    shadingModel : unlit,
+    vertexDomain : device,
+    blending : transparent,
+    parameters : [
+        { type : sampler2d, name : mask },
+        { type : float2, name : texelSize },
+        { type : float, name : strokeWidth }
+    ],
+    depthWrite : false,
+    depthCulling : false,
+    doubleSided : true
+}
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec2 uv = uvToRenderTargetUV(getNormalizedViewportCoord().xy);
+        vec2 center = texture(materialParams_mask, uv).rg;
+        // One filled mask for the entire selected hierarchy. Internal material,
+        // mesh and child boundaries must not produce outlines.
+        if (max(center.r, center.g) > 0.5) discard;
+        vec2 edge = vec2(0.0);
+        // Sample the interior of the dilation kernel too, not just its corners.
+        // Sparse samples miss narrow silhouettes and make the border patchy.
+        vec2 stepSize = materialParams.texelSize * materialParams.strokeWidth / 3.0;
+        for (int y = -3; y <= 3; ++y) {
+            for (int x = -3; x <= 3; ++x) {
+                if (x*x + y*y > 9) continue;
+                edge = max(edge, texture(materialParams_mask, uv + vec2(float(x), float(y)) * stepSize).rg);
+            }
+        }
+        if (max(edge.r, edge.g) < 0.5) discard;
+        material.baseColor = vec4(edge.r > 0.5 ? vec3(0.12, 0.38, 1.0) : vec3(0.45, 0.8, 1.0), 1.0);
+    }
+}

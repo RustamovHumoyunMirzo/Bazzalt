@@ -87,6 +87,8 @@
   "preferences.command_limit": "History limit (commands)",
   "preferences.memory_mb": "History memory budget (MiB)",
   "preferences.pivot_center": "Use selection center instead of pivot",
+  "preferences.high_level_selection": "Select top-level objects in the Scene viewport",
+  "viewport.high_level_selection": "High-level selection: hover and select top-level parents instead of individual children",
   "preferences.local_space": "Use local transform space",
   "preferences.gizmos_visible": "Show gizmos",
   "preferences.stats_visible": "Show statistics",

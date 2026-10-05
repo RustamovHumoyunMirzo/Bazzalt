@@ -51,6 +51,7 @@ struct CameraPostProcessing {
     struct DepthOfFieldSettings {
         bool Enabled = false;
         float FocusDistance = 10.0f;
+        // Lens f-stop: lower values increase DoF blur without changing exposure.
         float Aperture = 16.0f;
         float ShutterSpeed = 1.0f / 125.0f;
         float Sensitivity = 100.0f;

@@ -29,9 +29,21 @@ function Checkout([string]$Repository, [string]$Tag, [string]$Commit, [string]$D
     if ($LASTEXITCODE -ne 0 -or $Actual -ne $Commit) { throw "Dependency checkout failed integrity check: $Destination" }
 }
 function Build([string]$Source, [string]$Directory, [string]$Prefix, [string[]]$Options) {
+    # Installed SDKs travel between CI jobs; build trees do not. Reuse only a
+    # completed installation for the exact source, flags and compiler target.
+    $Commit=(& git -C $Source rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -ne 0) { throw "Cannot identify dependency source: $Source" }
+    $Identity=@($Commit,(Get-Command cl).Source)+$Options
+    $Stamp=Join-Path $Prefix ("bazzalt-build-"+[IO.Path]::GetFileName($Directory)+'.json')
+    $Expected=ConvertTo-Json -InputObject $Identity -Compress
+    if ((Test-Path -LiteralPath $Stamp) -and ([IO.File]::ReadAllText($Stamp) -eq $Expected)) {
+        Write-Host "Reusing verified completed installation: $Prefix"
+        return
+    }
     Checked cmake (@('-S',$Source,'-B',$Directory,'-G','Ninja','-DCMAKE_BUILD_TYPE=Release',"-DCMAKE_INSTALL_PREFIX=$Prefix")+$Options)
     Checked cmake @('--build',$Directory,'--parallel',"$Parallel")
     Checked cmake @('--install',$Directory)
+    [IO.File]::WriteAllText($Stamp,$Expected)
 }
 function Build-Filament {
     $Filament = Join-Path $Work 'filament-source'
@@ -57,10 +69,10 @@ $Qt = Join-Path $Work 'qt-x86'
 # Neither product uses QtSql. Disable it explicitly so the Win32 build cannot
 # auto-detect a runner's x64 PostgreSQL/MySQL client and link mismatched plugins.
 Build $QtBase (Join-Path $Work 'qtbase-x86') $Qt @('-DQT_BUILD_TESTS=OFF','-DQT_BUILD_EXAMPLES=OFF','-DFEATURE_sql=OFF','-DFEATURE_openssl=OFF','-DFEATURE_icu=OFF')
-if ($Stage -eq 'qt') { Write-Host "Win32 Qt base: $Qt"; return }
 $Svg = Join-Path $Work 'qtsvg'
 Checkout 'https://github.com/qt/qtsvg.git' "v$($Pins.qt_version)" $Pins.qtsvg_commit $Svg
 Build $Svg (Join-Path $Work 'qtsvg-x86') $Qt @("-DCMAKE_PREFIX_PATH=$Qt",'-DQT_BUILD_TESTS=OFF','-DQT_BUILD_EXAMPLES=OFF')
+if ($Stage -eq 'qt') { Write-Host "Win32 Qt base and SVG SDK: $Qt"; return }
 $PySide = Join-Path $Work 'pyside'
 Checkout 'https://github.com/pyside/pyside-setup.git' "v$($Pins.qt_version)" $Pins.pyside_commit $PySide
 Import-BazzaltMsvc x64

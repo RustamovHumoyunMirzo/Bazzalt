@@ -5,11 +5,9 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
-#include <map>
 #include <numeric>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <ryml.hpp>
 
 namespace Bazzalt::Runtime {
@@ -123,11 +121,6 @@ void ModelGeometry::Build(){
         std::nth_element(Order.begin()+begin,Order.begin()+middle,Order.begin()+begin+count,[&](auto a,auto b){auto& x=Triangles[a];auto& y=Triangles[b];return Axis(x.A+x.B+x.C,axis)<Axis(y.A+y.B+y.C,axis);});
         auto left=self(self,begin,middle-begin),right=self(self,middle,begin+count-middle);Nodes[index].Count=0;Nodes[index].Left=left;Nodes[index].Right=right;return index;
     };build(build,0,static_cast<std::uint32_t>(Order.size()));
-    using Point=std::tuple<float,float,float>;using Key=std::pair<Point,Point>;
-    std::map<Key,std::uint32_t> edges;
-    for(std::uint32_t i=0;i<Triangles.size();++i){const auto& t=Triangles[i];const std::array<Vec3,3> points{t.A,t.B,t.C};
-        for(int j=0;j<3;++j){auto a=points[j],b=points[(j+1)%3];Point pa{a.X,a.Y,a.Z},pb{b.X,b.Y,b.Z};if(pb<pa){std::swap(pa,pb);std::swap(a,b);}auto [it,inserted]=edges.emplace(Key{pa,pb},static_cast<std::uint32_t>(Edges.size()));if(inserted)Edges.push_back({a,b,{}});Edges[it->second].Faces.push_back(i);}
-    }
 }
 
 bool ModelGeometry::Raycast(Vec3 origin,Vec3 direction,float& distance) const{

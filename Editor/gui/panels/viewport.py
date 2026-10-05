@@ -51,6 +51,7 @@ class NativeRenderSurface(QWidget):
         self._gizmo_drag = None; self._hover_handle = None; self._last_delta = Vec3(); self._last_angle=0.0;self._last_scale=Vec3(1,1,1)
         self._orientation_animation=None
         self._orientation_visible=True
+        self._high_level_selection=False
         self._selection_box_start=None
         self._selection_box_additive=False;self._selection_band=None
         self._selection_box_preview=()
@@ -172,7 +173,21 @@ class NativeRenderSurface(QWidget):
                 else:world_radius=max(float(primitive.get("Radius",.5))*max(abs(float(scale[0])),abs(float(scale[2]))),float(primitive.get("Height",1))*.5*abs(float(scale[1])))
                 radius=world_radius*self.height()/(2.0*tan(radians(30.0))*projected[2])
             if projected[0]+radius>=left and projected[0]-radius<=right and projected[1]+radius>=top and projected[1]-radius<=bottom:selected.append(entity_id)
-        return selected
+        return list(dict.fromkeys(target for value in selected if (target:=self._SelectionTarget(value))))
+
+    def SetHighLevelSelection(self,enabled:bool)->None:
+        self._high_level_selection=bool(enabled)
+        self.Runtime.SetObjectHover("",self._eye)
+
+    def _SelectionTarget(self,entity_id:str)->str:
+        if not self._high_level_selection or not entity_id:return entity_id
+        parents=getattr(self.Runtime,"EditorParents",{})
+        seen=set();current=entity_id
+        while current not in seen:
+            seen.add(current);parent=parents.get(current,"")
+            if not parent or parent in ("0","00000000-0000-0000-0000-000000000000") or parent in seen:break
+            current=parent
+        return current if self.Runtime.IsEditorSelectable(current) else ""
 
     def _PreviewSelectionBox(self,current:QPoint)->list[str]:
         selected=self._EntitiesInSelectionBox(self._selection_box_start,current) if self._selection_box_start is not None else []
@@ -206,11 +221,11 @@ class NativeRenderSurface(QWidget):
             if projected is None:continue
             x,y,depth=projected;distance=(x-point.x())**2+(y-point.y())**2
             if distance<=best_distance and depth<best_depth:best=str(entity.get("uuid",""));best_distance=distance;best_depth=depth
-        return best
+        return self._SelectionTarget(best)
 
     def _PickSceneObject(self,point:QPoint)->str:
         ray=self._Ray(point)
-        return self.Runtime.PickPrimitive((ray.Origin.X,ray.Origin.Y,ray.Origin.Z),(ray.Direction.X,ray.Direction.Y,ray.Direction.Z))
+        return self._SelectionTarget(self.Runtime.PickPrimitive((ray.Origin.X,ray.Origin.Y,ray.Origin.Z),(ray.Direction.X,ray.Direction.Y,ray.Direction.Z)))
 
     def _PickGizmo(self, point: QPoint):
         if self._selection is None or self._mode is GizmoMode.Select:return None
@@ -404,6 +419,9 @@ class ViewportPanel(QFrame):
         if scene:
             controls=QFrame();controls.setObjectName("SceneViewControls");row=QHBoxLayout(controls);row.setContentsMargins(7,3,7,3);row.setSpacing(6)
             self.LocalToggle=QToolButton();self.LocalToggle.setObjectName("SceneToolChip");self.LocalToggle.setCheckable(True);self.LocalToggle.setToolTip("Local transform space")
+            self.HighLevelToggle=QToolButton();self.HighLevelToggle.setObjectName("SceneToolChip");self.HighLevelToggle.setCheckable(True)
+            def update_selection_text(_locale=None):self.HighLevelToggle.setToolTip(localization.Translate("viewport.high_level_selection"))
+            update_selection_text();localization.LocaleChanged.connect(update_selection_text)
             self.PivotMode=QComboBox();self.PivotMode.setObjectName("ScenePivotMode");self.PivotMode.addItems(("Pivot","Center"));self.PivotMode.setToolTip("Gizmo pivot position")
             self.ShadingMode=QComboBox();self.ShadingMode.addItems(("Lit","Unlit","Wireframe","Lighting Only","Overdraw"))
             plane=self.GridPlane=QComboBox();plane.addItems(("XY","XZ","YZ"));plane.setCurrentIndex(1)
@@ -411,14 +429,16 @@ class ViewportPanel(QFrame):
             for button,tooltip,checked in ((grid,"Grid",True),(self.GizmoToggle,"Gizmos",True),(self.StatsToggle,"Statistics",False)):
                 button.setObjectName("SceneToolChip");button.setCheckable(True);button.setChecked(checked);button.setToolTip(tooltip)
             self.StatsLabel=QLabel();self.StatsLabel.setObjectName("SceneStats");self.StatsLabel.hide()
-            for widget in (self.LocalToggle,self.PivotMode,self.ShadingMode,plane,grid,self.GizmoToggle,self.StatsToggle):row.addWidget(widget)
+            for widget in (self.LocalToggle,self.PivotMode,self.HighLevelToggle,self.ShadingMode,plane,grid,self.GizmoToggle,self.StatsToggle):row.addWidget(widget)
             row.addWidget(self.StatsLabel);row.addStretch();layout.addWidget(controls)
             def update_icons(_theme=None):
                 theme="light" if themes and themes.GetTheme().background=="#d4d4d4" else "dark"
                 if resources:
+                    self.HighLevelToggle.setIcon(resources.Icon(f"icons/{theme}/tab_hierarchy.svg"));self.HighLevelToggle.setIconSize(QSize(16,16))
                     for button,name in ((self.LocalToggle,"localpos.svg"),(grid,"grid.svg"),(self.GizmoToggle,"gizmos.svg"),(self.StatsToggle,"stats.svg")):button.setIcon(resources.Icon(f"icons/stoolbar/{theme}/{name}"));button.setIconSize(QSize(16,16))
             update_icons();themes.ThemeChanged.connect(update_icons) if themes else None
         self.Surface = NativeRenderSurface(runtime, scene)
+        if scene:self.HighLevelToggle.toggled.connect(self.Surface.SetHighLevelSelection)
         if scene:
             layout.addWidget(self.Surface, 1)
         else:

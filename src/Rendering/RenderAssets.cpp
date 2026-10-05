@@ -198,6 +198,8 @@ struct RenderAssets::Impl {
     Handle NextHandle = 1;
     std::unordered_map<Handle, Instance> Instances;
     std::vector<utils::Entity> EditorSuspended;
+    std::vector<Instance::Original> MaskOriginals;
+    std::vector<utils::Entity> MaskEntities;
     std::unordered_map<UUID, filament::Material*> Materials;
     std::unordered_map<UUID, std::vector<std::uint8_t>> MaterialPackages;
     std::unordered_map<UUID, std::filesystem::file_time_type> MaterialModified;
@@ -546,6 +548,27 @@ void RenderAssets::Update() {
     }
 }
 void RenderAssets::SetEditorOwner(Handle handle,UUID owner){if(m_impl)if(auto it=m_impl->Instances.find(handle);it!=m_impl->Instances.end())it->second.EditorOwner=owner;}
+bool RenderAssets::BeginSelectionMask(filament::Scene& scene,const std::unordered_set<UUID>& selected,const std::unordered_set<UUID>& hovered,
+                                     filament::MaterialInstance* selectedMaterial,filament::MaterialInstance* hoverMaterial){
+    if(!m_impl)return false;EndSelectionMask(scene);auto& manager=m_impl->Engine.getRenderableManager();
+    for(const auto& [_,value]:m_impl->Instances){
+        if(!value.AddedToScene)continue;
+        auto* material=selected.contains(value.EditorOwner)?selectedMaterial:hovered.contains(value.EditorOwner)?hoverMaterial:nullptr;
+        if(!material)continue;
+        const auto add=[&](utils::Entity entity){if(scene.hasEntity(entity))return;auto ri=manager.getInstance(entity);if(!ri)return;
+            for(std::size_t index=0;index<manager.getPrimitiveCount(ri);++index){m_impl->MaskOriginals.push_back({entity,index,manager.getMaterialInstanceAt(ri,index)});manager.setMaterialInstanceAt(ri,index,material);}
+            scene.addEntity(entity);m_impl->MaskEntities.push_back(entity);
+        };
+        if(value.Type==Impl::Kind::Gltf){if(value.SelectedGltfEntity)add(value.SelectedGltfEntity);else for(std::size_t index=0;index<value.Gltf->getEntityCount();++index)add(value.Gltf->getEntities()[index]);}
+        else add(value.Type==Impl::Kind::Primitive?value.PrimitiveEntity:value.Filamesh.renderable);
+    }return !m_impl->MaskEntities.empty();
+}
+void RenderAssets::EndSelectionMask(filament::Scene& scene){
+    if(!m_impl)return;auto& manager=m_impl->Engine.getRenderableManager();
+    for(const auto& original:m_impl->MaskOriginals){auto ri=manager.getInstance(original.Entity);if(ri)manager.setMaterialInstanceAt(ri,original.Primitive,original.Material);}
+    for(auto entity:m_impl->MaskEntities)scene.remove(entity);
+    m_impl->MaskOriginals.clear();m_impl->MaskEntities.clear();
+}
 std::size_t RenderAssets::GetMaterialSlotCount(Handle handle) const {
     if(!m_impl)return 0;auto found=m_impl->Instances.find(handle);if(found==m_impl->Instances.end())return 0;
     const auto& value=found->second;auto& manager=m_impl->Engine.getRenderableManager();std::size_t count=0;

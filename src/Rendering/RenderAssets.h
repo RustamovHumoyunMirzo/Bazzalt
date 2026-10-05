@@ -11,7 +11,7 @@
 #include "Bazzalt/PostProcessing.h"
 #include "Bazzalt/Math.h"
 
-namespace filament { class Engine; class Scene; }
+namespace filament { class Engine; class Scene; class MaterialInstance; }
 
 namespace Bazzalt::Runtime {
 struct ModelGeometry;
@@ -40,6 +40,9 @@ public:
     struct EditorMeshGeometry { UUID Owner;Mat4 World;std::shared_ptr<const ModelGeometry> Geometry; };
     [[nodiscard]] std::vector<EditorMeshGeometry> GetEditorMeshes() const;
     [[nodiscard]] std::size_t GetMaterialSlotCount(Handle handle) const;
+    bool BeginSelectionMask(filament::Scene& scene,const std::unordered_set<UUID>& selected,const std::unordered_set<UUID>& hovered,
+                            filament::MaterialInstance* selectedMaterial,filament::MaterialInstance* hoverMaterial);
+    void EndSelectionMask(filament::Scene& scene);
     void BeginEditorView(const std::unordered_set<UUID>& hidden);
     void EndEditorView();
     bool SetDebugMode(const std::string& mode);

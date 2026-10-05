@@ -4,6 +4,9 @@
 #include <fstream>
 #include <filament/Engine.h>
 #include <filament/RenderableManager.h>
+#include <filament/Scene.h>
+#include <filament/Material.h>
+#include <filament/MaterialInstance.h>
 #include "Bazzalt/AssetManager.h"
 #include "Runtime/Engine.h"
 #include "Rendering/RenderBackend.h"
@@ -62,7 +65,24 @@ int main(int argc,char** argv) {
         assert(geometry[0].Geometry==geometry[1].Geometry); // CPU geometry is shared too.
         float hitDistance=100;assert(geometry[0].Geometry->Raycast({0,.25f,2},{0,0,-1},hitDistance));assert(std::abs(hitDistance-2)<.001f);
         hitDistance=100;assert(!geometry[0].Geometry->Raycast({10,10,2},{0,0,-1},hitDistance));
-        assert(geometry[0].Geometry->Edges.size()==3);
+        assert(!geometry[0].Geometry->Nodes.empty());
+        // Both children enter one filled selection scene; original materials
+        // are restored before normal scene rendering, including repeated use.
+        renderer.SetEditorOwner(first,owner);renderer.SetEditorOwner(second,owner);
+        auto* maskScene=backend.GetEngine().createScene();
+        std::vector<std::pair<utils::Entity,const filament::MaterialInstance*>> originals;
+        backend.GetScene().forEach([&](utils::Entity entity){auto ri=manager.getInstance(entity);if(ri&&manager.getPrimitiveCount(ri))originals.emplace_back(entity,manager.getMaterialInstanceAt(ri,0));});
+        assert(!originals.empty());
+        auto* mask=originals.front().second->getMaterial()->createInstance();
+        for(int pass=0;pass<2;++pass){
+            assert(renderer.BeginSelectionMask(*maskScene,{owner},{},mask,mask));
+            std::size_t count=0;maskScene->forEach([&](utils::Entity entity){++count;assert(manager.getMaterialInstanceAt(manager.getInstance(entity),0)==mask);});assert(count==2);
+            renderer.EndSelectionMask(*maskScene);
+            for(const auto& [entity,material]:originals)assert(manager.getMaterialInstanceAt(manager.getInstance(entity),0)==material);
+            count=0;maskScene->forEach([&](utils::Entity){++count;});assert(count==0);
+        }
+        assert(!renderer.BeginSelectionMask(*maskScene,{}, {},mask,mask));
+        backend.GetEngine().destroy(maskScene);backend.GetEngine().destroy(mask);
         renderer.DestroyMesh(first);assert(manager.getComponentCount()==baseline+2);
         renderer.UpdateMesh(second,Mat4::Identity(),mesh);
         renderer.DestroyMesh(second);assert(manager.getComponentCount()==baseline);

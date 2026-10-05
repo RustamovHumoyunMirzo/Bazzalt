@@ -9,10 +9,8 @@ namespace Bazzalt::Runtime {
 // No renderer types or asset buffers escape into the public API.
 struct ModelGeometry {
     struct Triangle { Vec3 A,B,C; };
-    struct Edge { Vec3 A,B; std::vector<std::uint32_t> Faces; };
     struct Node { Vec3 Min,Max; std::uint32_t Begin=0,Count=0,Left=0,Right=0; };
     std::vector<Triangle> Triangles;
-    std::vector<Edge> Edges;
     std::vector<Node> Nodes;
     std::vector<std::uint32_t> Order;
     void Build();

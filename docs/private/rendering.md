@@ -69,8 +69,10 @@ Overlapping viewports are supported; priority controls their render order.
 ## Depth of field
 
 Depth of field is a native per-camera effect. Focus distance uses world units;
-aperture uses f-stops. Physical exposure values are synchronized to Filament,
-and `CameraPostProcessing::Exposure` acts as EV compensation.
+aperture uses f-stops. Lower DoF aperture values increase lens blur without
+brightening the image: the renderer fixes exposure's aperture at f/16 and
+scales the circle of confusion by `16 / Aperture`. Shutter speed and ISO still
+control exposure; `CameraPostProcessing::Exposure` acts as EV compensation.
 
 ```cpp
 auto& dof = camera.PostProcessing.DepthOfField;
@@ -82,6 +84,13 @@ dof.Quality = Bazzalt::DepthOfFieldQuality::High;
 
 Low, medium, and high quality use progressively larger gather kernels.
 `NativeResolution` trades performance for maximum sharpness.
+
+The current legacy Gaussian Blur fallback shares Filament's DoF stage. When
+both are enabled, camera DoF takes priority: blur must not override its focus,
+aperture, or circle-of-confusion limits. These are not yet independent stacked
+passes. A manual Vulkan pixel regression can be run with
+`BazzaltRenderingTests --gpu-dof`; it checks live on/off rendering and the
+enabled-blur conflict, rather than only inspecting native option values.
 
 ## Custom post-processing
 

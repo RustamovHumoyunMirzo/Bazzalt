@@ -25,6 +25,7 @@
 #include <filament/Texture.h>
 #include <filament/TextureSampler.h>
 #include <filament/SwapChain.h>
+#include <filament/RenderTarget.h>
 #include <filament/View.h>
 #include <filament/Viewport.h>
 #include <filament/Material.h>
@@ -41,6 +42,8 @@
 #include "Rendering/RenderAssets.h"
 #include "editor_gizmo_filamat.h"
 #include "editor_guide_filamat.h"
+#include "editor_selection_mask_filamat.h"
+#include "editor_selection_outline_filamat.h"
 #include "editor_grid_filamat.h"
 #include "editor_icon_filamat.h"
 #include "scene_cam_rgba.h"
@@ -64,6 +67,17 @@ struct RenderBackend::ViewportResource {
     filament::View* HelperView = nullptr;
     filament::Camera* HelperCamera = nullptr;
     utils::Entity HelperCameraEntity;
+    filament::View* GizmoView=nullptr;
+    filament::View* MaskView=nullptr;
+    filament::Scene* MaskScene=nullptr;
+    filament::Skybox* MaskBackground=nullptr;
+    filament::Texture* MaskTexture=nullptr;
+    filament::Texture* MaskDepth=nullptr;
+    filament::RenderTarget* MaskTarget=nullptr;
+    filament::View* OutlineView=nullptr;
+    filament::Scene* OutlineScene=nullptr;
+    filament::MaterialInstance* OutlineInstance=nullptr;
+    utils::Entity OutlineEntity;
 };
 
 struct RenderBackend::GizmoResource {
@@ -75,6 +89,13 @@ struct RenderBackend::GizmoResource {
     };
     filament::Material* Material = nullptr;
     filament::Material* GuideMaterial = nullptr;
+    filament::Scene* OverlayScene=nullptr;
+    filament::Material* MaskMaterial=nullptr;
+    filament::Material* OutlineMaterial=nullptr;
+    filament::MaterialInstance* SelectedMask=nullptr;
+    filament::MaterialInstance* HoverMask=nullptr;
+    filament::VertexBuffer* FullscreenVertices=nullptr;
+    filament::IndexBuffer* FullscreenIndices=nullptr;
     std::array<filament::VertexBuffer*, 3> Vertices{};
     std::array<filament::IndexBuffer*, 3> Indices{};
     std::array<filament::MaterialInstance*, 3> Instances{};
@@ -198,6 +219,17 @@ bool RenderBackend::Initialize(bool headless) {
     m_gizmo->GridMaterial = filament::Material::Builder()
         .package(Embedded::EditorGridFilamat, Embedded::EditorGridFilamatSize).build(*m_engine);
     if (!m_gizmo->Material || !m_gizmo->GuideMaterial || !m_gizmo->GridMaterial) { Shutdown(); return false; }
+    m_gizmo->OverlayScene=m_engine->createScene();
+    m_gizmo->MaskMaterial=filament::Material::Builder().package(Embedded::EditorSelectionMaskFilamat,Embedded::EditorSelectionMaskFilamatSize).build(*m_engine);
+    m_gizmo->OutlineMaterial=filament::Material::Builder().package(Embedded::EditorSelectionOutlineFilamat,Embedded::EditorSelectionOutlineFilamatSize).build(*m_engine);
+    if(!m_gizmo->MaskMaterial||!m_gizmo->OutlineMaterial){Shutdown();return false;}
+    m_gizmo->SelectedMask=m_gizmo->MaskMaterial->createInstance();m_gizmo->SelectedMask->setParameter("color",filament::math::float4{1,0,0,1});
+    m_gizmo->HoverMask=m_gizmo->MaskMaterial->createInstance();m_gizmo->HoverMask->setParameter("color",filament::math::float4{0,1,0,1});
+    static constexpr float fullscreen[]={-1,-1,0,3,-1,0,-1,3,0};static constexpr std::uint16_t fullscreenIndices[]={0,1,2};
+    m_gizmo->FullscreenVertices=filament::VertexBuffer::Builder().vertexCount(3).bufferCount(1).attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3).build(*m_engine);
+    m_gizmo->FullscreenVertices->setBufferAt(*m_engine,0,{fullscreen,sizeof(fullscreen)});
+    m_gizmo->FullscreenIndices=filament::IndexBuffer::Builder().indexCount(3).bufferType(filament::IndexBuffer::IndexType::USHORT).build(*m_engine);
+    m_gizmo->FullscreenIndices->setBuffer(*m_engine,{fullscreenIndices,sizeof(fullscreenIndices)});
     struct Model { const std::uint8_t* Bytes; std::size_t Size; std::uint32_t Vertices, Indices, IndexOffset; };
     const Model models[] = {
         {Embedded::EditorTranslateGizmoGlb, Embedded::EditorTranslateGizmoGlbSize, 75, 198, 2400},
@@ -298,6 +330,17 @@ bool RenderBackend::CreateViewport(std::uint64_t id, std::uintptr_t nativeWindow
     viewport->View->setPostProcessingEnabled(true);
     viewport->View->setVisibleLayers(0xff, kind == ViewportKind::Scene ? 0xff : 0x7f);
     if (kind == ViewportKind::Scene) {
+        viewport->GizmoView=m_engine->createView();viewport->GizmoView->setScene(m_gizmo->OverlayScene);viewport->GizmoView->setCamera(viewport->Camera);
+        viewport->GizmoView->setVisibleLayers(0xff,0x80);
+        viewport->GizmoView->setPostProcessingEnabled(false);viewport->GizmoView->setBlendMode(filament::View::BlendMode::TRANSLUCENT);viewport->GizmoView->setChannelDepthClearEnabled(0,true);
+        viewport->MaskScene=m_engine->createScene();viewport->MaskBackground=filament::Skybox::Builder().color({0,0,0,1}).showSun(false).build(*m_engine);viewport->MaskScene->setSkybox(viewport->MaskBackground);
+        viewport->MaskView=m_engine->createView();viewport->MaskView->setScene(viewport->MaskScene);viewport->MaskView->setCamera(viewport->Camera);viewport->MaskView->setPostProcessingEnabled(false);viewport->MaskView->setShadowingEnabled(false);viewport->MaskView->setScreenSpaceRefractionEnabled(false);
+        viewport->MaskView->setVisibleLayers(0xff,0x7f);
+        viewport->OutlineScene=m_engine->createScene();viewport->OutlineView=m_engine->createView();viewport->OutlineView->setScene(viewport->OutlineScene);viewport->OutlineView->setCamera(viewport->Camera);
+        viewport->OutlineView->setPostProcessingEnabled(false);viewport->OutlineView->setBlendMode(filament::View::BlendMode::TRANSLUCENT);
+        viewport->OutlineInstance=m_gizmo->OutlineMaterial->createInstance();viewport->OutlineEntity=m_engine->getEntityManager().create();m_engine->getTransformManager().create(viewport->OutlineEntity);
+        filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{4,4,1}}).material(0,viewport->OutlineInstance).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,m_gizmo->FullscreenVertices,m_gizmo->FullscreenIndices).culling(false).castShadows(false).receiveShadows(false).build(*m_engine,viewport->OutlineEntity);
+        viewport->OutlineScene->addEntity(viewport->OutlineEntity);
         ConfigureEditorFog(*viewport->View, m_gridScale);
         viewport->Camera->lookAt({6.0, 4.0, 8.0}, {0.0, 0.0, 0.0}, {0.0, 1.0, 0.0});
         viewport->HelperCameraEntity=m_engine->getEntityManager().create();viewport->HelperCamera=m_engine->createCamera(viewport->HelperCameraEntity);viewport->HelperView=m_engine->createView();viewport->HelperView->setScene(m_gizmo->HelperScene);viewport->HelperView->setCamera(viewport->HelperCamera);viewport->HelperView->setPostProcessingEnabled(false);viewport->HelperView->setBlendMode(filament::View::BlendMode::TRANSLUCENT);viewport->HelperView->setChannelDepthClearEnabled(0,true);viewport->HelperCamera->lookAt({2.1,1.4,2.8},{0,0,0},{0,1,0});viewport->HelperCamera->setProjection(38.0,1.0,0.1,10.0,filament::Camera::Fov::VERTICAL);
@@ -318,6 +361,24 @@ void RenderBackend::ResizeViewport(std::uint64_t id, std::uint32_t width,
     viewport.Width = std::max(1u, width);
     viewport.Height = std::max(1u, height);
     viewport.PixelRatio = std::max(1.0f,pixelRatio);
+    if(viewport.MaskView){
+        const filament::Viewport bounds{0,0,viewport.Width,viewport.Height};
+        viewport.MaskView->setViewport(bounds);viewport.OutlineView->setViewport(bounds);viewport.GizmoView->setViewport(bounds);
+        if(!viewport.MaskTexture||viewport.MaskTexture->getWidth()!=viewport.Width||viewport.MaskTexture->getHeight()!=viewport.Height){
+            viewport.MaskView->setRenderTarget(nullptr);
+            if(viewport.MaskTarget)m_engine->destroy(viewport.MaskTarget);
+            if(viewport.MaskTexture)m_engine->destroy(viewport.MaskTexture);
+            if(viewport.MaskDepth)m_engine->destroy(viewport.MaskDepth);
+            using Texture=filament::Texture;
+            viewport.MaskTexture=Texture::Builder().width(viewport.Width).height(viewport.Height).levels(1).sampler(Texture::Sampler::SAMPLER_2D).format(Texture::InternalFormat::RGBA8).usage(Texture::Usage::COLOR_ATTACHMENT|Texture::Usage::SAMPLEABLE).build(*m_engine);
+            viewport.MaskDepth=Texture::Builder().width(viewport.Width).height(viewport.Height).levels(1).sampler(Texture::Sampler::SAMPLER_2D).format(Texture::InternalFormat::DEPTH32F).usage(Texture::Usage::DEPTH_ATTACHMENT).build(*m_engine);
+            viewport.MaskTarget=filament::RenderTarget::Builder().texture(filament::RenderTarget::AttachmentPoint::COLOR,viewport.MaskTexture).texture(filament::RenderTarget::AttachmentPoint::DEPTH,viewport.MaskDepth).build(*m_engine);
+            viewport.MaskView->setRenderTarget(viewport.MaskTarget);
+            viewport.OutlineInstance->setParameter("mask",viewport.MaskTexture,filament::TextureSampler(filament::TextureSampler::MinFilter::NEAREST,filament::TextureSampler::MagFilter::NEAREST,filament::TextureSampler::WrapMode::CLAMP_TO_EDGE));
+        }
+        viewport.OutlineInstance->setParameter("texelSize",filament::math::float2{1.f/viewport.Width,1.f/viewport.Height});
+        viewport.OutlineInstance->setParameter("strokeWidth",3.f*viewport.PixelRatio);
+    }
     if (viewport.View) {
         viewport.View->setViewport({0, 0, viewport.Width, viewport.Height});
         viewport.Camera->setProjection(60.0,
@@ -335,6 +396,17 @@ void RenderBackend::DestroyViewport(std::uint64_t id) {
     const auto found = m_viewports.find(id);
     if (found == m_viewports.end()) return;
     auto& viewport = *found->second;
+    if(viewport.GizmoView)m_engine->destroy(viewport.GizmoView);
+    if(viewport.MaskView)m_engine->destroy(viewport.MaskView);
+    if(viewport.OutlineView)m_engine->destroy(viewport.OutlineView);
+    if(viewport.OutlineEntity){m_engine->destroy(viewport.OutlineEntity);m_engine->getEntityManager().destroy(viewport.OutlineEntity);}
+    if(viewport.OutlineInstance)m_engine->destroy(viewport.OutlineInstance);
+    if(viewport.OutlineScene)m_engine->destroy(viewport.OutlineScene);
+    if(viewport.MaskScene){viewport.MaskScene->setSkybox(nullptr);m_engine->destroy(viewport.MaskScene);}
+    if(viewport.MaskBackground)m_engine->destroy(viewport.MaskBackground);
+    if(viewport.MaskTarget)m_engine->destroy(viewport.MaskTarget);
+    if(viewport.MaskTexture)m_engine->destroy(viewport.MaskTexture);
+    if(viewport.MaskDepth)m_engine->destroy(viewport.MaskDepth);
     if(viewport.HelperView)m_engine->destroy(viewport.HelperView);
     if(viewport.HelperCamera)m_engine->destroyCameraComponent(viewport.HelperCameraEntity);
     if(viewport.HelperCameraEntity)m_engine->getEntityManager().destroy(viewport.HelperCameraEntity);
@@ -391,7 +463,7 @@ void RenderBackend::SetEditorGizmo(bool visible, float x, float y, float z, int 
             filament::math::mat4f::scaling(filament::math::float3{scale,scale,scale}) * rotation * modelOffset;
         transforms.setTransform(instance, transform);
         const bool active=visible&&scale>0&&model==mode-1;
-        if (active) m_scene->addEntity(m_gizmo->Entities[index]); else m_scene->remove(m_gizmo->Entities[index]);
+        if (active) m_gizmo->OverlayScene->addEntity(m_gizmo->Entities[index]); else m_gizmo->OverlayScene->remove(m_gizmo->Entities[index]);
     }
 }
 
@@ -416,24 +488,18 @@ void RenderBackend::SetEditorIcons(const std::vector<EditorIcon>& icons) {
 
 void RenderBackend::SetEditorGuides(const std::vector<EditorGuide>& guides){
     if(!m_gizmo||!m_engine)return;
-    // Batch strokes by color/depth policy. One renderable per edge exhausts
-    // command/handle arenas when selecting a detailed model.
+    // True GPU lines: world-space boxes become enormous near the camera when
+    // a long frustum edge uses its distant midpoint to calculate thickness.
+    // Native line rasterization clips segments and keeps them one pixel wide.
     using Key=std::tuple<bool,float,float,float,float>;
     std::map<Key,std::vector<filament::math::float3>> batches;
-    const ViewportResource* sceneViewport=nullptr;
-    for(const auto& [_,viewport]:m_viewports)if(viewport->Kind==ViewportKind::Scene){sceneViewport=viewport.get();break;}
     for(const auto& line:guides){
         const float fields[]={line.AX,line.AY,line.AZ,line.BX,line.BY,line.BZ,line.R,line.G,line.B,line.A};
         if(!std::all_of(std::begin(fields),std::end(fields),[](float v){return std::isfinite(v);}))continue;
         filament::math::float3 a{line.AX,line.AY,line.AZ},b{line.BX,line.BY,line.BZ},delta=b-a;
         float lengthValue=length(delta);if(!std::isfinite(lengthValue)||lengthValue<1e-6f)continue;
-        auto x=delta*.5f;auto direction=delta/lengthValue;
-        auto helper=std::abs(direction.y)<.99f?filament::math::float3{0,1,0}:filament::math::float3{1,0,0};
-        float thickness=.0125f;
-        if(sceneViewport){const float depth=std::max(.05f,length(sceneViewport->Eye-(a+b)*.5f));thickness=depth*2.f*std::tan(.5235988f)*(line.Outline?1.5f:1.f)*sceneViewport->PixelRatio/std::max(1u,sceneViewport->Height);}
-        auto z=normalize(cross(direction,helper))*thickness,y=normalize(cross(z,direction))*thickness,center=(a+b)*.5f;
         auto& vertices=batches[{line.Outline,line.R,line.G,line.B,line.A}];
-        for(int corner=0;corner<8;++corner)vertices.push_back(center+x*(corner&1?1.f:-1.f)+y*(corner&2?1.f:-1.f)+z*(corner&4?1.f:-1.f));
+        vertices.push_back(a);vertices.push_back(b);
     }
     const auto destroy=[&](GizmoResource::Guide& value){m_scene->remove(value.Entity);m_engine->destroy(value.Entity);m_engine->getEntityManager().destroy(value.Entity);if(value.Instance)m_engine->destroy(value.Instance);if(value.Vertices)m_engine->destroy(value.Vertices);if(value.Indices)m_engine->destroy(value.Indices);};
     while(m_gizmo->Guides.size()>batches.size()){destroy(m_gizmo->Guides.back());m_gizmo->Guides.pop_back();}
@@ -441,25 +507,24 @@ void RenderBackend::SetEditorGuides(const std::vector<EditorGuide>& guides){
         GizmoResource::Guide value;value.Instance=m_gizmo->GuideMaterial->createInstance();value.Instance->setDepthWrite(false);
         value.Entity=m_engine->getEntityManager().create();m_engine->getTransformManager().create(value.Entity);m_gizmo->Guides.push_back(value);
     }
-    constexpr std::uint32_t cube[]={0,2,1,1,2,3,4,5,6,5,7,6,0,1,4,1,5,4,2,6,3,3,6,7,0,4,2,2,4,6,1,3,5,3,7,5};
     auto& manager=m_engine->getRenderableManager();std::size_t batchIndex=0;
     for(auto& [key,vertices]:batches){
         auto& value=m_gizmo->Guides[batchIndex++];const auto [outline,r,g,b,a]=key;
-        const auto strokes=vertices.size()/8;
-        if(strokes>std::numeric_limits<std::uint32_t>::max()/36)throw std::length_error("Editor guide batch is too large");
-        const auto count=static_cast<std::uint32_t>(strokes*36);
+        const auto strokes=vertices.size()/2;
+        if(strokes>std::numeric_limits<std::uint32_t>::max()/2)throw std::length_error("Editor guide batch is too large");
+        const auto count=static_cast<std::uint32_t>(strokes*2);
         value.Instance->setParameter("color",filament::math::float4{r,g,b,a});value.Instance->setDepthCulling(!outline);
         if(value.Capacity<strokes){
             manager.destroy(value.Entity);
             if(value.Vertices)m_engine->destroy(value.Vertices);if(value.Indices)m_engine->destroy(value.Indices);
             value.Capacity=static_cast<std::uint32_t>(strokes);
-            value.Vertices=filament::VertexBuffer::Builder().vertexCount(value.Capacity*8).bufferCount(1).attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3).build(*m_engine);
-            value.Indices=filament::IndexBuffer::Builder().indexCount(value.Capacity*36).bufferType(filament::IndexBuffer::IndexType::UINT).build(*m_engine);
-            auto* indices=new std::vector<std::uint32_t>;indices->reserve(value.Capacity*36);
-            for(std::uint32_t stroke=0;stroke<value.Capacity;++stroke)for(auto index:cube)indices->push_back(stroke*8+index);
+            value.Vertices=filament::VertexBuffer::Builder().vertexCount(value.Capacity*2).bufferCount(1).attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3).build(*m_engine);
+            value.Indices=filament::IndexBuffer::Builder().indexCount(value.Capacity*2).bufferType(filament::IndexBuffer::IndexType::UINT).build(*m_engine);
+            auto* indices=new std::vector<std::uint32_t>;indices->reserve(value.Capacity*2);
+            for(std::uint32_t index=0;index<value.Capacity*2;++index)indices->push_back(index);
             value.Indices->setBuffer(*m_engine,{indices->data(),indices->size()*sizeof(std::uint32_t),[](void*,size_t,void* user){delete static_cast<std::vector<std::uint32_t>*>(user);},indices});
-            filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{1,1,1}}).material(0,value.Instance).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,value.Vertices,value.Indices,0,count).culling(false).castShadows(false).receiveShadows(false).layerMask(0xff,0x80).priority(6).build(*m_engine,value.Entity);
-        }else manager.setGeometryAt(manager.getInstance(value.Entity),0,filament::RenderableManager::PrimitiveType::TRIANGLES,value.Vertices,value.Indices,0,count);
+            filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{1,1,1}}).material(0,value.Instance).geometry(0,filament::RenderableManager::PrimitiveType::LINES,value.Vertices,value.Indices,0,count).culling(false).castShadows(false).receiveShadows(false).layerMask(0xff,0x80).priority(6).build(*m_engine,value.Entity);
+        }else manager.setGeometryAt(manager.getInstance(value.Entity),0,filament::RenderableManager::PrimitiveType::LINES,value.Vertices,value.Indices,0,count);
         auto* storage=new std::vector<filament::math::float3>(std::move(vertices));
         value.Vertices->setBufferAt(*m_engine,0,{storage->data(),storage->size()*sizeof(filament::math::float3),[](void*,size_t,void* user){delete static_cast<std::vector<filament::math::float3>*>(user);},storage});
         m_scene->addEntity(value.Entity);
@@ -525,17 +590,27 @@ void RenderBackend::Render() {
         (void)id;
         if (!resource->SwapChain || !m_renderer->beginFrame(resource->SwapChain)) continue;
         if (resource->Kind == ViewportKind::Scene) {
+            bool outlined=false;
+            if(!m_outlineSelected.empty()||!m_outlineHovered.empty()){
+                outlined=m_assets->BeginSelectionMask(*resource->MaskScene,m_outlineSelected,m_outlineHovered,m_gizmo->SelectedMask,m_gizmo->HoverMask);
+                try{if(outlined)m_renderer->render(resource->MaskView);}catch(...){m_assets->EndSelectionMask(*resource->MaskScene);throw;}
+                m_assets->EndSelectionMask(*resource->MaskScene);
+            }
             m_assets->BeginEditorView(m_editorHidden);
             std::vector<utils::Entity> suspendedLights;
             for(const auto& [owner,entity]:m_editorLights)if(m_editorHidden.contains(owner)&&m_scene->hasEntity(entity)){m_scene->remove(entity);suspendedLights.push_back(entity);}
             if (resource->View) m_renderer->render(resource->View);
             for(auto entity:suspendedLights)m_scene->addEntity(entity);
             m_assets->EndEditorView();
+            m_renderer->setClearOptions({.clearColor={0,0,0,0},.clear=false});
+            if(outlined)m_renderer->render(resource->OutlineView);
+            if(m_gizmoVisible&&m_gizmoMode>0)m_renderer->render(resource->GizmoView);
             if (resource->HelperView && m_orientationVisible) {
                 m_renderer->setClearOptions({.clearColor={0,0,0,0},.clear=false});
                 m_renderer->render(resource->HelperView);
                 m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});
             }
+            m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});
         } else {
             if (m_activeViews.empty()) {
                 // Render an empty view solely to clear the swap chain.  Its
@@ -563,7 +638,7 @@ void RenderBackend::Shutdown() {
     m_assets.reset();
     if (m_gizmo) {
         for (int axis=0; axis<9; ++axis) {
-            m_scene->remove(m_gizmo->Entities[axis]);
+            m_gizmo->OverlayScene->remove(m_gizmo->Entities[axis]);
             m_engine->destroy(m_gizmo->Entities[axis]);
             m_engine->getEntityManager().destroy(m_gizmo->Entities[axis]);
         }
@@ -581,6 +656,13 @@ void RenderBackend::Shutdown() {
         for(auto* value:m_gizmo->Indices)if(value)m_engine->destroy(value);
         if (m_gizmo->Material) m_engine->destroy(m_gizmo->Material);
         if (m_gizmo->GuideMaterial) m_engine->destroy(m_gizmo->GuideMaterial);
+        if(m_gizmo->SelectedMask)m_engine->destroy(m_gizmo->SelectedMask);
+        if(m_gizmo->HoverMask)m_engine->destroy(m_gizmo->HoverMask);
+        if(m_gizmo->MaskMaterial)m_engine->destroy(m_gizmo->MaskMaterial);
+        if(m_gizmo->OutlineMaterial)m_engine->destroy(m_gizmo->OutlineMaterial);
+        if(m_gizmo->FullscreenVertices)m_engine->destroy(m_gizmo->FullscreenVertices);
+        if(m_gizmo->FullscreenIndices)m_engine->destroy(m_gizmo->FullscreenIndices);
+        if(m_gizmo->OverlayScene)m_engine->destroy(m_gizmo->OverlayScene);
         m_gizmo.reset();
     }
     if (m_scene != nullptr) m_engine->destroy(m_scene);

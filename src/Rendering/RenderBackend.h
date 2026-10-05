@@ -54,6 +54,7 @@ public:
     void SetEditorIcons(const std::vector<EditorIcon>& icons);
     void SetEditorOrientationVisible(bool visible) { m_orientationVisible=visible; }
     void SetEditorGuides(const std::vector<EditorGuide>& guides);
+    void SetEditorOutline(std::unordered_set<UUID> selected,std::unordered_set<UUID> hovered){m_outlineSelected=std::move(selected);m_outlineHovered=std::move(hovered);}
     void Render();
     static void ConfigureEditorFog(filament::View& view,float gridScale);
     void SetEditorHidden(std::unordered_set<UUID> hidden){m_editorHidden=std::move(hidden);}
@@ -88,6 +89,7 @@ public:
     }
 
 private:
+    friend struct EditorOutlineTestAccess;
     struct ViewportResource;
     struct GizmoResource;
     struct EnvironmentResource;
@@ -112,6 +114,7 @@ private:
     bool m_gridVisible = true;
     bool m_orientationVisible = true;
     std::unordered_set<UUID> m_editorHidden;
+    std::unordered_set<UUID> m_outlineSelected,m_outlineHovered;
     std::unordered_map<UUID,utils::Entity> m_editorLights;
     int m_gridPlane = 1;
     float m_gridCenterX = 0, m_gridCenterY = 0, m_gridCenterZ = 0;
