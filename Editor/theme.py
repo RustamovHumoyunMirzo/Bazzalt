@@ -278,9 +278,12 @@ class ThemeManager(QObject):
     def SetTheme(self, theme: Theme) -> None:
         if not isinstance(theme, Theme):
             raise TypeError("theme must be a Theme instance")
+        stylesheet=BuildStyleSheet(theme);palette=BuildPalette(theme)
+        unchanged=self._theme==theme and self._application.styleSheet()==stylesheet and self._application.palette()==palette
         self._theme = theme
-        self._application.setPalette(BuildPalette(theme))
-        self._application.setStyleSheet(BuildStyleSheet(theme))
+        if unchanged:return
+        self._application.setPalette(palette)
+        self._application.setStyleSheet(stylesheet)
         self.ThemeChanged.emit(theme)
 
 

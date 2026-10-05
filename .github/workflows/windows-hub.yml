@@ -9,6 +9,7 @@ on:
     tags: ['hub-v*']
 permissions:
   contents: read
+  actions: read
 jobs:
   build:
     uses: ./.github/workflows/windows-product.yml

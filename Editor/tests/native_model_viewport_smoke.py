@@ -46,6 +46,13 @@ def main():
                     window.Controller.SelectEntity(mesh["uuid"])
                 started=perf_counter();window.Controller._Tick();elapsed=perf_counter()-started;QTest.qWait(10);print("EDITOR FRAME",frame,round(elapsed*1000,2),"ms",flush=True)
             window.Controller.IsDirty=False;window.Controller._dirty_scenes.clear()
+            if "--interactions" in sys.argv:
+                started=perf_counter();window.Controller.SelectAsset(root/"Assets"/"model.glb");print("ASSET SELECT",round((perf_counter()-started)*1000,2),"ms",flush=True)
+                entity=mesh["uuid"];window.Controller.SelectEntity(entity);window.Controller.History.Clear()
+                started=perf_counter();window.Controller.History.BeginTransforms("Move model",[entity]);runtime.Translate(entity,(1,0,0));window.Controller.History.Commit();print("TRANSFORM COMMIT",round((perf_counter()-started)*1000,2),"ms",flush=True)
+                started=perf_counter();window.Controller.Undo();print("TRANSFORM UNDO",round((perf_counter()-started)*1000,2),"ms",flush=True)
+                started=perf_counter();window.Controller.Redo();print("TRANSFORM REDO",round((perf_counter()-started)*1000,2),"ms",flush=True)
+                window.Controller.IsDirty=False;window.Controller._dirty_scenes.clear()
             window.close();app.processEvents();runtime.Release();del host
             return 0
         surface=QWidget();surface.setAttribute(Qt.WidgetAttribute.WA_NativeWindow)

@@ -8,13 +8,20 @@ class SceneCommand:
     Label:str
     Before:bytes
     After:bytes
+    Kind:str="scene"
 
 class SceneHistory(QObject):
     Changed=Signal()
     def __init__(self,runtime,parent=None,limit:int=100,byte_limit:int=128*1024*1024)->None:
         super().__init__(parent);self.Runtime=runtime;self.Limit=limit;self.ByteLimit=byte_limit;self._undo=[];self._redo=[];self._pending=None;self._restoring=False
+        self.LastRestoreStructural=True
     def Begin(self,label:str)->None:
-        if self._pending is None and not self._restoring:self._pending=(label,self.Runtime.CaptureScene())
+        if self._pending is None and not self._restoring:self._pending=(label,self.Runtime.CaptureScene(),"scene",())
+    def BeginTransforms(self,label:str,entities)->None:
+        if self._pending is not None or self._restoring:return
+        entities=tuple(dict.fromkeys(entities));before=self.Runtime.CaptureTransforms(entities)
+        if before:self._pending=(label,before,"transforms",entities)
+        else:self.Begin(label)
     def Configure(self,limit:int,byte_limit:int)->None:
         self.Limit=max(1,int(limit));self.ByteLimit=max(1024,int(byte_limit));self._Trim();self.Changed.emit()
     def _Trim(self)->None:
@@ -25,26 +32,27 @@ class SceneHistory(QObject):
             else:self._redo.pop(0)
     def Commit(self)->bool:
         if self._pending is None:return False
-        label,before=self._pending;self._pending=None;after=self.Runtime.CaptureScene()
+        label,before,kind,entities=self._pending;self._pending=None
+        after=self.Runtime.CaptureTransforms(entities) if kind=="transforms" else self.Runtime.CaptureScene()
         if not before or not after or before==after:return False
-        self._undo.append(SceneCommand(label,before,after));self._redo.clear()
+        self._undo.append(SceneCommand(label,before,after,kind));self._redo.clear()
         self._Trim()
         self.Changed.emit();return True
     def Cancel(self)->None:self._pending=None
     def Undo(self)->bool:
         if not self._undo:return False
         command=self._undo.pop();self._restoring=True
-        try:ok=self.Runtime.RestoreScene(command.Before)
+        try:ok=self.Runtime.RestoreTransforms(command.Before) if command.Kind=="transforms" else self.Runtime.RestoreScene(command.Before)
         finally:self._restoring=False
-        if ok:self._redo.append(command);self.Changed.emit()
+        if ok:self.LastRestoreStructural=command.Kind=="scene";self._redo.append(command);self.Changed.emit()
         else:self._undo.append(command)
         return ok
     def Redo(self)->bool:
         if not self._redo:return False
         command=self._redo.pop();self._restoring=True
-        try:ok=self.Runtime.RestoreScene(command.After)
+        try:ok=self.Runtime.RestoreTransforms(command.After) if command.Kind=="transforms" else self.Runtime.RestoreScene(command.After)
         finally:self._restoring=False
-        if ok:self._undo.append(command);self.Changed.emit()
+        if ok:self.LastRestoreStructural=command.Kind=="scene";self._undo.append(command);self.Changed.emit()
         else:self._redo.append(command)
         return ok
     def Clear(self)->None:self._undo.clear();self._redo.clear();self._pending=None;self.Changed.emit()

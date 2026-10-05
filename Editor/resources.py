@@ -14,6 +14,7 @@ class ResourceManager:
     def __init__(self, root: Path | None = None) -> None:
         self._root = (root or Path(__file__).resolve().parent / "assets").resolve()
         self._package = ResourcePackage("editor", self._root, compiled=False) if root is not None else Package("editor")
+        self._icons = {}
 
     @property
     def Root(self) -> Path:
@@ -34,7 +35,11 @@ class ResourceManager:
         return self._package.ReadText(relative_path, encoding)
 
     def Icon(self, relative_path: str | Path) -> QIcon:
-        return QIcon(self.Path(relative_path))
+        key=str(relative_path)
+        if key not in self._icons:
+            if len(self._icons)>=256:self._icons.clear()
+            self._icons[key]=QIcon(self.Path(relative_path))
+        return QIcon(self._icons[key])
 
     def Pixmap(self, relative_path: str | Path) -> QPixmap:
         return QPixmap(self.Path(relative_path))

@@ -1,5 +1,28 @@
 # Editor panels
 
+## Performance boundaries
+
+Resource icons are validated and decoded once per `ResourceManager`, then shared
+through Qt's implicit-sharing cache. Panel title/icon changes are batched into one
+docking rebuild. Applying an unchanged theme does not restyle or rebuild the UI;
+initial hierarchy population is explicit rather than relying on a theme event.
+
+Entity selection identifies scene rows from cached scene IDs instead of serializing
+all loaded scenes. Per-tick gizmo tracking uses the private `entity_pose` bridge
+query, not a complete component snapshot. Stats use `entity_count`, and Edit action
+availability uses the hierarchy's cached active-entity count. Hierarchy refreshes
+avoid resubmitting unchanged native visibility/lock sets within the same scene.
+Idle material checks reuse the last scene snapshot; authoring changes invalidate
+it, and checks defer while flying or dragging. Play-mode checks still inspect
+runtime changes. These optimizations do not cache editable inspector values.
+
+The manual `Editor.tests.native_model_viewport_smoke --editor` tool measures editor
+tick time using a temporary project. Warm selected-model ticks measured roughly
+2–6 ms on the development RTX 3050 Ti, but the first Vulkan render still took about
+1.5 seconds. Tick time excludes subsequent Qt event/paint processing and is not a
+claim of end-to-end FPS. The first-render/shader warm-up stall remains a separate
+startup performance limitation.
+
 ## Hierarchy helpers and model icons
 
 The three-dot menu beside Hierarchy search offers Expand/Collapse All,
@@ -21,6 +44,23 @@ icon. Thumbnail generation never touches the active scene or native swapchains.
 Work is bounded, uses one worker, and caches 128 results per session; source file
 changes invalidate the cache key. Icons update in place without changing folder,
 selection, or item size. External glTF buffers must stay inside the model folder.
+Previews are static PNG images, never live viewport widgets. They are also stored
+under the cross-platform app-data `BAZZALT/data/Cache/ModelThumbnails` directory.
+A new cache instance loads an existing image in its worker without rendering the
+model again. Source fingerprints and thumbnail format version invalidate old
+images; a read-only or missing cache falls back to generating the thumbnail.
+Selecting an asset does not trigger an asset-database scan/import. Filesystem
+changes still mark the normal idle import workflow dirty.
+
+Transform history uses compact before/after local-transform records for inspector
+transform edits, gizmo drags, multi-selection center moves, and Object placement
+commands. Undo/redo applies validated entity batches in place: no temporary scene
+file, registry replacement, model reload, or hierarchy rebuild is needed. Parent
+and child local values restore independently and preserve their relationship.
+Structural and other snapshot commands retain the existing full-scene path;
+they are not yet universally incremental. Filament keeps bounded caches of 128
+material definitions and 512 program specializations to reduce repeat compilation
+when scene resources are rebuilt. Cold first-render latency is still outstanding.
 
 BAZZALT creates its standard panels inside `Editor.gui.application.Editor`. They share the
 same `ThemeManager`, `ResourceManager`, and `LocalizationManager` as the menu and docking
@@ -193,3 +233,16 @@ They autosave by project UUID and entity UUID in editor settings and do not dirt
 the scene, become undo records, or affect gameplay scripts. The public engine API
 does not expose editor selection locks. Duplicating an entity creates an unlocked,
 visible copy.
+## Thumbnail worker ownership and CI reuse
+
+Model previews are static images, not live 3D viewports. A bounded single-worker
+Python executor reads or renders cached PNGs off the GUI thread. Queued Qt
+signals deliver results; QPixmap and browser icon updates stay on the GUI
+thread. Cache destruction cancels queued jobs without blocking the UI and
+suppresses results from running jobs.
+
+Win32 CI uses exact dependency caches first. Cache misses optionally fetch the
+known Qt and Filament artifacts from run 37308449117. Expired/missing artifacts
+fall back to normal builds. The dependency build script validates pinned source,
+compiler, options and source-patch stamps before skipping compilation. Large
+dependency builds remain in GitHub Actions.

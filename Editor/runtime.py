@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import os
+import json
 import sys
 from pathlib import Path
 
@@ -139,6 +140,14 @@ class RuntimeService(QObject):
     def EntityDetails(self, entity_id: str) -> dict:
         return dict(self._host.entity_details(entity_id)) if self._host is not None else {}
 
+    def EntityPose(self,entity_id:str)->dict:
+        if self._host is not None and hasattr(self._host,"entity_pose"):return dict(self._host.entity_pose(entity_id))
+        return self.EntityDetails(entity_id)
+
+    def EntityCount(self)->int:
+        if self._host is not None and hasattr(self._host,"entity_count"):return int(self._host.entity_count())
+        return len(self.Entities())
+
     def HasActiveCamera(self) -> bool:
         return bool(self._host and hasattr(self._host, "has_active_camera") and
                     self._host.has_active_camera())
@@ -191,6 +200,18 @@ class RuntimeService(QObject):
 
     def CaptureScene(self) -> bytes:
         return bytes(self._host.capture_scene()) if self._host is not None and hasattr(self._host,"capture_scene") else b""
+
+    def CaptureTransforms(self,entities)->bytes:
+        if self._host is None or not hasattr(self._host,"restore_transforms"):return b""
+        values={}
+        for entity in entities:
+            pose=self.EntityPose(entity)
+            if not all(key in pose for key in ("local_position","local_rotation","local_scale")):return b""
+            values[entity]={key:pose[key] for key in ("local_position","local_rotation","local_scale")}
+        return json.dumps(values,sort_keys=True,separators=(",",":"),allow_nan=False).encode()
+
+    def RestoreTransforms(self,snapshot:bytes)->bool:
+        return bool(self._host and hasattr(self._host,"restore_transforms") and self._host.restore_transforms(json.loads(snapshot)))
 
     def SceneEnvironment(self,scene_id:str)->dict:
         return dict(self._host.scene_environment(scene_id)) if self._host is not None and hasattr(self._host,"scene_environment") else {}
@@ -302,7 +323,10 @@ class RuntimeService(QObject):
     def SyncEditorEntityState(self,scenes)->None:
         self.EditorParents={str(entity["uuid"]):str(entity.get("parent", "")) for scene in scenes for entity in scene.get("entities",())}
         if self._host is not None and hasattr(self._host,"set_editor_entity_state"):
-            self._host.set_editor_entity_state([entity for entity in self.EditorParents if self.IsEditorHidden(entity)],[entity for entity in self.EditorParents if self.IsEditorLocked(entity)])
+            hidden=[entity for entity in self.EditorParents if self.IsEditorHidden(entity)];locked=[entity for entity in self.EditorParents if self.IsEditorLocked(entity)]
+            state=(self.SceneInfo().get("uuid",""),tuple(hidden),tuple(locked))
+            if getattr(self,"_synced_editor_flags",None)!=state:
+                self._host.set_editor_entity_state(hidden,locked);self._synced_editor_flags=state
 
     def SetSceneRenderMode(self,mode:str)->bool:
         return bool(self._host and hasattr(self._host,"set_scene_render_mode") and self._host.set_scene_render_mode(mode))

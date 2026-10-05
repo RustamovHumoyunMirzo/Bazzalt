@@ -94,7 +94,7 @@ class ObjectTools(QObject):
             target=list(center);target[{0:2,1:1,2:0}[self.Window.Scene.GridPlane.currentIndex()]]=0
         if command in {"place_cursor","view_center","center_origin","project_grid"} and target is None:return
         if command=="align_view" and rotation is None:return
-        label=self.Window.Localization.Translate("object."+command);controller.History.Begin(label);changed=False
+        label=self.Window.Localization.Translate("object."+command);controller.History.BeginTransforms(label,roots);changed=False
         try:
             for value,item in details.items():
                 position=item["position"];orientation=item["rotation"];scale=item["scale"]

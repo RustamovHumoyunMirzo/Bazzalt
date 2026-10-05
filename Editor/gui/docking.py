@@ -757,7 +757,7 @@ class DockingSystem(QWidget):
 
     def set_panel_presentation(
         self, panel: DockPanel | str, *, title: str | None = None,
-        icon: QIcon | None = None
+        icon: QIcon | None = None, rebuild: bool = True
     ) -> None:
         """Update a panel's translated title or themed icon in every dock view."""
         item = self.panel(panel)
@@ -765,6 +765,10 @@ class DockingSystem(QWidget):
             item.title = title
         if icon is not None:
             item.icon = icon
+        if rebuild:self._rebuild_views()
+
+    def refresh_panel_presentations(self) -> None:
+        """Commit a batch of title/icon changes in one dock-tree rebuild."""
         self._rebuild_views()
 
     def dock(

@@ -7,10 +7,14 @@ import base64
 import json
 import math
 import struct
+import hashlib
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor, wait
+from threading import Event
 from pathlib import Path
 from urllib.parse import unquote
-from PySide6.QtCore import QObject, QPointF, QRunnable, QThreadPool, Qt, Signal, Slot
+from PySide6.QtCore import QObject, QPointF, Qt, Signal, Slot, QSaveFile, QIODevice
+from bazzalt.settings import DataPaths
 from PySide6.QtGui import QColor, QImage, QPainter, QPolygonF
 
 MAX_BYTES=128*1024*1024
@@ -136,19 +140,47 @@ def RenderModelThumbnail(path,size=96):
 class _Signals(QObject):
     Ready=Signal(object,object)
 
-class _Work(QRunnable):
-    def __init__(self,key,path,signals):super().__init__();self.key=key;self.path=path;self.signals=signals
+class _WorkerPool:
+    """Python-owned jobs avoid QRunnable/Shiboken wrapper lifetime dependencies."""
+    def __init__(self):
+        self.Closed=Event();self._executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix="BazzaltThumbnail");self._jobs=[]
+    def start(self,work):
+        self._jobs=[job for job in self._jobs if not job.done()]
+        self._jobs.append(self._executor.submit(work.run))
+    def waitForDone(self,milliseconds):
+        return not wait(self._jobs,timeout=milliseconds/1000).not_done
+    def Close(self,*args):
+        self.Closed.set();self._executor.shutdown(wait=False,cancel_futures=True)
+
+class _Work:
+    def __init__(self,key,path,signals,cache_root,closed):self.key=key;self.path=path;self.signals=signals;self.cache_root=cache_root;self.closed=closed
     def run(self):
-        try:image=RenderModelThumbnail(self.path)
+        try:
+            filename=self.cache_root/(hashlib.sha256(repr((2,self.key)).encode()).hexdigest()+".png")
+            try:image=QImage(str(filename)) if filename.is_file() and filename.stat().st_size<1024*1024 else QImage()
+            except OSError:image=QImage()
+            if image.isNull():
+                image=RenderModelThumbnail(self.path)
+                if not image.isNull():
+                    try:
+                        self.cache_root.mkdir(parents=True,exist_ok=True);output=QSaveFile(str(filename))
+                        if output.open(QIODevice.OpenModeFlag.WriteOnly):
+                            if image.save(output,"PNG"):output.commit()
+                            else:output.cancelWriting()
+                    except OSError:pass # Read-only caches must not prevent previews.
         except Exception:image=QImage() # Malformed/unsupported files keep their fallback icon.
-        self.signals.Ready.emit(self.key,image)
+        if not self.closed.is_set():
+            self.signals.Ready.emit(self.key,image)
 
 class ModelThumbnailCache(QObject):
     Ready=Signal(str,object)
-    def __init__(self,parent=None):
+    def __init__(self,parent=None,cache_root=None):
         super().__init__(parent);self._cache=OrderedDict();self._pending=set();self._signals=_Signals()
-        self._signals.Ready.connect(self._Finished,Qt.ConnectionType.QueuedConnection);self._pool=QThreadPool();self._pool.setMaxThreadCount(1)
+        self._cache_root=Path(cache_root) if cache_root is not None else DataPaths.Root()/"Cache"/"ModelThumbnails"
+        self._signals.Ready.connect(self._Finished,Qt.ConnectionType.QueuedConnection);self._pool=_WorkerPool()
+        self.destroyed.connect(self._pool.Close)
     def Request(self,path):
+        if self._pool.Closed.is_set():return None
         path=Path(path)
         if path.suffix.lower() not in {".glb",".gltf",".obj"}:return None
         try:
@@ -160,10 +192,11 @@ class ModelThumbnailCache(QObject):
         except OSError:return None
         if key in self._cache:self._cache.move_to_end(key);return self._cache[key]
         if key not in self._pending and len(self._pending)<64:
-            self._pending.add(key);self._pool.start(_Work(key,path,self._signals))
+            self._pending.add(key);self._pool.start(_Work(key,path,self._signals,self._cache_root,self._pool.Closed))
         return None
     @Slot(object,object)
     def _Finished(self,key,image):
+        if self._pool.Closed.is_set():return
         self._pending.discard(key);self._cache[key]=image
         while len(self._cache)>128:self._cache.popitem(last=False)
         self.Ready.emit(key[0],image)

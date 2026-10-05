@@ -200,6 +200,8 @@ bool RenderBackend::Initialize(bool headless) {
     // An editor must handle imported models and multiple views, not just the
     // tiny demonstration scenes that Filament's default arenas are sized for.
     filament::Engine::Config config;
+    // Keep bounded shader definitions/specializations across editor scene edits.
+    config.materialCacheCapacity=128;config.programCacheCapacity=512;
     if(!headless){
         config.perFrameCommandsSizeMB=16;config.perRenderPassArenaSizeMB=24;
         config.minCommandBufferSizeMB=8;config.commandBufferSizeMB=32;

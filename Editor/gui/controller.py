@@ -44,6 +44,7 @@ class EditorController(QObject):
         self.ScriptCompiler=None;self.ScriptAttachments=None
         self.MaterialCompiler=MaterialCompiler(runtime);self._material_check=0.0;self._material_error=""
         self._asset_database_dirty=True
+        self._material_scenes=None
         self.History=SceneHistory(runtime,self)
         self.Timer = QTimer(self)
         self.Timer.setInterval(16)
@@ -102,7 +103,7 @@ class EditorController(QObject):
         window.Scene.Surface.RotationDragged.connect(self.ApplyGizmoRotation)
         window.Scene.Surface.ScaleDragged.connect(self.ApplyGizmoScale)
         window.Scene.Surface.GizmoDragFinished.connect(self._FinishGizmoDrag)
-        window.Scene.Surface.GizmoDragStarted.connect(lambda:self.History.Begin("Transform selection"))
+        window.Scene.Surface.GizmoDragStarted.connect(lambda:self.History.BeginTransforms("Transform selection",self.SelectedEntities))
         window.Scene.Surface.EntityPicked.connect(self.SelectSceneEntity)
         window.Scene.Surface.EntitiesBoxSelected.connect(self.SelectSceneBox)
         window.Scene.Surface.SelectionBoxStarted.connect(self.BeginSceneBoxSelection)
@@ -130,7 +131,8 @@ class EditorController(QObject):
 
     def _Tick(self) -> None:
         self.GameInput.SyncFocus()
-        if monotonic()-self._material_check>2.0:
+        surface=self.Window.Scene.Surface
+        if monotonic()-self._material_check>2.0 and not surface._navigating and surface._gizmo_drag is None:
             self._material_check=monotonic();self._PrepareUsedMaterials()
         if self.Runtime.Tick() is False:
             self.Timer.stop()
@@ -138,7 +140,7 @@ class EditorController(QObject):
         if self._play_authoring is not None and not self.Runtime.IsPlaying():self._RestorePlayAuthoring()
         self._stats_frames+=1;now=monotonic()
         if now-self._stats_started>=1.0:
-            self.Window.Scene.StatsLabel.setText(self.Window.Localization.Translate("viewport.stats",fps=round(self._stats_frames/(now-self._stats_started)),objects=len(self.Runtime.Entities())));self._stats_frames=0;self._stats_started=now
+            self.Window.Scene.StatsLabel.setText(self.Window.Localization.Translate("viewport.stats",fps=round(self._stats_frames/(now-self._stats_started)),objects=self.Runtime.EntityCount()));self._stats_frames=0;self._stats_started=now
         self.Window.Output.SetGameCameraAvailable(self.Runtime.HasActiveCamera())
         # Editor gizmos follow the authoritative world transform every frame.
         # This also covers transforms changed by systems or native user code.
@@ -182,6 +184,9 @@ class EditorController(QObject):
         theme = "light" if self.Window.ThemeManager.GetTheme().background == "#d4d4d4" else "dark"
         root_ids={"","0","00000000-0000-0000-0000-000000000000"}
         loaded_scenes=self.Runtime.LoadedScenes();self.Runtime.SyncEditorEntityState(loaded_scenes)
+        self._material_scenes=loaded_scenes
+        self._loaded_scene_ids={str(scene.get("uuid","")) for scene in loaded_scenes}
+        self._active_entity_count=sum(len(scene.get("entities",())) for scene in loaded_scenes if scene.get("active"))
         for scene_info in loaded_scenes:
             scene_id=str(scene_info.get("uuid",""));scene_name=str(scene_info.get("name","Untitled"))
             scene_root=self.Window.Hierarchy.AddItem(scene_name,scene_id,icon=self.Window.Resources.Icon(f"icons/{theme}/scene.svg"),kind="scene",active=bool(scene_info.get("active")))
@@ -220,7 +225,7 @@ class EditorController(QObject):
         self.Window.Properties.AddComponentButton.setVisible(bool(next_entity))
         if not self.SelectedEntity:
             self.Window.Scene.Surface.SetSelection(None);self._UpdateGizmo();return
-        if any(str(scene.get("uuid"))==self.SelectedEntity for scene in self.Runtime.LoadedScenes()):
+        if self.SelectedEntity in getattr(self,"_loaded_scene_ids",set()) or self.SelectedEntity==str(self.Runtime.SceneInfo().get("uuid","")):
             scene_id=self.SelectedEntity;self.InspectedScene=scene_id;self.SelectedEntity="";self.SelectedEntities=[];self.Window.Scene.Surface.SetSelection(None);self._UpdateGizmo();self._InspectScene(scene_id);return
         details = self.Runtime.EntityDetails(self.SelectedEntity)
         if not details:self._UpdateGizmo();return
@@ -276,7 +281,7 @@ class EditorController(QObject):
         summary.AddField("Selection",QLabel(", ".join(str(value.get("name","")) for value in details)))
         center=tuple(sum(float(value.get("world_position",value["position"])[axis]) for value in details)/len(details) for axis in range(3));last_center=[center];position=Vec3Input(center);summary.AddField("Center",position)
         def move_center(_value=None):
-            target=position.GetValue();delta=tuple(target[i]-last_center[0][i] for i in range(3));self.History.Begin("Move selection")
+            target=position.GetValue();delta=tuple(target[i]-last_center[0][i] for i in range(3));self.History.BeginTransforms("Move selection",unique)
             results=[self.Runtime.Translate(entity,delta) for entity in unique]
             if any(results):self.History.Commit();last_center[0]=target;self.SetDirty(True);self._UpdateGizmo()
             else:self.History.Cancel()
@@ -316,7 +321,8 @@ class EditorController(QObject):
         self.Window.MenuBar.UndoAction.setToolTip(self.History.UndoLabel());self.Window.MenuBar.RedoAction.setToolTip(self.History.RedoLabel())
 
     def _Mutate(self,label:str,operation):
-        self.History.Begin(label)
+        if label=="Edit Transform":self.History.BeginTransforms(label,self.SelectedEntities)
+        else:self.History.Begin(label)
         try:result=operation()
         except Exception:self.History.Cancel();raise
         if result:self.History.Commit()
@@ -325,15 +331,21 @@ class EditorController(QObject):
 
     def Undo(self)->None:
         scene=self.InspectedScene
-        if self.History.Undo():self.SetDirty(True);self.RefreshHierarchy();self.SelectEntity(scene,force=True) if scene else self.SelectEntities(self.SelectedEntities)
+        if self.History.Undo():
+            self.SetDirty(True)
+            if self.History.LastRestoreStructural:self.SelectEntity(scene,force=True) if scene else self.SelectEntities(self.SelectedEntities)
+            else:self._RefreshInspectorValues();self._UpdateGizmo()
 
     def Redo(self)->None:
         scene=self.InspectedScene
-        if self.History.Redo():self.SetDirty(True);self.RefreshHierarchy();self.SelectEntity(scene,force=True) if scene else self.SelectEntities(self.SelectedEntities)
+        if self.History.Redo():
+            self.SetDirty(True)
+            if self.History.LastRestoreStructural:self.SelectEntity(scene,force=True) if scene else self.SelectEntities(self.SelectedEntities)
+            else:self._RefreshInspectorValues();self._UpdateGizmo()
 
     def SelectAsset(self,path)->None:
-        self.Runtime.RefreshAssets()
         path=Path(path);self.SelectedEntity="";self.SelectedEntities=[];self.Window.Scene.Surface.SetSelection(None);self.Runtime.SetGizmo("",0);self.Window.Properties.Clear();self.Window.Properties.AddComponentButton.setVisible(False)
+        self.InspectedScene="";self._UpdateGizmo()
         section=self.Window.Properties.AddComponentSection("asset",self.Window.Localization.Translate("properties.asset"),removable=False)
         for label,value in (("Name",path.name),("Type",path.suffix.lower() or "Folder"),("Path",str(path)),("Size",self._FormatAssetSize(self._AssetSize(path)))):section.AddField(self.Window.Localization.Translate(f"properties.asset_{label.lower()}") if label!="Name" else self.Window.Localization.Translate("properties.asset_name"),QLabel(value))
         if path.suffix.lower()==".matinst":self._InspectMaterial(path)
@@ -462,7 +474,8 @@ class EditorController(QObject):
         try:
             if self._asset_database_dirty:self.Runtime.RefreshAssets();self._asset_database_dirty=False
             used=set();shaders=set(getattr(self.Runtime,"UsedShaderAssets",lambda:[])())
-            scenes=self.Runtime.LoadedScenes()
+            if self._material_scenes is None or self.Runtime.IsPlaying():self._material_scenes=self.Runtime.LoadedScenes()
+            scenes=self._material_scenes
             for scene in scenes:
                 environment=self.Runtime.SceneEnvironment(str(scene.get("uuid","")));material=environment.get("material",ZERO)
                 if environment.get("mode",0)==1 and material!=ZERO:used.add(material)
@@ -670,6 +683,7 @@ class EditorController(QObject):
         if not self._updating_inspector and entity_id==self.SelectedEntity and name.strip() and self._Mutate("Rename entity",lambda:self.Runtime.Rename(entity_id,name.strip())):self.SetDirty(True);self.RefreshHierarchy()
 
     def SetDirty(self, dirty: bool = True, scene_ids=None) -> None:
+        if dirty:self._material_scenes=None
         if not dirty:self._dirty_scenes.clear()
         else:
             ids={str(value) for value in (scene_ids or ()) if value}
@@ -698,13 +712,13 @@ class EditorController(QObject):
         if len(self.SelectedEntities)>1:
             positions=[]
             for value in self.SelectedEntities:
-                details=self.Runtime.EntityDetails(value)
+                details=self.Runtime.EntityPose(value)
                 if details.get("scene_active",True):positions.append(details.get("world_position",details.get("position")))
             positions=[value for value in positions if value]
             if positions:
                 center=tuple(sum(value[axis] for value in positions)/len(positions) for axis in range(3)) if self._pivot_center else tuple(positions[0]);self.Window.Scene.Surface.SetSelection(center);self.Runtime.SetGizmoPosition(center,modes[self.Window.Toolbar.GetGizmoMode()]);return
         if self.SelectedEntity:
-            details=self.Runtime.EntityDetails(self.SelectedEntity)
+            details=self.Runtime.EntityPose(self.SelectedEntity)
             if details and not details.get("scene_active",True):self.Window.Scene.Surface.SetSelection(None);self.Runtime.SetGizmo("",modes[self.Window.Toolbar.GetGizmoMode()]);return
             if details:self.Window.Scene.Surface.SetSelection(details.get("world_position",details["position"]))
         self.Runtime.SetGizmo(self.SelectedEntity, modes[self.Window.Toolbar.GetGizmoMode()])

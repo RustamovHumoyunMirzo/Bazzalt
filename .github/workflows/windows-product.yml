@@ -14,6 +14,7 @@ on:
         type: string
 permissions:
   contents: read
+  actions: read
 jobs:
   x64:
     if: inputs.architecture == 'both' || inputs.architecture == 'x64'
@@ -64,7 +65,7 @@ jobs:
         run: |
           python -m unittest discover -s Launcher/tests -v
           if ($LASTEXITCODE -ne 0) { throw 'Hub/download tests failed' }
-          python -m unittest Editor.tests.test_scripting Editor.tests.test_compiled_resources Editor.tests.test_file_association_preferences Editor.tests.test_restart_settings Editor.tests.test_runtime_tick_failure Editor.tests.test_viewport_gesture_priority Editor.tests.test_object_tools Editor.tests.test_browser_hierarchy_helpers Editor.tests.test_diagnostics -v
+          python -m unittest Editor.tests.test_scripting Editor.tests.test_compiled_resources Editor.tests.test_file_association_preferences Editor.tests.test_restart_settings Editor.tests.test_runtime_tick_failure Editor.tests.test_viewport_gesture_priority Editor.tests.test_object_tools Editor.tests.test_browser_hierarchy_helpers Editor.tests.test_editor_performance Editor.tests.test_diagnostics -v
           if ($LASTEXITCODE -ne 0) { throw 'Resource/compiler/preferences tests failed' }
       - name: Install Inno Setup
         if: inputs.product == 'hub'
@@ -108,6 +109,18 @@ jobs:
         with:
           path: build/win32-bootstrap/qt-x86
           key: win32-qt-v1-${{ runner.os }}-${{ steps.toolchain.outputs.version }}-${{ hashFiles('releases/windows-x86.json', 'scripts/build_windows_x86_dependencies.ps1', 'scripts/windows_toolchain.ps1') }}
+      # The build script validates source/compiler/options/patch stamps before
+      # reusing an installation. Missing or expired artifacts fall back to build.
+      - name: Seed Qt SDK from the successful Win32 build
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: '11345099158'
+          run-id: '37308449117'
+          github-token: ${{ github.token }}
+          path: build/win32-bootstrap/qt-x86
+          merge-multiple: true
       - name: Build Qt and SVG only
         if: steps.qt-cache.outputs.cache-hit != 'true'
         run: ./scripts/build_windows_x86_dependencies.ps1 -Stage qt -Parallel 2
@@ -117,7 +130,7 @@ jobs:
           path: build/win32-bootstrap/qt-x86/
           include-hidden-files: true
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 30
 
   x86-gui:
     needs: x86-qt
@@ -161,7 +174,7 @@ jobs:
           path: build/win32-bootstrap/python-package/
           include-hidden-files: true
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 30
 
   x86-filament:
     if: (inputs.architecture == 'both' || inputs.architecture == 'x86') && inputs.product != 'hub'
@@ -186,6 +199,16 @@ jobs:
             build/win32-bootstrap/filament-x86
             build/win32-bootstrap/python-package
           key: win32-filament-v1-${{ runner.os }}-${{ steps.toolchain.outputs.version }}-${{ hashFiles('releases/windows-x86.json', 'scripts/build_windows_x86_dependencies.ps1', 'scripts/patch_filament_win32.py', 'scripts/windows_toolchain.ps1') }}
+      - name: Seed Filament SDK from the successful Win32 build
+        if: steps.filament-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: '11346706470'
+          run-id: '37308449117'
+          github-token: ${{ github.token }}
+          path: build/win32-bootstrap/filament-x86
+          merge-multiple: true
       - name: Build Filament only, parallel to Qt and PySide
         if: steps.filament-cache.outputs.cache-hit != 'true'
         run: ./scripts/build_windows_x86_dependencies.ps1 -Stage filament -Parallel 2
@@ -195,7 +218,7 @@ jobs:
           path: build/win32-bootstrap/filament-x86/
           include-hidden-files: true
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 30
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: inputs.product == 'core'
         with:
@@ -203,7 +226,7 @@ jobs:
           path: build/win32-bootstrap/python-package/
           include-hidden-files: true
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 30
 
   x86:
     needs: [x86-qt, x86-gui, x86-filament]

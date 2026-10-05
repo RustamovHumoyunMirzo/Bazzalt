@@ -132,6 +132,7 @@ class Editor(QMainWindow):
         initial=self._settings.get("preferences")
         if not isinstance(initial,dict):initial=MergePreferences(None);initial["appearance"]["theme"]=str(self._settings.get("theme","dark"))
         self.ApplyPreferences(initial,save=False)
+        if self.Hierarchy.Tree.topLevelItemCount()==0:self.Controller.RefreshHierarchy()
         for control,signal,key in ((self.Scene.HighLevelToggle,"toggled","high_level_selection"),(self.Scene.PivotMode,"currentIndexChanged","pivot_center"),(self.Scene.LocalToggle,"toggled","local_space"),(self.Scene.GridToggle,"toggled","grid_visible"),(self.Scene.GridPlane,"currentIndexChanged","grid_plane"),(self.Scene.GizmoToggle,"toggled","gizmos_visible"),(self.Scene.StatsToggle,"toggled","stats_visible"),(self.Scene.ShadingMode,"currentIndexChanged","shading_mode"),(self.MenuBar.IconsAction,"toggled","icons_visible")):
             getattr(control,signal).connect(lambda value,k=key:self._SaveScenePreference(k,bool(value) if k=="pivot_center" else value))
 
@@ -192,7 +193,7 @@ class Editor(QMainWindow):
         else:
             item=self.Hierarchy.Tree.currentItem()
             rename=bool(item and item.data(0,Qt.ItemDataRole.UserRole+1) in {"entity","scene"} and len(self.Hierarchy.Tree.selectedItems())==1)
-            states=dict(copy=selected,paste=bool(self.Controller._hierarchy_clipboard),delete=selected,rename=rename,duplicate=selected,select_all=bool(self.Runtime.Entities()),deselect_all=selected)
+            states=dict(copy=selected,paste=bool(self.Controller._hierarchy_clipboard),delete=selected,rename=rename,duplicate=selected,select_all=bool(getattr(self.Controller,"_active_entity_count",0)),deselect_all=selected)
         for key,enabled in states.items():self.MenuBar.EditActions[key].setEnabled(enabled)
 
     def ExecuteEditCommand(self,command:str)->None:
@@ -325,7 +326,9 @@ class Editor(QMainWindow):
                 panel_id,
                 title=self.Localization.Translate(f"panel.{panel_id}"),
                 icon=self._PanelIcon(panel_id),
+                rebuild=False,
             )
+        self.Docking.refresh_panel_presentations()
 
     def _ResetWorkspace(self) -> None:
         self.Docking.restore_layout(self._default_layout)

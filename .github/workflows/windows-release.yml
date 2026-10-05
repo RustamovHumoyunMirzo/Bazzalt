@@ -5,6 +5,7 @@ on:
     tags: ['release-v*']
 permissions:
   contents: read
+  actions: read
 jobs:
   editor:
     uses: ./.github/workflows/windows-product.yml

@@ -65,7 +65,7 @@ class Win32PackagingTests(unittest.TestCase):
             self.assertIn("hashFiles(",jobs[name])
             self.assertIn("cache-hit != 'true'",jobs[name])
             self.assertNotIn("restore-keys",jobs[name]) # Do not restore mismatched binaries.
-            self.assertIn("retention-days: 1",jobs[name])
+            self.assertIn("retention-days: 30",jobs[name])
         self.assertIn("needs: x86-qt",jobs["x86-gui"])
         self.assertNotIn("needs:",jobs["x86-filament"])
         product=jobs["x86"]
@@ -76,6 +76,19 @@ class Win32PackagingTests(unittest.TestCase):
         self.assertNotIn("build_windows_x86_dependencies.ps1",product)
         self.assertIn("timeout-minutes: 120",product)
         self.assertIn("dependency-python-x86-${{ inputs.product }}",product)
+
+    def test_previous_sdk_artifacts_are_optional_and_still_validated(self):
+        root=Path(__file__).resolve().parents[2]
+        workflow=(root/".github/workflows/windows-product.yml").read_text()
+        for identifier in ("11345099158","11346706470"):
+            self.assertIn(f"artifact-ids: '{identifier}'",workflow)
+        self.assertEqual(workflow.count("run-id: '37308449117'"),2)
+        self.assertEqual(workflow.count("continue-on-error: true"),2)
+        self.assertIn("actions: read",workflow)
+        script=(root/"scripts/build_windows_x86_dependencies.ps1").read_text()
+        self.assertIn("[IO.File]::ReadAllText($Stamp) -eq $Expected",script)
+        self.assertIn("Get-Command cl",script)
+        self.assertIn("git -C $Source diff",script)
 
     def test_split_gui_build_reuses_completed_qt_and_svg_installations(self):
         root=Path(__file__).resolve().parents[2]

@@ -96,6 +96,36 @@ class BrowserHierarchyHelpersTests(unittest.TestCase):
                 self.assertIsNotNone(cache.Request(path))
             finally:gate.set();cache._pool.waitForDone(5000);cache.deleteLater()
 
+    def test_static_preview_is_reused_across_cache_instances(self):
+        from Editor.model_thumbnails import ModelThumbnailCache
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/"mesh.obj";path.write_text("v -1 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n",encoding="utf-8")
+            completed=[];cache=ModelThumbnailCache(cache_root=Path(folder)/"cache")
+            cache.Ready.connect(lambda name,image:completed.append(image));cache.Request(path)
+            self.assertTrue(self._WaitFor(lambda:bool(completed)));self.assertFalse(completed[0].isNull());cache._pool.waitForDone(5000)
+            second=ModelThumbnailCache(cache_root=Path(folder)/"cache");loaded=[];second.Ready.connect(lambda name,image:loaded.append(image))
+            with patch("Editor.model_thumbnails.RenderModelThumbnail",side_effect=AssertionError("cached thumbnail regenerated")):
+                second.Request(path);self.assertTrue(self._WaitFor(lambda:bool(loaded)))
+            self.assertFalse(loaded[0].isNull());second._pool.waitForDone(5000);cache.deleteLater();second.deleteLater()
+
+    def test_worker_shutdown_cancels_queue_and_suppresses_delivery(self):
+        from Editor.model_thumbnails import ModelThumbnailCache
+        gate=Event();started=Event();completed=[]
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/"mesh.obj";path.write_text("broken",encoding="utf-8")
+            cache=ModelThumbnailCache(cache_root=Path(folder)/"cache")
+            cache.Ready.connect(lambda *args:completed.append(args))
+            def delayed(path):
+                started.set();gate.wait(5)
+                return RenderModelThumbnail(path)
+            try:
+                with patch("Editor.model_thumbnails.RenderModelThumbnail",side_effect=delayed):
+                    cache.Request(path);self.assertTrue(self._WaitFor(started.is_set))
+                    cache._pool.Close();gate.set()
+                    self.assertTrue(cache._pool.waitForDone(5000));self.App.processEvents()
+                self.assertFalse(completed);self.assertIsNone(cache.Request(path))
+            finally:gate.set();cache._pool.Close();cache.deleteLater()
+
     def test_glb_node_transforms_and_invalid_geometry(self):
         with tempfile.TemporaryDirectory() as folder:
             path=Path(folder)/"mesh.glb";positions=struct.pack("<9f",-1,0,0,1,0,0,0,2,0)

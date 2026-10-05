@@ -256,6 +256,26 @@ public:
     py::dict EntityDetails(const std::string& id) {
         auto [scene,entity]=FindEntity(id);if(!entity)return {};auto result=SnapshotEntity(*scene,entity);result["scene_active"]=(scene==&m_engine->GetScene());result["scene_uuid"]=scene->GetUUID().ToString();return result;
     }
+    py::dict EntityPose(const std::string& id) {
+        auto [scene,entity]=FindEntity(id);if(!entity)return {};
+        const auto position=entity.GetWorldMatrix().TransformPoint({});py::dict result;
+        result["world_position"]=py::make_tuple(position.X,position.Y,position.Z);
+        result["position"]=result["world_position"];result["scene_active"]=(scene==&m_engine->GetScene());
+        const auto& local=entity.GetComponent<Transform>();
+        result["local_position"]=py::make_tuple(local.Position.X,local.Position.Y,local.Position.Z);
+        result["local_rotation"]=py::make_tuple(local.Rotation.X,local.Rotation.Y,local.Rotation.Z,local.Rotation.W);
+        result["local_scale"]=py::make_tuple(local.Scale.X,local.Scale.Y,local.Scale.Z);return result;
+    }
+    bool RestoreTransforms(const py::dict& poses) {
+        std::vector<std::pair<Entity,Transform>> changes;
+        for(const auto& item:poses){auto [scene,entity]=FindEntity(py::cast<std::string>(item.first));if(!entity)return false;
+            const auto data=py::cast<py::dict>(item.second);const auto p=data["local_position"].cast<std::array<float,3>>();const auto r=data["local_rotation"].cast<std::array<float,4>>();const auto s=data["local_scale"].cast<std::array<float,3>>();
+            Transform value;value.Position={p[0],p[1],p[2]};value.Rotation={r[0],r[1],r[2],r[3]};value.Scale={s[0],s[1],s[2]};changes.emplace_back(entity,value);
+        }
+        for(auto& [entity,value]:changes)entity.GetComponent<Transform>()=value;
+        return true;
+    }
+    std::size_t EntityCount() const {return m_engine->GetScene().GetEntityCount();}
     bool HasActiveCamera() const {
         const auto cameras = m_engine->GetScene().GetRegistry().view<Camera>();
         for (const auto handle : cameras)
@@ -592,6 +612,9 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("entities", &Bazzalt::EditorBridge::EditorHost::Entities)
         .def("loaded_scenes", &Bazzalt::EditorBridge::EditorHost::LoadedScenes)
         .def("entity_details", &Bazzalt::EditorBridge::EditorHost::EntityDetails)
+        .def("entity_pose", &Bazzalt::EditorBridge::EditorHost::EntityPose)
+        .def("restore_transforms", &Bazzalt::EditorBridge::EditorHost::RestoreTransforms)
+        .def("entity_count", &Bazzalt::EditorBridge::EditorHost::EntityCount)
         .def("has_active_camera", &Bazzalt::EditorBridge::EditorHost::HasActiveCamera)
         .def("create_entity", &Bazzalt::EditorBridge::EditorHost::CreateEntity,
              py::arg("name"), py::arg("parent") = "")
