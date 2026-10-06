@@ -56,6 +56,8 @@ class BrowserHierarchyHelpersTests(unittest.TestCase):
     def test_options_icons_follow_palette_and_component_uses_shared_button(self):
         themes=ThemeManager(self.App);button=OptionsButton();section=ComponentSection("Test",localization=self.Locale)
         self.assertFalse(button.icon().isNull());self.assertIsInstance(section.findChild(OptionsButton,"ComponentOptionsButton"),OptionsButton)
+        self.assertTrue(button.property("editorOptionsButton"));self.assertTrue(button.autoRaise())
+        self.assertTrue(section.findChild(OptionsButton,"ComponentOptionsButton").property("editorOptionsButton"))
         themes.SetTheme(Theme.dark());dark=button.icon().cacheKey();themes.SetTheme(Theme.light());self.assertNotEqual(dark,button.icon().cacheKey())
         section.deleteLater();button.deleteLater()
 

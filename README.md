@@ -13,14 +13,6 @@ support for generating games; the Win32 CI badge covers that runtime only.
 > **Alpha status:** core workflows are functional, but APIs and file formats may
 > still change. BAZZALT is not yet recommended for production projects.
 
-## Supported Platforms & Backends
-
-| Backend | Platform(s) |
-|----------|---------|
-| Vulkan (1.0+) | Windows, Linux, macOS |
-| OpenGL (4.1+) | Windows, Linux, macOS |
-| Metal | macOS |
-
 ## Contributing
 
 Issues and focused pull requests are welcome. Include tests for behavior

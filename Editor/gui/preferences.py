@@ -58,13 +58,12 @@ class PreferencesDialog(QDialog):
         for key,minimum,maximum,value in (("command_limit",1,1000,100),("memory_mb",1,2048,128)):
             field=RangeInput(minimum,maximum,value,decimals=0);layout.addRow(self.Tr(f"preferences.{key}"),field);self.Controls[key]=field
     def _AddScripting(self):
-        layout=self._Page("scripting");success=QCheckBox(self.Tr("preferences.show_compile_success"));layout.addRow(success);note=QLabel(self.Tr("preferences.compiler_note"));note.setWordWrap(True);note.setObjectName("PreferencesHint");layout.addRow(note);self.Controls["show_compile_success"]=success
+        layout=self._Page("scripting");success=QCheckBox(self.Tr("preferences.show_compile_success"));layout.addRow(success);self.Controls["show_compile_success"]=success
     def _AddRendering(self):
         layout=self._Page("rendering");backend=QComboBox()
         for name in self.Editor.Runtime.SupportedRenderingBackends():
             backend.addItem(self.Tr("preferences.backend."+name),name)
         layout.addRow(self.Tr("preferences.rendering_backend"),backend)
-        note=QLabel(self.Tr("preferences.rendering_restart_note"));note.setWordWrap(True);layout.addRow(note)
         self.Controls["rendering_backend"]=backend
     def _AddTools(self):
         layout=self._Page("tools")
@@ -74,11 +73,9 @@ class PreferencesDialog(QDialog):
                 path=QFileDialog.getOpenFileName(self,self.Tr("preferences."+key),field.text())[0] if key=="compiler_path" else QFileDialog.getExistingDirectory(self,self.Tr("preferences."+key),field.text())
                 if path:field.setText(path)
             button.clicked.connect(choose);layout.addRow(self.Tr("preferences."+key),row);self.Controls[key]=field
-        note=QLabel(self.Tr("preferences.tools_note"));note.setWordWrap(True);layout.addRow(note)
     def _AddFileAssociations(self):
         layout=self._Page("file_associations")
         remember=QCheckBox(self.Tr("preferences.associations_remember"));layout.addRow(remember);self.Controls["remember_associations"]=remember
-        note=QLabel(self.Tr("preferences.associations_note"));note.setWordWrap(True);layout.addRow(note)
         self.AssociationList=QTreeWidget();self.AssociationList.setHeaderLabels([self.Tr("preferences.association_format"),self.Tr("preferences.association_application")]);self.AssociationList.setRootIsDecorated(False);self.AssociationList.setMinimumHeight(120);layout.addRow(self.AssociationList)
         controls=QWidget();buttons=QHBoxLayout(controls);buttons.setContentsMargins(0,0,0,0)
         self.AssociationChoose=QPushButton(self.Tr("preferences.association_choose"));self.AssociationReset=QPushButton(self.Tr("preferences.association_reset"));self.AssociationResetAll=QPushButton(self.Tr("preferences.association_reset_all"))

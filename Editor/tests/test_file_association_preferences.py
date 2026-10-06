@@ -5,7 +5,7 @@ import unittest
 from types import SimpleNamespace
 from copy import deepcopy
 from unittest.mock import Mock,patch
-from PySide6.QtWidgets import QApplication,QWidget
+from PySide6.QtWidgets import QApplication,QWidget,QLabel
 from PySide6.QtCore import QEvent
 from Editor.asset_opening import ExternalAssetOpener
 from Editor.gui.preferences import PreferencesDialog,MergePreferences
@@ -30,6 +30,10 @@ class FileAssociationPreferencesTests(unittest.TestCase):
     def setUp(self):self.Editor=PreferencesEditor();self.Dialog=PreferencesDialog(self.Editor)
     def tearDown(self):
         self.Dialog.close();self.Editor.close();self.Editor.deleteLater();self.App.sendPostedEvents(None,QEvent.Type.DeferredDelete)
+    def test_preferences_have_no_persistent_helper_notes(self):
+        texts={label.text() for label in self.Dialog.findChildren(QLabel)}
+        for key in ("preferences.compiler_note","preferences.rendering_restart_note","preferences.tools_note","preferences.associations_note"):
+            self.assertNotIn(self.Editor.Localization.Translate(key),texts)
     def test_section_lists_choices_and_reset_cancel_changes_nothing(self):
         self.assertIn("File Associations",[self.Dialog.Sections.item(index).text() for index in range(self.Dialog.Sections.count())])
         self.assertEqual(self.Dialog.AssociationList.topLevelItem(0).text(0),".cpp")

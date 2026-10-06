@@ -220,7 +220,6 @@
   "preferences.grid_plane": "Grid plane",
   "preferences.clear_console_play": "Clear Console when entering Play mode",
   "preferences.show_compile_success": "Show successful script builds in Console",
-  "preferences.compiler_note": "Compiler errors and warnings are always shown and cannot be disabled.",
   "preferences.restore_defaults": "Restore Defaults",
   "preferences.cancel": "Cancel",
   "preferences.apply": "Apply",
@@ -246,7 +245,6 @@
   "preferences.backend.vulkan": "Vulkan",
   "preferences.backend.metal": "Metal",
   "preferences.backend.webgpu": "WebGPU",
-  "preferences.rendering_restart_note": "Only backends supported by this editor build are listed. Changing the backend requires an editor restart. GPU and driver support is also required.",
   "restart.title": "Restart Required",
   "restart.message": "Your changes include critical settings that require an editor restart.",
   "restart.now": "Restart Now",
@@ -285,7 +283,6 @@
   "assets.open_failed": "Could not open asset: {error}",
   "preferences.section.file_associations": "File Associations",
   "preferences.associations_remember": "Remember applications for Open and double-click",
-  "preferences.associations_note": "Open uses the saved application, or asks on first use. Open with… always asks. These associations affect only Bazzalt. Set Application explicitly assigns a program; reset makes the next Open ask again. Changes are saved with Apply.",
   "preferences.association_format": "Format",
   "preferences.association_application": "Application",
   "preferences.association_unassigned": "Ask on first open",
@@ -328,6 +325,5 @@
   "preferences.compiler_path": "Clang++ executable",
   "preferences.sdk_path": "Script SDK directory",
   "preferences.tools_automatic": "Automatic (shared Hub tools / editor SDK)",
-  "preferences.tools_browse": "Browse…",
-  "preferences.tools_note": "Build tools are shared by all editor versions. Windows also needs MSVC C++ Build Tools and a Windows SDK. Empty paths use automatic discovery; invalid overrides report compiler errors rather than falling back."
+  "preferences.tools_browse": "Browse…"
 }
