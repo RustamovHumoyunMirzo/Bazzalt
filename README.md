@@ -13,6 +13,13 @@ support for generating games; the Win32 CI badge covers that runtime only.
 > **Alpha status:** core workflows are functional, but APIs and file formats may
 > still change. BAZZALT is not yet recommended for production projects.
 
+## Documentation
+
+Read the [public guides](docs/public/index.html) for scene editing, C++ and Lua
+gameplay, assets, and materials. Open the downloaded HTML in a browser for
+offline use. Documentation authoring and version/language setup are described
+in [docs/public/README.md](docs/public/README.md).
+
 ## Contributing
 
 Issues and focused pull requests are welcome. Include tests for behavior

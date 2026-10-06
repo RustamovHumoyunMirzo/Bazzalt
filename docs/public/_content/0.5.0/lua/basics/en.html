@@ -1,0 +1,34 @@
+<h1>Lua terms and first calls</h1>
+<p class="lead">This guide explains the notation used in BAZZALT Lua examples. You do not need to memorize the API reference before writing a behavior.</p>
+<h2 id="values-and-variables">Values and variables</h2>
+<pre><code>local speed = 4
+local label = "Player"
+local enabled = true</code></pre>
+<p>A <strong>value</strong> is data: a number, text, or true/false. A <strong>variable</strong> is a name used to keep a value. local makes that variable local to the surrounding script/function rather than an accidental global. Text in quotes is a string. true and false are booleans; nil means no value.</p>
+<p>The equals sign stores a value. The double equals sign compares values. Plus adds numbers or supported vectors; star multiplies them. Case matters: Speed and speed are different names.</p>
+<h2 id="tables">Tables and fields</h2>
+<pre><code>local Walk = { Speed = 4 }
+Walk.Speed = 6</code></pre>
+<p>A <strong>table</strong> groups named values. Here Speed is a field on Walk. A dot reads/writes a field. The engine also exposes typed values such as Vec3; they look similar to tables when accessing X/Y/Z, but accept the operations defined by their bindings.</p>
+<p>Use Bazzalt.Vec3.new(0, 1, 0) to construct a 3D vector. Zero-argument Vec3.new() creates (0,0,0). It is not a scene object; it is just three numbers used to describe position/direction.</p>
+<h2 id="functions">Functions, arguments, and results</h2>
+<pre><code>local direction = Bazzalt.Vec3.new(1, 0, 1)
+local unitDirection = direction:Normalized()</code></pre>
+<p>A <strong>function</strong> performs an operation. Its <strong>arguments</strong> go inside parentheses. Its <strong>result</strong> can be stored in a variable. The first call constructs a vector using three numbers. The second returns a unit-length copy; it does not change direction itself.</p>
+<p>A static call such as Bazzalt.Time.GetDeltaTime() uses a dot. An object method such as entity:GetWorldTransform() uses a colon to pass that object. Do not replace one syntax with the other arbitrarily.</p>
+<h2 id="callbacks-and-self">Callbacks and self</h2>
+<pre><code>local Walk = { Speed = 4 }
+function Walk:OnUpdate(deltaTime)
+    local entity = self.Entity
+end
+return Walk</code></pre>
+<p>A <strong>callback</strong> is a function the engine calls for you. OnUpdate runs during gameplay updates. Its deltaTime argument is the current time step in seconds. With a colon-defined method, self is the table being updated. The runtime supplies self.Entity, the object this behavior was attached to.</p>
+<p>The file returns Walk so the runtime can use that table as the behavior. There is no manual engine loop in the script. OnCreate/OnDestroy are optional setup/cleanup callbacks, not commands that launch or close the editor.</p>
+<h2 id="copies">Why changing a copy may do nothing</h2>
+<pre><code>local light = self.Entity:GetComponent("Light")
+light.Intensity = 1200
+self.Entity:SetComponent("Light", light)</code></pre>
+<p>The first line gets a copy of an existing Light component. The second changes that copy. The final line commits it into scene storage. Without the final line, this is not a reliable way to edit the actual component. Add the Light first or test HasComponent before retrieving it.</p>
+<h2 id="rates-and-errors">Movement rates and errors</h2>
+<p>Moving four units every frame makes speed depend on frame rate. Moving <code>4 * deltaTime</code> units per update describes four units per second. Input is read from Game output's focus, not from typed letters in Inspector.</p>
+<p>An unknown method, misspelled component name, nil value, or incompatible argument can raise an error. Read Console and compare the exact names with the <a href="../reference/en.html">Lua reference</a>. Start with the <a href="../en.html">complete Walk example</a> rather than mixing unverified snippets.</p>

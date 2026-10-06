@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Entities, hierarchy, environment and geometry queries in one scene. The host advances systems; gameplay cannot call the private scene update loop.">
+  <title>Scene | BAZZALT Docs 0.5.0</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../" data-version="0.5.0" data-page="native/reference/Scene">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"><option value="0.5.0" selected>0.5.0</option></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"><option value="en" selected>English</option></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><details><summary>Editor manual</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/manual/en.html">Start here</a>
+<a class="nav-link" href="../../../../0.5.0/manual/first-launch/en.html">Open your first project</a>
+<details><summary>Find your way around</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/manual/workspace/en.html">Panels and scene controls</a>
+<details><summary>Panel guides</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/manual/panels/hierarchy/en.html">Hierarchy</a>
+<a class="nav-link" href="../../../../0.5.0/manual/panels/inspector/en.html">Inspector</a>
+<a class="nav-link" href="../../../../0.5.0/manual/panels/scene/en.html">Scene view</a>
+<a class="nav-link" href="../../../../0.5.0/manual/panels/game/en.html">Game output</a>
+<a class="nav-link" href="../../../../0.5.0/manual/panels/assets/en.html">Asset Browser</a>
+<a class="nav-link" href="../../../../0.5.0/manual/panels/console/en.html">Console</a></div></details>
+<a class="nav-link" href="../../../../0.5.0/manual/menus/en.html">Menus and play controls</a>
+<a class="nav-link" href="../../../../0.5.0/manual/settings/en.html">Preferences and project settings</a></div></details>
+<a class="nav-link" href="../../../../0.5.0/manual/first-scene/en.html">Your first scene</a>
+<a class="nav-link" href="../../../../0.5.0/manual/assets/en.html">Assets and project files</a>
+<a class="nav-link" href="../../../../0.5.0/manual/scenes/en.html">Multiple scenes and saving</a>
+<a class="nav-link" href="../../../../0.5.0/manual/glossary/en.html">Terms used in these guides</a></div></details>
+<details open><summary>C++</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/en.html">C++ gameplay API</a>
+<a class="nav-link" href="../../../../0.5.0/native/basics/en.html">Read your first C++ example</a>
+<a class="nav-link" href="../../../../0.5.0/native/behaviors/en.html">Write a C++ behavior</a>
+<a class="nav-link" href="../../../../0.5.0/native/entities/en.html">Entities and components</a>
+<a class="nav-link" href="../../../../0.5.0/native/materials/en.html">Runtime materials</a>
+<details open><summary>C++ API reference</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/en.html">C++ API reference</a>
+<details><summary>Enumerations</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/AntiAliasing/en.html">AntiAliasing</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/AssetState/en.html">AssetState</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/CameraAspectMode/en.html">CameraAspectMode</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/CameraProjection/en.html">CameraProjection</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentInheritanceMode/en.html">ComponentInheritanceMode</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/DepthOfFieldQuality/en.html">DepthOfFieldQuality</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/InputAxis/en.html">InputAxis</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/KeyCode/en.html">KeyCode</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/LightType/en.html">LightType</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MaterialCulling/en.html">MaterialCulling</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MaterialDepthFunction/en.html">MaterialDepthFunction</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MouseButton/en.html">MouseButton</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PostProcessParameterType/en.html">PostProcessParameterType</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PrimitiveShape/en.html">PrimitiveShape</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PropertyType/en.html">PropertyType</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneEnvironmentMode/en.html">SceneEnvironmentMode</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneQueryShape/en.html">SceneQueryShape</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ShaderParameterType/en.html">ShaderParameterType</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ShaderPreset/en.html">ShaderPreset</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ToneMapping/en.html">ToneMapping</a></div></details>
+<details><summary>Assets and models</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/AssetInfo/en.html">AssetInfo</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/AssetManager/en.html">AssetManager</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ModelAsset/en.html">ModelAsset</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ModelAssetNode/en.html">ModelAssetNode</a></div></details>
+<details><summary>Components</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/Camera/en.html">Camera</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/CameraPostProcessing/en.html">CameraPostProcessing</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/CameraPostProcessing-DepthOfFieldSettings/en.html">CameraPostProcessing::DepthOfFieldSettings</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/CameraViewport/en.html">CameraViewport</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Component/en.html">Component</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentInheritance-Transform/en.html">ComponentInheritance&lt;Transform&gt;</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/GaussianBlur/en.html">GaussianBlur</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Hierarchy/en.html">Hierarchy</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Identity/en.html">Identity</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Light/en.html">Light</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Mesh/en.html">Mesh</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ModelInstance/en.html">ModelInstance</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ModelNode/en.html">ModelNode</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Name/en.html">Name</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PrimitiveObject/en.html">PrimitiveObject</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneQueryBounds/en.html">SceneQueryBounds</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ScriptAttachment/en.html">ScriptAttachment</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ScriptComponents/en.html">ScriptComponents</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ScriptPropertyValue/en.html">ScriptPropertyValue</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Transform/en.html">Transform</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Vignette/en.html">Vignette</a></div></details>
+<details><summary>Serialization and module contracts</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentInheritance/en.html">ComponentInheritance</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentSerializationRegistry/en.html">ComponentSerializationRegistry</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentSerializationRegistry-Descriptor/en.html">ComponentSerializationRegistry::Descriptor</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ProjectMetadata/en.html">ProjectMetadata</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ProjectSerializer/en.html">ProjectSerializer</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneSerializer/en.html">SceneSerializer</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ScriptModuleApi/en.html">ScriptModuleApi</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ScriptRuntimeAccess/en.html">ScriptRuntimeAccess</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SerializedComponent/en.html">SerializedComponent</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/UnresolvedComponents/en.html">UnresolvedComponents</a></div></details>
+<details open><summary>Scenes and entities</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/Entity/en.html">Entity</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/EntityReference/en.html">EntityReference</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Scene/en.html" aria-current="page">Scene</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneEnvironment/en.html">SceneEnvironment</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneManager/en.html">SceneManager</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneQueryHit/en.html">SceneQueryHit</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneQueryOptions/en.html">SceneQueryOptions</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneRay/en.html">SceneRay</a></div></details>
+<details><summary>Gameplay and systems</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/Behavior/en.html">Behavior</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentSystem/en.html">ComponentSystem</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Input/en.html">Input</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/System/en.html">System</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Time/en.html">Time</a></div></details>
+<details><summary>Materials and effects</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/CustomPostProcessEffect/en.html">CustomPostProcessEffect</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Material/en.html">Material</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MaterialBuilder/en.html">MaterialBuilder</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MaterialRenderState/en.html">MaterialRenderState</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PostProcessParameter/en.html">PostProcessParameter</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PostProcessingStack/en.html">PostProcessingStack</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Shader/en.html">Shader</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ShaderParameter/en.html">ShaderParameter</a></div></details>
+<details><summary>Math and identifiers</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/Mat3/en.html">Mat3</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Mat4/en.html">Mat4</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MathFunctions/en.html">MathFunctions</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Quaternion/en.html">Quaternion</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/UUID/en.html">UUID</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Vec2/en.html">Vec2</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Vec3/en.html">Vec3</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Vec4/en.html">Vec4</a></div></details></div></details></div></details>
+<details><summary>Lua</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/en.html">Write a Lua behavior</a>
+<a class="nav-link" href="../../../../0.5.0/lua/basics/en.html">Lua terms and first calls</a>
+<a class="nav-link" href="../../../../0.5.0/lua/api/en.html">Lua API conventions</a>
+<details><summary>Lua API reference</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/en.html">Lua API reference</a>
+<details><summary>Enumerations</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/AntiAliasing/en.html">AntiAliasing</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/AssetState/en.html">AssetState</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/CameraAspectMode/en.html">CameraAspectMode</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/CameraProjection/en.html">CameraProjection</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/DepthOfFieldQuality/en.html">DepthOfFieldQuality</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/InputAxis/en.html">InputAxis</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/KeyCode/en.html">KeyCode</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/LightType/en.html">LightType</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MaterialCulling/en.html">MaterialCulling</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MaterialDepthFunction/en.html">MaterialDepthFunction</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MouseButton/en.html">MouseButton</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/PostProcessParameterType/en.html">PostProcessParameterType</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/PrimitiveShape/en.html">PrimitiveShape</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneEnvironmentMode/en.html">SceneEnvironmentMode</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneQueryShape/en.html">SceneQueryShape</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ShaderParameterType/en.html">ShaderParameterType</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ShaderPreset/en.html">ShaderPreset</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ToneMapping/en.html">ToneMapping</a></div></details>
+<details><summary>Assets and models</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/AssetInfo/en.html">AssetInfo</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/AssetManager/en.html">AssetManager</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ModelAsset/en.html">ModelAsset</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ModelAssetNode/en.html">ModelAssetNode</a></div></details>
+<details><summary>Scenes and entities</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Entity/en.html">Entity</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/EntityReference/en.html">EntityReference</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Scene/en.html">Scene</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneEnvironment/en.html">SceneEnvironment</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneManager/en.html">SceneManager</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneQueryHit/en.html">SceneQueryHit</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneQueryOptions/en.html">SceneQueryOptions</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneRay/en.html">SceneRay</a></div></details>
+<details><summary>Materials and effects</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/CustomPostProcessEffect/en.html">CustomPostProcessEffect</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Material/en.html">Material</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MaterialBuilder/en.html">MaterialBuilder</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MaterialRenderState/en.html">MaterialRenderState</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/PostProcessParameter/en.html">PostProcessParameter</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/PostProcessingStack/en.html">PostProcessingStack</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Shader/en.html">Shader</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ShaderParameter/en.html">ShaderParameter</a></div></details>
+<details><summary>Components</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Camera/en.html">Camera</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/CameraPostProcessing/en.html">CameraPostProcessing</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/CameraViewport/en.html">CameraViewport</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Component/en.html">Component</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/DepthOfFieldSettings/en.html">DepthOfFieldSettings</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/GaussianBlur/en.html">GaussianBlur</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Hierarchy/en.html">Hierarchy</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Identity/en.html">Identity</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Light/en.html">Light</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Mesh/en.html">Mesh</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ModelInstance/en.html">ModelInstance</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ModelNode/en.html">ModelNode</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Name/en.html">Name</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/PrimitiveObject/en.html">PrimitiveObject</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneQueryBounds/en.html">SceneQueryBounds</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ScriptAttachment/en.html">ScriptAttachment</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ScriptComponents/en.html">ScriptComponents</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ScriptPropertyValue/en.html">ScriptPropertyValue</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Transform/en.html">Transform</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Vignette/en.html">Vignette</a></div></details>
+<details><summary>Math and identifiers</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Mat3/en.html">Mat3</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Mat4/en.html">Mat4</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MathFunctions/en.html">MathFunctions</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Quaternion/en.html">Quaternion</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/UUID/en.html">UUID</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Vec2/en.html">Vec2</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Vec3/en.html">Vec3</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Vec4/en.html">Vec4</a></div></details>
+<details><summary>Gameplay and systems</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Behavior/en.html">Behavior</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Input/en.html">Input</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Time/en.html">Time</a></div></details></div></details></div></details>
+<details><summary>Shaders</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/bshader/en.html">Shaders and material assets</a></div></details></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / C++ / C++ API reference / Scenes and entities / Scene</nav>
+      <article class="doc"><h1>Scene</h1>
+<p class="lead">Entities, hierarchy, environment and geometry queries in one scene. The host advances systems; gameplay cannot call the private scene update loop.</p>
+<p><strong>C++ header:</strong> <code>Bazzalt/Scene.h</code>.</p>
+<p>Read signatures together with the behavior notes below. The <a href="../en.html">reference introduction</a> explains arguments, return values, value copies, and errors.</p>
+<pre><code>#include &lt;Bazzalt/Scene.h&gt;</code></pre>
+<pre><code>class Scene final</code></pre>
+<h2 id="example">Example</h2><p>Gameplay snippets run inside a behavior callback or helper. Variables such as scene, camera, savedText and assetUUID are existing values, not automatically declared global variables.</p><pre><code>auto* scene = Bazzalt::SceneManager::GetActiveScene();
+if (scene) {
+    auto cube = scene-&gt;CreateEntity(&quot;Cube&quot;);
+    cube.AddComponent&lt;Bazzalt::PrimitiveObject&gt;();
+}</code></pre>
+<h2 id="Scene">Scene</h2>
+<pre><code>Scene()
+Scene(const Scene &amp;) = delete
+Scene(Scene &amp;&amp;) = delete</code></pre>
+<p>Constructs a value using the shown defaults/arguments, or destroys it when its lifetime ends. A value/handle is not ownership of the active host.</p>
+<p>This construction/copy/assignment is deleted: the host service is not constructible or this object is non-copyable.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const Scene &amp;</code></td><td>Operand/value of the type shown in the declaration; see this method&#x27;s behavior and coordinate-space description.</td></tr>
+</tbody></table>
+<h2 id="destructor-Scene">~Scene</h2>
+<pre><code>~ Scene()</code></pre>
+<p>Constructs a value using the shown defaults/arguments, or destroys it when its lifetime ends. A value/handle is not ownership of the active host.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="operator-assign">operator=</h2>
+<pre><code>Scene &amp; operator =(const Scene &amp;) = delete
+Scene &amp; operator =(Scene &amp;&amp;) = delete</code></pre>
+<p>Assignment/copy policy is given by this declaration; Scene assignment is deleted because scene-owned storage cannot be copied.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const Scene &amp;</code></td><td>Operand/value of the type shown in the declaration; see this method&#x27;s behavior and coordinate-space description.</td></tr>
+</tbody></table>
+<h2 id="CreateEntity">CreateEntity</h2>
+<pre><code>Entity CreateEntity(std::string name ={})
+Entity CreateEntity(UUID uuid, std::string name ={})</code></pre>
+<p>Creates an entity with required default components and root parenting. The explicit UUID overload requires an unused nonzero ID; the name overload generates one.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>std::string name ={}</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+<tr><td><code>UUID uuid</code></td><td>Explicit stable UUID; keep it unique in the target scene.</td></tr>
+</tbody></table>
+<h2 id="DestroyEntity">DestroyEntity</h2>
+<pre><code>void DestroyEntity(Entity entity)</code></pre>
+<p>Destroys the specified scene entity and descendants. Existing handles/references to their storage must no longer be used. The permanent root cannot be destroyed.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Entity entity</code></td><td>Entity in the relevant live scene; must not outlive that scene.</td></tr>
+</tbody></table>
+<h2 id="Clear">Clear</h2>
+<pre><code>void Clear()</code></pre>
+<p>Destroys ordinary scene entities while preserving the permanent root; does not clear the project asset database.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="FindEntityByName">FindEntityByName</h2>
+<pre><code>Entity FindEntityByName(const std::string &amp; name)</code></pre>
+<p>Returns the first entity with the display name, or an invalid handle when absent. Names are not guaranteed unique.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+</tbody></table>
+<h2 id="GetEntity">GetEntity</h2>
+<pre><code>Entity GetEntity(Entity::Id id)
+Entity GetEntity(UUID uuid)</code></pre>
+<p>Resolves a UUID or transient registry ID in this scene. Returns an invalid Entity when it cannot resolve; registry IDs are not persistent asset IDs.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Entity::Id id</code></td><td>Stable UUID or transient integer ID, according to the overload.</td></tr>
+<tr><td><code>UUID uuid</code></td><td>Explicit stable UUID; keep it unique in the target scene.</td></tr>
+</tbody></table>
+<h2 id="GetRootEntity">GetRootEntity</h2>
+<pre><code>Entity GetRootEntity()</code></pre>
+<p>Returns the permanent root whose UUID is zero. It is not a camera or ordinary deletable object.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="GetUUID">GetUUID</h2>
+<pre><code>UUID GetUUID() const</code></pre>
+<p>Returns the stable UUID identifying this value/entity/scene. It is not a filename or display name.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="GetEnvironment">GetEnvironment</h2>
+<pre><code>const SceneEnvironment &amp; GetEnvironment() const</code></pre>
+<p>Returns current scene environment data. In C++ it is a const reference; Lua receives a copy to commit with SetEnvironment.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="SetEnvironment">SetEnvironment</h2>
+<pre><code>bool SetEnvironment(const SceneEnvironment &amp; value)</code></pre>
+<p>Validates and commits a complete environment value. Returns false if its mode, intensity, rotation or clear color is invalid.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const SceneEnvironment &amp; value</code></td><td>Value whose type must match the declaration. Numeric values must be finite where validated.</td></tr>
+</tbody></table>
+<h2 id="GetEntityCount">GetEntityCount</h2>
+<pre><code>std::size_t GetEntityCount() const</code></pre>
+<p>Returns the number of live registry entities, including the permanent root; this is not draw-call count.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="SetParent">SetParent</h2>
+<pre><code>bool SetParent(Entity child, Entity parent, bool worldPositionStays = true)</code></pre>
+<p>Reparents the child/entity. worldPositionStays defaults true; false preserves local values. Returns false for invalid/cross-scene/cyclic links or failed world preservation.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Entity child</code></td><td>Entity whose parent relationship is being changed.</td></tr>
+<tr><td><code>Entity parent</code></td><td>Target parent entity in the same scene.</td></tr>
+<tr><td><code>bool worldPositionStays = true</code></td><td>True preserves world placement; false preserves local values. Default true.</td></tr>
+</tbody></table>
+<h2 id="RemoveParent">RemoveParent</h2>
+<pre><code>bool RemoveParent(Entity child, bool worldPositionStays = true)</code></pre>
+<p>Reparents to the scene root, normally preserving world placement. Returns whether the operation succeeds.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Entity child</code></td><td>Entity whose parent relationship is being changed.</td></tr>
+<tr><td><code>bool worldPositionStays = true</code></td><td>True preserves world placement; false preserves local values. Default true.</td></tr>
+</tbody></table>
+<h2 id="GetParent">GetParent</h2>
+<pre><code>Entity GetParent(Entity child)</code></pre>
+<p>Returns the parent handle (root where applicable), or an invalid handle when there is no resolvable parent.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Entity child</code></td><td>Entity whose parent relationship is being changed.</td></tr>
+</tbody></table>
+<h2 id="GetChildren">GetChildren</h2>
+<pre><code>std::vector&lt;Entity&gt; GetChildren(Entity parent)</code></pre>
+<p>Returns direct children, not all descendants. Returned handles do not own those entities.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Entity parent</code></td><td>Target parent entity in the same scene.</td></tr>
+</tbody></table>
+<h2 id="IsAncestor">IsAncestor</h2>
+<pre><code>bool IsAncestor(Entity ancestor, Entity descendant) const</code></pre>
+<p>Returns whether the first entity is an ancestor of the descendant in this scene; an entity is not its own ancestor.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Entity ancestor</code></td><td>Operand/value of the type shown in the declaration; see this method&#x27;s behavior and coordinate-space description.</td></tr>
+<tr><td><code>Entity descendant</code></td><td>Operand/value of the type shown in the declaration; see this method&#x27;s behavior and coordinate-space description.</td></tr>
+</tbody></table>
+<h2 id="GetWorldMatrix">GetWorldMatrix</h2>
+<pre><code>Mat4 GetWorldMatrix(Entity entity) const</code></pre>
+<p>Returns the composed parent-to-child world transformation matrix, not just the local Transform matrix.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Entity entity</code></td><td>Entity in the relevant live scene; must not outlive that scene.</td></tr>
+</tbody></table>
+<h2 id="GetWorldTransform">GetWorldTransform</h2>
+<pre><code>Transform GetWorldTransform(Entity entity) const</code></pre>
+<p>Returns a world-space Transform value. Edit the returned copy and call SetWorldTransform to commit it.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Entity entity</code></td><td>Entity in the relevant live scene; must not outlive that scene.</td></tr>
+</tbody></table>
+<h2 id="SetWorldTransform">SetWorldTransform</h2>
+<pre><code>bool SetWorldTransform(Entity entity, const Transform &amp; transform)</code></pre>
+<p>Commits world placement by converting it into local Transform data under the parent. Returns false for a rejected/non-decomposable placement.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Entity entity</code></td><td>Entity in the relevant live scene; must not outlive that scene.</td></tr>
+<tr><td><code>const Transform &amp; transform</code></td><td>Complete Transform value in the coordinate space named by the method.</td></tr>
+</tbody></table>
+<h2 id="InstantiateModel">InstantiateModel</h2>
+<pre><code>Entity InstantiateModel(const ModelAsset &amp; model, Entity parent ={}, std::string name ={})
+Entity InstantiateModel(UUID modelAsset, Entity parent ={}, std::string name ={})</code></pre>
+<p>Creates a parent and child entity tree from ModelAsset or its UUID, preserving node transforms and mesh references. Returns the instance parent; this does not create new source assets.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const ModelAsset &amp; model</code></td><td>Imported ModelAsset description.</td></tr>
+<tr><td><code>Entity parent ={}</code></td><td>Target parent entity in the same scene.</td></tr>
+<tr><td><code>std::string name ={}</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+<tr><td><code>UUID modelAsset</code></td><td>Model asset UUID resolved through AssetManager.</td></tr>
+</tbody></table>
+<h2 id="TryGetInheritedComponent">TryGetInheritedComponent</h2>
+<pre><code>template&lt;typename ComponentType&gt; const ComponentType * TryGetInheritedComponent(Entity entity) const</code></pre>
+<p>Returns a local or opted-in nearest-ancestor component, or absence. Transform composition is handled by world-transform APIs, not by returning an ancestor Transform as the child.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Entity entity</code></td><td>Entity in the relevant live scene; must not outlive that scene.</td></tr>
+</tbody></table>
+<h2 id="ScreenPointToRay">ScreenPointToRay</h2>
+<pre><code>SceneRay ScreenPointToRay(Entity camera, Vec2 screenPoint, Vec2 presentationSize) const</code></pre>
+<p>Converts a top-left-origin presentation pixel coordinate through the specified game camera and its viewport to a world ray. presentationSize is the full surface pixel size.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Entity camera</code></td><td>Entity with an eligible Camera component in this scene.</td></tr>
+<tr><td><code>Vec2 screenPoint</code></td><td>Top-left-origin pixel coordinate in the full presentation surface.</td></tr>
+<tr><td><code>Vec2 presentationSize</code></td><td>Full presentation width/height in pixels, not normalized coordinates.</td></tr>
+</tbody></table>
+<h2 id="Pick">Pick</h2>
+<pre><code>SceneQueryHit Pick(Entity camera, Vec2 screenPoint, Vec2 presentationSize, const SceneQueryOptions &amp; options ={})</code></pre>
+<p>Returns the nearest matching hit for a camera pixel point. Empty Target means no geometry hit; options apply layers, distance, enabled state and Filter.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Entity camera</code></td><td>Entity with an eligible Camera component in this scene.</td></tr>
+<tr><td><code>Vec2 screenPoint</code></td><td>Top-left-origin pixel coordinate in the full presentation surface.</td></tr>
+<tr><td><code>Vec2 presentationSize</code></td><td>Full presentation width/height in pixels, not normalized coordinates.</td></tr>
+<tr><td><code>const SceneQueryOptions &amp; options ={}</code></td><td>Optional SceneQueryOptions controlling layer mask, distance, disabled state and predicate.</td></tr>
+</tbody></table>
+<h2 id="PickAll">PickAll</h2>
+<pre><code>std::vector&lt;SceneQueryHit&gt; PickAll(Entity camera, Vec2 screenPoint, Vec2 presentationSize, const SceneQueryOptions &amp; options ={})</code></pre>
+<p>Returns matching camera-pixel hits ordered by distance. This is not a physics contact list.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Entity camera</code></td><td>Entity with an eligible Camera component in this scene.</td></tr>
+<tr><td><code>Vec2 screenPoint</code></td><td>Top-left-origin pixel coordinate in the full presentation surface.</td></tr>
+<tr><td><code>Vec2 presentationSize</code></td><td>Full presentation width/height in pixels, not normalized coordinates.</td></tr>
+<tr><td><code>const SceneQueryOptions &amp; options ={}</code></td><td>Optional SceneQueryOptions controlling layer mask, distance, disabled state and predicate.</td></tr>
+</tbody></table>
+<h2 id="Raycast">Raycast</h2>
+<pre><code>SceneQueryHit Raycast(const SceneRay &amp; ray, const SceneQueryOptions &amp; options ={})</code></pre>
+<p>Returns the closest matching world-ray geometry hit. Empty Target means no hit. The ray direction must be nonzero and finite.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const SceneRay &amp; ray</code></td><td>World origin/direction describing a nonzero ray.</td></tr>
+<tr><td><code>const SceneQueryOptions &amp; options ={}</code></td><td>Optional SceneQueryOptions controlling layer mask, distance, disabled state and predicate.</td></tr>
+</tbody></table>
+<h2 id="RaycastAll">RaycastAll</h2>
+<pre><code>std::vector&lt;SceneQueryHit&gt; RaycastAll(const SceneRay &amp; ray, const SceneQueryOptions &amp; options ={})</code></pre>
+<p>Returns matching world-ray geometry hits in distance order. MaxDistance and Filter constrain the results.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const SceneRay &amp; ray</code></td><td>World origin/direction describing a nonzero ray.</td></tr>
+<tr><td><code>const SceneQueryOptions &amp; options ={}</code></td><td>Optional SceneQueryOptions controlling layer mask, distance, disabled state and predicate.</td></tr>
+</tbody></table>
+<h2 id="OverlapSphere">OverlapSphere</h2>
+<pre><code>std::vector&lt;Entity&gt; OverlapSphere(Vec3 center, float radius, const SceneQueryOptions &amp; options ={})</code></pre>
+<p>Returns matching entities overlapping a world-space sphere; radius is nonnegative world distance. Uses scene query geometry, not physics contacts.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Vec3 center</code></td><td>World-space center of an overlap query.</td></tr>
+<tr><td><code>float radius</code></td><td>Sphere radius in world distance units.</td></tr>
+<tr><td><code>const SceneQueryOptions &amp; options ={}</code></td><td>Optional SceneQueryOptions controlling layer mask, distance, disabled state and predicate.</td></tr>
+</tbody></table>
+<h2 id="OverlapBox">OverlapBox</h2>
+<pre><code>std::vector&lt;Entity&gt; OverlapBox(Vec3 center, Vec3 extents, const SceneQueryOptions &amp; options ={})</code></pre>
+<p>Returns matching entities overlapping a world-axis-aligned box. Extents are half-size, not full dimensions.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Vec3 center</code></td><td>World-space center of an overlap query.</td></tr>
+<tr><td><code>Vec3 extents</code></td><td>Box half-size (not full size).</td></tr>
+<tr><td><code>const SceneQueryOptions &amp; options ={}</code></td><td>Optional SceneQueryOptions controlling layer mask, distance, disabled state and predicate.</td></tr>
+</tbody></table>
+<h2 id="AddSystem">AddSystem</h2>
+<pre><code>template&lt;typename SystemType, typename ... Args&gt; SystemType &amp; AddSystem(Args &amp;&amp; ... args)</code></pre>
+<p>Creates/registers a system and calls OnCreate. C++ returns an existing same-type system; Lua requires a unique name and table. Do not add during system updates.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Args &amp;&amp; ... args</code></td><td>Constructor arguments forwarded to the component/system type.</td></tr>
+</tbody></table>
+<h2 id="HasSystem">HasSystem</h2>
+<pre><code>template&lt;typename SystemType&gt; bool HasSystem() const</code></pre>
+<p>Returns whether the specified system type/name is registered, regardless of its enable state.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="GetSystem">GetSystem</h2>
+<pre><code>template&lt;typename SystemType&gt; SystemType &amp; GetSystem()
+template&lt;typename SystemType&gt; const SystemType &amp; GetSystem() const</code></pre>
+<p>Returns a registered system; lookup of an absent type/name fails instead of silently creating it.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="RemoveSystem">RemoveSystem</h2>
+<pre><code>template&lt;typename SystemType&gt; bool RemoveSystem()</code></pre>
+<p>Removes the registered system and calls OnDestroy. Returns false if absent; modification during system updates is rejected.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="GetRegistry">GetRegistry</h2>
+<pre><code>entt::registry &amp; GetRegistry()
+const entt::registry &amp; GetRegistry() const</code></pre>
+<p>Advanced C++ access to EnTT storage. Prefer entity/scene operations for hierarchy invariants; never rewrite Identity/Hierarchy pools as ordinary user data.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../../0.5.0/native/reference/EntityReference/en.html"><small>Previous</small>EntityReference</a>
+<a class="next" href="../../../../0.5.0/native/reference/SceneEnvironment/en.html"><small>Next</small>SceneEnvironment</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#Scene">Scene</a><a class="toc-link" href="#destructor-Scene">~Scene</a><a class="toc-link" href="#operator-assign">operator=</a><a class="toc-link" href="#CreateEntity">CreateEntity</a><a class="toc-link" href="#DestroyEntity">DestroyEntity</a><a class="toc-link" href="#Clear">Clear</a><a class="toc-link" href="#FindEntityByName">FindEntityByName</a><a class="toc-link" href="#GetEntity">GetEntity</a><a class="toc-link" href="#GetRootEntity">GetRootEntity</a><a class="toc-link" href="#GetUUID">GetUUID</a><a class="toc-link" href="#GetEnvironment">GetEnvironment</a><a class="toc-link" href="#SetEnvironment">SetEnvironment</a><a class="toc-link" href="#GetEntityCount">GetEntityCount</a><a class="toc-link" href="#SetParent">SetParent</a><a class="toc-link" href="#RemoveParent">RemoveParent</a><a class="toc-link" href="#GetParent">GetParent</a><a class="toc-link" href="#GetChildren">GetChildren</a><a class="toc-link" href="#IsAncestor">IsAncestor</a><a class="toc-link" href="#GetWorldMatrix">GetWorldMatrix</a><a class="toc-link" href="#GetWorldTransform">GetWorldTransform</a><a class="toc-link" href="#SetWorldTransform">SetWorldTransform</a><a class="toc-link" href="#InstantiateModel">InstantiateModel</a><a class="toc-link" href="#TryGetInheritedComponent">TryGetInheritedComponent</a><a class="toc-link" href="#ScreenPointToRay">ScreenPointToRay</a><a class="toc-link" href="#Pick">Pick</a><a class="toc-link" href="#PickAll">PickAll</a><a class="toc-link" href="#Raycast">Raycast</a><a class="toc-link" href="#RaycastAll">RaycastAll</a><a class="toc-link" href="#OverlapSphere">OverlapSphere</a><a class="toc-link" href="#OverlapBox">OverlapBox</a><a class="toc-link" href="#AddSystem">AddSystem</a><a class="toc-link" href="#HasSystem">HasSystem</a><a class="toc-link" href="#GetSystem">GetSystem</a><a class="toc-link" href="#RemoveSystem">RemoveSystem</a><a class="toc-link" href="#GetRegistry">GetRegistry</a></nav></aside>
+  </div>
+  <footer>BAZZALT 0.5.0 documentation · English</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

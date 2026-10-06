@@ -1,0 +1,23 @@
+<h1>Assets and project files</h1>
+<p class="lead">An asset is a file used by the project: a model, image, scene, script, shader, or material. The Asset Browser shows the project's asset directory, not every file on your computer.</p>
+<h2 id="project-files">Which files matter</h2>
+<table><thead><tr><th>File or folder</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>.bproject</code></td><td>Project descriptor and project metadata.</td></tr>
+<tr><td><code>Assets/</code></td><td>The usual source asset directory. A project can configure another asset directory.</td></tr>
+<tr><td><code>.bscene</code></td><td>Scene data. The contents use YAML despite the engine-specific extension.</td></tr>
+<tr><td><code>.meta</code></td><td>A sidecar beside an asset containing its stable UUID and import metadata.</td></tr>
+<tr><td><code>.bazzalt/</code></td><td>Project-local generated/import and script state. It is not a replacement for the original assets.</td></tr>
+</tbody></table>
+<p>A <strong>UUID</strong> is a long identifier used to refer to an asset independently of its filename. Renaming a model should not break a material or scene reference to it. Keep an asset with its matching <code>.meta</code> file when moving project files or using version control. Deleting the metadata can give the asset a new identity on reimport.</p>
+<h2 id="importing">Importing and the cache</h2>
+<p>Add supported source files to the project asset directory. The importer converts them into data the runtime can load and records the result in a <strong>cache</strong>. For example, Lua source becomes Lua bytecode, and shader source becomes a compiled renderer package. The cache is generated data; keep the source files as the editable originals.</p>
+<p>An import error does not mean that the file vanished. Check Console for the asset's path and error. Invalid Lua syntax, an unavailable shader compiler, or a failed environment-map conversion must be fixed before that asset can be used normally.</p>
+<h2 id="assigning-assets">Assign an asset to a field</h2>
+<p>Drag an Asset Browser item into an Inspector asset field, or use that field's picker to choose a registered project asset. Pickers filter by the field's expected type. A texture is not a valid model, and a shader is not a material asset.</p>
+<p>Fields show asset names rather than raw UUIDs. Clearing a field removes its reference; it does not delete the source file.</p>
+<h2 id="models">Models and their parts</h2>
+<p>A glTF model is one asset, but placing it in a scene creates a parent object and child objects matching the model's node hierarchy. A node may represent a mesh part or a grouping transform. This is why a model can have many Hierarchy entries even though you imported one file.</p>
+<p>Children can have their own components. Adding an ordinary component to a parent does not add it to every child. Transforms compose through the hierarchy, so moving a parent moves its descendants. Use high-level selection in Scene view when you want to manipulate the model as one object.</p>
+<h2 id="opening-files">Open source files</h2>
+<p>Double-click a scene to load it into the Hierarchy. C++ files support Open and Open with: Open remembers a selected application, while Open with asks again. Configure or reset those choices in Preferences → File Associations.</p>
+<p>Asset names normally omit their extensions in the browser. Renaming shows the extension so you can see the full filename. Do not change a file's extension simply to make it appear as another asset type; the contents must match that type.</p>

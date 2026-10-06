@@ -1,0 +1,15 @@
+<h1>Console</h1>
+<p class="lead">Console lists log messages as individual entries. Use it to read script errors and import failures rather than guessing from a missing object.</p>
+<h2 id="read-entry">Read one entry</h2>
+<p>Each entry has a message, optional level icon, and a source at its end. The source identifies who reported it, such as Editor or Compiler. Info, warning, and error are different levels; an iconless message can also be valid.</p>
+<p>Click a row to select it. Rows support multi-selection and per-item context menus. Copy the actual error text/path when reporting a problem; an isolated screenshot of a red icon does not say which asset or compiler failed.</p>
+<h2 id="filters">Filters and searching the cause</h2>
+<p>Filters is a multi-select dropdown rather than a row of independent filter buttons. Choose the levels you need, and use source filtering to limit messages from a subsystem. Filtering hides entries; it does not fix the error that produced them.</p>
+<p>If the panel looks empty while you expect a failure, clear the filters before concluding no message exists. A script build may produce several related lines; read the earliest relevant error, not only the final “failed” summary.</p>
+<h2 id="clear-and-remove">Clear or remove messages</h2>
+<p>The controls include clearing messages, clearing the filtered set, and removing selected entries. Right-click a row for its supported actions. These operations remove console history, not source files, imports, or scene objects.</p>
+<p>If you remove a recurring error entry, the underlying operation can report it again. Resolve the source/import/build problem instead of repeatedly clearing the panel.</p>
+<h2 id="common-errors">Common situations</h2>
+<ul><li>C++ Play fails: read Compiler messages for the source line and toolchain error.</li><li>Lua does not run: read import/runtime errors for invalid syntax, wrong component names, or script limits.</li><li>Model/material is invisible: check asset import readiness and shader/material references as well as camera placement.</li><li>Environment conversion fails: keep the reported source path and converter error; changing intensity does not repair an unavailable cache.</li></ul>
+<h2 id="next-step">After fixing a source error</h2>
+<p>Save the source file, allow its import/compile to complete, and try the action again. Do not assume an old cached result replaced a failed import. See the <a href="../../../lua/en.html">Lua behavior guide</a> or <a href="../../../native/behaviors/en.html">C++ behavior guide</a> for minimal working examples.</p>

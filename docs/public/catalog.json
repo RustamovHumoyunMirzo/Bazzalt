@@ -1,0 +1,43 @@
+{
+  "defaultVersion": "0.5.0",
+  "languages": {"en": "English"},
+  "versions": [{"id": "0.5.0", "label": "0.5.0", "groups": [
+    {"title": "Editor manual", "id": "manual", "pages": [
+      {"id": "manual", "title": "Start here"},
+      {"id": "manual/first-launch", "title": "Open your first project"},
+      {"id": "manual/workspace", "title": "Find your way around", "children": [
+        {"title": "Panel guides", "children": [
+          {"id": "manual/panels/hierarchy", "title": "Hierarchy"},
+          {"id": "manual/panels/inspector", "title": "Inspector"},
+          {"id": "manual/panels/scene", "title": "Scene view"},
+          {"id": "manual/panels/game", "title": "Game output"},
+          {"id": "manual/panels/assets", "title": "Asset Browser"},
+          {"id": "manual/panels/console", "title": "Console"}
+        ]},
+        {"id": "manual/menus", "title": "Menus and play controls"},
+        {"id": "manual/settings", "title": "Preferences and project settings"}
+      ]},
+      {"id": "manual/first-scene", "title": "Your first scene"},
+      {"id": "manual/assets", "title": "Assets and project files"},
+      {"id": "manual/scenes", "title": "Multiple scenes and saving"},
+      {"id": "manual/glossary", "title": "Terms used in these guides"}
+    ]},
+    {"title": "C++", "id": "native", "pages": [
+      {"id": "native", "title": "C++ gameplay API"},
+      {"id": "native/basics", "title": "Read your first C++ example"},
+      {"id": "native/behaviors", "title": "Write a C++ behavior"},
+      {"id": "native/entities", "title": "Entities and components"},
+      {"id": "native/materials", "title": "Runtime materials"},
+      {"id": "native/reference", "title": "C++ API reference", "reference": "cpp"}
+    ]},
+    {"title": "Lua", "id": "lua", "pages": [
+      {"id": "lua", "title": "Write a Lua behavior"},
+      {"id": "lua/basics", "title": "Lua terms and first calls"},
+      {"id": "lua/api", "title": "Lua API conventions"},
+      {"id": "lua/reference", "title": "Lua API reference", "reference": "lua"}
+    ]},
+    {"title": "Shaders", "id": "bshader", "pages": [
+      {"id": "bshader", "title": "Shaders and material assets"}
+    ]}
+  ]}]
+}

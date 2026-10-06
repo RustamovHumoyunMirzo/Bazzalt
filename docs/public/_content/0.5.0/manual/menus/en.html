@@ -1,0 +1,18 @@
+<h1>Menus and play controls</h1>
+<p class="lead">The menubar operates on the editor/project. The play controls start and inspect runtime behavior; they are not scene-saving commands.</p>
+<h2 id="file">File</h2>
+<p>Open/load scene actions choose a scene asset, not another project. Save writes authoring scene changes; Save As chooses another scene file path. Project Settings edits project metadata. Exit closes the editor and can ask how to handle unsaved changes.</p>
+<p>The Hub manages choosing/creating projects. A scene .bscene and project .bproject are different files.</p>
+<h2 id="edit">Edit</h2>
+<p>Undo and Redo navigate authoring history. Other edit commands act on the current appropriate selection or editable field. Preferences opens editor-wide settings. A disabled action usually means it has no valid current target; selecting text in a field is not the same as selecting scene objects.</p>
+<h2 id="object">Object</h2>
+<p>Object contains selection and placement tools, including manipulation modes and snapping/alignment helpers. A snapping operation changes object placement; Frame/Focus view commands change the editor camera instead. Check the selection and pivot/local modes before a group operation.</p>
+<h2 id="view">View</h2>
+<p>Maximize Viewport enlarges the active viewport for focused work. Camera presets choose editor viewing directions. Focus Selected (F) frames chosen objects; Frame All (A) frames the scene, except movement keys are reserved while flying with right mouse.</p>
+<p>Gizmos and overlays toggle editor handles, grid, icons, and statistics. Shading modes are diagnostic: Lit, Unlit, Wireframe, Lighting Only, and Overdraw help examine geometry/lighting/rendering. They are not automatically shader changes saved onto every material. A disabled NavMesh item does not indicate an implemented navigation system.</p>
+<h2 id="window-and-help">Window and Help</h2>
+<p>Window shows/hides panels and resets the workspace. Checkmarks indicate open/existing panels; a hidden tab is not a deleted scene. The current Help → About entry is disabled; do not treat it as a working information dialog.</p>
+<h2 id="play-controls">Play, Stop, Pause, and Step</h2>
+<p>Play enters runtime execution, compiling enabled attached C++ behavior modules as needed. Lua source has already been imported into bytecode; Lua-only Play does not compile a native module. Read Console if entering Play fails.</p>
+<p>Stop leaves runtime execution and restores authoring state. Pause/Step are controls for inspecting execution rather than changing the application's private loop from scripts. If a control is disabled, it is not applicable to the current play state.</p>
+<p>Click Game output when testing player Input. Scene view's flying controls navigate the editor camera instead. Save authoring changes separately with File's save commands.</p>

@@ -1,0 +1,17 @@
+<h1>Preferences and project settings</h1>
+<p class="lead">Preferences affect your editor installation/user experience. Project Settings describe the game project. Scene environment data belongs to the scene instead.</p>
+<h2 id="preferences">Open Preferences</h2>
+<p>Choose Edit → Preferences. The child settings window blocks ordinary editor interaction while open. Sections appear on the left; their fields appear on the right. Select a section before editing its fields.</p>
+<p>Preferences include general appearance/behavior, scene navigation and overlays, history limits, build tools, rendering backend selection, and file associations. Settings are stored in the platform's application-data location, not as gameplay components.</p>
+<h2 id="scene-tools">Scene tool preferences</h2>
+<p>Use Scene preferences to adjust navigation speed, grid behavior, orientation visibility, and remembered tool choices. The Scene toolbar also remembers authoring modes such as local/global and pivot/center. A setting affecting the editor camera does not change a game Camera component.</p>
+<p>If imported model groups expand too much, change the preference for newly added hierarchy objects. Existing manual expansions are separate choices.</p>
+<h2 id="history">Undo history</h2>
+<p>History limits bound undo/redo count and memory use. A smaller limit can discard old steps sooner; it is not a substitute for saving scenes. Undo changes authoring state, not your entire source-control history.</p>
+<h2 id="build-tools">Build tools and file associations</h2>
+<p>C++ behaviors need a compatible native compiler/SDK configuration. Build Tools lets you override supported tool/Script SDK paths. On Windows, Clang alone is not the complete Microsoft SDK/runtime environment. Read Console if compiling Play fails.</p>
+<p>File Associations controls the applications remembered for supported source formats. Open uses a saved choice; Open with asks again. Reset an association when the external source editor path is no longer valid.</p>
+<h2 id="project-settings">Project Settings</h2>
+<p>Choose File → Project Settings for project information. This is not the same as selecting a scene header to change an environment. The Hub still owns creating/choosing projects; Project Settings does not let gameplay scripts take over project management.</p>
+<h2 id="restart">Changes requiring restart</h2>
+<p>Critical changes, such as rendering backend or project name, may prompt a restart. Restart now applies them after reopening; restart later leaves the current session running until you reopen. Save any scene work before restarting. The prompt is about the setting's application, not a promise that every unsaved scene was automatically saved.</p>

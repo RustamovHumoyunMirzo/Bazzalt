@@ -1,0 +1,42 @@
+<h1>Write a C++ behavior</h1>
+<p class="lead">Attach this behavior to a cube to move it with WASD. The editor supplies the entity and calls the behavior while the game is playing.</p>
+<h2 id="create-the-file">Create the file</h2>
+<p>If headers, namespaces, references, templates, or callbacks are new, read <a href="../basics/en.html">Read your first C++ example</a> before continuing. You still do not need to write an engine loop.</p>
+<p>Create a C++ component in the Asset Browser, or add <code>Walk.cpp</code> beneath your project's asset directory, for example <code>Assets/Scripts/Walk.cpp</code>. Replace its contents with this code:</p>
+<pre><code class="language-cpp">#include &lt;Bazzalt/Script.h&gt;
+#include &lt;Bazzalt/Input.h&gt;
+#include &lt;Bazzalt/Math.h&gt;
+
+COMPONENT(Walk) {
+public:
+    PROPERTY(float, Speed, 4.0f)
+
+    void OnUpdate(float deltaTime) override {
+        using namespace Bazzalt;
+        Vec3 direction{Input::GetAxis(InputAxis::Horizontal), 0.0f,
+                       -Input::GetAxis(InputAxis::Vertical)};
+        if (direction.LengthSquared() == 0.0f) return;
+
+        auto entity = GetEntity();
+        auto transform = entity.GetWorldTransform();
+        transform.Position += direction.Normalized() * Speed * deltaTime;
+        entity.SetWorldTransform(transform);
+    }
+};</code></pre>
+<h2 id="understand-the-code">What the code does</h2>
+<p><code>COMPONENT(Walk)</code> declares an attachable behavior named Walk. <code>PROPERTY(float, Speed, 4.0f)</code> exposes a floating-point value in the Inspector. The default is 4 world units per second. The Inspector can supply another value before OnCreate runs.</p>
+<p>OnUpdate receives the frame's scaled time step in seconds. Multiplying movement by deltaTime keeps speed from depending directly on frame rate. Normalizing the direction prevents diagonal movement from being faster. The zero-length test avoids normalizing a vector that has no direction.</p>
+<p>GetWorldTransform returns a value, not a live component reference. After changing that value, SetWorldTransform commits it to the entity, accounting for its parent. The negative vertical axis makes W move along world negative Z. This is world-axis movement, not camera-relative movement or a physics controller.</p>
+<h2 id="attach-and-play">Attach and run</h2>
+<ol>
+<li>Create a cube and make sure an enabled game camera can see it.</li>
+<li>Select the cube and choose Walk under Add Component's script entries, or drag the script onto the entity.</li>
+<li>Set Speed in the Inspector if needed.</li>
+<li>Press Play. If compilation fails, read the Compiler messages in Console.</li>
+<li>Click Game output to give gameplay input focus, then press WASD.</li>
+</ol>
+<p>Scene view's right-click flying controls move the editor camera, not this cube. Input is inactive when gameplay does not have focus. Typing W into an Inspector field should not move the object.</p>
+<h2 id="lifecycle">Other lifecycle callbacks</h2>
+<p>Use <code>OnCreate()</code> to acquire runtime state and <code>OnDestroy()</code> to release resources you own, such as a transient material. <code>OnFixedUpdate(float fixedDeltaTime)</code> is available for fixed-step work. Do not initialize the engine, poll the operating system, or present frames from these methods.</p>
+<h2 id="names-and-properties">Names and properties</h2>
+<p>Each source declares one COMPONENT, and its type name must be unique across C++ and Lua behaviors in the project. Two files both declaring COMPONENT(Walk) are a conflict even if their filenames differ. Property names must also be unique within the behavior. Resolve duplicate declarations instead of attaching them and expecting their fields to merge.</p>

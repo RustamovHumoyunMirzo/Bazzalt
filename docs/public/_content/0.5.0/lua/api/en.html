@@ -1,0 +1,33 @@
+<h1>Lua API conventions</h1>
+<p class="lead">The Bazzalt table exposes gameplay types and services. Constructors, static functions, and object methods use different Lua syntax.</p>
+<h2 id="dots-and-colons">Dots and colons</h2>
+<p>For an operation-by-operation lookup, use the <a href="../reference/en.html">Lua API reference</a>. It lists only registered Lua methods and fields, including wrapper-only operations and return-value differences.</p>
+<pre><code class="language-lua">local B = Bazzalt
+local direction = B.Vec3.new(1, 0, 0)       -- Constructor: dot.
+local pressed = B.Input.GetKey(B.KeyCode.W) -- Static service: dot.
+local length = direction:Length()          -- Object method: colon.
+local transform = self.Entity:GetWorldTransform()</code></pre>
+<p>A colon passes the object as the first method argument. Forgetting it on an entity method is not equivalent to calling a static function. Names preserve the C++ API's PascalCase spelling.</p>
+<h2 id="components-are-copies">Component values are copies</h2>
+<pre><code class="language-lua">if self.Entity:HasComponent("Light") then
+    local light = self.Entity:GetComponent("Light")
+    light.Intensity = 1200
+    self.Entity:SetComponent("Light", light)
+    self.Entity:SetComponentEnabled("Light", true)
+end</code></pre>
+<p>GetComponent returns a snapshot. Editing that table/userdata alone does not change scene storage: SetComponent commits it. This avoids retaining unsafe references after an entity is destroyed or a component is removed. Use the exact built-in type name, such as Camera, Light, Mesh, or PrimitiveObject.</p>
+<p>AddComponent, HasComponent, TryGetComponent, RemoveComponent, IsComponentEnabled, and SetComponentEnabled also accept type-name strings. Required default components are not ordinary removable/disableable components. A custom C++ struct does not appear in Lua automatically; an engine extension needs bindings.</p>
+<h2 id="transforms">World transforms</h2>
+<pre><code class="language-lua">local transform = self.Entity:GetWorldTransform()
+transform.Position = transform.Position + B.Vec3.new(0, 1, 0)
+self.Entity:SetWorldTransform(transform)</code></pre>
+<p>GetWorldTransform also returns a value. SetWorldTransform handles the conversion to the local transform under the parent. Use this pair when you mean a change in world coordinates. Editing the Transform component directly means local coordinates.</p>
+<h2 id="collections-and-indices">Collections and indices</h2>
+<p>Returned lists use normal one-based Lua tables. Explicit engine indices, such as matrix row/column coordinates or material slots, remain zero-based. These are different concepts: the first element of a returned Lua list is list[1], while the first material slot is slot 0.</p>
+<p>C++ APIs with output arguments may return multiple Lua values. For example, UUID.TryParse returns success and a UUID rather than requiring a pointer parameter. Check success before using the result.</p>
+<h2 id="services">Gameplay services</h2>
+<p>Input reads gameplay keys and mouse state when game input is active. Time exposes scaled/unscaled clocks and time scale. SceneManager exposes the active scene and deferred LoadScene requests. None of these gives scripts control over project creation, saving, the private application loop, or frame presentation.</p>
+<p>Scenes expose entities, hierarchy, model instantiation, environment data, and scene-based geometry queries. Components expose camera post-processing, primitive geometry, lights, and meshes. See <a href="../../native/materials/en.html">Runtime materials</a> for material builders, assignment, and lifetime in both languages.</p>
+<h2 id="deployment">Bytecode and deployment</h2>
+<p>Lua source is imported to <code>.blua</code> cache data. A source-free game can ship imported bytecode with its asset metadata and the original UUID. Bytecode depends on the Lua VM version and target representation; it is not a universal file that can be reused across all engine versions and architectures.</p>
+<p>The Lua VM is a separate shared library used by the core runtime. A game distribution needs the matching Lua library beside the core library. Do not copy only the core DLL and assume Lua attachments will still execute.</p>

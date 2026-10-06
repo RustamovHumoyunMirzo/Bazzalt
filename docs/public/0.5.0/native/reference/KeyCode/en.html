@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Physical keyboard identifiers, independent of operating-system virtual-key values. Use these constants with Input rather than hard-coded platform key numbers.">
+  <title>KeyCode | BAZZALT Docs 0.5.0</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../" data-version="0.5.0" data-page="native/reference/KeyCode">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"><option value="0.5.0" selected>0.5.0</option></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"><option value="en" selected>English</option></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><details><summary>Editor manual</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/manual/en.html">Start here</a>
+<a class="nav-link" href="../../../../0.5.0/manual/first-launch/en.html">Open your first project</a>
+<details><summary>Find your way around</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/manual/workspace/en.html">Panels and scene controls</a>
+<details><summary>Panel guides</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/manual/panels/hierarchy/en.html">Hierarchy</a>
+<a class="nav-link" href="../../../../0.5.0/manual/panels/inspector/en.html">Inspector</a>
+<a class="nav-link" href="../../../../0.5.0/manual/panels/scene/en.html">Scene view</a>
+<a class="nav-link" href="../../../../0.5.0/manual/panels/game/en.html">Game output</a>
+<a class="nav-link" href="../../../../0.5.0/manual/panels/assets/en.html">Asset Browser</a>
+<a class="nav-link" href="../../../../0.5.0/manual/panels/console/en.html">Console</a></div></details>
+<a class="nav-link" href="../../../../0.5.0/manual/menus/en.html">Menus and play controls</a>
+<a class="nav-link" href="../../../../0.5.0/manual/settings/en.html">Preferences and project settings</a></div></details>
+<a class="nav-link" href="../../../../0.5.0/manual/first-scene/en.html">Your first scene</a>
+<a class="nav-link" href="../../../../0.5.0/manual/assets/en.html">Assets and project files</a>
+<a class="nav-link" href="../../../../0.5.0/manual/scenes/en.html">Multiple scenes and saving</a>
+<a class="nav-link" href="../../../../0.5.0/manual/glossary/en.html">Terms used in these guides</a></div></details>
+<details open><summary>C++</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/en.html">C++ gameplay API</a>
+<a class="nav-link" href="../../../../0.5.0/native/basics/en.html">Read your first C++ example</a>
+<a class="nav-link" href="../../../../0.5.0/native/behaviors/en.html">Write a C++ behavior</a>
+<a class="nav-link" href="../../../../0.5.0/native/entities/en.html">Entities and components</a>
+<a class="nav-link" href="../../../../0.5.0/native/materials/en.html">Runtime materials</a>
+<details open><summary>C++ API reference</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/en.html">C++ API reference</a>
+<details open><summary>Enumerations</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/AntiAliasing/en.html">AntiAliasing</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/AssetState/en.html">AssetState</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/CameraAspectMode/en.html">CameraAspectMode</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/CameraProjection/en.html">CameraProjection</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentInheritanceMode/en.html">ComponentInheritanceMode</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/DepthOfFieldQuality/en.html">DepthOfFieldQuality</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/InputAxis/en.html">InputAxis</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/KeyCode/en.html" aria-current="page">KeyCode</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/LightType/en.html">LightType</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MaterialCulling/en.html">MaterialCulling</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MaterialDepthFunction/en.html">MaterialDepthFunction</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MouseButton/en.html">MouseButton</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PostProcessParameterType/en.html">PostProcessParameterType</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PrimitiveShape/en.html">PrimitiveShape</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PropertyType/en.html">PropertyType</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneEnvironmentMode/en.html">SceneEnvironmentMode</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneQueryShape/en.html">SceneQueryShape</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ShaderParameterType/en.html">ShaderParameterType</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ShaderPreset/en.html">ShaderPreset</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ToneMapping/en.html">ToneMapping</a></div></details>
+<details><summary>Assets and models</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/AssetInfo/en.html">AssetInfo</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/AssetManager/en.html">AssetManager</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ModelAsset/en.html">ModelAsset</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ModelAssetNode/en.html">ModelAssetNode</a></div></details>
+<details><summary>Components</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/Camera/en.html">Camera</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/CameraPostProcessing/en.html">CameraPostProcessing</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/CameraPostProcessing-DepthOfFieldSettings/en.html">CameraPostProcessing::DepthOfFieldSettings</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/CameraViewport/en.html">CameraViewport</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Component/en.html">Component</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentInheritance-Transform/en.html">ComponentInheritance&lt;Transform&gt;</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/GaussianBlur/en.html">GaussianBlur</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Hierarchy/en.html">Hierarchy</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Identity/en.html">Identity</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Light/en.html">Light</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Mesh/en.html">Mesh</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ModelInstance/en.html">ModelInstance</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ModelNode/en.html">ModelNode</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Name/en.html">Name</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PrimitiveObject/en.html">PrimitiveObject</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneQueryBounds/en.html">SceneQueryBounds</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ScriptAttachment/en.html">ScriptAttachment</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ScriptComponents/en.html">ScriptComponents</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ScriptPropertyValue/en.html">ScriptPropertyValue</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Transform/en.html">Transform</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Vignette/en.html">Vignette</a></div></details>
+<details><summary>Serialization and module contracts</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentInheritance/en.html">ComponentInheritance</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentSerializationRegistry/en.html">ComponentSerializationRegistry</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentSerializationRegistry-Descriptor/en.html">ComponentSerializationRegistry::Descriptor</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ProjectMetadata/en.html">ProjectMetadata</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ProjectSerializer/en.html">ProjectSerializer</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneSerializer/en.html">SceneSerializer</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ScriptModuleApi/en.html">ScriptModuleApi</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ScriptRuntimeAccess/en.html">ScriptRuntimeAccess</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SerializedComponent/en.html">SerializedComponent</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/UnresolvedComponents/en.html">UnresolvedComponents</a></div></details>
+<details><summary>Scenes and entities</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/Entity/en.html">Entity</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/EntityReference/en.html">EntityReference</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Scene/en.html">Scene</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneEnvironment/en.html">SceneEnvironment</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneManager/en.html">SceneManager</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneQueryHit/en.html">SceneQueryHit</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneQueryOptions/en.html">SceneQueryOptions</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneRay/en.html">SceneRay</a></div></details>
+<details><summary>Gameplay and systems</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/Behavior/en.html">Behavior</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentSystem/en.html">ComponentSystem</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Input/en.html">Input</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/System/en.html">System</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Time/en.html">Time</a></div></details>
+<details><summary>Materials and effects</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/CustomPostProcessEffect/en.html">CustomPostProcessEffect</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Material/en.html">Material</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MaterialBuilder/en.html">MaterialBuilder</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MaterialRenderState/en.html">MaterialRenderState</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PostProcessParameter/en.html">PostProcessParameter</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PostProcessingStack/en.html">PostProcessingStack</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Shader/en.html">Shader</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ShaderParameter/en.html">ShaderParameter</a></div></details>
+<details><summary>Math and identifiers</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/Mat3/en.html">Mat3</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Mat4/en.html">Mat4</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MathFunctions/en.html">MathFunctions</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Quaternion/en.html">Quaternion</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/UUID/en.html">UUID</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Vec2/en.html">Vec2</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Vec3/en.html">Vec3</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Vec4/en.html">Vec4</a></div></details></div></details></div></details>
+<details><summary>Lua</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/en.html">Write a Lua behavior</a>
+<a class="nav-link" href="../../../../0.5.0/lua/basics/en.html">Lua terms and first calls</a>
+<a class="nav-link" href="../../../../0.5.0/lua/api/en.html">Lua API conventions</a>
+<details><summary>Lua API reference</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/en.html">Lua API reference</a>
+<details><summary>Enumerations</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/AntiAliasing/en.html">AntiAliasing</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/AssetState/en.html">AssetState</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/CameraAspectMode/en.html">CameraAspectMode</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/CameraProjection/en.html">CameraProjection</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/DepthOfFieldQuality/en.html">DepthOfFieldQuality</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/InputAxis/en.html">InputAxis</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/KeyCode/en.html">KeyCode</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/LightType/en.html">LightType</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MaterialCulling/en.html">MaterialCulling</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MaterialDepthFunction/en.html">MaterialDepthFunction</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MouseButton/en.html">MouseButton</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/PostProcessParameterType/en.html">PostProcessParameterType</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/PrimitiveShape/en.html">PrimitiveShape</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneEnvironmentMode/en.html">SceneEnvironmentMode</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneQueryShape/en.html">SceneQueryShape</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ShaderParameterType/en.html">ShaderParameterType</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ShaderPreset/en.html">ShaderPreset</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ToneMapping/en.html">ToneMapping</a></div></details>
+<details><summary>Assets and models</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/AssetInfo/en.html">AssetInfo</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/AssetManager/en.html">AssetManager</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ModelAsset/en.html">ModelAsset</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ModelAssetNode/en.html">ModelAssetNode</a></div></details>
+<details><summary>Scenes and entities</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Entity/en.html">Entity</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/EntityReference/en.html">EntityReference</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Scene/en.html">Scene</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneEnvironment/en.html">SceneEnvironment</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneManager/en.html">SceneManager</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneQueryHit/en.html">SceneQueryHit</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneQueryOptions/en.html">SceneQueryOptions</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneRay/en.html">SceneRay</a></div></details>
+<details><summary>Materials and effects</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/CustomPostProcessEffect/en.html">CustomPostProcessEffect</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Material/en.html">Material</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MaterialBuilder/en.html">MaterialBuilder</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MaterialRenderState/en.html">MaterialRenderState</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/PostProcessParameter/en.html">PostProcessParameter</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/PostProcessingStack/en.html">PostProcessingStack</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Shader/en.html">Shader</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ShaderParameter/en.html">ShaderParameter</a></div></details>
+<details><summary>Components</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Camera/en.html">Camera</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/CameraPostProcessing/en.html">CameraPostProcessing</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/CameraViewport/en.html">CameraViewport</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Component/en.html">Component</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/DepthOfFieldSettings/en.html">DepthOfFieldSettings</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/GaussianBlur/en.html">GaussianBlur</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Hierarchy/en.html">Hierarchy</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Identity/en.html">Identity</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Light/en.html">Light</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Mesh/en.html">Mesh</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ModelInstance/en.html">ModelInstance</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ModelNode/en.html">ModelNode</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Name/en.html">Name</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/PrimitiveObject/en.html">PrimitiveObject</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneQueryBounds/en.html">SceneQueryBounds</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ScriptAttachment/en.html">ScriptAttachment</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ScriptComponents/en.html">ScriptComponents</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ScriptPropertyValue/en.html">ScriptPropertyValue</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Transform/en.html">Transform</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Vignette/en.html">Vignette</a></div></details>
+<details><summary>Math and identifiers</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Mat3/en.html">Mat3</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Mat4/en.html">Mat4</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MathFunctions/en.html">MathFunctions</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Quaternion/en.html">Quaternion</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/UUID/en.html">UUID</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Vec2/en.html">Vec2</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Vec3/en.html">Vec3</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Vec4/en.html">Vec4</a></div></details>
+<details><summary>Gameplay and systems</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Behavior/en.html">Behavior</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Input/en.html">Input</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Time/en.html">Time</a></div></details></div></details></div></details>
+<details><summary>Shaders</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/bshader/en.html">Shaders and material assets</a></div></details></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / C++ / C++ API reference / Enumerations / KeyCode</nav>
+      <article class="doc"><h1>KeyCode</h1>
+<p class="lead">Physical keyboard identifiers, independent of operating-system virtual-key values. Use these constants with Input rather than hard-coded platform key numbers.</p>
+<p><strong>C++ header:</strong> <code>Bazzalt/Input.h</code>.</p>
+<p>Read signatures together with the behavior notes below. The <a href="../en.html">reference introduction</a> explains arguments, return values, value copies, and errors.</p>
+<pre><code>#include &lt;Bazzalt/Input.h&gt;</code></pre>
+<pre><code>enum class KeyCode : std::uint16_t</code></pre>
+<h2 id="Unknown">Unknown</h2>
+<pre><code>Unknown = 0</code></pre>
+<p>Physical Unknown key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="A">A</h2>
+<pre><code>A = 4</code></pre>
+<p>Physical A key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="B">B</h2>
+<pre><code>B</code></pre>
+<p>Physical B key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="C">C</h2>
+<pre><code>C</code></pre>
+<p>Physical C key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="D">D</h2>
+<pre><code>D</code></pre>
+<p>Physical D key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="E">E</h2>
+<pre><code>E</code></pre>
+<p>Physical E key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F">F</h2>
+<pre><code>F</code></pre>
+<p>Physical F key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="G">G</h2>
+<pre><code>G</code></pre>
+<p>Physical G key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="H">H</h2>
+<pre><code>H</code></pre>
+<p>Physical H key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="I">I</h2>
+<pre><code>I</code></pre>
+<p>Physical I key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="J">J</h2>
+<pre><code>J</code></pre>
+<p>Physical J key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="K">K</h2>
+<pre><code>K</code></pre>
+<p>Physical K key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="L">L</h2>
+<pre><code>L</code></pre>
+<p>Physical L key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="M">M</h2>
+<pre><code>M</code></pre>
+<p>Physical M key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="N">N</h2>
+<pre><code>N</code></pre>
+<p>Physical N key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="O">O</h2>
+<pre><code>O</code></pre>
+<p>Physical O key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="P">P</h2>
+<pre><code>P</code></pre>
+<p>Physical P key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Q">Q</h2>
+<pre><code>Q</code></pre>
+<p>Physical Q key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="R">R</h2>
+<pre><code>R</code></pre>
+<p>Physical R key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="S">S</h2>
+<pre><code>S</code></pre>
+<p>Physical S key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="T">T</h2>
+<pre><code>T</code></pre>
+<p>Physical T key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="U">U</h2>
+<pre><code>U</code></pre>
+<p>Physical U key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="V">V</h2>
+<pre><code>V</code></pre>
+<p>Physical V key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="W">W</h2>
+<pre><code>W</code></pre>
+<p>Physical W key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="X">X</h2>
+<pre><code>X</code></pre>
+<p>Physical X key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Y">Y</h2>
+<pre><code>Y</code></pre>
+<p>Physical Y key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Z">Z</h2>
+<pre><code>Z</code></pre>
+<p>Physical Z key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Digit1">Digit1</h2>
+<pre><code>Digit1 = 30</code></pre>
+<p>Physical Digit1 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Digit2">Digit2</h2>
+<pre><code>Digit2</code></pre>
+<p>Physical Digit2 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Digit3">Digit3</h2>
+<pre><code>Digit3</code></pre>
+<p>Physical Digit3 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Digit4">Digit4</h2>
+<pre><code>Digit4</code></pre>
+<p>Physical Digit4 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Digit5">Digit5</h2>
+<pre><code>Digit5</code></pre>
+<p>Physical Digit5 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Digit6">Digit6</h2>
+<pre><code>Digit6</code></pre>
+<p>Physical Digit6 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Digit7">Digit7</h2>
+<pre><code>Digit7</code></pre>
+<p>Physical Digit7 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Digit8">Digit8</h2>
+<pre><code>Digit8</code></pre>
+<p>Physical Digit8 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Digit9">Digit9</h2>
+<pre><code>Digit9</code></pre>
+<p>Physical Digit9 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Digit0">Digit0</h2>
+<pre><code>Digit0</code></pre>
+<p>Physical Digit0 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Enter">Enter</h2>
+<pre><code>Enter = 40</code></pre>
+<p>Physical Enter key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Escape">Escape</h2>
+<pre><code>Escape</code></pre>
+<p>Physical Escape key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Backspace">Backspace</h2>
+<pre><code>Backspace</code></pre>
+<p>Physical Backspace key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Tab">Tab</h2>
+<pre><code>Tab</code></pre>
+<p>Physical Tab key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Space">Space</h2>
+<pre><code>Space</code></pre>
+<p>Physical Space key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Minus">Minus</h2>
+<pre><code>Minus</code></pre>
+<p>Physical Minus key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Equals">Equals</h2>
+<pre><code>Equals</code></pre>
+<p>Physical Equals key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="LeftBracket">LeftBracket</h2>
+<pre><code>LeftBracket</code></pre>
+<p>Physical LeftBracket key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="RightBracket">RightBracket</h2>
+<pre><code>RightBracket</code></pre>
+<p>Physical RightBracket key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Backslash">Backslash</h2>
+<pre><code>Backslash</code></pre>
+<p>Physical Backslash key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Semicolon">Semicolon</h2>
+<pre><code>Semicolon = 51</code></pre>
+<p>Physical Semicolon key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Apostrophe">Apostrophe</h2>
+<pre><code>Apostrophe</code></pre>
+<p>Physical Apostrophe key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Grave">Grave</h2>
+<pre><code>Grave</code></pre>
+<p>Physical Grave key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Comma">Comma</h2>
+<pre><code>Comma</code></pre>
+<p>Physical Comma key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Period">Period</h2>
+<pre><code>Period</code></pre>
+<p>Physical Period key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Slash">Slash</h2>
+<pre><code>Slash</code></pre>
+<p>Physical Slash key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="CapsLock">CapsLock</h2>
+<pre><code>CapsLock</code></pre>
+<p>Physical CapsLock key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F1">F1</h2>
+<pre><code>F1 = 58</code></pre>
+<p>Physical F1 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F2">F2</h2>
+<pre><code>F2</code></pre>
+<p>Physical F2 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F3">F3</h2>
+<pre><code>F3</code></pre>
+<p>Physical F3 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F4">F4</h2>
+<pre><code>F4</code></pre>
+<p>Physical F4 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F5">F5</h2>
+<pre><code>F5</code></pre>
+<p>Physical F5 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F6">F6</h2>
+<pre><code>F6</code></pre>
+<p>Physical F6 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F7">F7</h2>
+<pre><code>F7</code></pre>
+<p>Physical F7 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F8">F8</h2>
+<pre><code>F8</code></pre>
+<p>Physical F8 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F9">F9</h2>
+<pre><code>F9</code></pre>
+<p>Physical F9 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F10">F10</h2>
+<pre><code>F10</code></pre>
+<p>Physical F10 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F11">F11</h2>
+<pre><code>F11</code></pre>
+<p>Physical F11 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F12">F12</h2>
+<pre><code>F12</code></pre>
+<p>Physical F12 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="PrintScreen">PrintScreen</h2>
+<pre><code>PrintScreen</code></pre>
+<p>Physical PrintScreen key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="ScrollLock">ScrollLock</h2>
+<pre><code>ScrollLock</code></pre>
+<p>Physical ScrollLock key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Pause">Pause</h2>
+<pre><code>Pause</code></pre>
+<p>Physical Pause key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Insert">Insert</h2>
+<pre><code>Insert = 73</code></pre>
+<p>Physical Insert key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Home">Home</h2>
+<pre><code>Home</code></pre>
+<p>Physical Home key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="PageUp">PageUp</h2>
+<pre><code>PageUp</code></pre>
+<p>Physical PageUp key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Delete">Delete</h2>
+<pre><code>Delete</code></pre>
+<p>Physical Delete key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="End">End</h2>
+<pre><code>End</code></pre>
+<p>Physical End key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="PageDown">PageDown</h2>
+<pre><code>PageDown</code></pre>
+<p>Physical PageDown key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Right">Right</h2>
+<pre><code>Right</code></pre>
+<p>Physical Right key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Left">Left</h2>
+<pre><code>Left</code></pre>
+<p>Physical Left key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Down">Down</h2>
+<pre><code>Down</code></pre>
+<p>Physical Down key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Up">Up</h2>
+<pre><code>Up</code></pre>
+<p>Physical Up key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="NumLock">NumLock</h2>
+<pre><code>NumLock = 83</code></pre>
+<p>Physical NumLock key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="KeypadDivide">KeypadDivide</h2>
+<pre><code>KeypadDivide</code></pre>
+<p>Physical KeypadDivide key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="KeypadMultiply">KeypadMultiply</h2>
+<pre><code>KeypadMultiply</code></pre>
+<p>Physical KeypadMultiply key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="KeypadMinus">KeypadMinus</h2>
+<pre><code>KeypadMinus</code></pre>
+<p>Physical KeypadMinus key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="KeypadPlus">KeypadPlus</h2>
+<pre><code>KeypadPlus</code></pre>
+<p>Physical KeypadPlus key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="KeypadEnter">KeypadEnter</h2>
+<pre><code>KeypadEnter</code></pre>
+<p>Physical KeypadEnter key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Keypad1">Keypad1</h2>
+<pre><code>Keypad1</code></pre>
+<p>Physical Keypad1 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Keypad2">Keypad2</h2>
+<pre><code>Keypad2</code></pre>
+<p>Physical Keypad2 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Keypad3">Keypad3</h2>
+<pre><code>Keypad3</code></pre>
+<p>Physical Keypad3 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Keypad4">Keypad4</h2>
+<pre><code>Keypad4</code></pre>
+<p>Physical Keypad4 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Keypad5">Keypad5</h2>
+<pre><code>Keypad5</code></pre>
+<p>Physical Keypad5 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Keypad6">Keypad6</h2>
+<pre><code>Keypad6</code></pre>
+<p>Physical Keypad6 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Keypad7">Keypad7</h2>
+<pre><code>Keypad7</code></pre>
+<p>Physical Keypad7 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Keypad8">Keypad8</h2>
+<pre><code>Keypad8</code></pre>
+<p>Physical Keypad8 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Keypad9">Keypad9</h2>
+<pre><code>Keypad9</code></pre>
+<p>Physical Keypad9 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="Keypad0">Keypad0</h2>
+<pre><code>Keypad0</code></pre>
+<p>Physical Keypad0 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="KeypadPeriod">KeypadPeriod</h2>
+<pre><code>KeypadPeriod</code></pre>
+<p>Physical KeypadPeriod key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F13">F13</h2>
+<pre><code>F13 = 104</code></pre>
+<p>Physical F13 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F14">F14</h2>
+<pre><code>F14</code></pre>
+<p>Physical F14 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F15">F15</h2>
+<pre><code>F15</code></pre>
+<p>Physical F15 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F16">F16</h2>
+<pre><code>F16</code></pre>
+<p>Physical F16 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F17">F17</h2>
+<pre><code>F17</code></pre>
+<p>Physical F17 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F18">F18</h2>
+<pre><code>F18</code></pre>
+<p>Physical F18 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F19">F19</h2>
+<pre><code>F19</code></pre>
+<p>Physical F19 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F20">F20</h2>
+<pre><code>F20</code></pre>
+<p>Physical F20 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F21">F21</h2>
+<pre><code>F21</code></pre>
+<p>Physical F21 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F22">F22</h2>
+<pre><code>F22</code></pre>
+<p>Physical F22 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F23">F23</h2>
+<pre><code>F23</code></pre>
+<p>Physical F23 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="F24">F24</h2>
+<pre><code>F24</code></pre>
+<p>Physical F24 key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="LeftControl">LeftControl</h2>
+<pre><code>LeftControl = 224</code></pre>
+<p>Physical LeftControl key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="LeftShift">LeftShift</h2>
+<pre><code>LeftShift</code></pre>
+<p>Physical LeftShift key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="LeftAlt">LeftAlt</h2>
+<pre><code>LeftAlt</code></pre>
+<p>Physical LeftAlt key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="LeftSuper">LeftSuper</h2>
+<pre><code>LeftSuper</code></pre>
+<p>Physical LeftSuper key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="RightControl">RightControl</h2>
+<pre><code>RightControl</code></pre>
+<p>Physical RightControl key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="RightShift">RightShift</h2>
+<pre><code>RightShift</code></pre>
+<p>Physical RightShift key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="RightAlt">RightAlt</h2>
+<pre><code>RightAlt</code></pre>
+<p>Physical RightAlt key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p>
+<h2 id="RightSuper">RightSuper</h2>
+<pre><code>RightSuper</code></pre>
+<p>Physical RightSuper key identifier. Use Input.GetKey/GetKeyDown/GetKeyUp with it, not an operating-system key number.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../../0.5.0/native/reference/InputAxis/en.html"><small>Previous</small>InputAxis</a>
+<a class="next" href="../../../../0.5.0/native/reference/LightType/en.html"><small>Next</small>LightType</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#Unknown">Unknown</a><a class="toc-link" href="#A">A</a><a class="toc-link" href="#B">B</a><a class="toc-link" href="#C">C</a><a class="toc-link" href="#D">D</a><a class="toc-link" href="#E">E</a><a class="toc-link" href="#F">F</a><a class="toc-link" href="#G">G</a><a class="toc-link" href="#H">H</a><a class="toc-link" href="#I">I</a><a class="toc-link" href="#J">J</a><a class="toc-link" href="#K">K</a><a class="toc-link" href="#L">L</a><a class="toc-link" href="#M">M</a><a class="toc-link" href="#N">N</a><a class="toc-link" href="#O">O</a><a class="toc-link" href="#P">P</a><a class="toc-link" href="#Q">Q</a><a class="toc-link" href="#R">R</a><a class="toc-link" href="#S">S</a><a class="toc-link" href="#T">T</a><a class="toc-link" href="#U">U</a><a class="toc-link" href="#V">V</a><a class="toc-link" href="#W">W</a><a class="toc-link" href="#X">X</a><a class="toc-link" href="#Y">Y</a><a class="toc-link" href="#Z">Z</a><a class="toc-link" href="#Digit1">Digit1</a><a class="toc-link" href="#Digit2">Digit2</a><a class="toc-link" href="#Digit3">Digit3</a><a class="toc-link" href="#Digit4">Digit4</a><a class="toc-link" href="#Digit5">Digit5</a><a class="toc-link" href="#Digit6">Digit6</a><a class="toc-link" href="#Digit7">Digit7</a><a class="toc-link" href="#Digit8">Digit8</a><a class="toc-link" href="#Digit9">Digit9</a><a class="toc-link" href="#Digit0">Digit0</a><a class="toc-link" href="#Enter">Enter</a><a class="toc-link" href="#Escape">Escape</a><a class="toc-link" href="#Backspace">Backspace</a><a class="toc-link" href="#Tab">Tab</a><a class="toc-link" href="#Space">Space</a><a class="toc-link" href="#Minus">Minus</a><a class="toc-link" href="#Equals">Equals</a><a class="toc-link" href="#LeftBracket">LeftBracket</a><a class="toc-link" href="#RightBracket">RightBracket</a><a class="toc-link" href="#Backslash">Backslash</a><a class="toc-link" href="#Semicolon">Semicolon</a><a class="toc-link" href="#Apostrophe">Apostrophe</a><a class="toc-link" href="#Grave">Grave</a><a class="toc-link" href="#Comma">Comma</a><a class="toc-link" href="#Period">Period</a><a class="toc-link" href="#Slash">Slash</a><a class="toc-link" href="#CapsLock">CapsLock</a><a class="toc-link" href="#F1">F1</a><a class="toc-link" href="#F2">F2</a><a class="toc-link" href="#F3">F3</a><a class="toc-link" href="#F4">F4</a><a class="toc-link" href="#F5">F5</a><a class="toc-link" href="#F6">F6</a><a class="toc-link" href="#F7">F7</a><a class="toc-link" href="#F8">F8</a><a class="toc-link" href="#F9">F9</a><a class="toc-link" href="#F10">F10</a><a class="toc-link" href="#F11">F11</a><a class="toc-link" href="#F12">F12</a><a class="toc-link" href="#PrintScreen">PrintScreen</a><a class="toc-link" href="#ScrollLock">ScrollLock</a><a class="toc-link" href="#Pause">Pause</a><a class="toc-link" href="#Insert">Insert</a><a class="toc-link" href="#Home">Home</a><a class="toc-link" href="#PageUp">PageUp</a><a class="toc-link" href="#Delete">Delete</a><a class="toc-link" href="#End">End</a><a class="toc-link" href="#PageDown">PageDown</a><a class="toc-link" href="#Right">Right</a><a class="toc-link" href="#Left">Left</a><a class="toc-link" href="#Down">Down</a><a class="toc-link" href="#Up">Up</a><a class="toc-link" href="#NumLock">NumLock</a><a class="toc-link" href="#KeypadDivide">KeypadDivide</a><a class="toc-link" href="#KeypadMultiply">KeypadMultiply</a><a class="toc-link" href="#KeypadMinus">KeypadMinus</a><a class="toc-link" href="#KeypadPlus">KeypadPlus</a><a class="toc-link" href="#KeypadEnter">KeypadEnter</a><a class="toc-link" href="#Keypad1">Keypad1</a><a class="toc-link" href="#Keypad2">Keypad2</a><a class="toc-link" href="#Keypad3">Keypad3</a><a class="toc-link" href="#Keypad4">Keypad4</a><a class="toc-link" href="#Keypad5">Keypad5</a><a class="toc-link" href="#Keypad6">Keypad6</a><a class="toc-link" href="#Keypad7">Keypad7</a><a class="toc-link" href="#Keypad8">Keypad8</a><a class="toc-link" href="#Keypad9">Keypad9</a><a class="toc-link" href="#Keypad0">Keypad0</a><a class="toc-link" href="#KeypadPeriod">KeypadPeriod</a><a class="toc-link" href="#F13">F13</a><a class="toc-link" href="#F14">F14</a><a class="toc-link" href="#F15">F15</a><a class="toc-link" href="#F16">F16</a><a class="toc-link" href="#F17">F17</a><a class="toc-link" href="#F18">F18</a><a class="toc-link" href="#F19">F19</a><a class="toc-link" href="#F20">F20</a><a class="toc-link" href="#F21">F21</a><a class="toc-link" href="#F22">F22</a><a class="toc-link" href="#F23">F23</a><a class="toc-link" href="#F24">F24</a><a class="toc-link" href="#LeftControl">LeftControl</a><a class="toc-link" href="#LeftShift">LeftShift</a><a class="toc-link" href="#LeftAlt">LeftAlt</a><a class="toc-link" href="#LeftSuper">LeftSuper</a><a class="toc-link" href="#RightControl">RightControl</a><a class="toc-link" href="#RightShift">RightShift</a><a class="toc-link" href="#RightAlt">RightAlt</a><a class="toc-link" href="#RightSuper">RightSuper</a></nav></aside>
+  </div>
+  <footer>BAZZALT 0.5.0 documentation · English</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

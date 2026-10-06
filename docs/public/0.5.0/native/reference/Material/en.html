@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A handle to shared imported or owned transient material state. Runtime property edits affect rendering without writing the source asset.">
+  <title>Material | BAZZALT Docs 0.5.0</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../" data-version="0.5.0" data-page="native/reference/Material">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"><option value="0.5.0" selected>0.5.0</option></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"><option value="en" selected>English</option></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><details><summary>Editor manual</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/manual/en.html">Start here</a>
+<a class="nav-link" href="../../../../0.5.0/manual/first-launch/en.html">Open your first project</a>
+<details><summary>Find your way around</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/manual/workspace/en.html">Panels and scene controls</a>
+<details><summary>Panel guides</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/manual/panels/hierarchy/en.html">Hierarchy</a>
+<a class="nav-link" href="../../../../0.5.0/manual/panels/inspector/en.html">Inspector</a>
+<a class="nav-link" href="../../../../0.5.0/manual/panels/scene/en.html">Scene view</a>
+<a class="nav-link" href="../../../../0.5.0/manual/panels/game/en.html">Game output</a>
+<a class="nav-link" href="../../../../0.5.0/manual/panels/assets/en.html">Asset Browser</a>
+<a class="nav-link" href="../../../../0.5.0/manual/panels/console/en.html">Console</a></div></details>
+<a class="nav-link" href="../../../../0.5.0/manual/menus/en.html">Menus and play controls</a>
+<a class="nav-link" href="../../../../0.5.0/manual/settings/en.html">Preferences and project settings</a></div></details>
+<a class="nav-link" href="../../../../0.5.0/manual/first-scene/en.html">Your first scene</a>
+<a class="nav-link" href="../../../../0.5.0/manual/assets/en.html">Assets and project files</a>
+<a class="nav-link" href="../../../../0.5.0/manual/scenes/en.html">Multiple scenes and saving</a>
+<a class="nav-link" href="../../../../0.5.0/manual/glossary/en.html">Terms used in these guides</a></div></details>
+<details open><summary>C++</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/en.html">C++ gameplay API</a>
+<a class="nav-link" href="../../../../0.5.0/native/basics/en.html">Read your first C++ example</a>
+<a class="nav-link" href="../../../../0.5.0/native/behaviors/en.html">Write a C++ behavior</a>
+<a class="nav-link" href="../../../../0.5.0/native/entities/en.html">Entities and components</a>
+<a class="nav-link" href="../../../../0.5.0/native/materials/en.html">Runtime materials</a>
+<details open><summary>C++ API reference</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/en.html">C++ API reference</a>
+<details><summary>Enumerations</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/AntiAliasing/en.html">AntiAliasing</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/AssetState/en.html">AssetState</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/CameraAspectMode/en.html">CameraAspectMode</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/CameraProjection/en.html">CameraProjection</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentInheritanceMode/en.html">ComponentInheritanceMode</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/DepthOfFieldQuality/en.html">DepthOfFieldQuality</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/InputAxis/en.html">InputAxis</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/KeyCode/en.html">KeyCode</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/LightType/en.html">LightType</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MaterialCulling/en.html">MaterialCulling</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MaterialDepthFunction/en.html">MaterialDepthFunction</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MouseButton/en.html">MouseButton</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PostProcessParameterType/en.html">PostProcessParameterType</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PrimitiveShape/en.html">PrimitiveShape</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PropertyType/en.html">PropertyType</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneEnvironmentMode/en.html">SceneEnvironmentMode</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneQueryShape/en.html">SceneQueryShape</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ShaderParameterType/en.html">ShaderParameterType</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ShaderPreset/en.html">ShaderPreset</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ToneMapping/en.html">ToneMapping</a></div></details>
+<details><summary>Assets and models</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/AssetInfo/en.html">AssetInfo</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/AssetManager/en.html">AssetManager</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ModelAsset/en.html">ModelAsset</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ModelAssetNode/en.html">ModelAssetNode</a></div></details>
+<details><summary>Components</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/Camera/en.html">Camera</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/CameraPostProcessing/en.html">CameraPostProcessing</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/CameraPostProcessing-DepthOfFieldSettings/en.html">CameraPostProcessing::DepthOfFieldSettings</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/CameraViewport/en.html">CameraViewport</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Component/en.html">Component</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentInheritance-Transform/en.html">ComponentInheritance&lt;Transform&gt;</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/GaussianBlur/en.html">GaussianBlur</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Hierarchy/en.html">Hierarchy</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Identity/en.html">Identity</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Light/en.html">Light</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Mesh/en.html">Mesh</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ModelInstance/en.html">ModelInstance</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ModelNode/en.html">ModelNode</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Name/en.html">Name</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PrimitiveObject/en.html">PrimitiveObject</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneQueryBounds/en.html">SceneQueryBounds</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ScriptAttachment/en.html">ScriptAttachment</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ScriptComponents/en.html">ScriptComponents</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ScriptPropertyValue/en.html">ScriptPropertyValue</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Transform/en.html">Transform</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Vignette/en.html">Vignette</a></div></details>
+<details><summary>Serialization and module contracts</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentInheritance/en.html">ComponentInheritance</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentSerializationRegistry/en.html">ComponentSerializationRegistry</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentSerializationRegistry-Descriptor/en.html">ComponentSerializationRegistry::Descriptor</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ProjectMetadata/en.html">ProjectMetadata</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ProjectSerializer/en.html">ProjectSerializer</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneSerializer/en.html">SceneSerializer</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ScriptModuleApi/en.html">ScriptModuleApi</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ScriptRuntimeAccess/en.html">ScriptRuntimeAccess</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SerializedComponent/en.html">SerializedComponent</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/UnresolvedComponents/en.html">UnresolvedComponents</a></div></details>
+<details><summary>Scenes and entities</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/Entity/en.html">Entity</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/EntityReference/en.html">EntityReference</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Scene/en.html">Scene</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneEnvironment/en.html">SceneEnvironment</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneManager/en.html">SceneManager</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneQueryHit/en.html">SceneQueryHit</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneQueryOptions/en.html">SceneQueryOptions</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneRay/en.html">SceneRay</a></div></details>
+<details><summary>Gameplay and systems</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/Behavior/en.html">Behavior</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentSystem/en.html">ComponentSystem</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Input/en.html">Input</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/System/en.html">System</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Time/en.html">Time</a></div></details>
+<details open><summary>Materials and effects</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/CustomPostProcessEffect/en.html">CustomPostProcessEffect</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Material/en.html" aria-current="page">Material</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MaterialBuilder/en.html">MaterialBuilder</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MaterialRenderState/en.html">MaterialRenderState</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PostProcessParameter/en.html">PostProcessParameter</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PostProcessingStack/en.html">PostProcessingStack</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Shader/en.html">Shader</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ShaderParameter/en.html">ShaderParameter</a></div></details>
+<details><summary>Math and identifiers</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/Mat3/en.html">Mat3</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Mat4/en.html">Mat4</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MathFunctions/en.html">MathFunctions</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Quaternion/en.html">Quaternion</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/UUID/en.html">UUID</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Vec2/en.html">Vec2</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Vec3/en.html">Vec3</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Vec4/en.html">Vec4</a></div></details></div></details></div></details>
+<details><summary>Lua</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/en.html">Write a Lua behavior</a>
+<a class="nav-link" href="../../../../0.5.0/lua/basics/en.html">Lua terms and first calls</a>
+<a class="nav-link" href="../../../../0.5.0/lua/api/en.html">Lua API conventions</a>
+<details><summary>Lua API reference</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/en.html">Lua API reference</a>
+<details><summary>Enumerations</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/AntiAliasing/en.html">AntiAliasing</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/AssetState/en.html">AssetState</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/CameraAspectMode/en.html">CameraAspectMode</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/CameraProjection/en.html">CameraProjection</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/DepthOfFieldQuality/en.html">DepthOfFieldQuality</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/InputAxis/en.html">InputAxis</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/KeyCode/en.html">KeyCode</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/LightType/en.html">LightType</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MaterialCulling/en.html">MaterialCulling</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MaterialDepthFunction/en.html">MaterialDepthFunction</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MouseButton/en.html">MouseButton</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/PostProcessParameterType/en.html">PostProcessParameterType</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/PrimitiveShape/en.html">PrimitiveShape</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneEnvironmentMode/en.html">SceneEnvironmentMode</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneQueryShape/en.html">SceneQueryShape</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ShaderParameterType/en.html">ShaderParameterType</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ShaderPreset/en.html">ShaderPreset</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ToneMapping/en.html">ToneMapping</a></div></details>
+<details><summary>Assets and models</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/AssetInfo/en.html">AssetInfo</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/AssetManager/en.html">AssetManager</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ModelAsset/en.html">ModelAsset</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ModelAssetNode/en.html">ModelAssetNode</a></div></details>
+<details><summary>Scenes and entities</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Entity/en.html">Entity</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/EntityReference/en.html">EntityReference</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Scene/en.html">Scene</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneEnvironment/en.html">SceneEnvironment</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneManager/en.html">SceneManager</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneQueryHit/en.html">SceneQueryHit</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneQueryOptions/en.html">SceneQueryOptions</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneRay/en.html">SceneRay</a></div></details>
+<details><summary>Materials and effects</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/CustomPostProcessEffect/en.html">CustomPostProcessEffect</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Material/en.html">Material</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MaterialBuilder/en.html">MaterialBuilder</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MaterialRenderState/en.html">MaterialRenderState</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/PostProcessParameter/en.html">PostProcessParameter</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/PostProcessingStack/en.html">PostProcessingStack</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Shader/en.html">Shader</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ShaderParameter/en.html">ShaderParameter</a></div></details>
+<details><summary>Components</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Camera/en.html">Camera</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/CameraPostProcessing/en.html">CameraPostProcessing</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/CameraViewport/en.html">CameraViewport</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Component/en.html">Component</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/DepthOfFieldSettings/en.html">DepthOfFieldSettings</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/GaussianBlur/en.html">GaussianBlur</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Hierarchy/en.html">Hierarchy</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Identity/en.html">Identity</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Light/en.html">Light</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Mesh/en.html">Mesh</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ModelInstance/en.html">ModelInstance</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ModelNode/en.html">ModelNode</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Name/en.html">Name</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/PrimitiveObject/en.html">PrimitiveObject</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneQueryBounds/en.html">SceneQueryBounds</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ScriptAttachment/en.html">ScriptAttachment</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ScriptComponents/en.html">ScriptComponents</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ScriptPropertyValue/en.html">ScriptPropertyValue</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Transform/en.html">Transform</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Vignette/en.html">Vignette</a></div></details>
+<details><summary>Math and identifiers</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Mat3/en.html">Mat3</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Mat4/en.html">Mat4</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MathFunctions/en.html">MathFunctions</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Quaternion/en.html">Quaternion</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/UUID/en.html">UUID</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Vec2/en.html">Vec2</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Vec3/en.html">Vec3</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Vec4/en.html">Vec4</a></div></details>
+<details><summary>Gameplay and systems</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Behavior/en.html">Behavior</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Input/en.html">Input</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Time/en.html">Time</a></div></details></div></details></div></details>
+<details><summary>Shaders</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/bshader/en.html">Shaders and material assets</a></div></details></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / C++ / C++ API reference / Materials and effects / Material</nav>
+      <article class="doc"><h1>Material</h1>
+<p class="lead">A handle to shared imported or owned transient material state. Runtime property edits affect rendering without writing the source asset.</p>
+<p><strong>C++ header:</strong> <code>Bazzalt/Material.h</code>.</p>
+<p>Read signatures together with the behavior notes below. The <a href="../en.html">reference introduction</a> explains arguments, return values, value copies, and errors.</p>
+<pre><code>#include &lt;Bazzalt/Material.h&gt;</code></pre>
+<pre><code>class Material final</code></pre>
+<h2 id="example">Example</h2><p>Gameplay snippets run inside a behavior callback or helper. Variables such as scene, camera, savedText and assetUUID are existing values, not automatically declared global variables.</p><pre><code>auto material = Bazzalt::Material::Create();
+material.SetFloat(&quot;roughness&quot;, 0.4f);
+material.ApplyTo(GetEntity());
+// Retain the handle; Destroy it during owned-resource cleanup.</code></pre>
+<h2 id="Material">Material</h2>
+<pre><code>Material() = default</code></pre>
+<p>Constructs a value using the shown defaults/arguments, or destroys it when its lifetime ends. A value/handle is not ownership of the active host.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="Load">Load</h2>
+<pre><code>static Material Load(UUID id)</code></pre>
+<p>Returns a UUID-backed handle without changing/importing files. The resulting handle may be invalid; validity depends on the active host and definition.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>UUID id</code></td><td>Stable UUID or transient integer ID, according to the overload.</td></tr>
+</tbody></table>
+<h2 id="Create">Create</h2>
+<pre><code>static Material Create(Shader shader)
+static Material Create(ShaderPreset preset = ShaderPreset::StandardLit)</code></pre>
+<p>Creates an owned transient Material from a shader or built-in preset (default StandardLit). Unresolvable Shader input returns an invalid handle. Check IsValid; Destroy valid owned results when finished.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Shader shader</code></td><td>Precompiled shader definition handle, not a source string.</td></tr>
+<tr><td><code>ShaderPreset preset = ShaderPreset::StandardLit</code></td><td>ShaderPreset constant; StandardLit is the default.</td></tr>
+</tbody></table>
+<h2 id="IsRuntime">IsRuntime</h2>
+<pre><code>bool IsRuntime() const</code></pre>
+<p>Returns whether the material is transient runtime-owned state, rather than a shared imported asset.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="Destroy">Destroy</h2>
+<pre><code>bool Destroy()</code></pre>
+<p>For Material, destroys only transient state and returns false for imported assets/absent state. Every copied handle becomes invalid; renderables restore their fallback on update.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="SetShader">SetShader</h2>
+<pre><code>void SetShader(Shader shader, bool preserveProperties = true)</code></pre>
+<p>Sets a precompiled shader. Compatible values can be preserved (default true). Invalid material or shader throws; this never invokes a shader compiler.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Shader shader</code></td><td>Precompiled shader definition handle, not a source string.</td></tr>
+<tr><td><code>bool preserveProperties = true</code></td><td>Retain matching name/type parameter values when switching shaders; default true.</td></tr>
+</tbody></table>
+<h2 id="CopyPropertiesFrom">CopyPropertiesFrom</h2>
+<pre><code>void CopyPropertiesFrom(Material source, bool copyRenderState = true)</code></pre>
+<p>Copies effective compatible name/type values from another valid material, optionally also its render state. It does not switch the target shader.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Material source</code></td><td>Existing material whose compatible effective values are copied.</td></tr>
+<tr><td><code>bool copyRenderState = true</code></td><td>Also copy source render state; default true.</td></tr>
+</tbody></table>
+<h2 id="ResetParameter">ResetParameter</h2>
+<pre><code>void ResetParameter(const std::string &amp; name)</code></pre>
+<p>Removes one runtime parameter override and restores the authored/shader default. An unknown parameter or invalid material throws.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+</tbody></table>
+<h2 id="ResetProperties">ResetProperties</h2>
+<pre><code>void ResetProperties()</code></pre>
+<p>Removes all runtime parameter overrides, without deleting the material or changing its shader.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="HasOverride">HasOverride</h2>
+<pre><code>bool HasOverride(const std::string &amp; name) const</code></pre>
+<p>Reports whether this parameter has an explicit runtime override, not merely whether the shader declares it.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+</tbody></table>
+<h2 id="GetRenderState">GetRenderState</h2>
+<pre><code>MaterialRenderState GetRenderState() const</code></pre>
+<p>Returns the current render-state value, including whether Override is active. Invalid material handles throw.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="SetRenderState">SetRenderState</h2>
+<pre><code>void SetRenderState(MaterialRenderState state)</code></pre>
+<p>Commits render-state overrides and enables Override. Invalid enum values or material handles throw; compiled blending/features remain part of the shader.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>MaterialRenderState state</code></td><td>Host/render-state value, according to the signature.</td></tr>
+</tbody></table>
+<h2 id="ResetRenderState">ResetRenderState</h2>
+<pre><code>void ResetRenderState()</code></pre>
+<p>Removes the override so the next renderer update restores the shader package defaults, including depth comparison.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="AllSlots">AllSlots</h2>
+<pre><code>static constexpr std::size_t AllSlots = std::numeric_limits&lt;std::size_t&gt;::max()</code></pre>
+<p>Marker for assignment to every slot: maximum size_t in C++, -1 in Lua. Actual slot indices are zero-based.</p>
+<h2 id="ApplyTo">ApplyTo</h2>
+<pre><code>std::size_t ApplyTo(Entity entity, std::size_t slot = AllSlots, bool includeChildren = false) const</code></pre>
+<p>Assigns existing Mesh/PrimitiveObject components on an entity. AllSlots is default; descendants are opt-in. Returns entities changed. Invalid handles/slots throw; primitive slots other than 0/AllSlots are rejected.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Entity entity</code></td><td>Entity in the relevant live scene; must not outlive that scene.</td></tr>
+<tr><td><code>std::size_t slot = AllSlots</code></td><td>Zero-based material slot; AllSlots/-1 selects all slots.</td></tr>
+<tr><td><code>bool includeChildren = false</code></td><td>Apply through descendants only when true; default false.</td></tr>
+</tbody></table>
+<h2 id="GetAssetUUID">GetAssetUUID</h2>
+<pre><code>UUID GetAssetUUID() const</code></pre>
+<p>Returns the referenced material/shader UUID. It may be unresolved; call IsValid before assuming the definition is available.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="IsValid">IsValid</h2>
+<pre><code>bool IsValid() const</code></pre>
+<p>Returns whether the current host resolves the material definition. A destroyed transient handle becomes invalid.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="Instantiate">Instantiate</h2>
+<pre><code>Material Instantiate() const</code></pre>
+<p>Returns an independent transient copy of effective material state, or an invalid handle if the source cannot resolve. Destroy the copy when finished.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="GetShader">GetShader</h2>
+<pre><code>Shader GetShader() const</code></pre>
+<p>Returns this material&#x27;s current shader handle, or an invalid shader if its material definition cannot resolve.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="GetParameters">GetParameters</h2>
+<pre><code>std::vector&lt;ShaderParameter&gt; GetParameters() const</code></pre>
+<p>Returns the reflected parameter names and types. It does not return renderer handles or compile a shader.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="HasParameter">HasParameter</h2>
+<pre><code>bool HasParameter(const std::string &amp; name) const</code></pre>
+<p>Tests whether the current shader declares the parameter name. Use this before selecting a typed setter dynamically.</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+</tbody></table>
+<h2 id="SetFloat">SetFloat</h2>
+<pre><code>void SetFloat(const std::string &amp; name, float value)</code></pre>
+<p>Writes a named Float parameter. Missing name, mismatched reflected type or invalid material throws. Numeric setters reject non-finite values; texture setters use a supported project image asset UUID (zero clears the reference).</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+<tr><td><code>float value</code></td><td>Value whose type must match the declaration. Numeric values must be finite where validated.</td></tr>
+</tbody></table>
+<h2 id="SetVec2">SetVec2</h2>
+<pre><code>void SetVec2(const std::string &amp; name, Vec2 value)</code></pre>
+<p>Writes a named Vec2 parameter. Missing name, mismatched reflected type or invalid material throws. Numeric setters reject non-finite values; texture setters use a supported project image asset UUID (zero clears the reference).</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+<tr><td><code>Vec2 value</code></td><td>Value whose type must match the declaration. Numeric values must be finite where validated.</td></tr>
+</tbody></table>
+<h2 id="SetVec3">SetVec3</h2>
+<pre><code>void SetVec3(const std::string &amp; name, Vec3 value)</code></pre>
+<p>Writes a named Vec3 parameter. Missing name, mismatched reflected type or invalid material throws. Numeric setters reject non-finite values; texture setters use a supported project image asset UUID (zero clears the reference).</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+<tr><td><code>Vec3 value</code></td><td>Value whose type must match the declaration. Numeric values must be finite where validated.</td></tr>
+</tbody></table>
+<h2 id="SetVec4">SetVec4</h2>
+<pre><code>void SetVec4(const std::string &amp; name, Vec4 value)</code></pre>
+<p>Writes a named Vec4 parameter. Missing name, mismatched reflected type or invalid material throws. Numeric setters reject non-finite values; texture setters use a supported project image asset UUID (zero clears the reference).</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+<tr><td><code>Vec4 value</code></td><td>Value whose type must match the declaration. Numeric values must be finite where validated.</td></tr>
+</tbody></table>
+<h2 id="SetColor">SetColor</h2>
+<pre><code>void SetColor(const std::string &amp; name, Vec4 value)</code></pre>
+<p>Writes a named Color parameter. Missing name, mismatched reflected type or invalid material throws. Numeric setters reject non-finite values; texture setters use a supported project image asset UUID (zero clears the reference).</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+<tr><td><code>Vec4 value</code></td><td>Value whose type must match the declaration. Numeric values must be finite where validated.</td></tr>
+</tbody></table>
+<h2 id="SetMatrix3">SetMatrix3</h2>
+<pre><code>void SetMatrix3(const std::string &amp; name, const Mat3 &amp; value)</code></pre>
+<p>Writes a named Matrix3 parameter. Missing name, mismatched reflected type or invalid material throws. Numeric setters reject non-finite values; texture setters use a supported project image asset UUID (zero clears the reference).</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+<tr><td><code>const Mat3 &amp; value</code></td><td>Value whose type must match the declaration. Numeric values must be finite where validated.</td></tr>
+</tbody></table>
+<h2 id="SetMatrix4">SetMatrix4</h2>
+<pre><code>void SetMatrix4(const std::string &amp; name, const Mat4 &amp; value)</code></pre>
+<p>Writes a named Matrix4 parameter. Missing name, mismatched reflected type or invalid material throws. Numeric setters reject non-finite values; texture setters use a supported project image asset UUID (zero clears the reference).</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+<tr><td><code>const Mat4 &amp; value</code></td><td>Value whose type must match the declaration. Numeric values must be finite where validated.</td></tr>
+</tbody></table>
+<h2 id="SetInteger">SetInteger</h2>
+<pre><code>void SetInteger(const std::string &amp; name, std::int32_t value)</code></pre>
+<p>Writes a named Integer parameter. Missing name, mismatched reflected type or invalid material throws. Numeric setters reject non-finite values; texture setters use a supported project image asset UUID (zero clears the reference).</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+<tr><td><code>std::int32_t value</code></td><td>Value whose type must match the declaration. Numeric values must be finite where validated.</td></tr>
+</tbody></table>
+<h2 id="SetBoolean">SetBoolean</h2>
+<pre><code>void SetBoolean(const std::string &amp; name, bool value)</code></pre>
+<p>Writes a named Boolean parameter. Missing name, mismatched reflected type or invalid material throws. Numeric setters reject non-finite values; texture setters use a supported project image asset UUID (zero clears the reference).</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+<tr><td><code>bool value</code></td><td>Value whose type must match the declaration. Numeric values must be finite where validated.</td></tr>
+</tbody></table>
+<h2 id="SetTexture">SetTexture</h2>
+<pre><code>void SetTexture(const std::string &amp; name, UUID value)</code></pre>
+<p>Writes a named Texture parameter. Missing name, mismatched reflected type or invalid material throws. Numeric setters reject non-finite values; texture setters use a supported project image asset UUID (zero clears the reference).</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+<tr><td><code>UUID value</code></td><td>Value whose type must match the declaration. Numeric values must be finite where validated.</td></tr>
+</tbody></table>
+<h2 id="GetFloat">GetFloat</h2>
+<pre><code>float GetFloat(const std::string &amp; name) const</code></pre>
+<p>Returns a named Float parameter. Missing name, mismatched reflected type or invalid material throws. Numeric setters reject non-finite values; texture setters use a supported project image asset UUID (zero clears the reference).</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+</tbody></table>
+<h2 id="GetVec2">GetVec2</h2>
+<pre><code>Vec2 GetVec2(const std::string &amp; name) const</code></pre>
+<p>Returns a named Vec2 parameter. Missing name, mismatched reflected type or invalid material throws. Numeric setters reject non-finite values; texture setters use a supported project image asset UUID (zero clears the reference).</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+</tbody></table>
+<h2 id="GetVec3">GetVec3</h2>
+<pre><code>Vec3 GetVec3(const std::string &amp; name) const</code></pre>
+<p>Returns a named Vec3 parameter. Missing name, mismatched reflected type or invalid material throws. Numeric setters reject non-finite values; texture setters use a supported project image asset UUID (zero clears the reference).</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+</tbody></table>
+<h2 id="GetVec4">GetVec4</h2>
+<pre><code>Vec4 GetVec4(const std::string &amp; name) const</code></pre>
+<p>Returns a named Vec4 parameter. Missing name, mismatched reflected type or invalid material throws. Numeric setters reject non-finite values; texture setters use a supported project image asset UUID (zero clears the reference).</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+</tbody></table>
+<h2 id="GetColor">GetColor</h2>
+<pre><code>Vec4 GetColor(const std::string &amp; name) const</code></pre>
+<p>Returns a named Color parameter. Missing name, mismatched reflected type or invalid material throws. Numeric setters reject non-finite values; texture setters use a supported project image asset UUID (zero clears the reference).</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+</tbody></table>
+<h2 id="GetMatrix3">GetMatrix3</h2>
+<pre><code>Mat3 GetMatrix3(const std::string &amp; name) const</code></pre>
+<p>Returns a named Matrix3 parameter. Missing name, mismatched reflected type or invalid material throws. Numeric setters reject non-finite values; texture setters use a supported project image asset UUID (zero clears the reference).</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+</tbody></table>
+<h2 id="GetMatrix4">GetMatrix4</h2>
+<pre><code>Mat4 GetMatrix4(const std::string &amp; name) const</code></pre>
+<p>Returns a named Matrix4 parameter. Missing name, mismatched reflected type or invalid material throws. Numeric setters reject non-finite values; texture setters use a supported project image asset UUID (zero clears the reference).</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+</tbody></table>
+<h2 id="GetInteger">GetInteger</h2>
+<pre><code>std::int32_t GetInteger(const std::string &amp; name) const</code></pre>
+<p>Returns a named Integer parameter. Missing name, mismatched reflected type or invalid material throws. Numeric setters reject non-finite values; texture setters use a supported project image asset UUID (zero clears the reference).</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+</tbody></table>
+<h2 id="GetBoolean">GetBoolean</h2>
+<pre><code>bool GetBoolean(const std::string &amp; name) const</code></pre>
+<p>Returns a named Boolean parameter. Missing name, mismatched reflected type or invalid material throws. Numeric setters reject non-finite values; texture setters use a supported project image asset UUID (zero clears the reference).</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+</tbody></table>
+<h2 id="GetTexture">GetTexture</h2>
+<pre><code>UUID GetTexture(const std::string &amp; name) const</code></pre>
+<p>Returns a named Texture parameter. Missing name, mismatched reflected type or invalid material throws. Numeric setters reject non-finite values; texture setters use a supported project image asset UUID (zero clears the reference).</p>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const std::string &amp; name</code></td><td>Display label or declared parameter/type name as specified by this method; names are not UUID identity.</td></tr>
+</tbody></table></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../../0.5.0/native/reference/CustomPostProcessEffect/en.html"><small>Previous</small>CustomPostProcessEffect</a>
+<a class="next" href="../../../../0.5.0/native/reference/MaterialBuilder/en.html"><small>Next</small>MaterialBuilder</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#Material">Material</a><a class="toc-link" href="#Load">Load</a><a class="toc-link" href="#Create">Create</a><a class="toc-link" href="#IsRuntime">IsRuntime</a><a class="toc-link" href="#Destroy">Destroy</a><a class="toc-link" href="#SetShader">SetShader</a><a class="toc-link" href="#CopyPropertiesFrom">CopyPropertiesFrom</a><a class="toc-link" href="#ResetParameter">ResetParameter</a><a class="toc-link" href="#ResetProperties">ResetProperties</a><a class="toc-link" href="#HasOverride">HasOverride</a><a class="toc-link" href="#GetRenderState">GetRenderState</a><a class="toc-link" href="#SetRenderState">SetRenderState</a><a class="toc-link" href="#ResetRenderState">ResetRenderState</a><a class="toc-link" href="#AllSlots">AllSlots</a><a class="toc-link" href="#ApplyTo">ApplyTo</a><a class="toc-link" href="#GetAssetUUID">GetAssetUUID</a><a class="toc-link" href="#IsValid">IsValid</a><a class="toc-link" href="#Instantiate">Instantiate</a><a class="toc-link" href="#GetShader">GetShader</a><a class="toc-link" href="#GetParameters">GetParameters</a><a class="toc-link" href="#HasParameter">HasParameter</a><a class="toc-link" href="#SetFloat">SetFloat</a><a class="toc-link" href="#SetVec2">SetVec2</a><a class="toc-link" href="#SetVec3">SetVec3</a><a class="toc-link" href="#SetVec4">SetVec4</a><a class="toc-link" href="#SetColor">SetColor</a><a class="toc-link" href="#SetMatrix3">SetMatrix3</a><a class="toc-link" href="#SetMatrix4">SetMatrix4</a><a class="toc-link" href="#SetInteger">SetInteger</a><a class="toc-link" href="#SetBoolean">SetBoolean</a><a class="toc-link" href="#SetTexture">SetTexture</a><a class="toc-link" href="#GetFloat">GetFloat</a><a class="toc-link" href="#GetVec2">GetVec2</a><a class="toc-link" href="#GetVec3">GetVec3</a><a class="toc-link" href="#GetVec4">GetVec4</a><a class="toc-link" href="#GetColor">GetColor</a><a class="toc-link" href="#GetMatrix3">GetMatrix3</a><a class="toc-link" href="#GetMatrix4">GetMatrix4</a><a class="toc-link" href="#GetInteger">GetInteger</a><a class="toc-link" href="#GetBoolean">GetBoolean</a><a class="toc-link" href="#GetTexture">GetTexture</a></nav></aside>
+  </div>
+  <footer>BAZZALT 0.5.0 documentation · English</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

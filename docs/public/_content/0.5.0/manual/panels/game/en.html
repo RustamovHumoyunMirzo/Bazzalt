@@ -1,0 +1,17 @@
+<h1>Game output</h1>
+<p class="lead">Output Game is the image produced by game cameras in the active scene. It is where you test the player's view and focused gameplay input.</p>
+<h2 id="find-game">Show the output</h2>
+<p>Choose the Output Game tab; it may share a container with Scene. If missing, show it from Window. A static scene can render without movement scripts. Play is needed to execute attached behaviors, not to author a camera entity.</p>
+<h2 id="camera-required">An enabled camera is required</h2>
+<p>If no eligible camera exists, the output is black with a warning. The Scene editor camera is not used as a fallback. Create a Camera entity or add/enable a Camera component and ensure its Active field is true.</p>
+<p>A camera looks through its entity Transform. Position it where it can see the object, and check its rotation, near/far clipping, projection and viewport. An unrotated camera looks toward negative local Z. For a cube at the origin, an unrotated camera at (0,0,5) is a useful starting position.</p>
+<h2 id="camera-settings">Image and camera settings</h2>
+<p>Perspective makes distant objects appear smaller. Orthographic is a parallel view. A camera viewport is the rectangle it draws into; full screen uses (0,0,1,1) in normalized coordinates. Splits let multiple enabled cameras draw into different parts of the output; priorities determine order where they overlap.</p>
+<p>Camera post-processing controls its own image. Enable both the post-processing master and Depth of Field to use focus blur. Lower f-stop usually increases blur; a larger number is not a stronger blur slider. GaussianBlur is an image-wide effect, not focus-dependent blur.</p>
+<h2 id="test-input">Test input</h2>
+<ol><li>Attach a behavior to a visible entity.</li><li>Press Play. Resolve compilation/import errors in Console if Play does not start.</li><li>Click inside Game output to give gameplay input focus.</li><li>Use the script's controls. Press Stop to return to editing.</li></ol>
+<p>Holding right mouse/WASD in Scene view flies the editor camera. That is not proof that a gameplay script is reading Input. Text fields and other editor interactions should not feed player movement.</p>
+<h2 id="diagnose">Diagnose the image</h2>
+<ul><li>Black with no-camera warning: active scene lacks an enabled/active game camera.</li><li>Background but no object: check view direction, clipping, object Visible/Enabled, geometry/material references, and active scene.</li><li>Surface too dark: check Light components and scene image-based lighting.</li><li>Still bright after deleting a light: inspect scene environment intensity and Image Based Lighting.</li><li>No blur: inspect the game camera's effect/master flags and choose a visible subject away from focus distance.</li></ul>
+<h2 id="overlays">What should not appear</h2>
+<p>Grid, object manipulation handles, editor camera/light icons, and orientation guides are Scene tools. They should not be treated as gameplay rendering or included in the output camera image.</p>

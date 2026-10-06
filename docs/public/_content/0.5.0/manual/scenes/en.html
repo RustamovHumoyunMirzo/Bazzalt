@@ -1,0 +1,18 @@
+<h1>Multiple scenes and saving</h1>
+<p class="lead">The Hierarchy can contain several loaded scenes, but only one is active for Scene view and Game output.</p>
+<h2 id="create-and-load">Create and load a scene</h2>
+<p>Use the Asset Browser's file-creation menu to create a Scene asset. A scene file has the <code>.bscene</code> extension. Double-click it, or use its <strong>Load scene</strong> context-menu command, to add it to the Hierarchy.</p>
+<p>Loading is not the same as activating. Loading another scene keeps the current active scene active. Objects in an inactive scene can still be selected and edited from the Hierarchy, but its contents do not replace the active viewport.</p>
+<h2 id="activate-and-unload">Activate and unload</h2>
+<p>Right-click an inactive scene header and choose <strong>Activate scene</strong>. The active header becomes bold. Activation is a single-scene operation, not a way to render every selected scene together.</p>
+<p><strong>Unload scene</strong> removes an inactive scene from the Hierarchy without deleting its asset. The active scene cannot be unloaded. Activate a different scene first if you need to unload the current one. A scene already loaded is not offered for loading again under a second name.</p>
+<h2 id="scene-settings">Scene settings</h2>
+<p>Select a scene header to inspect scene-level settings, including its environment. A scene is not an entity: it does not have an Add Component button. Environment mode determines whether you assign an environment map or an environment material. Skybox visibility and image-based lighting are separate controls.</p>
+<h2 id="unsaved-changes">Unsaved changes</h2>
+<p>An asterisk (<code>*</code>) on a scene header means that scene has edits that have not been saved to disk. With several scenes loaded, check the individual headers instead of assuming that one saved scene means all scenes are saved.</p>
+<p>Use File → Save or Ctrl S and confirm that the relevant indicators clear. When closing the editor with unsaved changes, choose Save and close, close without saving, or Cancel. Closing without saving discards unsaved authoring changes; Cancel leaves the project open.</p>
+<h2 id="renaming">Renaming and identity</h2>
+<p>Use the Asset Browser or the scene header's rename action to rename a scene. The loaded scene tracks its asset identity, not just its path, so it should not become a duplicate when loaded after a rename. Keep matching metadata when moving files outside the editor.</p>
+<h2 id="runtime-loading">Loading scenes from gameplay</h2>
+<p>Gameplay can request a scene change through <code>SceneManager.LoadScene</code> in Lua or <code>Bazzalt::SceneManager::LoadScene</code> in C++. The request is deferred to a safe runtime boundary. Loading a scene does not give a behavior ownership of project loading, scene saving, or the application loop.</p>
+<p>Check the returned result and <code>GetLastError</code> for a rejected request. Do not assume that a successful request has already switched the active scene in the same callback. See the <a href="../../native/en.html">C++ API overview</a> or <a href="../../lua/api/en.html">Lua conventions</a>.</p>

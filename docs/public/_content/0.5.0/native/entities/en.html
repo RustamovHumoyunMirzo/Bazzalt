@@ -1,0 +1,44 @@
+<h1>Entities and components</h1>
+<p class="lead">An entity is a handle to a scene object. Components provide that object's data. A handle can become invalid when its scene or object is destroyed.</p>
+<h2 id="get-an-entity">Get or create an entity</h2>
+<pre><code class="language-cpp">#include &lt;Bazzalt/Scene.h&gt;
+#include &lt;Bazzalt/SceneManager.h&gt;
+#include &lt;Bazzalt/Components/PrimitiveObject.h&gt;
+
+void CreateCube() {
+    auto* scene = Bazzalt::SceneManager::GetActiveScene();
+    if (!scene) return;
+    auto cube = scene-&gt;CreateEntity("Cube");
+    cube.AddComponent&lt;Bazzalt::PrimitiveObject&gt;();
+}</code></pre>
+<p>This helper is called from gameplay, not an application entry point. An entity receives the engine's required identity, name, hierarchy, and transform data. AddComponent adds the requested component type; it does not add a duplicate of an existing type.</p>
+<p>Use <code>IsValid()</code> before using a handle that may outlive a scene change. UUID lookup is suitable for stable references. Name lookup can be convenient, but two entities may have the same name.</p>
+<h2 id="component-access">Read and change components</h2>
+<pre><code class="language-cpp">if (auto* light = entity.TryGetComponent&lt;Bazzalt::Light&gt;()) {
+    light-&gt;Intensity = 1000.0f;
+}
+entity.SetComponentEnabled&lt;Bazzalt::Light&gt;(false);</code></pre>
+<p>The snippet assumes you include <code>Bazzalt/Components/Light.h</code> and the entity is valid. TryGetComponent returns null when that type is absent. GetComponent expects the component to exist. Enabling a component is different from removing it: disabling retains its values for use when enabled again.</p>
+<p>C++ component references point into scene storage. Do not keep them across component removal, entity destruction, or scene replacement. Lua uses copied values instead; its write-back rules are described in <a href="../../lua/api/en.html">Lua conventions</a>.</p>
+<h2 id="parenting">Parenting and world transforms</h2>
+<pre><code class="language-cpp">child.SetParent(parent);       // Keep the current world transform.
+auto world = child.GetWorldTransform();
+world.Position.Y += 1.0f;
+child.SetWorldTransform(world);
+child.RemoveParent();          // Return to the scene root, keeping world placement.</code></pre>
+<p>Transform component values are local to the parent. World values compose the child's local transform with all its ancestors. This is why moving a parent moves its child even without editing the child's local position.</p>
+<p>SetParent and RemoveParent default to preserving world placement. Pass false for worldPositionStays if you intentionally want to keep the local values instead. Cross-scene parenting and hierarchy cycles are rejected. UUID zero represents the permanent root, not an ordinary deletable object.</p>
+<h2 id="custom-components">Define your own data component</h2>
+<pre><code class="language-cpp">#include &lt;Bazzalt/Component.h&gt;
+
+struct Health : Bazzalt::Component {
+    float Current = 100.0f;
+    float Maximum = 100.0f;
+};
+
+// Inside gameplay code:
+// entity.AddComponent&lt;Health&gt;();</code></pre>
+<p>Custom component types derive from Component. A System can process them, while an attachable COMPONENT behavior can access them through its entity. The compiler knowing a C++ struct does not automatically register its fields with the editor, scene serializer, or Lua binding layer. For Inspector-editable script fields, use PROPERTY in an attachable behavior. For an engine extension, register the corresponding serialization and Lua support explicitly.</p>
+<h2 id="queries-and-lifetime">Queries and lifetime</h2>
+<p>Scene provides Pick, PickAll, Raycast, RaycastAll, and overlap queries against scene geometry. These are scene queries, not a physics simulation or a promise of rigid-body collision behavior. Imported model hierarchy and primitive geometry can be queried without creating a physics world.</p>
+<p>DestroyEntity destroys descendants as well. Do not continue using their handles after destruction. Modifying scene structure during a component iteration requires care; never assume a raw registry view stays valid across arbitrary removals.</p>

@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Comparison between a fragment depth and existing depth. Changing it does not create alpha blending or compile another shader.">
+  <title>MaterialDepthFunction | BAZZALT Docs 0.5.0</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../" data-version="0.5.0" data-page="native/reference/MaterialDepthFunction">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"><option value="0.5.0" selected>0.5.0</option></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"><option value="en" selected>English</option></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><details><summary>Editor manual</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/manual/en.html">Start here</a>
+<a class="nav-link" href="../../../../0.5.0/manual/first-launch/en.html">Open your first project</a>
+<details><summary>Find your way around</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/manual/workspace/en.html">Panels and scene controls</a>
+<details><summary>Panel guides</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/manual/panels/hierarchy/en.html">Hierarchy</a>
+<a class="nav-link" href="../../../../0.5.0/manual/panels/inspector/en.html">Inspector</a>
+<a class="nav-link" href="../../../../0.5.0/manual/panels/scene/en.html">Scene view</a>
+<a class="nav-link" href="../../../../0.5.0/manual/panels/game/en.html">Game output</a>
+<a class="nav-link" href="../../../../0.5.0/manual/panels/assets/en.html">Asset Browser</a>
+<a class="nav-link" href="../../../../0.5.0/manual/panels/console/en.html">Console</a></div></details>
+<a class="nav-link" href="../../../../0.5.0/manual/menus/en.html">Menus and play controls</a>
+<a class="nav-link" href="../../../../0.5.0/manual/settings/en.html">Preferences and project settings</a></div></details>
+<a class="nav-link" href="../../../../0.5.0/manual/first-scene/en.html">Your first scene</a>
+<a class="nav-link" href="../../../../0.5.0/manual/assets/en.html">Assets and project files</a>
+<a class="nav-link" href="../../../../0.5.0/manual/scenes/en.html">Multiple scenes and saving</a>
+<a class="nav-link" href="../../../../0.5.0/manual/glossary/en.html">Terms used in these guides</a></div></details>
+<details open><summary>C++</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/en.html">C++ gameplay API</a>
+<a class="nav-link" href="../../../../0.5.0/native/basics/en.html">Read your first C++ example</a>
+<a class="nav-link" href="../../../../0.5.0/native/behaviors/en.html">Write a C++ behavior</a>
+<a class="nav-link" href="../../../../0.5.0/native/entities/en.html">Entities and components</a>
+<a class="nav-link" href="../../../../0.5.0/native/materials/en.html">Runtime materials</a>
+<details open><summary>C++ API reference</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/en.html">C++ API reference</a>
+<details open><summary>Enumerations</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/AntiAliasing/en.html">AntiAliasing</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/AssetState/en.html">AssetState</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/CameraAspectMode/en.html">CameraAspectMode</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/CameraProjection/en.html">CameraProjection</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentInheritanceMode/en.html">ComponentInheritanceMode</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/DepthOfFieldQuality/en.html">DepthOfFieldQuality</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/InputAxis/en.html">InputAxis</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/KeyCode/en.html">KeyCode</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/LightType/en.html">LightType</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MaterialCulling/en.html">MaterialCulling</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MaterialDepthFunction/en.html" aria-current="page">MaterialDepthFunction</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MouseButton/en.html">MouseButton</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PostProcessParameterType/en.html">PostProcessParameterType</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PrimitiveShape/en.html">PrimitiveShape</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PropertyType/en.html">PropertyType</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneEnvironmentMode/en.html">SceneEnvironmentMode</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneQueryShape/en.html">SceneQueryShape</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ShaderParameterType/en.html">ShaderParameterType</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ShaderPreset/en.html">ShaderPreset</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ToneMapping/en.html">ToneMapping</a></div></details>
+<details><summary>Assets and models</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/AssetInfo/en.html">AssetInfo</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/AssetManager/en.html">AssetManager</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ModelAsset/en.html">ModelAsset</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ModelAssetNode/en.html">ModelAssetNode</a></div></details>
+<details><summary>Components</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/Camera/en.html">Camera</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/CameraPostProcessing/en.html">CameraPostProcessing</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/CameraPostProcessing-DepthOfFieldSettings/en.html">CameraPostProcessing::DepthOfFieldSettings</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/CameraViewport/en.html">CameraViewport</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Component/en.html">Component</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentInheritance-Transform/en.html">ComponentInheritance&lt;Transform&gt;</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/GaussianBlur/en.html">GaussianBlur</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Hierarchy/en.html">Hierarchy</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Identity/en.html">Identity</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Light/en.html">Light</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Mesh/en.html">Mesh</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ModelInstance/en.html">ModelInstance</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ModelNode/en.html">ModelNode</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Name/en.html">Name</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PrimitiveObject/en.html">PrimitiveObject</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneQueryBounds/en.html">SceneQueryBounds</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ScriptAttachment/en.html">ScriptAttachment</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ScriptComponents/en.html">ScriptComponents</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ScriptPropertyValue/en.html">ScriptPropertyValue</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Transform/en.html">Transform</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Vignette/en.html">Vignette</a></div></details>
+<details><summary>Serialization and module contracts</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentInheritance/en.html">ComponentInheritance</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentSerializationRegistry/en.html">ComponentSerializationRegistry</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentSerializationRegistry-Descriptor/en.html">ComponentSerializationRegistry::Descriptor</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ProjectMetadata/en.html">ProjectMetadata</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ProjectSerializer/en.html">ProjectSerializer</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneSerializer/en.html">SceneSerializer</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ScriptModuleApi/en.html">ScriptModuleApi</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ScriptRuntimeAccess/en.html">ScriptRuntimeAccess</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SerializedComponent/en.html">SerializedComponent</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/UnresolvedComponents/en.html">UnresolvedComponents</a></div></details>
+<details><summary>Scenes and entities</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/Entity/en.html">Entity</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/EntityReference/en.html">EntityReference</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Scene/en.html">Scene</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneEnvironment/en.html">SceneEnvironment</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneManager/en.html">SceneManager</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneQueryHit/en.html">SceneQueryHit</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneQueryOptions/en.html">SceneQueryOptions</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/SceneRay/en.html">SceneRay</a></div></details>
+<details><summary>Gameplay and systems</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/Behavior/en.html">Behavior</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ComponentSystem/en.html">ComponentSystem</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Input/en.html">Input</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/System/en.html">System</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Time/en.html">Time</a></div></details>
+<details><summary>Materials and effects</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/CustomPostProcessEffect/en.html">CustomPostProcessEffect</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Material/en.html">Material</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MaterialBuilder/en.html">MaterialBuilder</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MaterialRenderState/en.html">MaterialRenderState</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PostProcessParameter/en.html">PostProcessParameter</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/PostProcessingStack/en.html">PostProcessingStack</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Shader/en.html">Shader</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/ShaderParameter/en.html">ShaderParameter</a></div></details>
+<details><summary>Math and identifiers</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/native/reference/Mat3/en.html">Mat3</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Mat4/en.html">Mat4</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/MathFunctions/en.html">MathFunctions</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Quaternion/en.html">Quaternion</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/UUID/en.html">UUID</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Vec2/en.html">Vec2</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Vec3/en.html">Vec3</a>
+<a class="nav-link" href="../../../../0.5.0/native/reference/Vec4/en.html">Vec4</a></div></details></div></details></div></details>
+<details><summary>Lua</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/en.html">Write a Lua behavior</a>
+<a class="nav-link" href="../../../../0.5.0/lua/basics/en.html">Lua terms and first calls</a>
+<a class="nav-link" href="../../../../0.5.0/lua/api/en.html">Lua API conventions</a>
+<details><summary>Lua API reference</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/en.html">Lua API reference</a>
+<details><summary>Enumerations</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/AntiAliasing/en.html">AntiAliasing</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/AssetState/en.html">AssetState</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/CameraAspectMode/en.html">CameraAspectMode</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/CameraProjection/en.html">CameraProjection</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/DepthOfFieldQuality/en.html">DepthOfFieldQuality</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/InputAxis/en.html">InputAxis</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/KeyCode/en.html">KeyCode</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/LightType/en.html">LightType</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MaterialCulling/en.html">MaterialCulling</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MaterialDepthFunction/en.html">MaterialDepthFunction</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MouseButton/en.html">MouseButton</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/PostProcessParameterType/en.html">PostProcessParameterType</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/PrimitiveShape/en.html">PrimitiveShape</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneEnvironmentMode/en.html">SceneEnvironmentMode</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneQueryShape/en.html">SceneQueryShape</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ShaderParameterType/en.html">ShaderParameterType</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ShaderPreset/en.html">ShaderPreset</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ToneMapping/en.html">ToneMapping</a></div></details>
+<details><summary>Assets and models</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/AssetInfo/en.html">AssetInfo</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/AssetManager/en.html">AssetManager</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ModelAsset/en.html">ModelAsset</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ModelAssetNode/en.html">ModelAssetNode</a></div></details>
+<details><summary>Scenes and entities</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Entity/en.html">Entity</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/EntityReference/en.html">EntityReference</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Scene/en.html">Scene</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneEnvironment/en.html">SceneEnvironment</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneManager/en.html">SceneManager</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneQueryHit/en.html">SceneQueryHit</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneQueryOptions/en.html">SceneQueryOptions</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneRay/en.html">SceneRay</a></div></details>
+<details><summary>Materials and effects</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/CustomPostProcessEffect/en.html">CustomPostProcessEffect</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Material/en.html">Material</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MaterialBuilder/en.html">MaterialBuilder</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MaterialRenderState/en.html">MaterialRenderState</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/PostProcessParameter/en.html">PostProcessParameter</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/PostProcessingStack/en.html">PostProcessingStack</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Shader/en.html">Shader</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ShaderParameter/en.html">ShaderParameter</a></div></details>
+<details><summary>Components</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Camera/en.html">Camera</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/CameraPostProcessing/en.html">CameraPostProcessing</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/CameraViewport/en.html">CameraViewport</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Component/en.html">Component</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/DepthOfFieldSettings/en.html">DepthOfFieldSettings</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/GaussianBlur/en.html">GaussianBlur</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Hierarchy/en.html">Hierarchy</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Identity/en.html">Identity</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Light/en.html">Light</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Mesh/en.html">Mesh</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ModelInstance/en.html">ModelInstance</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ModelNode/en.html">ModelNode</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Name/en.html">Name</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/PrimitiveObject/en.html">PrimitiveObject</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/SceneQueryBounds/en.html">SceneQueryBounds</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ScriptAttachment/en.html">ScriptAttachment</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ScriptComponents/en.html">ScriptComponents</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/ScriptPropertyValue/en.html">ScriptPropertyValue</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Transform/en.html">Transform</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Vignette/en.html">Vignette</a></div></details>
+<details><summary>Math and identifiers</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Mat3/en.html">Mat3</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Mat4/en.html">Mat4</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/MathFunctions/en.html">MathFunctions</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Quaternion/en.html">Quaternion</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/UUID/en.html">UUID</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Vec2/en.html">Vec2</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Vec3/en.html">Vec3</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Vec4/en.html">Vec4</a></div></details>
+<details><summary>Gameplay and systems</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Behavior/en.html">Behavior</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Input/en.html">Input</a>
+<a class="nav-link" href="../../../../0.5.0/lua/reference/Time/en.html">Time</a></div></details></div></details></div></details>
+<details><summary>Shaders</summary><div class="tree-list">
+<a class="nav-link" href="../../../../0.5.0/bshader/en.html">Shaders and material assets</a></div></details></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / C++ / C++ API reference / Enumerations / MaterialDepthFunction</nav>
+      <article class="doc"><h1>MaterialDepthFunction</h1>
+<p class="lead">Comparison between a fragment depth and existing depth. Changing it does not create alpha blending or compile another shader.</p>
+<p><strong>C++ header:</strong> <code>Bazzalt/Material.h</code>.</p>
+<p>Read signatures together with the behavior notes below. The <a href="../en.html">reference introduction</a> explains arguments, return values, value copies, and errors.</p>
+<pre><code>#include &lt;Bazzalt/Material.h&gt;</code></pre>
+<pre><code>enum class MaterialDepthFunction : std::uint8_t</code></pre>
+<h2 id="Less">Less</h2>
+<pre><code>Less</code></pre>
+<p>Pass only if incoming depth is less.</p>
+<h2 id="LessEqual">LessEqual</h2>
+<pre><code>LessEqual</code></pre>
+<p>Pass for less or equal depth.</p>
+<h2 id="Equal">Equal</h2>
+<pre><code>Equal</code></pre>
+<p>Pass for equal depth.</p>
+<h2 id="Greater">Greater</h2>
+<pre><code>Greater</code></pre>
+<p>Pass for greater depth.</p>
+<h2 id="GreaterEqual">GreaterEqual</h2>
+<pre><code>GreaterEqual</code></pre>
+<p>Pass for greater or equal depth.</p>
+<h2 id="Always">Always</h2>
+<pre><code>Always</code></pre>
+<p>Always pass comparison.</p>
+<h2 id="Never">Never</h2>
+<pre><code>Never</code></pre>
+<p>Never pass comparison.</p>
+<h2 id="NotEqual">NotEqual</h2>
+<pre><code>NotEqual</code></pre>
+<p>Pass for different depth.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../../0.5.0/native/reference/MaterialCulling/en.html"><small>Previous</small>MaterialCulling</a>
+<a class="next" href="../../../../0.5.0/native/reference/MouseButton/en.html"><small>Next</small>MouseButton</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#Less">Less</a><a class="toc-link" href="#LessEqual">LessEqual</a><a class="toc-link" href="#Equal">Equal</a><a class="toc-link" href="#Greater">Greater</a><a class="toc-link" href="#GreaterEqual">GreaterEqual</a><a class="toc-link" href="#Always">Always</a><a class="toc-link" href="#Never">Never</a><a class="toc-link" href="#NotEqual">NotEqual</a></nav></aside>
+  </div>
+  <footer>BAZZALT 0.5.0 documentation · English</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>
