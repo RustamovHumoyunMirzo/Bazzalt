@@ -5,6 +5,7 @@
 #include "Bazzalt/Component.h"
 #include "Bazzalt/Math.h"
 #include "Bazzalt/UUID.h"
+#include "Bazzalt/Material.h"
 
 namespace Bazzalt {
 
@@ -29,6 +30,9 @@ struct PrimitiveObject : Component {
     bool Visible = true;
     bool CastShadows = true;
     bool ReceiveShadows = true;
+    void SetMaterial(Material material) { MaterialAsset=material.GetAssetUUID(); }
+    [[nodiscard]] Material GetMaterial() const { return Material::Load(MaterialAsset); }
+    void ClearMaterial() { MaterialAsset={}; }
 };
 
 } // namespace Bazzalt

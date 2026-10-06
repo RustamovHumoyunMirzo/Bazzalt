@@ -7,6 +7,7 @@
 #include "Bazzalt/UUID.h"
 
 namespace Bazzalt {
+enum class ShaderPreset : std::uint8_t { StandardLit, Unlit, StandardLitTransparent, UnlitTransparent };
 enum class ShaderParameterType : std::uint32_t { Float, Float2, Float3, Float4, Integer, Boolean, Texture2D, Matrix3, Matrix4 };
 struct ShaderParameter {
     std::string Name;
@@ -34,6 +35,7 @@ class Shader final {
 public:
     Shader() = default;
     [[nodiscard]] static Shader Load(UUID id) { Shader result; result.m_asset = id; return result; }
+    [[nodiscard]] BAZZALT_API static Shader Builtin(ShaderPreset preset = ShaderPreset::StandardLit);
     [[nodiscard]] UUID GetAssetUUID() const { return m_asset; }
     [[nodiscard]] bool IsValid() const { auto* host=Detail::BoundMaterialServices; return m_asset && host && host->IsValid(m_asset,true); }
     [[nodiscard]] std::vector<ShaderParameter> GetParameters() const {

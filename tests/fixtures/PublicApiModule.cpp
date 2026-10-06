@@ -5,6 +5,7 @@
 #include <Bazzalt/EntityReference.h>
 #include <Bazzalt/Input.h>
 #include <Bazzalt/Material.h>
+#include <Bazzalt/MaterialBuilder.h>
 #include <Bazzalt/Math.h>
 #include <Bazzalt/ModelAsset.h>
 #include <Bazzalt/PostProcessing.h>
@@ -35,6 +36,7 @@ class ScriptSystem : public Bazzalt::System {
 COMPONENT(PublicApiProbe) {
 public:
     PROPERTY(Bazzalt::Entity, Cube, {})
+    Bazzalt::Material Surface;
     void OnCreate() override {
         auto* scene = Bazzalt::SceneManager::GetActiveScene();
         if (!scene || Cube != GetEntity()) throw std::runtime_error("Not the host scene/entity");
@@ -44,12 +46,15 @@ public:
         Cube.SetComponentEnabled<Bazzalt::Light>(false);
         Cube.GetComponent<Bazzalt::Transform>().Position.X = 3.0f;
         Bazzalt::Time::SetTimeScale(0.5f);
+        Surface=Bazzalt::MaterialBuilder().SetFloat("roughness",.2f).Build();
+        if(Surface.ApplyTo(Cube)!=1 || !Surface.IsRuntime())throw std::runtime_error("Runtime material assignment failed");
     }
     void OnUpdate(float delta) override {
         auto world = Cube.GetWorldTransform();
         world.Translate({delta, 0.0f, 0.0f});
         if (!Cube.SetWorldTransform(world)) throw std::runtime_error("World transform update failed");
     }
+    void OnDestroy() override { Surface.Destroy(); }
 };
 namespace {
 void* Create(const char* entity) { auto* value=new PublicApiProbe(); Bazzalt::ScriptRuntimeAccess::Bind(*value,entity); return value; }

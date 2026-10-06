@@ -175,7 +175,7 @@ struct RenderAssets::Impl {
         bool AddedToScene = false;
         bool DebugWireframeAdded = false;
         std::vector<Original> Originals;
-        struct Override { utils::Entity Entity;std::size_t Primitive;UUID Asset;filament::MaterialInstance* Base;filament::MaterialInstance* Value=nullptr; };
+        struct Override { utils::Entity Entity;std::size_t Primitive;UUID Asset;filament::MaterialInstance* Base;filament::MaterialInstance* Value=nullptr;bool StateOverride=false; };
         std::vector<Override> Overrides;
         std::shared_ptr<ModelGeometryAsset> Geometry;
         std::uint32_t SourceIndex=Mesh::EntireAsset;
@@ -224,8 +224,9 @@ struct RenderAssets::Impl {
         if (!id) return nullptr;
         std::vector<std::uint8_t> ownedBytes;
         const auto embedded = GetEmbeddedPostProcessShader(id);
-        const std::uint8_t* data = embedded.Data;
-        std::size_t size = embedded.Size;
+        const auto builtin = GetBuiltinMaterialPackage(id);
+        const std::uint8_t* data = builtin.Data ? builtin.Data : embedded.Data;
+        std::size_t size = builtin.Data ? builtin.Size : embedded.Size;
         if (data == nullptr) {
             const auto asset = AssetManager::GetAsset(id);
             if (!asset || asset->State != AssetState::Ready) return nullptr;
@@ -242,7 +243,7 @@ struct RenderAssets::Impl {
         }
         if (data == nullptr || size == 0) return nullptr;
         if(auto found=Materials.find(id);found!=Materials.end()) {
-            if(embedded.Data || MaterialPackages[id]==ownedBytes)return found->second;
+            if(builtin.Data || embedded.Data || MaterialPackages[id]==ownedBytes)return found->second;
         }
         auto* material = filament::Material::Builder().package(data, size).build(Engine);
         if (material) {if(auto found=Materials.find(id);found!=Materials.end())RetiredMaterials.push_back(found->second);Materials[id]=material;MaterialPackages[id]=std::move(ownedBytes);}
@@ -295,6 +296,16 @@ struct RenderAssets::Impl {
     }
     void ApplyMaterialValues(filament::MaterialInstance* instance,UUID asset) {
         auto* services=GetMaterialServices();auto material=Bazzalt::Material::Load(asset);
+        const auto state=material.GetRenderState();
+        if(state.Override){
+            using C=filament::MaterialInstance::CullingMode;using D=filament::MaterialInstance::DepthFunc;
+            static constexpr C culling[]{C::NONE,C::FRONT,C::BACK,C::FRONT_AND_BACK};
+            static constexpr D depth[]{D::L,D::LE,D::E,D::G,D::GE,D::A,D::N,D::NE};
+            if(state.DoubleSided || instance->getMaterial()->isDoubleSided())instance->setDoubleSided(state.DoubleSided);
+            instance->setCullingMode(culling[static_cast<unsigned>(state.Culling)]);
+            instance->setColorWrite(state.ColorWrite);instance->setDepthWrite(state.DepthWrite);instance->setDepthCulling(state.DepthTest);
+            instance->setDepthFunc(depth[static_cast<unsigned>(state.DepthFunction)]);
+        }
         std::vector<filament::Material::ParameterInfo> actual(instance->getMaterial()->getParameterCount());instance->getMaterial()->getParameters(actual.data(),actual.size());
         for(const auto& p:material.GetParameters()) {
             const auto found=std::find_if(actual.begin(),actual.end(),[&](const auto& a){return p.Name==a.name;});
@@ -322,13 +333,15 @@ struct RenderAssets::Impl {
             auto* shader=material.IsValid()?LoadMaterial(material.GetShader().GetAssetUUID()):LoadMaterial(override.Asset);
             if(shader&&shader->getMaterialDomain()!=filament::MaterialDomain::SURFACE)shader=nullptr;
             if(shader){auto& manager=Engine.getRenderableManager();auto enabled=manager.getEnabledAttributesAt(manager.getInstance(override.Entity),override.Primitive);auto required=shader->getRequiredAttributes();if((enabled & required)!=required)shader=nullptr;}
-            if(shader && (!override.Value || override.Value->getMaterial()!=shader)){
+            const bool stateOverride=material.IsValid()&&material.GetRenderState().Override;
+            if(shader && (!override.Value || override.Value->getMaterial()!=shader || (override.StateOverride&&!stateOverride))){
                 Restore(value);auto* old=override.Value;override.Value=shader->createInstance();
                 const auto ri=Engine.getRenderableManager().getInstance(override.Entity);
                 Engine.getRenderableManager().setMaterialInstanceAt(ri,override.Primitive,override.Value);
                 if(old)Engine.destroy(old);ApplyDebug(value);
             }else if(!shader&&override.Value){Restore(value);const auto ri=Engine.getRenderableManager().getInstance(override.Entity);Engine.getRenderableManager().setMaterialInstanceAt(ri,override.Primitive,override.Base);Engine.destroy(override.Value);override.Value=nullptr;ApplyDebug(value);}
             if(override.Value&&material.IsValid())ApplyMaterialValues(override.Value,override.Asset);
+            override.StateOverride=stateOverride;
         }
     }
     void RegisterOverrides(Instance& value,const Mesh& component) {

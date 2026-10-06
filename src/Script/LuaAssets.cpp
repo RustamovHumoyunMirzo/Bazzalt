@@ -1,4 +1,5 @@
 #include "Script/LuaBindings.h"
+#include "Bazzalt/MaterialBuilder.h"
 namespace Bazzalt::Runtime {
 void BindLuaAssets(sol::table api){
     auto parameterTypes=api.create_named("PostProcessParameterType");
@@ -67,7 +68,31 @@ void BindLuaAssets(sol::table api){
     auto shader=api.new_usertype<Shader>("Shader",sol::constructors<Shader()>());shader["Load"]=&Shader::Load;shader["GetAssetUUID"]=&Shader::GetAssetUUID;shader["IsValid"]=&Shader::IsValid;shader["GetParameters"]=[](Shader value){return sol::as_table(value.GetParameters());};
     auto material=api.new_usertype<Material>("Material",sol::constructors<Material()>());
     material["Load"]=&Material::Load;
-    material["Create"]=&Material::Create;
+    material["Create"]=sol::overload([](){return Material::Create();},[](Shader shader){return Material::Create(shader);},[](ShaderPreset preset){return Material::Create(preset);});
+    auto presets=api.create_named("ShaderPreset");
+    presets["StandardLit"]=ShaderPreset::StandardLit;presets["Unlit"]=ShaderPreset::Unlit;
+    presets["StandardLitTransparent"]=ShaderPreset::StandardLitTransparent;presets["UnlitTransparent"]=ShaderPreset::UnlitTransparent;
+    shader["Builtin"]=[](sol::optional<ShaderPreset> preset){return Shader::Builtin(preset.value_or(ShaderPreset::StandardLit));};
+    auto culling=api.create_named("MaterialCulling");culling["None"]=MaterialCulling::None;culling["Front"]=MaterialCulling::Front;culling["Back"]=MaterialCulling::Back;culling["FrontAndBack"]=MaterialCulling::FrontAndBack;
+    auto depth=api.create_named("MaterialDepthFunction");
+#define BAZZALT_LUA_DEPTH(Name) depth[#Name]=MaterialDepthFunction::Name;
+    BAZZALT_LUA_DEPTH(Less) BAZZALT_LUA_DEPTH(LessEqual) BAZZALT_LUA_DEPTH(Equal) BAZZALT_LUA_DEPTH(Greater) BAZZALT_LUA_DEPTH(GreaterEqual) BAZZALT_LUA_DEPTH(Always) BAZZALT_LUA_DEPTH(Never) BAZZALT_LUA_DEPTH(NotEqual)
+#undef BAZZALT_LUA_DEPTH
+    auto state=api.new_usertype<MaterialRenderState>("MaterialRenderState",sol::constructors<MaterialRenderState()>());
+#define BAZZALT_LUA_STATE(Name) state[#Name]=&MaterialRenderState::Name;
+    BAZZALT_LUA_STATE(Override) BAZZALT_LUA_STATE(DoubleSided) BAZZALT_LUA_STATE(DepthTest) BAZZALT_LUA_STATE(DepthWrite) BAZZALT_LUA_STATE(ColorWrite) BAZZALT_LUA_STATE(Culling) BAZZALT_LUA_STATE(DepthFunction)
+#undef BAZZALT_LUA_STATE
+    material["IsRuntime"]=&Material::IsRuntime;material["Destroy"]=&Material::Destroy;
+    material["SetShader"]=[](Material& m,Shader s,sol::optional<bool> preserve){m.SetShader(s,preserve.value_or(true));};
+    material["CopyPropertiesFrom"]=[](Material& m,Material s,sol::optional<bool> state){m.CopyPropertiesFrom(s,state.value_or(true));};
+    material["ResetParameter"]=&Material::ResetParameter;material["ResetProperties"]=&Material::ResetProperties;material["HasOverride"]=&Material::HasOverride;
+    material["GetRenderState"]=&Material::GetRenderState;material["SetRenderState"]=&Material::SetRenderState;material["ResetRenderState"]=&Material::ResetRenderState;
+    material["AllSlots"]=sol::var(-1);
+    material["ApplyTo"]=[](const Material& m,Entity entity,sol::optional<std::int64_t> slot,sol::optional<bool> children){auto index=slot.value_or(-1);if(index < -1 || index>=4096)throw std::out_of_range("Invalid material slot");return m.ApplyTo(entity,index==-1?Material::AllSlots:static_cast<std::size_t>(index),children.value_or(false));};
+    auto builder=api.new_usertype<MaterialBuilder>("MaterialBuilder",sol::constructors<MaterialBuilder(),MaterialBuilder(Shader)>());
+#define BAZZALT_LUA_BUILDER(Name) builder[#Name]=&MaterialBuilder::Name;
+    BAZZALT_LUA_BUILDER(SetShader) BAZZALT_LUA_BUILDER(SetRenderState) BAZZALT_LUA_BUILDER(SetFloat) BAZZALT_LUA_BUILDER(SetVec2) BAZZALT_LUA_BUILDER(SetVec3) BAZZALT_LUA_BUILDER(SetVec4) BAZZALT_LUA_BUILDER(SetColor) BAZZALT_LUA_BUILDER(SetMatrix3) BAZZALT_LUA_BUILDER(SetMatrix4) BAZZALT_LUA_BUILDER(SetInteger) BAZZALT_LUA_BUILDER(SetBoolean) BAZZALT_LUA_BUILDER(SetTexture) BAZZALT_LUA_BUILDER(Build) BAZZALT_LUA_BUILDER(Clear)
+#undef BAZZALT_LUA_BUILDER
     material["GetAssetUUID"]=&Material::GetAssetUUID;
     material["IsValid"]=&Material::IsValid;
     material["Instantiate"]=&Material::Instantiate;

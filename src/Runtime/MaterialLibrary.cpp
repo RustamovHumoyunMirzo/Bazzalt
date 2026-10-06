@@ -1,5 +1,11 @@
 #include "Runtime/MaterialLibrary.h"
 #include "Bazzalt/AssetManager.h"
+#include "Bazzalt/Components/Mesh.h"
+#include "Bazzalt/Components/PrimitiveObject.h"
+#include "runtime_lit_filamat.h"
+#include "runtime_unlit_filamat.h"
+#include "runtime_lit_transparent_filamat.h"
+#include "runtime_unlit_transparent_filamat.h"
 #include <ryml.hpp>
 #include <ryml_std.hpp>
 #include <fstream>
@@ -8,6 +14,7 @@
 #include <cstring>
 #include <cmath>
 #include <algorithm>
+#include <array>
 #include <cctype>
 
 namespace Bazzalt::Runtime {
@@ -21,7 +28,10 @@ struct Definition {
     std::unordered_map<std::string,Detail::MaterialValue> Values;
     std::unordered_map<std::string,Detail::MaterialValue> Overrides;
     bool Transient=false;
+    MaterialRenderState State{};
 };
+constexpr std::uint64_t BuiltinShaderNamespace=0xba22a17000000002ULL;
+int PresetIndex(UUID id){return id.GetHigh()==BuiltinShaderNamespace&&id.GetLow()>=1&&id.GetLow()<=4?int(id.GetLow()-1):-1;}
 std::unordered_map<UUID,Definition> Shaders,Materials;
 std::string Read(const std::filesystem::path& path) {
     std::ifstream stream(path,std::ios::binary);return {std::istreambuf_iterator<char>(stream),{}};
@@ -42,6 +52,15 @@ bool ParseValue(ryml::ConstNodeRef node,ShaderParameterType type,Detail::Materia
     } catch(...) { return false; }
 }
 Definition* ShaderDefinition(UUID id) {
+    if(const int preset=PresetIndex(id);preset>=0){
+        static std::array<Definition,4> builtins=[](){std::array<Definition,4> values;
+            for(int i=0;i<4;++i){auto& value=values[i];value.Shader=UUID{BuiltinShaderNamespace,std::uint64_t(i+1)};value.Stamp="builtin-runtime-1";
+                value.Parameters={{"baseColor",ShaderParameterType::Float4},{"emissive",ShaderParameterType::Float3}};
+                Detail::MaterialValue color;std::fill_n(color.Numbers,4,1.f);value.Values["baseColor"]=color;value.Values["emissive"]={};
+                if(i==0||i==2){for(auto name:{"roughness","metallic","reflectance"}){value.Parameters.push_back({name,ShaderParameterType::Float});Detail::MaterialValue number;number.Numbers[0]=std::string(name)=="metallic"?0.f:.5f;value.Values[name]=number;}}
+            }return values;
+        }();return &builtins[preset];
+    }
     const auto asset=AssetManager::GetAsset(id);if(!asset)return nullptr;
     const auto ext=Extension(asset->SourcePath);if(ext!=".mat"&&ext!=".shad")return nullptr;
     auto path=asset->CachePath;path+=".reflection.json";std::error_code error;const auto modified=std::filesystem::last_write_time(path,error);if(error)return nullptr;
@@ -76,7 +95,8 @@ Definition* MaterialDefinition(UUID id) {
         if(!shader){auto& result=Materials[id];result=Definition{};result.Stamp=json;result.Modified=modified;return &result;}
         auto* definition=ShaderDefinition(shader);if(!definition)return nullptr;
         const auto stamp=json+definition->Stamp;auto& result=Materials[id];if(result.Stamp==stamp)return &result;
-        Definition next=*definition;next.Shader=shader;next.Stamp=stamp;next.ShaderStamp=definition->Stamp;next.Modified=modified;next.Overrides=result.Overrides;
+        Definition next=*definition;next.Shader=shader;next.Stamp=stamp;next.ShaderStamp=definition->Stamp;next.Modified=modified;next.State=result.State;
+        for(const auto& parameter:next.Parameters)for(const auto& old:result.Parameters)if(parameter.Name==old.Name&&parameter.Type==old.Type)if(auto value=result.Overrides.find(parameter.Name);value!=result.Overrides.end())next.Overrides.emplace(value->first,value->second);
         if(root.has_child("properties"))for(const auto& p:next.Parameters)if(root["properties"].has_child(ryml::to_csubstr(p.Name))){
             if(!ParseValue(root["properties"][ryml::to_csubstr(p.Name)],p.Type,next.Values[p.Name]))return nullptr;
         }
@@ -101,5 +121,52 @@ Detail::MaterialServices Services{Valid,GetShader,Parameter,Get,Set,Clone};
 }
 Detail::MaterialServices* GetMaterialServices(){return &Services;}
 void ResetMaterialLibrary(){Materials.clear();Shaders.clear();}
-void ResetRuntimeMaterials(){for(auto it=Materials.begin();it!=Materials.end();)if(it->second.Transient)it=Materials.erase(it);else{it->second.Overrides.clear();++it;}}
+void ResetRuntimeMaterials(){Materials.clear();}
+MaterialShaderPackage GetBuiltinMaterialPackage(UUID shader){
+    switch(PresetIndex(shader)){
+    case 0:return {Embedded::RuntimeLitFilamat,Embedded::RuntimeLitFilamatSize};
+    case 1:return {Embedded::RuntimeUnlitFilamat,Embedded::RuntimeUnlitFilamatSize};
+    case 2:return {Embedded::RuntimeLitTransparentFilamat,Embedded::RuntimeLitTransparentFilamatSize};
+    case 3:return {Embedded::RuntimeUnlitTransparentFilamat,Embedded::RuntimeUnlitTransparentFilamatSize};
+    default:return {};
+    }
+}
+}
+
+namespace Bazzalt {
+Shader Shader::Builtin(ShaderPreset preset){const auto value=static_cast<unsigned>(preset);if(value>3)throw std::invalid_argument("Invalid built-in shader preset");return Load({Runtime::BuiltinShaderNamespace,value+1});}
+Material Material::Create(ShaderPreset preset){return Create(Shader::Builtin(preset));}
+bool Material::IsRuntime() const {auto* definition=Runtime::MaterialDefinition(m_asset);return definition&&definition->Transient;}
+bool Material::Destroy(){auto found=Runtime::Materials.find(m_asset);if(found==Runtime::Materials.end()||!found->second.Transient)return false;Runtime::Materials.erase(found);return true;}
+void Material::SetShader(Shader shader,bool preserve){
+    auto* source=Runtime::ShaderDefinition(shader.GetAssetUUID());auto* current=Runtime::MaterialDefinition(m_asset);
+    if(!source||!current)throw std::invalid_argument("SetShader requires a valid material and shader");
+    auto next=*source;next.Shader=shader.GetAssetUUID();next.Transient=current->Transient;next.Modified=current->Modified;next.Stamp=current->Stamp;next.ShaderStamp=source->Stamp;next.State=current->State;
+    if(preserve)for(const auto& parameter:next.Parameters)for(const auto& old:current->Parameters)if(parameter.Name==old.Name&&parameter.Type==old.Type){Detail::MaterialValue value;if(Runtime::Get(m_asset,parameter.Name.c_str(),&value))next.Overrides[parameter.Name]=value;}
+    *current=std::move(next);
+}
+void Material::CopyPropertiesFrom(Material source,bool state){
+    auto* target=Runtime::MaterialDefinition(m_asset);auto* input=Runtime::MaterialDefinition(source.m_asset);
+    if(!target||!input)throw std::invalid_argument("CopyPropertiesFrom requires valid materials");
+    auto next=target->Overrides;
+    for(const auto& parameter:target->Parameters)for(const auto& old:input->Parameters)if(parameter.Name==old.Name&&parameter.Type==old.Type){Detail::MaterialValue value;if(Runtime::Get(source.m_asset,parameter.Name.c_str(),&value))next[parameter.Name]=value;}
+    target->Overrides=std::move(next);if(state)target->State=input->State;
+}
+void Material::ResetParameter(const std::string& name){auto* d=Runtime::MaterialDefinition(m_asset);if(!d||!HasParameter(name))throw std::invalid_argument("Unknown material parameter: "+name);d->Overrides.erase(name);}
+void Material::ResetProperties(){auto* d=Runtime::MaterialDefinition(m_asset);if(!d)throw std::invalid_argument("Invalid material");d->Overrides.clear();}
+bool Material::HasOverride(const std::string& name) const {auto* d=Runtime::MaterialDefinition(m_asset);return d&&d->Overrides.contains(name);}
+MaterialRenderState Material::GetRenderState() const {auto* d=Runtime::MaterialDefinition(m_asset);if(!d)throw std::invalid_argument("Invalid material");return d->State;}
+void Material::SetRenderState(MaterialRenderState state){auto* d=Runtime::MaterialDefinition(m_asset);if(!d||static_cast<unsigned>(state.Culling)>3||static_cast<unsigned>(state.DepthFunction)>7)throw std::invalid_argument("Invalid material render state");state.Override=true;d->State=state;}
+void Material::ResetRenderState(){auto* d=Runtime::MaterialDefinition(m_asset);if(!d)throw std::invalid_argument("Invalid material");d->State={};}
+std::size_t Material::ApplyTo(Entity entity,std::size_t slot,bool children) const {
+    if(!IsValid()||!entity.IsValid())throw std::invalid_argument("ApplyTo requires a valid material and entity");
+    if(slot!=AllSlots&&slot>=4096)throw std::out_of_range("Material slot exceeds supported range");
+    std::vector<Entity> targets{entity};if(children)for(std::size_t i=0;i<targets.size();++i)for(auto child:targets[i].GetChildren())targets.push_back(child);
+    for(auto target:targets)if(target.HasComponent<PrimitiveObject>()&&slot!=AllSlots&&slot!=0)throw std::out_of_range("Primitives have only material slot zero");
+    std::size_t count=0;for(auto target:targets){bool applied=false;
+        if(auto* mesh=target.TryGetComponent<Mesh>()){if(slot==AllSlots)mesh->SetMaterial(*this);else mesh->SetMaterial(slot,*this);applied=true;}
+        if(auto* primitive=target.TryGetComponent<PrimitiveObject>()){primitive->SetMaterial(*this);applied=true;}
+        if(applied)++count;
+    }return count;
+}
 }

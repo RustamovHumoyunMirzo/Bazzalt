@@ -1,5 +1,8 @@
 # Materials and shaders
 
+See [Runtime materials](runtime-materials.md) for the C++/Lua material builder,
+built-in presets, shader switching, render state, and assignment APIs.
+
 ## Editor workflow
 
 Create a **Shader** (`.shad`) in the Asset Browser, or import an existing

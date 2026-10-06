@@ -185,7 +185,12 @@ void BindLuaComponents(sol::table api){
     dof["NativeResolution"]=&DoF::NativeResolution;
     sol::usertype<Transform> transform=api["Transform"];
     transform["GetMatrix"]=&Transform::GetMatrix;transform["GetForward"]=&Transform::GetForward;transform["GetRight"]=&Transform::GetRight;transform["GetUp"]=&Transform::GetUp;transform["Translate"]=&Transform::Translate;transform["Rotate"]=&Transform::Rotate;
-    sol::usertype<Mesh> mesh=api["Mesh"];mesh["SetMaterial"]=&Mesh::SetMaterial;mesh["GetMaterial"]=&Mesh::GetMaterial;mesh["ClearMaterial"]=&Mesh::ClearMaterial;mesh["EntireAsset"]=sol::var(Mesh::EntireAsset);
+    sol::usertype<Mesh> mesh=api["Mesh"];
+    mesh["SetMaterial"]=sol::overload([](Mesh& m,Material v){m.SetMaterial(v);},[](Mesh& m,std::size_t slot,Material v){m.SetMaterial(slot,v);});
+    mesh["GetMaterial"]=sol::overload([](const Mesh& m){return m.GetMaterial();},[](const Mesh& m,std::size_t slot){return m.GetMaterial(slot);});
+    mesh["ClearMaterial"]=sol::overload([](Mesh& m){m.ClearMaterial();},[](Mesh& m,std::size_t slot){m.ClearMaterial(slot);});
+    mesh["GetMaterialCount"]=&Mesh::GetMaterialCount;mesh["EntireAsset"]=sol::var(Mesh::EntireAsset);
+    sol::usertype<PrimitiveObject> primitive=api["PrimitiveObject"];primitive["SetMaterial"]=&PrimitiveObject::SetMaterial;primitive["GetMaterial"]=&PrimitiveObject::GetMaterial;primitive["ClearMaterial"]=&PrimitiveObject::ClearMaterial;
     sol::usertype<CameraViewport> viewport=api["CameraViewport"];
     viewport["FullScreen"]=&CameraViewport::FullScreen;viewport["LeftHalf"]=&CameraViewport::LeftHalf;viewport["RightHalf"]=&CameraViewport::RightHalf;viewport["TopHalf"]=&CameraViewport::TopHalf;viewport["BottomHalf"]=&CameraViewport::BottomHalf;viewport["Grid"]=&CameraViewport::Grid;
 }

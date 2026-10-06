@@ -175,9 +175,17 @@ and `OverlapBox`.
 Fields: `MeshAsset`, `MaterialAsset`, `ModelNodeIndex`, `Materials`, `LayerMask`, `Visible`, `CastShadows`,
 `ReceiveShadows`.
 
-Methods: `SetMaterial(Material)`, `GetMaterial()`, `ClearMaterial()`.
+Methods: `SetMaterial(Material)`, `SetMaterial(slot, Material)`, `GetMaterial()`,
+`GetMaterial(slot)`, `GetMaterialCount()`, `ClearMaterial()`, `ClearMaterial(slot)`.
 
 ## `Bazzalt/Material.h` and `Bazzalt/Shader.h`
+
+Runtime extensions include `Shader::Builtin(ShaderPreset)`, material lifecycle
+(`IsRuntime`, `Destroy`), shader switching, property copy/reset, render-state
+control, and entity/descendant assignment through `ApplyTo`. The public
+`Bazzalt/MaterialBuilder.h` provides a fluent typed builder with validated,
+atomic construction. See [Runtime materials](runtime-materials.md) for the
+complete C++/Lua reference, defaults, ownership rules, and examples.
 
 UUID-based asset handles with no public renderer dependency. Material supports
 `Load`, `Create(Shader)`, `Instantiate`, `GetShader`, `HasParameter`, and typed

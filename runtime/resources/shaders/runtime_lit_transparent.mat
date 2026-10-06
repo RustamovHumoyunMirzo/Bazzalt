@@ -1,0 +1,25 @@
+material {
+    name : BazzaltRuntimeLitTransparent,
+    shadingModel : lit,
+    doubleSided : true,
+    blending : transparent,
+    depthWrite : false,
+    parameters : [
+        { type : float4, name : baseColor },
+        { type : float3, name : emissive },
+        { type : float, name : roughness },
+        { type : float, name : metallic },
+        { type : float, name : reflectance }
+    ],
+    requires : [ tangents ]
+}
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = materialParams.baseColor;
+        material.emissive = vec4(materialParams.emissive, 0.0);
+        material.roughness = clamp(materialParams.roughness, 0.0, 1.0);
+        material.metallic = clamp(materialParams.metallic, 0.0, 1.0);
+        material.reflectance = clamp(materialParams.reflectance, 0.0, 1.0);
+    }
+}

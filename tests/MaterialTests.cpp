@@ -11,6 +11,7 @@
 #include <filament/MaterialInstance.h>
 #include "Rendering/RenderAssets.h"
 #include "Bazzalt/Material.h"
+#include "Bazzalt/MaterialBuilder.h"
 #include "Bazzalt/Components/Mesh.h"
 #include "Runtime/Engine.h"
 #include "Runtime/MaterialLibrary.h"
@@ -39,6 +40,16 @@ int main(int argc,char** argv){
     auto created=Material::Create(material.GetShader());assert(created.IsValid());assert(created.GetFloat("roughness")==0.5f);
     auto parent=engine.GetScene().CreateEntity("Parent");parent.AddComponent<Mesh>().MaterialAsset=material.GetAssetUUID();
     auto child=engine.GetScene().CreateEntity("Child");child.SetParent(parent);assert(!child.AddComponent<Mesh>().MaterialAsset);
+    auto runtime=MaterialBuilder().SetColor("baseColor",{.2f,.6f,.8f,1}).SetFloat("roughness",.3f).Build();
+    assert(runtime.IsRuntime()&&runtime.HasOverride("roughness"));assert(runtime.GetFloat("roughness")==.3f);
+    runtime.ResetParameter("roughness");assert(runtime.GetFloat("roughness")==.5f&&!runtime.HasOverride("roughness"));
+    auto runtimeCopy=Material::Create();runtimeCopy.CopyPropertiesFrom(runtime);assert(runtimeCopy.GetColor("baseColor").Y==.6f);
+    runtimeCopy.SetShader(Shader::Builtin(ShaderPreset::Unlit));assert(!runtimeCopy.HasParameter("roughness"));assert(runtimeCopy.GetColor("baseColor").Y==.6f);
+    assert(runtime.ApplyTo(parent,Material::AllSlots,true)==2);assert(child.GetComponent<Mesh>().GetMaterial().GetAssetUUID()==runtime.GetAssetUUID());
+    child.GetComponent<Mesh>().SetMaterial(1,runtimeCopy);assert(child.GetComponent<Mesh>().GetMaterial(0).GetAssetUUID()==runtime.GetAssetUUID());
+    assert(child.GetComponent<Mesh>().GetMaterialCount()==2);
+    rejected=false;try{auto invalid=MaterialBuilder().SetFloat("missing",1).Build();(void)invalid;}catch(const std::invalid_argument&){rejected=true;}assert(rejected);
+    assert(!material.Destroy());assert(runtimeCopy.Destroy());assert(!runtimeCopy.IsValid());
     Runtime::ResetRuntimeMaterials();assert(!copy.IsValid());assert(material.GetFloat("roughness")==0.25f);
     if(argc>1){Runtime::NativeScriptRuntime scripts;Runtime::ScriptBinding binding;binding.Module=std::filesystem::u8path(argv[1]);binding.TypeName="LifecycleProbe";binding.Entity=parent.GetUUID().ToString();binding.Properties["Surface"]=asset->Id.ToString();binding.Properties["LogPath"]=(directory/"lifecycle.txt").string();std::string error;assert(scripts.Configure({binding},error));assert(scripts.Start(error));assert(material.GetFloat("roughness")==0.1f);scripts.Stop();}
     // Real gltfio / Filament material assignment, without a platform window.
@@ -62,6 +73,15 @@ int main(int argc,char** argv){
         material.SetColor("baseColor",{.1f,.3f,.6f,1});renderer.UpdatePrimitive(primitiveHandle,Mat4::Identity(),primitive);
         renderScene->forEach([&](utils::Entity entity){auto ri=graphics->getRenderableManager().getInstance(entity);if(ri)assert(graphics->getRenderableManager().getMaterialInstanceAt(ri,0)->getParameter<filament::math::float4>("baseColor").y==0.3f);});
         assert(renderer.SetDebugMode("unlit"));renderer.UpdatePrimitive(primitiveHandle,Mat4::Identity(),primitive);assert(renderer.SetDebugMode("lit"));renderer.DestroyPrimitive(primitiveHandle);
+        auto surface=MaterialBuilder().SetColor("baseColor",{.1f,.75f,.3f,1}).Build();primitive.SetMaterial(surface);
+        const auto live=renderer.CreatePrimitive(primitive);assert(live!=Runtime::RenderAssets::InvalidHandle);
+        MaterialRenderState state;state.DoubleSided=true;state.Culling=MaterialCulling::None;state.DepthWrite=false;state.DepthFunction=MaterialDepthFunction::Always;surface.SetRenderState(state);
+        renderer.UpdatePrimitive(live,Mat4::Identity(),primitive);
+        renderScene->forEach([&](utils::Entity entity){auto ri=graphics->getRenderableManager().getInstance(entity);if(!ri)return;auto* mi=graphics->getRenderableManager().getMaterialInstanceAt(ri,0);assert(mi->getParameter<filament::math::float4>("baseColor").y==.75f);assert(!mi->isDepthWriteEnabled());assert(mi->getCullingMode()==filament::MaterialInstance::CullingMode::NONE);});
+        surface.ResetRenderState();renderer.UpdatePrimitive(live,Mat4::Identity(),primitive);
+        renderScene->forEach([&](utils::Entity entity){auto ri=graphics->getRenderableManager().getInstance(entity);if(ri)assert(graphics->getRenderableManager().getMaterialInstanceAt(ri,0)->isDepthWriteEnabled());});
+        surface.SetShader(Shader::Builtin(ShaderPreset::UnlitTransparent));renderer.UpdatePrimitive(live,Mat4::Identity(),primitive);
+        assert(surface.Destroy());renderer.UpdatePrimitive(live,Mat4::Identity(),primitive);renderer.DestroyPrimitive(live);
     }
     graphics->destroy(renderScene);filament::Engine::destroy(&graphics);
     engine.Shutdown();std::filesystem::remove_all(directory);

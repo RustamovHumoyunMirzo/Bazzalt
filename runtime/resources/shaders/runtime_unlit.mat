@@ -1,0 +1,19 @@
+material {
+    name : BazzaltRuntimeUnlit,
+    shadingModel : unlit,
+    doubleSided : true,
+    blending : opaque,
+    
+    parameters : [
+        { type : float4, name : baseColor },
+        { type : float3, name : emissive }
+    ]
+}
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = materialParams.baseColor;
+        material.emissive = vec4(materialParams.emissive, 0.0);
+        
+    }
+}

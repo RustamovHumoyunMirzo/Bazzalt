@@ -27,6 +27,8 @@ release workflows, shared build tools, and architecture support.
    environment materials, and shared inspector previews.
    [Materials and shaders](materials-and-shaders.md) covers the material Inspector,
    demand-driven compilation, typed C++ handles, and script asset properties.
+   [Runtime materials](runtime-materials.md) covers builders, built-in shaders,
+   live C++/Lua edits, render state, lifetime, and per-slot assignments.
 7. [Math](math.md) — coordinate conventions and public math types.
 8. [Public API reference](api-reference.md) — header-by-header reference.
    [Gameplay time](time.md) covers slow motion, scaled/unscaled clocks, pause,

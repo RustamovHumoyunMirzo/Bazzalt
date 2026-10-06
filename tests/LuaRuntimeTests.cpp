@@ -85,6 +85,20 @@ return Behavior
     binding.Module=exportedAsset->CachePath;entity.RemoveComponent<Light>();
     assert(runtime.Configure({binding},error));assert(runtime.Start(error));runtime.Update(.25f);runtime.Stop();
     binding.Module=output;
+    write(R"(local B=Bazzalt
+return {OnCreate=function(self)
+ local m=B.MaterialBuilder.new():SetColor('baseColor',B.Vec4.new(.2,.4,.6,1)):SetFloat('roughness',.25):Build()
+ assert(m:IsRuntime() and m:HasOverride('roughness'))
+ local state=B.MaterialRenderState.new();state.DepthWrite=false;m:SetRenderState(state)
+ assert(not m:GetRenderState().DepthWrite)
+ m:ResetParameter('roughness');assert(m:GetFloat('roughness')==.5)
+ m:SetShader(B.Shader.Builtin(B.ShaderPreset.Unlit));assert(not m:HasParameter('roughness'))
+ local copy=B.Material.Create();copy:CopyPropertiesFrom(m);assert(math.abs(copy:GetColor('baseColor').Y-.4)<.0001)
+ local mesh=B.Mesh.new();mesh:SetMaterial(0,m);assert(mesh:GetMaterialCount()==1)
+ local primitive=B.PrimitiveObject.new();primitive:SetMaterial(m);assert(primitive:GetMaterial():IsValid())
+ assert(m:Destroy() and not m:IsValid());assert(copy:Destroy())
+end})");
+    assert(Runtime::LuaRuntime::Import(source,output,error));assert(runtime.Configure({binding},error));assert(runtime.Start(error));runtime.Stop();
     write("return {OnCreate=function(self) while true do end end}");assert(Runtime::LuaRuntime::Import(source,output,error));assert(runtime.Configure({binding},error));assert(!runtime.Start(error));assert(error.find("instruction budget")!=std::string::npos);
     write("this is invalid Lua");assert(!Runtime::LuaRuntime::Import(source,output,error));assert(database.Refresh());
     const auto failedAsset=database.Find(source);assert(failedAsset&&failedAsset->State==AssetState::Failed&&!failedAsset->LastError.empty());

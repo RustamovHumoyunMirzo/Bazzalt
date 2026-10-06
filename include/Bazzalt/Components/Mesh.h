@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 
 #include <cstdint>
 #include <limits>
@@ -23,7 +24,16 @@ struct Mesh : Component {
     bool CastShadows = true;
     bool ReceiveShadows = true;
     void SetMaterial(Material material) { MaterialAsset=material.GetAssetUUID(); }
+    void SetMaterial(std::size_t slot, Material material) {
+        if(slot>=4096)throw std::out_of_range("Material slot exceeds the supported range");
+        if(MaterialAsset)std::fill(Materials.begin(),Materials.end(),MaterialAsset);
+        if(Materials.size()<=slot)Materials.resize(slot+1,MaterialAsset);
+        MaterialAsset={};Materials[slot]=material.GetAssetUUID();
+    }
     [[nodiscard]] Material GetMaterial() const { return Material::Load(MaterialAsset); }
+    [[nodiscard]] Material GetMaterial(std::size_t slot) const { return Material::Load(MaterialAsset?MaterialAsset:slot<Materials.size()?Materials[slot]:UUID{}); }
+    [[nodiscard]] std::size_t GetMaterialCount() const { return Materials.empty()?(MaterialAsset?1u:0u):Materials.size(); }
+    void ClearMaterial(std::size_t slot) { SetMaterial(slot,Material{}); }
     void ClearMaterial() { MaterialAsset={};Materials.clear(); }
 };
 
