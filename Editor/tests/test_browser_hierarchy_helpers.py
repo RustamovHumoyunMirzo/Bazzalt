@@ -70,9 +70,11 @@ class BrowserHierarchyHelpersTests(unittest.TestCase):
                 panel.SetProjectRoot(folder);item=panel.Browser.item(0);old=item.icon().cacheKey();item.setSelected(True)
                 finished=self._WaitFor(lambda:bool(completed))
                 self.assertTrue(finished,f"Thumbnail completion timeout: {panel._thumbnails.WorkerDiagnostics()}")
-                self.assertEqual(completed[0][0],str(path));self.assertFalse(completed[0][1].isNull(),"Thumbnail generation returned an empty image")
+                # SetProjectRoot resolves aliases (including Windows RUNNER~1
+                # short names); verify file identity rather than path spelling.
+                self.assertTrue(Path(completed[0][0]).samefile(path));self.assertFalse(completed[0][1].isNull(),"Thumbnail generation returned an empty image")
                 self.assertNotEqual(item.icon().cacheKey(),old,"Worker completed but browser did not apply the thumbnail")
-                self.assertTrue(item.isSelected());self.assertEqual(panel.CurrentFolder(),Path(folder))
+                self.assertTrue(item.isSelected());self.assertTrue(panel.CurrentFolder().samefile(folder))
                 path.write_text("broken",encoding="utf-8");self.assertTrue(RenderModelThumbnail(path).isNull())
             finally:
                 panel._thumbnails._pool.waitForDone(5000);panel.deleteLater()
