@@ -101,6 +101,9 @@ class EditorSession(QObject):
             QMessageBox.critical(self.Loading,"Editor Could Not Be Opened",details);self.App.quit()
 
 def main(arguments:list[str]|None=None)->int:
+    import struct
+    if struct.calcsize("P") != 8:
+        raise RuntimeError("BAZZALT Editor requires a 64-bit machine and Python runtime.")
     parser=argparse.ArgumentParser(prog="BAZZALT Editor");parser.add_argument("--project",type=Path);parser.add_argument("--editor-version",default="0.5.0");parser.add_argument("--check-runtime",action="store_true",help=argparse.SUPPRESS);options=parser.parse_args(arguments)
     if options.project is None and not options.check_runtime: parser.error("the following arguments are required: --project")
     app=QApplication(sys.argv if arguments is None else [sys.argv[0],*arguments]);app.setStyle("Fusion");app.setApplicationName("BAZZALT Editor");app.setOrganizationName("BAZZALT");app.setQuitOnLastWindowClosed(False)

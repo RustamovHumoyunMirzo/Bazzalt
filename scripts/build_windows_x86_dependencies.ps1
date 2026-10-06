@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('qt','gui','filament','all')][string]$Stage = 'all',
+    [ValidateSet('filament')][string]$Stage = 'filament',
     [string]$WorkDirectory = 'build/win32-bootstrap',
     [ValidateRange(1,32)][int]$Parallel = 2,
     [switch]$AllowLocalBuild
@@ -13,7 +13,7 @@ $Work = [IO.Path]::GetFullPath((Join-Path $Root $WorkDirectory))
 if (-not $Work.StartsWith($Root + [IO.Path]::DirectorySeparatorChar)) { throw 'Win32 build work must stay inside the workspace.' }
 $Versions = Get-Content (Join-Path $Root 'releases/versions.json') -Raw | ConvertFrom-Json
 $Pins = Get-Content (Join-Path $Root 'releases/windows-x86.json') -Raw | ConvertFrom-Json
-if ($Versions.python -ne '3.13.2' -or $Versions.pyside -ne $Pins.qt_version) { throw 'Update and verify the Win32 dependency pins when changing Python/Qt versions.' }
+if ($Versions.python -ne '3.13.2') { throw 'Update and verify the Win32 dependency pins when changing Python versions.' }
 New-Item -ItemType Directory -Force -Path $Work | Out-Null
 . (Join-Path $PSScriptRoot 'windows_toolchain.ps1')
 $HostPython = (Get-Command python).Source
@@ -66,40 +66,4 @@ $PythonPackage = Join-Path $Work 'python-package'
 if (-not (Test-Path -LiteralPath $PythonPackage)) { [IO.Compression.ZipFile]::ExtractToDirectory($Package,$PythonPackage) }
 $Python = Join-Path $PythonPackage 'tools/python.exe'
 Checked $Python @('-c','import struct; assert struct.calcsize("P")==4')
-if ($Stage -eq 'filament') { Build-Filament; return }
-$QtBase = Join-Path $Work 'qtbase'
-Checkout 'https://github.com/qt/qtbase.git' "v$($Pins.qt_version)" $Pins.qtbase_commit $QtBase
-Import-BazzaltMsvc x86
-$Qt = Join-Path $Work 'qt-x86'
-# Neither product uses QtSql. Disable it explicitly so the Win32 build cannot
-# auto-detect a runner's x64 PostgreSQL/MySQL client and link mismatched plugins.
-Build $QtBase (Join-Path $Work 'qtbase-x86') $Qt @('-DQT_BUILD_TESTS=OFF','-DQT_BUILD_EXAMPLES=OFF','-DFEATURE_sql=OFF','-DFEATURE_openssl=OFF','-DFEATURE_icu=OFF')
-$Svg = Join-Path $Work 'qtsvg'
-Checkout 'https://github.com/qt/qtsvg.git' "v$($Pins.qt_version)" $Pins.qtsvg_commit $Svg
-Build $Svg (Join-Path $Work 'qtsvg-x86') $Qt @("-DCMAKE_PREFIX_PATH=$Qt",'-DQT_BUILD_TESTS=OFF','-DQT_BUILD_EXAMPLES=OFF')
-if ($Stage -eq 'qt') { Write-Host "Win32 Qt base and SVG SDK: $Qt"; return }
-$PySide = Join-Path $Work 'pyside'
-Checkout 'https://github.com/pyside/pyside-setup.git' "v$($Pins.qt_version)" $Pins.pyside_commit $PySide
-Import-BazzaltMsvc x64
-$HostQt = Join-Path $Work 'qt-host'
-Build $QtBase (Join-Path $Work 'qtbase-host') $HostQt @('-DQT_BUILD_TESTS=OFF','-DQT_BUILD_EXAMPLES=OFF','-DFEATURE_gui=OFF','-DFEATURE_widgets=OFF','-DFEATURE_network=OFF','-DFEATURE_sql=OFF','-DFEATURE_openssl=OFF','-DFEATURE_icu=OFF')
-& (Join-Path $PSScriptRoot 'get_llvm.ps1') -Version $Versions.llvm -Sha256 $Versions.llvm_sha256
-$Llvm = Join-Path $Root 'toolchain/llvm'
-$env:CLANG_INSTALL_DIR = $Llvm
-$HostShiboken = Join-Path $Work 'shiboken-host'
-Build (Join-Path $PySide 'sources/shiboken6') (Join-Path $Work 'shiboken-host-build') $HostShiboken @("-DCMAKE_PREFIX_PATH=$HostQt", "-DPython_EXECUTABLE=$HostPython",'-DSHIBOKEN_BUILD_LIBS=OFF','-DSHIBOKEN_BUILD_TOOLS=ON','-DBUILD_TESTS=OFF')
-$env:PATH = (Join-Path $HostQt 'bin') + ';' + (Join-Path $Llvm 'bin') + ';' + $env:PATH
-Import-BazzaltMsvc x86
-$Bindings = Join-Path $Work 'bindings-x86'
-Build $PySide (Join-Path $Work 'pyside-x86') $Bindings @("-DCMAKE_PREFIX_PATH=$Qt", "-DPython_EXECUTABLE=$Python", "-DQFP_SHIBOKEN_HOST_PATH=$HostShiboken", "-DQFP_QT_TARGET_PATH=$Qt", "-DPYTHON_SITE_PACKAGES=$Bindings/Lib/site-packages",'-DSHIBOKEN6TOOLS_SKIP_FIND_DEPENDENCIES=ON','-DSHIBOKEN_BUILD_TOOLS=OFF','-DSHIBOKEN_BUILD_LIBS=ON','-DFORCE_LIMITED_API=OFF','-DBUILD_TESTS=OFF','-DDISABLE_DOCSTRINGS=ON','-DMODULES=Core;Gui;Widgets;Network;OpenGL;OpenGLWidgets;PrintSupport;Svg;SvgWidgets;Test;Xml')
-$Wheels = Join-Path $Work 'wheels'
-Checked $HostPython @((Join-Path $PSScriptRoot 'package_pyside_win32.py'),'--prefix',$Bindings,'--qt',$Qt,'--source',$PySide,'--output',$Wheels,'--version',$Pins.qt_version)
-Checked $Python @('-m','pip','install','--no-index','--find-links',$Wheels,"PySide6==$($Pins.qt_version)")
-Checked $Python @('-m','pip','install','-r',(Join-Path $Root 'requirements-build.txt'),'pybind11==3.0.2')
-$env:QT_QPA_PLATFORM = 'offscreen'
-Checked $Python @('-c','from PySide6.QtWidgets import QApplication; from PySide6.QtSvg import QSvgRenderer; app=QApplication([]); assert QSvgRenderer(b"<svg xmlns=\"http://www.w3.org/2000/svg\"/>").isValid()')
-if ($Stage -eq 'all') {
-    Build-Filament
-}
-Write-Host "Win32 Python: $Python"
-Write-Host "Win32 Filament: $(Join-Path $Work 'filament-x86')"
+Build-Filament

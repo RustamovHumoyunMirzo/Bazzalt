@@ -23,6 +23,8 @@ def Architecture(path: Path) -> str:
 
 
 def Audit(root: Path, architecture: str, product: str) -> None:
+    if product in {"editor","hub"} and architecture != "x64":
+        raise ValueError("Hub and Editor require 64-bit; x86 is a game-runtime target only")
     binaries = list(root.rglob("*.exe")) + list(root.rglob("*.dll")) + list(root.rglob("*.pyd"))
     if not binaries: raise ValueError("Payload has no Windows binaries")
     for path in binaries:

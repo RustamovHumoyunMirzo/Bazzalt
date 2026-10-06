@@ -74,7 +74,7 @@ size must match. Editor packaging runs the compiled executable's
 
 Windows 32-bit and Windows 64-bit run on every push and pull request, and can
 also be started manually. Each calls the shared product pipeline for only its
-architecture, building the engine/editor, running native and Python tests, and
+architecture: x64 builds the editor, while x86 builds only the game runtime,
 checking the packaged runtime. README badges show GitHub's actual push-workflow
 status, not a hard-coded passing label. Superseded runs on the same ref are
 cancelled to avoid unnecessary dependency builds. These checks run entirely on
@@ -93,14 +93,9 @@ excluded from the Release Suite's product-artifact download pattern.
 Independent workflows: Windows Editor, Windows Core, Windows Hub. Each can be
 started manually, optionally overriding the product version. Their x64 jobs
 build/test/package the product and upload its binaries and catalog entry.
-Their x86 jobs now source-build matching dependencies and attempt the same
-test/package pipeline with genuine Win32 targets. They upload binaries only after
-all build, test, and architecture checks pass; support reports are no longer
-substituted for products. The complete Win32 pipeline still needs a successful
-GitHub Actions run before it is considered release-validated.
+Only Core additionally builds a genuine Win32 SDK. Editor and Hub are x64-only.
 
-Windows Release Suite builds both architectures of all products plus separate
-verified x64 and source-built Win32 LLVM ZIPs.
+Windows Release Suite builds x64 Editor/Hub/LLVM and x64/x86 Core packages.
 Manual dispatch creates CI artifacts only. A `release-v*` tag additionally
 publishes a GitHub Release with the product files and `downloads.json`.
 Change versions.json before creating a new release tag. Publishing requires the
@@ -134,99 +129,18 @@ Editor Preferences > Build Tools accepts an explicit Clang++ executable and SDK
 directory. Invalid overrides do not fall back silently. Missing tools, SDKs, or
 compiler launch failures become Console diagnostics and stop Play safely.
 
-## Source-built Win32 pipeline
+## Win32 game-runtime targets
 
-Filament v1.77.0 receives a small, exact-context source patch before compilation:
-its shader-module debug name uses an integer conversion when Vulkan defines
-non-dispatchable handles as `uint64_t` on Win32, and retains pointer conversion
-on 64-bit platforms. `scripts/patch_filament_win32.py` is idempotent and rejects
-unexpected upstream context. Both its contents and the source diff participate
-in dependency cache/build identities; changing the patch cannot reuse an old SDK.
-The same patch preserves `VKAPI_PTR` on all three Vulkan `enumerate` helper
-function-pointer signatures. Win32 Vulkan API pointers use `__stdcall`; leaving
-the helpers at the default `__cdecl` prevents template deduction even when every
-parameter and return type otherwise matches. Tiny syntax fixtures exercise all
-three overload shapes with the Vulkan calling convention on x86 and x64.
+Hub and Editor require a 64-bit machine and process. Win32 support is limited
+ to the core/game-runtime SDK used for producing 32-bit games from a 64-bit
+ development environment. No Win32 Qt, PySide, Hub, Editor or compiler-host
+ packages are built. The 64-bit compiler targets x86 when producing games.
 
-Pinned LLVM bootstrap downloads use the official release archive URL directly
-and still require SHA-256 verification. They do not need GitHub release API
-discovery, avoiding rate limits on shared CI runner IPs. Unpinned discovery uses
-`GH_TOKEN` or `GITHUB_TOKEN` when available. No large dependencies are built locally
-as part of these regression checks; handle conversion tests compile a tiny,
-header-free syntax fixture for both architectures.
-
-Qt 6's [supported Windows platforms](https://doc.qt.io/qt-6.10/supported-platforms.html)
-are x64/ARM64, not x86; the pinned PySide6 release supplies no win32 wheel.
-The official Filament v1.77.0 Windows SDK also contains x86_64 libraries only.
-The Win32 jobs therefore cannot use those precompiled packages. CMake selects
-`x86` for a real 32-bit target and fails when matching libraries are absent.
-
-`releases/windows-x86.json` pins the QtBase, QtSvg, PySide/Shiboken, Filament,
-and LLVM source commits, plus the checksum of portable Python 3.13.2 Win32.
-`scripts/build_windows_x86_dependencies.ps1` runs on the Actions worker:
-
-- `qt` builds the installed Win32 Qt base and QtSvg SDK.
-- `gui` reuses the completed Qt/QtSvg installation, builds a separate minimal x64 Qt/Shiboken generator,
-  and genuine Win32 PySide bindings; it builds architecture-audited wheels and
-  performs a Qt Widgets/SVG smoke test with 32-bit Python.
-- `filament` builds only the native renderer dependencies needed by Core.
-  Core's SVG build-time generator uses host Python/Qt, not shipped GUI libraries.
-- `all` prepares the Editor's GUI and native renderer dependencies.
-
-Filament is built with the x86 MSVC toolchain, the dynamic CRT, Vulkan enabled,
-and `DIST_DIR=x86/md`. Its import tools are also compiled as Win32 executables.
-Host generator tools never enter the shipped payload.
-Both Qt source builds explicitly disable the unused QtSql module; this prevents
-auto-detected database clients installed on hosted runners from introducing
-wrong-architecture PostgreSQL/MySQL plugins into the Win32 build.
-The bindings wheel helper
-checks every DLL/PYD/EXE and creates ordinary metadata and hashed RECORD entries;
-it does not supply replacement or stub Qt APIs.
-
-`scripts/build_windows_x86_llvm.ps1` builds actual Win32 Clang and LLD with an
-`i686-pc-windows-msvc` target and resource headers, then audits and packages them
-as a separate tools download. The Win32 compiler is not bundled into Editor.
-
-Product jobs configure a separate CMake tree with `-A Win32`, run native tests,
-run the GUI regression suite where applicable, and invoke the common packager
-with 32-bit Python, `-Architecture x86`, and `-FilamentDirectory` pointing to the
-source-built SDK. Editor packaging additionally checks the packaged native runtime.
-The Hub job creates an independent x86 Inno Setup installer containing only Hub.
-Release publication waits for **both architectures** of every product and tool
-package. A failed upstream port/build never produces a mislabeled x86 release.
-
-These are large **CI builds**, not automatic local developer setup. Both source
-build scripts refuse execution outside GitHub Actions unless a developer explicitly
-opts in with `-AllowLocalBuild`. Trigger Windows Editor/Core/Hub or Windows Release
-Suite in Actions to validate the setup. Only source, pins, scripts, and workflows
-belong in the repository; dependency build/cache directories remain ignored.
-Local dependency compilation was stopped at the owner's request. Successful
-partial compilation is not proof of a working Win32 Editor/renderer/installer;
-TODO 3 remains pending end-to-end CI validation.
-
-### Win32 job duration and caching
-
-The reusable product workflow no longer puts every source build and packaging
-step into a single 350-minute job. It uses four stages:
-
-1. `x86-qt`: Qt base and SVG, up to 350 minutes.
-2. `x86-gui`: depends on Qt; builds generators and PySide, up to 350 minutes.
-3. `x86-filament`: independent of Qt/PySide, up to 350 minutes.
-4. `x86`: downloads the completed runtimes/SDKs, tests and packages the product,
-   up to 120 minutes. Core skips GUI stages; Hub skips Filament.
-
-Each dependency stage caches only its completed installation, keyed by pinned
-sources, build/packaging scripts and MSVC toolset version. There are no fuzzy
-restore keys. Exact completed-installation stamps stop the GUI stage from
-recompiling Qt after its SDK is downloaded. Fresh products still build and test
-on every commit; cached dependencies do not skip product tests.
-
-Intermediate artifacts have one-day retention and product-qualified names to
-avoid collisions in release workflows. Cache misses still perform real source
-builds; cache availability is an optimization, not a requirement. If one
-individual dependency stage itself reaches the time limit, split that stage
-further or use a more capable runner. This job structure has been statically
-validated locally, but timing must be verified by an actual Actions run.
+The Windows 32-bit Game Runtime workflow builds and tests only core. It builds
+ pinned Filament using the Win32 MSVC toolchain and compatibility patches,
+ caches the installed SDK, and preserves native test logs. The editor bridge
+ must be disabled with BAZZALT_BUILD_EDITOR_BRIDGE=OFF for 32-bit builds.
+ Release Suite ships x64 Hub/Editor/tools and both core architectures.
 
 ## Compiled resources and release hygiene
 

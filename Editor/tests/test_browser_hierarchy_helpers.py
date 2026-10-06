@@ -68,7 +68,8 @@ class BrowserHierarchyHelpersTests(unittest.TestCase):
             panel._thumbnails.Ready.connect(lambda name,image:completed.append((name,image)))
             try:
                 panel.SetProjectRoot(folder);item=panel.Browser.item(0);old=item.icon().cacheKey();item.setSelected(True)
-                self.assertTrue(self._WaitFor(lambda:bool(completed)),f"Thumbnail worker did not complete; pending={panel._thumbnails._pending}")
+                finished=self._WaitFor(lambda:bool(completed))
+                self.assertTrue(finished,f"Thumbnail completion timeout: {panel._thumbnails.WorkerDiagnostics()}")
                 self.assertEqual(completed[0][0],str(path));self.assertFalse(completed[0][1].isNull(),"Thumbnail generation returned an empty image")
                 self.assertNotEqual(item.icon().cacheKey(),old,"Worker completed but browser did not apply the thumbnail")
                 self.assertTrue(item.isSelected());self.assertEqual(panel.CurrentFolder(),Path(folder))
@@ -125,6 +126,34 @@ class BrowserHierarchyHelpersTests(unittest.TestCase):
                     self.assertTrue(cache._pool.waitForDone(5000));self.App.processEvents()
                 self.assertFalse(completed);self.assertIsNone(cache.Request(path))
             finally:gate.set();cache._pool.Close();cache.deleteLater()
+
+    def test_completed_future_waits_for_gui_collection(self):
+        from Editor.model_thumbnails import ModelThumbnailCache
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/"mesh.obj";path.write_text("v -1 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n",encoding="utf-8")
+            cache=ModelThumbnailCache(cache_root=Path(folder)/"cache");completed=[]
+            cache.Ready.connect(lambda *args:completed.append(args))
+            try:
+                cache.Request(path)
+                self.assertTrue(cache._pool.waitForDone(5000))
+                self.assertFalse(completed) # GUI was deliberately not pumped.
+                self.assertIn("done",cache.WorkerDiagnostics()["jobs"].values())
+                self.assertTrue(self._WaitFor(lambda:bool(completed)))
+                self.assertFalse(cache._completion_timer.isActive());self.assertFalse(cache._pending)
+            finally:cache._pool.Close();cache.deleteLater()
+
+    def test_failed_future_is_reported_and_releases_pending_slot(self):
+        from Editor.model_thumbnails import ModelThumbnailCache
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/"mesh.obj";path.write_text("broken",encoding="utf-8")
+            cache=ModelThumbnailCache(cache_root=Path(folder)/"cache");completed=[]
+            cache.Ready.connect(lambda name,image:completed.append(image))
+            try:
+                with patch("Editor.model_thumbnails._Work.run",side_effect=RuntimeError("worker failure")):
+                    cache.Request(path);self.assertTrue(self._WaitFor(lambda:bool(completed)))
+                self.assertTrue(completed[0].isNull());self.assertFalse(cache._pending)
+                self.assertIn("worker failure",cache.WorkerDiagnostics()["errors"][str(path)])
+            finally:cache._pool.Close();cache.deleteLater()
 
     def test_glb_node_transforms_and_invalid_geometry(self):
         with tempfile.TemporaryDirectory() as folder:

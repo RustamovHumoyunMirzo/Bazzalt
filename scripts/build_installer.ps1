@@ -1,6 +1,6 @@
 param(
     [string]$Version = "1.0.0",
-    [ValidateSet('x64','x86')][string]$Architecture = 'x64',
+    [ValidateSet('x64')][string]$Architecture = 'x64',
     [string]$BundleDirectory = "dist/production/bazzalt_hub.dist",
     [string]$OutputDirectory = "dist/installer",
     [string]$InnoCompiler = ""

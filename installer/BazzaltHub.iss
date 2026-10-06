@@ -26,12 +26,8 @@ DefaultDirName={autopf}\BAZZALT Hub
 DefaultGroupName=BAZZALT
 DisableProgramGroupPage=yes
 PrivilegesRequired=admin
-#if TargetArchitecture == "x64"
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-#else
-ArchitecturesAllowed=x86compatible
-#endif
 MinVersion=10.0.17763
 OutputDir={#InstallerOutputDir}
 OutputBaseFilename=BazzaltHub-Setup

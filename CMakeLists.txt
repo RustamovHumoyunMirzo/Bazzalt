@@ -209,6 +209,9 @@ target_compile_definitions(Bazzalt PRIVATE
 
 option(BAZZALT_BUILD_EDITOR_BRIDGE "Build the private Python editor runtime bridge" ON)
 if(BAZZALT_BUILD_EDITOR_BRIDGE)
+    if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+        message(FATAL_ERROR "The Editor requires 64-bit. For 32-bit game/runtime builds set BAZZALT_BUILD_EDITOR_BRIDGE=OFF.")
+    endif()
     find_package(Python COMPONENTS Development.Module REQUIRED)
     # Resolve pybind11 as a package. Avoid a conditional add_subdirectory for
     # the optional, normally-empty dependency folder: IDE CMake parsers inspect

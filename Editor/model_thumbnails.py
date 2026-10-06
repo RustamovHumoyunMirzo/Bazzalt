@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, wait
 from threading import Event
 from pathlib import Path
 from urllib.parse import unquote
-from PySide6.QtCore import QObject, QPointF, Qt, Signal, Slot, QSaveFile, QIODevice
+from PySide6.QtCore import QObject, QPointF, Qt, Signal, Slot, QSaveFile, QIODevice, QTimer
 from bazzalt.settings import DataPaths
 from PySide6.QtGui import QColor, QImage, QPainter, QPolygonF
 
@@ -137,23 +137,21 @@ def RenderModelThumbnail(path,size=96):
     finally:painter.end()
     return image
 
-class _Signals(QObject):
-    Ready=Signal(object,object)
-
 class _WorkerPool:
     """Python-owned jobs avoid QRunnable/Shiboken wrapper lifetime dependencies."""
     def __init__(self):
         self.Closed=Event();self._executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix="BazzaltThumbnail");self._jobs=[]
     def start(self,work):
         self._jobs=[job for job in self._jobs if not job.done()]
-        self._jobs.append(self._executor.submit(work.run))
+        future=self._executor.submit(work.run);self._jobs.append(future)
+        return future
     def waitForDone(self,milliseconds):
         return not wait(self._jobs,timeout=milliseconds/1000).not_done
     def Close(self,*args):
         self.Closed.set();self._executor.shutdown(wait=False,cancel_futures=True)
 
 class _Work:
-    def __init__(self,key,path,signals,cache_root,closed):self.key=key;self.path=path;self.signals=signals;self.cache_root=cache_root;self.closed=closed
+    def __init__(self,key,path,cache_root):self.key=key;self.path=path;self.cache_root=cache_root
     def run(self):
         try:
             filename=self.cache_root/(hashlib.sha256(repr((2,self.key)).encode()).hexdigest()+".png")
@@ -169,15 +167,18 @@ class _Work:
                             else:output.cancelWriting()
                     except OSError:pass # Read-only caches must not prevent previews.
         except Exception:image=QImage() # Malformed/unsupported files keep their fallback icon.
-        if not self.closed.is_set():
-            self.signals.Ready.emit(self.key,image)
+        return image
 
 class ModelThumbnailCache(QObject):
     Ready=Signal(str,object)
     def __init__(self,parent=None,cache_root=None):
-        super().__init__(parent);self._cache=OrderedDict();self._pending=set();self._signals=_Signals()
+        super().__init__(parent);self._cache=OrderedDict();self._pending=set();self._futures={};self._errors={}
         self._cache_root=Path(cache_root) if cache_root is not None else DataPaths.Root()/"Cache"/"ModelThumbnails"
-        self._signals.Ready.connect(self._Finished,Qt.ConnectionType.QueuedConnection);self._pool=_WorkerPool()
+        self._pool=_WorkerPool()
+        # Workers only return QImages. Collect futures on the owning Qt thread;
+        # no worker-thread Python QObject signal/receiver wrapper is involved.
+        self._completion_timer=QTimer(self);self._completion_timer.setInterval(16)
+        self._completion_timer.timeout.connect(self._CollectCompleted)
         self.destroyed.connect(self._pool.Close)
     def Request(self,path):
         if self._pool.Closed.is_set():return None
@@ -192,8 +193,27 @@ class ModelThumbnailCache(QObject):
         except OSError:return None
         if key in self._cache:self._cache.move_to_end(key);return self._cache[key]
         if key not in self._pending and len(self._pending)<64:
-            self._pending.add(key);self._pool.start(_Work(key,path,self._signals,self._cache_root,self._pool.Closed))
+            self._pending.add(key);self._futures[key]=self._pool.start(_Work(key,path,self._cache_root))
+            if not self._completion_timer.isActive():self._completion_timer.start()
         return None
+    def WorkerDiagnostics(self):
+        return {"closed":self._pool.Closed.is_set(),"timer_active":self._completion_timer.isActive(),
+                "jobs":{repr(key):("cancelled" if future.cancelled() else "done" if future.done() else "running" if future.running() else "queued") for key,future in self._futures.items()},
+                "errors":dict(self._errors)}
+    @Slot()
+    def _CollectCompleted(self):
+        if self._pool.Closed.is_set():
+            self._completion_timer.stop();self._pending.clear();self._futures.clear();return
+        for key,future in list(self._futures.items()):
+            if not future.done():continue
+            del self._futures[key]
+            try:image=future.result()
+            except Exception as error:
+                self._errors[key[0]]=repr(error)
+                while len(self._errors)>128:self._errors.pop(next(iter(self._errors)))
+                image=QImage()
+            self._Finished(key,image)
+        if not self._futures:self._completion_timer.stop()
     @Slot(object,object)
     def _Finished(self,key,image):
         if self._pool.Closed.is_set():return

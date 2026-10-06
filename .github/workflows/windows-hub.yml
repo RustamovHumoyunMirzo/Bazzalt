@@ -15,4 +15,5 @@ jobs:
     uses: ./.github/workflows/windows-product.yml
     with:
       product: hub
+      architecture: x64
       version: ${{ inputs.version || '' }}

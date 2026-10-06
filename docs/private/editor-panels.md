@@ -236,10 +236,15 @@ visible copy.
 ## Thumbnail worker ownership and CI reuse
 
 Model previews are static images, not live 3D viewports. A bounded single-worker
-Python executor reads or renders cached PNGs off the GUI thread. Queued Qt
-signals deliver results; QPixmap and browser icon updates stay on the GUI
-thread. Cache destruction cancels queued jobs without blocking the UI and
+Python executor reads or renders cached PNGs off the GUI thread. A GUI-owned
+timer collects completed futures and emits the public Ready signal on the GUI
+thread; workers never call QObject signals. The timer stops when idle. QPixmap
+and browser icon updates stay on the GUI thread. Cache destruction cancels queued jobs without blocking the UI and
 suppresses results from running jobs.
+
+Thumbnail timeout assertions include worker states, timer activity and unexpected
+future exceptions via WorkerDiagnostics, distinguishing execution from UI delivery
+failures. Tests also cover workers completing before the GUI pumps events.
 
 Win32 CI uses exact dependency caches first. Cache misses optionally fetch the
 known Qt and Filament artifacts from run 37308449117. Expired/missing artifacts

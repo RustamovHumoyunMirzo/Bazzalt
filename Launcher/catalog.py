@@ -53,6 +53,7 @@ class HubCatalog:
                     # Windows PowerShell 5 writes UTF-8 text with a BOM. Accept both
                     # forms so editor discovery also survives manifests from older installers.
                     value = json.loads((root / "editor.json").read_text(encoding="utf-8-sig"))
+                    if value.get("architecture") in {"x86","win32","32"}:continue
                     version = str(value["version"]); Version.Parse(version)
                     executable = str(value.get("executable", "Bazzalt.exe" if os.name == "nt" else "Bazzalt"))
                     target = (root / executable).resolve()

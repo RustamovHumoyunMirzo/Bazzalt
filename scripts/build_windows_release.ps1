@@ -8,6 +8,9 @@ param(
     [string]$DownloadBaseUrl = ''
 )
 $ErrorActionPreference = 'Stop'
+if ($Architecture -eq 'x86' -and $Product -ne 'core') {
+    throw 'Hub and Editor require 64-bit. Win32 is supported only for the game core/runtime.'
+}
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $Versions = Get-Content (Join-Path $Root 'releases/versions.json') -Raw | ConvertFrom-Json
 if (-not $Version) { $Version = $Versions.$Product }

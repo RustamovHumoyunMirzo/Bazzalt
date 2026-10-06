@@ -15,4 +15,5 @@ jobs:
     uses: ./.github/workflows/windows-product.yml
     with:
       product: editor
+      architecture: x64
       version: ${{ inputs.version || '' }}

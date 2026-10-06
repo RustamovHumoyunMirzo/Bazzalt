@@ -40,7 +40,9 @@ def FetchCatalog(url: str) -> list[dict]:
     result = []
     for entry in value["downloads"]:
         ValidateEntry(entry)
-        if entry["platform"] == "windows" and entry["architecture"] == ("x64" if struct.calcsize("P") == 8 else "x86"):
+        if entry["platform"] == "windows" and (entry["architecture"] == "x64" or entry["product"] == "core"):
+            # x86 core SDKs are cross-build targets, not editor installations.
+            if entry["product"] in {"editor","hub"} and entry["architecture"] != "x64":continue
             result.append(entry)
     return result
 
@@ -58,6 +60,8 @@ def ValidateEntry(entry: dict) -> None:
 
 def Download(entry: dict, target: Path, progress=lambda done, total: None, cancelled=lambda: False) -> None:
     ValidateEntry(entry)
+    if entry["product"] in {"editor","hub"} and entry["architecture"] != "x64":
+        raise ValueError("Hub and Editor require 64-bit")
     digest = hashlib.sha256(); total = 0
     with urlopen(Request(entry["url"], headers={"User-Agent": "BAZZALT-Hub/1.0"}), timeout=60) as response, target.open("xb") as output:
         _Https(response.geturl())
@@ -103,6 +107,8 @@ def _PEArchitecture(path: Path) -> str:
 
 def Install(entry: dict, archive: Path, versions: Path) -> Path:
     ValidateEntry(entry)
+    if entry["product"] in {"editor","hub"} and entry["architecture"] != "x64":
+        raise ValueError("Hub and Editor require 64-bit")
     with archive.open("rb") as stream:
         digest=hashlib.file_digest(stream,"sha256").hexdigest()
     if archive.stat().st_size != entry["size"] or digest.lower() != entry["sha256"].lower():

@@ -119,6 +119,9 @@ class HubWindow(NativeHubWindow):
 
 
 def main() -> int:
+    import struct
+    if struct.calcsize("P") != 8:
+        raise RuntimeError("BAZZALT Hub requires a 64-bit machine and Python runtime.")
     app = QApplication(sys.argv); app.setOrganizationName("BAZZALT"); app.setApplicationName("BAZZALT Hub")
     app.setWindowIcon(LogoIcon("#707070"))
     window = HubWindow(); window.show(); return app.exec()

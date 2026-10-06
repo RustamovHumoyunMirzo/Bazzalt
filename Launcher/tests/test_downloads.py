@@ -63,6 +63,19 @@ class DownloadTests(unittest.TestCase):
         with patch("Launcher.downloads.urlopen",return_value=Response(json.dumps(value).encode())):
             self.assertEqual(len(FetchCatalog("https://example.org/catalog")),1)
 
+    def test_catalog_keeps_x86_game_sdk_but_excludes_x86_editor(self):
+        entries=[self.MakeEntry(),self.MakeEntry()|{"architecture":"x86"},self.MakeEntry(product="core")|{"architecture":"x86"}]
+        with patch("Launcher.downloads.urlopen",return_value=Response(json.dumps({"schema_version":1,"downloads":entries}).encode())):
+            result=FetchCatalog("https://example.org/catalog")
+        self.assertEqual([(item["product"],item["architecture"]) for item in result],[("editor","x64"),("core","x86")])
+
+    def test_x86_editor_is_rejected_before_download_or_install(self):
+        entry=self.MakeEntry()|{"architecture":"x86"}
+        with patch("Launcher.downloads.urlopen") as request:
+            with self.assertRaisesRegex(ValueError,"64-bit"):Download(entry,self.Root/"download.zip")
+            request.assert_not_called()
+        with self.assertRaisesRegex(ValueError,"64-bit"):Install(entry,self.Root/"missing.zip",self.Root/"versions")
+
     def test_zip_rejects_traversal_windows_devices_and_ads(self):
         for index,name in enumerate(("../escape","C:/escape","/escape","folder/NUL.txt","folder/file:stream","folder/file. ","..\\escape")):
             with self.subTest(name=name):

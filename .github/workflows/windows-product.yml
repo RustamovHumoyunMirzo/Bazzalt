@@ -88,96 +88,8 @@ jobs:
             dist/releases/*.json
           if-no-files-found: error
           retention-days: 30
-  x86-qt:
-    if: (inputs.architecture == 'both' || inputs.architecture == 'x86') && inputs.product != 'core'
-    runs-on: windows-2022
-    timeout-minutes: 350
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: '3.13.2'
-      - name: Identify MSVC cache compatibility
-        id: toolchain
-        run: |
-          . scripts/windows_toolchain.ps1
-          Import-BazzaltMsvc x86
-          "version=$env:VCToolsVersion" >> $env:GITHUB_OUTPUT
-      - name: Cache installed Win32 Qt SDK
-        id: qt-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: build/win32-bootstrap/qt-x86
-          key: win32-qt-v1-${{ runner.os }}-${{ steps.toolchain.outputs.version }}-${{ hashFiles('releases/windows-x86.json', 'scripts/build_windows_x86_dependencies.ps1', 'scripts/windows_toolchain.ps1') }}
-      # The build script validates source/compiler/options/patch stamps before
-      # reusing an installation. Missing or expired artifacts fall back to build.
-      - name: Seed Qt SDK from the successful Win32 build
-        if: steps.qt-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          artifact-ids: '11345099158'
-          run-id: '37308449117'
-          github-token: ${{ github.token }}
-          path: build/win32-bootstrap/qt-x86
-          merge-multiple: true
-      - name: Build Qt and SVG only
-        if: steps.qt-cache.outputs.cache-hit != 'true'
-        run: ./scripts/build_windows_x86_dependencies.ps1 -Stage qt -Parallel 2
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: dependency-qt-x86-${{ inputs.product }}
-          path: build/win32-bootstrap/qt-x86/
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 30
-
-  x86-gui:
-    needs: x86-qt
-    if: (inputs.architecture == 'both' || inputs.architecture == 'x86') && inputs.product != 'core'
-    runs-on: windows-2022
-    timeout-minutes: 350
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: '3.13.2'
-      - name: Restore Qt SDK from its completed job
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: dependency-qt-x86-${{ inputs.product }}
-          path: build/win32-bootstrap/qt-x86
-      - name: Identify MSVC cache compatibility
-        id: toolchain
-        run: |
-          . scripts/windows_toolchain.ps1
-          Import-BazzaltMsvc x86
-          "version=$env:VCToolsVersion" >> $env:GITHUB_OUTPUT
-      - name: Cache installed Win32 Python and PySide
-        id: gui-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: build/win32-bootstrap/python-package
-          key: win32-gui-v1-${{ runner.os }}-${{ steps.toolchain.outputs.version }}-${{ hashFiles('releases/windows-x86.json', 'releases/versions.json', 'scripts/build_windows_x86_dependencies.ps1', 'scripts/windows_toolchain.ps1', 'scripts/get_llvm.ps1', 'scripts/package_pyside_win32.py', 'requirements-build.txt') }}
-      - name: Build real Win32 PySide bindings
-        if: steps.gui-cache.outputs.cache-hit != 'true'
-        run: ./scripts/build_windows_x86_dependencies.ps1 -Stage gui -Parallel 2
-      - name: Verify restored Python and Qt architecture
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: |
-          & build/win32-bootstrap/python-package/tools/python.exe -c 'import struct; from PySide6.QtWidgets import QApplication; from PySide6.QtSvg import QSvgRenderer; assert struct.calcsize("P")==4; app=QApplication([]); assert QSvgRenderer().isValid() is False'
-          if ($LASTEXITCODE -ne 0) { throw 'Cached Win32 GUI runtime validation failed' }
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: dependency-python-x86-${{ inputs.product }}
-          path: build/win32-bootstrap/python-package/
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 30
-
   x86-filament:
-    if: (inputs.architecture == 'both' || inputs.architecture == 'x86') && inputs.product != 'hub'
+    if: (inputs.architecture == 'both' || inputs.architecture == 'x86') && inputs.product == 'core'
     runs-on: windows-2022
     timeout-minutes: 350
     steps:
@@ -209,7 +121,7 @@ jobs:
           github-token: ${{ github.token }}
           path: build/win32-bootstrap/filament-x86
           merge-multiple: true
-      - name: Build Filament only, parallel to Qt and PySide
+      - name: Build Win32 game-runtime Filament SDK
         if: steps.filament-cache.outputs.cache-hit != 'true'
         run: ./scripts/build_windows_x86_dependencies.ps1 -Stage filament -Parallel 2
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -229,14 +141,8 @@ jobs:
           retention-days: 30
 
   x86:
-    needs: [x86-qt, x86-gui, x86-filament]
-    # Core skips Qt/GUI; Hub skips Filament. A skipped optional dependency must
-    # not skip this job, but any required dependency failure must prevent it.
-    if: >-
-      always() && !cancelled() &&
-      (inputs.architecture == 'both' || inputs.architecture == 'x86') &&
-      (inputs.product == 'core' || needs.x86-gui.result == 'success') &&
-      (inputs.product == 'hub' || needs.x86-filament.result == 'success')
+    needs: x86-filament
+    if: (inputs.architecture == 'both' || inputs.architecture == 'x86') && inputs.product == 'core'
     runs-on: windows-2022
     timeout-minutes: 120
     steps:
@@ -291,18 +197,6 @@ jobs:
             build/x86/Testing/Temporary/*.log
             build/x86/native-tests.xml
           if-no-files-found: ignore
-      - name: Test actual Win32 GUI and tools
-        if: inputs.product != 'core'
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: |
-          & build/win32-bootstrap/python-package/tools/python.exe -m unittest discover -s Launcher/tests -v
-          if ($LASTEXITCODE -ne 0) { throw 'Win32 GUI tests failed' }
-          & build/win32-bootstrap/python-package/tools/python.exe -m unittest Editor.tests.test_scripting Editor.tests.test_compiled_resources Editor.tests.test_file_association_preferences Editor.tests.test_restart_settings Editor.tests.test_runtime_tick_failure -v
-          if ($LASTEXITCODE -ne 0) { throw 'Win32 resource/compiler/preferences tests failed' }
-      - name: Install Inno Setup
-        if: inputs.product == 'hub'
-        run: choco install innosetup --yes --no-progress
       - name: Package Win32 product
         shell: pwsh
         env:

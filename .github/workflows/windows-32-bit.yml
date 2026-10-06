@@ -1,4 +1,4 @@
-name: Windows 32-bit
+name: Windows 32-bit Game Runtime
 
 on:
   push:
@@ -17,5 +17,5 @@ jobs:
   build-and-test:
     uses: ./.github/workflows/windows-product.yml
     with:
-      product: editor
+      product: core
       architecture: x86
