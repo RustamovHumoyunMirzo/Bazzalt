@@ -31,10 +31,10 @@ def Audit(root: Path, architecture: str, product: str) -> None:
         if Architecture(path) != architecture: raise ValueError(f"Wrong architecture: {path}")
     if product == "hub":
         for path in root.rglob("*"):
-            if path.name.lower() in {"versions", "scriptsdk", "bazzalt.dll", "bazzalt.exe", "toolchain"} or path.name.startswith("_bazzalt_runtime"):
+            if path.name.lower() in {"versions", "scriptsdk", "bazzalt.dll", "bazzalt_lua.dll", "bazzalt.exe", "toolchain"} or path.name.startswith("_bazzalt_runtime"):
                 raise ValueError(f"Hub must not ship editors/core/tools: {path}")
     elif product == "editor":
-        for required in ("Bazzalt.exe", "editor.json", "Editor/Bazzalt.dll", "ScriptSDK/include/Bazzalt/Scene.h", "ScriptSDK/lib/Bazzalt.lib"):
+        for required in ("Bazzalt.exe", "editor.json", "Editor/Bazzalt.dll", "Editor/bazzalt_lua.dll", "ScriptSDK/include/Bazzalt/Scene.h", "ScriptSDK/lib/Bazzalt.lib", "ScriptSDK/lib/bazzalt_lua.dll"):
             if not (root / required).is_file(): raise ValueError(f"Missing editor file: {required}")
         if (root / "toolchain").exists(): raise ValueError("Editors must use separately installed build tools")
 

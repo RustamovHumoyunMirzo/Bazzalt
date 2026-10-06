@@ -28,8 +28,12 @@ $Stage = Join-Path $Output "$Product-$Version-windows-$Architecture"
 if (Test-Path -LiteralPath $Stage) { throw "Use a clean output directory; refusing to merge stale payload: $Stage" }
 function Copy-ReleaseSDK([string]$Destination) {
     New-Item -ItemType Directory -Force -Path (Join-Path $Destination 'lib') | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $Destination 'licenses') | Out-Null
+    Copy-Item -LiteralPath (Join-Path $Root 'deps/lua/README') -Destination (Join-Path $Destination 'licenses/Lua.txt')
+    Copy-Item -LiteralPath (Join-Path $Root 'deps/sol2/LICENSE.txt') -Destination (Join-Path $Destination 'licenses/Sol2.txt')
     Copy-Item -LiteralPath (Join-Path $Build 'ScriptSDK/include') -Destination $Destination -Recurse
     Copy-Item -LiteralPath (Join-Path $Build 'Editor/Release/Bazzalt.dll') -Destination (Join-Path $Destination 'lib/Bazzalt.dll')
+    Copy-Item -LiteralPath (Join-Path $Build 'Editor/Release/bazzalt_lua.dll') -Destination (Join-Path $Destination 'lib/bazzalt_lua.dll')
     Copy-Item -LiteralPath (Join-Path $Build 'ScriptSDK/lib/Release/Bazzalt.lib') -Destination (Join-Path $Destination 'lib/Bazzalt.lib')
 }
 if ($Product -ne 'hub') {
@@ -41,7 +45,7 @@ if ($Product -eq 'core') {
     New-Item -ItemType Directory -Path $Stage | Out-Null
     Copy-ReleaseSDK $Stage
     Copy-Item -LiteralPath (Join-Path $Root 'LICENSE') -Destination $Stage
-    @{version=$Version;architecture=$Architecture;platform='windows';abi=1} | ConvertTo-Json | Set-Content (Join-Path $Stage 'core.json') -Encoding utf8
+    @{version=$Version;architecture=$Architecture;platform='windows';abi=1;lua_version='5.4.9'} | ConvertTo-Json | Set-Content (Join-Path $Stage 'core.json') -Encoding utf8
 } else {
     python (Join-Path $Root 'scripts/compile_resources.py') --build-directory (Join-Path $Build 'CompiledResources')
     if ($LASTEXITCODE -ne 0) { throw 'Resource compilation failed' }
@@ -61,7 +65,7 @@ if ($Product -eq 'core') {
         $Native = Get-ChildItem -LiteralPath $NativeFolder -Filter '_bazzalt_runtime*.pyd' | Select-Object -First 1
         if (-not $Native) { throw 'Native editor module missing' }
         New-Item -ItemType Directory -Force -Path (Join-Path $Stage 'Editor') | Out-Null
-        foreach ($File in @($Native.FullName, (Join-Path $NativeFolder 'Bazzalt.dll'), (Join-Path $NativeFolder 'bshad.dll'))) {
+        foreach ($File in @($Native.FullName, (Join-Path $NativeFolder 'Bazzalt.dll'), (Join-Path $NativeFolder 'bshad.dll'), (Join-Path $NativeFolder 'bazzalt_lua.dll'))) {
             Copy-Item -LiteralPath $File -Destination (Join-Path $Stage 'Editor')
         }
         Copy-ReleaseSDK (Join-Path $Stage 'ScriptSDK')
@@ -69,7 +73,7 @@ if ($Product -eq 'core') {
         foreach ($Tool in @('matc.exe','cmgen.exe','filamesh.exe')) {
             Copy-Item -LiteralPath (Join-Path $Filament "bin/$Tool") -Destination (Join-Path $Stage 'tools/filament')
         }
-        @{version=$Version;core_version=$Versions.core;architecture=$Architecture;executable='Bazzalt.exe';project_format_max=1} | ConvertTo-Json | Set-Content (Join-Path $Stage 'editor.json') -Encoding utf8
+        @{version=$Version;core_version=$Versions.core;architecture=$Architecture;executable='Bazzalt.exe';project_format_max=1;lua_version='5.4.9'} | ConvertTo-Json | Set-Content (Join-Path $Stage 'editor.json') -Encoding utf8
         $Check = Start-Process -FilePath (Join-Path $Stage 'Bazzalt.exe') -ArgumentList '--check-runtime' -WorkingDirectory $Stage -WindowStyle Hidden -Wait -PassThru
         if ($Check.ExitCode -ne 0) { throw 'Packaged native runtime check failed' }
     }

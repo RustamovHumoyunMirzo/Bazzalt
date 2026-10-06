@@ -1,4 +1,5 @@
 #include "Runtime/AssetDatabase.h"
+#include "Runtime/LuaRuntime.h"
 
 #include <algorithm>
 #include <array>
@@ -367,7 +368,21 @@ std::string AssetImporter::ComputeSourceHash(const std::filesystem::path& source
 }
 
 AssetDatabase::AssetDatabase() {
+    class LuaImporter final : public AssetImporter {
+    public:
+        std::string GetName() const override { return "LuaBytecode"; }
+        std::uint32_t GetVersion() const override { return 50409; }
+        bool Supports(const std::filesystem::path& source) const override { auto extension=LowerExtension(source);return extension==".lua"||extension==".blua"; }
+        std::string GetCacheExtension(const std::filesystem::path&) const override { return ".blua"; }
+        bool Import(const AssetImportContext& context,std::string& error) override {
+            std::error_code code;std::filesystem::create_directories(context.OutputPath.parent_path(),code);
+            if(code){error=code.message();return false;}
+            if(LowerExtension(context.SourcePath)==".blua")return CopyAsset(context,error);
+            return LuaRuntime::Import(context.SourcePath,context.OutputPath,error);
+        }
+    };
     RegisterImporter(std::make_unique<RawImporter>());
+    RegisterImporter(std::make_unique<LuaImporter>());
     RegisterImporter(std::make_unique<GltfImporter>());
     RegisterImporter(std::make_unique<TextureImporter>());
     RegisterImporter(std::make_unique<EnvironmentImporter>());
@@ -428,6 +443,10 @@ bool AssetDatabase::Refresh() {
         if (!isFile) continue;
         if (LowerExtension(iterator->path()) == ".meta") continue;
         if (!RegisterSource(iterator->path())) {
+            // A Lua syntax error must not prevent opening the editor/project.
+            // Keep a failed UUID asset and let Play report its import error.
+            const auto asset=Find(iterator->path());
+            if(LowerExtension(iterator->path())==".lua"&&asset&&asset->State==AssetState::Failed&&!asset->LastError.empty())continue;
             const std::string error = m_lastError;
             return fail(error);
         }
@@ -490,7 +509,14 @@ bool AssetDatabase::RegisterSource(const std::filesystem::path& source) {
         }
     }
     if (record.State != AssetState::Ready) {
-        if (!ImportAsset(record, metadata, *importer, sourceHash)) return false;
+        if (!ImportAsset(record, metadata, *importer, sourceHash)) {
+            if(importer->GetName()=="LuaBytecode"){
+                record.LastError=m_lastError;
+                if(metadataDirty){metadata.Importer=record.Importer;metadata.ImporterVersion=record.ImporterVersion;if(!SaveMetadata(metaPath,metadata))return false;}
+                m_byPath.insert_or_assign(PathUtf8(normalized),record.Id);m_byId.insert_or_assign(record.Id,std::move(record));
+            }
+            return false;
+        }
         metadataDirty = true;
     }
     if (metadataDirty && !SaveMetadata(metaPath, metadata)) return false;
@@ -614,6 +640,16 @@ bool AssetDatabase::SetEnvironmentImportSettings(UUID id,const PropertyMap& sett
 std::optional<AssetInfo> AssetDatabase::Find(UUID id) const {
     const auto found = m_byId.find(id);
     return found == m_byId.end() ? std::nullopt : std::optional<AssetInfo>(found->second);
+}
+
+bool AssetDatabase::RefreshSource(const std::filesystem::path& source){
+    const auto path=NormalizeSource(source);
+    if(!IsPathWithin(m_assetDirectory,path)){m_lastError="Asset source is outside the project Assets directory";return false;}
+    m_lastError.clear();const bool result=RegisterSource(path);
+    if(!result)if(auto found=m_byPath.find(PathUtf8(path));found!=m_byPath.end()){
+        auto& record=m_byId.at(found->second);record.State=AssetState::Failed;record.LastError=m_lastError;
+    }
+    return result;
 }
 
 std::optional<AssetInfo> AssetDatabase::Find(const std::filesystem::path& sourcePath) const {

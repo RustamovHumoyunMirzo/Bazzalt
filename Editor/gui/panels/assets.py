@@ -73,6 +73,7 @@ class AssetBrowserPanel(QWidget):
         except (OSError,ValueError):return False
     def _Icon(self,path):
         path=Path(path);ext=path.suffix.lower()
+        if ext==".lua" and self._resources:return self._resources.Icon("icons/abrowser/lua.svg")
         if ext in MODEL_EXTENSIONS:
             image=self._thumbnails.Request(path)
             if image is not None and not image.isNull():return QIcon(QPixmap.fromImage(image))
@@ -183,8 +184,11 @@ class AssetBrowserPanel(QWidget):
         while candidate.exists():candidate=candidate.with_name(f"{stem} {number}{suffix}");number+=1
         return candidate
     def _Create(self,kind)->None:
-        names={"folder":"New Folder","scene":"New Scene.bscene","cpp":"NewComponent.cpp","shader":"NewShader.shad","filament_shader":"NewShader.mat","material":"NewMaterial.matinst"};path=self._Unique(names[kind])
-        if kind=="folder":path.mkdir()
+        names={"folder":"New Folder","scene":"New Scene.bscene","cpp":"NewComponent.cpp","lua":"NewBehavior.lua","shader":"NewShader.shad","filament_shader":"NewShader.mat","material":"NewMaterial.matinst"};path=self._Unique(names[kind])
+        if kind=="lua":
+            name=path.stem.replace(" ","_")
+            path.write_text(f'-- COMPONENT({name})\n-- PROPERTY(float, Speed, 1.0)\nlocal Behavior = {{ Speed = 1.0 }}\nfunction Behavior:OnUpdate(deltaTime)\n    -- self.Entity is the attached entity.\nend\nreturn Behavior\n',encoding="utf-8")
+        elif kind=="folder":path.mkdir()
         else:path.write_text(f'FormatVersion: 1\nSceneUUID: "{uuid.uuid4()}"\nEntities:\n' if kind=="scene" else '#include <Bazzalt/Script.h>\n\nCOMPONENT(NewComponent) {\npublic:\n    PROPERTY(float, Speed, 1.0f)\n\n    void OnUpdate(float deltaTime) override { (void)deltaTime; }\n};\n' if kind=="cpp" else "shader NewShader {\n    properties { roughness: float = 0.5; }\n    material { color = vec4(1.0); roughness = roughness; }\n}\n" if kind=="shader" else 'material { name: "NewShader", shadingModel: lit }\nfragment { void material(inout MaterialInputs material) { prepareMaterial(material); material.baseColor = vec4(1.0); } }\n' if kind=="filament_shader" else '{\n  "version": 1,\n  "shader": null,\n  "properties": {}\n}\n',encoding="utf-8")
         self.Refresh(path);self.Browser.editItem(self.Browser.currentItem())
     def _Import(self)->None:
@@ -259,7 +263,7 @@ class AssetBrowserPanel(QWidget):
         if target is not None and widget is self.Browser and not target.isSelected():self.Browser.setCurrentItem(target)
         reveal_paths=[Path(target.data(0,Qt.ItemDataRole.UserRole))] if widget is self.Tree and target is not None else [Path(item.data(Qt.ItemDataRole.UserRole)) for item in self.Browser.selectedItems()]
         tr=self._localization.Translate;menu=QMenu(self);create=menu.addMenu(tr("assets.create"))
-        for key,label in (("folder","assets.folder"),("scene","assets.scene"),("cpp","assets.native_cpp"),("shader","assets.shader"),("material","assets.material")):
+        for key,label in (("folder","assets.folder"),("scene","assets.scene"),("cpp","assets.native_cpp"),("lua","assets.lua"),("shader","assets.shader"),("material","assets.material")):
             action=create.addAction(tr(label));action.triggered.connect(lambda _=False,k=key:self._Create(k))
         menu.addAction(tr("assets.import"),self._Import);menu.addSeparator();selected=bool(self.Browser.selectedItems()) if widget is self.Browser else False
         current=Path(self.Browser.currentItem().data(Qt.ItemDataRole.UserRole)) if widget is self.Browser and self.Browser.currentItem() else None

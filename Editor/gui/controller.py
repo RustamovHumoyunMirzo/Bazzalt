@@ -11,7 +11,8 @@ from PySide6.QtWidgets import QApplication, QFileDialog, QLabel, QMenu, QProgres
 
 from ..runtime import RuntimeService
 from ..history import SceneHistory
-from ..scripting import ScriptAttachments, ScriptCompiler, ScriptValidationError
+from ..scripting import ScriptAttachments, ScriptCompiler, ScriptValidationError, BuildResult
+from ..lua_assets import LuaAssetWatcher
 from ..materials import MaterialCompiler, MaterialError, ZERO, COUNTS
 from ..environments import InspectEnvironment
 from ..game_input import GameInputRouter
@@ -42,6 +43,8 @@ class EditorController(QObject):
         self._gizmos_visible=True;self._stats_frames=0;self._stats_started=monotonic()
         self._snap_modes=set();self._pivot_center=False;self._local_space=False
         self.ScriptCompiler=None;self.ScriptAttachments=None
+        self._lua_play_pending=False;self.LuaAssets=LuaAssetWatcher(self.Runtime,self)
+        self.LuaAssets.Finished.connect(self._LuaImportFinished);self.LuaAssets.Failed.connect(self._LuaImportFailed)
         self.MaterialCompiler=MaterialCompiler(runtime);self._material_check=0.0;self._material_error=""
         self._asset_database_dirty=True
         self._material_scenes=None
@@ -148,12 +151,14 @@ class EditorController(QObject):
         if self.SelectedEntity and self.Runtime.IsPlaying():self._RefreshInspectorValues(preserve_editing=True)
 
     def SaveScene(self) -> bool:
+        if self.ScriptAttachments and not self._SyncLuaScripts():return False
         if self.ScenePath:
             if self.Runtime.SaveScene(self.ScenePath): self.SetDirty(False);return True
             return False
         return self.SaveSceneAsDialog()
 
     def SaveSceneAsDialog(self) -> bool:
+        if self.ScriptAttachments and not self._SyncLuaScripts():return False
         dialog=QFileDialog(self.Window,self.Window.Localization.Translate("dialog.save_scene"),self.Runtime.AssetDirectory(),self.Window.Localization.Translate("dialog.scene_filter"))
         dialog.setOption(QFileDialog.Option.DontUseNativeDialog);dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
         path=dialog.selectedFiles()[0] if dialog.exec() and dialog.selectedFiles() else ""
@@ -170,11 +175,14 @@ class EditorController(QObject):
         project_id=str(self.Runtime.ProjectInfo().get("uuid",""));saved=self.Window._settings.get("entity_editor_state",{}).get(project_id,{})
         self.Runtime.EditorEntityState={str(entity):{key:bool(value) for key,value in flags.items() if key in {"locked","hidden"}} for entity,flags in saved.items() if isinstance(flags,dict)} if isinstance(saved,dict) else {}
         self.ScriptCompiler=ScriptCompiler(project);self.ScriptAttachments=ScriptAttachments(project)
+        self.ScriptAttachments.MergeLuaSceneBindings(self.Runtime.LuaSceneScripts())
+        self.LuaAssets.Track(value["source"] for value in self.ScriptAttachments.LuaSceneBindings())
         self.Window.Console.AddMessage(
             self.Window.Localization.Translate("console.project_loaded", path=path)
         )
 
     def RefreshHierarchy(self) -> None:
+        if self.ScriptAttachments and not self.Runtime.IsPlaying():self.ScriptAttachments.MergeLuaSceneBindings(self.Runtime.LuaSceneScripts())
         self.Window.Output.SetGameCameraAvailable(self.Runtime.HasActiveCamera())
         selected = list(self.SelectedEntities) or ([self.InspectedScene] if self.InspectedScene else [])
         hierarchy_blocker=QSignalBlocker(self.Window.Hierarchy.Tree)
@@ -251,7 +259,7 @@ class EditorController(QObject):
         component_data = details.get("component_data", {})
         component_enabled=details.get("component_enabled",{})
         for component in details.get("components", ())[1:]:
-            if component != "Transform":
+            if component not in {"Transform","ScriptComponents"}:
                 section = self.Window.Properties.AddComponentSection(
                     f"runtime.{component}", str(component), expanded=False,
                     icon=self._ComponentIcon(str(component)),
@@ -840,7 +848,7 @@ class EditorController(QObject):
         if not self.SelectedEntity:return
         if component_id.startswith("script.") and self.ScriptAttachments:
             if self.ScriptAttachments.Remove(self.SelectedEntity,component_id.removeprefix("script.")):
-                self.SetDirty(True);self.SelectEntity(self.SelectedEntity,force=True)
+                self._SyncLuaScripts();self.SetDirty(True);self.SelectEntity(self.SelectedEntity,force=True)
             return
         prefix="multi." if component_id.startswith("multi.") else "runtime." if component_id.startswith("runtime.") else ""
         if not prefix:return
@@ -853,7 +861,7 @@ class EditorController(QObject):
             self.History.Begin("Instantiate model");entity=self.Runtime.InstantiateModelPath(path,parent_id)
             if entity:self.History.Commit();self.SetDirty(True,[self._SceneForParent(parent_id)]);self.SelectEntity(entity)
             else:self.History.Cancel()
-        elif Path(path).suffix.lower()==".cpp" and self.ScriptCompiler:
+        elif Path(path).suffix.lower() in {".cpp",".lua"} and self.ScriptCompiler:
             try:descriptor=self.ScriptCompiler.Inspect(path)
             except ScriptValidationError as error:self._ScriptValidationFailed(error);return
             target=parent_id or self.SelectedEntity
@@ -930,15 +938,20 @@ class EditorController(QObject):
 
     def Play(self) -> None:
         if self.Runtime.IsPlaying():return
+        if self.LuaAssets.IsBusy():self._lua_play_pending=True;return
         if not self._PrepareUsedMaterials():self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
         if self.Window.PreferenceValue("console","clear_on_play",False):self.Window.Console.Clear()
         if self.ScriptCompiler and self.ScriptAttachments:
             tr=self.Window.Localization.Translate
-            progress=QProgressDialog(tr("scripting.compiling"),None,0,0,self.Window);progress.setWindowModality(Qt.WindowModality.WindowModal);progress.setCancelButton(None);progress.show();QApplication.processEvents()
+            native_sources=[path for path in self.ScriptAttachments.UsedSources() if Path(path).suffix.lower()!=".lua"]
+            progress=None
+            if native_sources:
+                progress=QProgressDialog(tr("scripting.compiling"),None,0,0,self.Window);progress.setWindowModality(Qt.WindowModality.WindowModal);progress.setCancelButton(None);progress.show();QApplication.processEvents()
             try:
                 self.ScriptCompiler.Tools=self.Window.GetPreferences().get("tools",{})
-                result=self.ScriptCompiler.Build(self.ScriptAttachments.UsedSources())
-            finally:progress.close()
+                result=self.ScriptCompiler.Build(native_sources) if native_sources else BuildResult(True)
+            finally:
+                if progress is not None:progress.close()
             for diagnostic in result.diagnostics:
                 level=ConsoleLevel.Error if diagnostic.level=="error" else ConsoleLevel.Warning if diagnostic.level=="warning" else ConsoleLevel.Info
                 message=tr(diagnostic.localization_key) if diagnostic.localization_key else diagnostic.message
@@ -947,6 +960,8 @@ class EditorController(QObject):
             if result.outputs and self.Window.PreferenceValue("scripting","show_compile_success",True):self.Window.Console.AddMessage(tr("scripting.compile_success",count=len(result.outputs)),ConsoleLevel.Info,True,tr("scripting.compiler_source"))
             try:bindings=self.ScriptAttachments.RuntimeBindings(result.outputs)
             except ScriptValidationError as error:self._ScriptValidationFailed(error);self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
+            active_entities={str(entity["uuid"]) for entity in self.Runtime.Entities()}
+            bindings=[binding for binding in bindings if binding["entity"] in active_entities]
             if not self.Runtime.ConfigureScripts(bindings):
                 self.Window.Console.AddMessage(self.Runtime.LastError(),ConsoleLevel.Error,True,tr("scripting.runtime_source"));self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
         authoring=(set(self._dirty_scenes),self.History.Checkpoint())
@@ -964,7 +979,7 @@ class EditorController(QObject):
             if self.ScriptCompiler:descriptor=self.ScriptCompiler.ValidateDescriptor(descriptor)
             added=self.ScriptAttachments.Attach(entity_id,descriptor)
         except ScriptValidationError as error:self._ScriptValidationFailed(error);return
-        if added:self.SetDirty(True);self.SelectEntity(entity_id,force=True)
+        if added:self._SyncLuaScripts();self.SetDirty(True);self.SelectEntity(entity_id,force=True)
         else:self._ScriptValidationFailed(self.Window.Localization.Translate("scripting.already_attached",name=descriptor.name))
 
     def _ScriptValidationFailed(self,error)->None:
@@ -973,13 +988,28 @@ class EditorController(QObject):
 
     def _SetScriptEnabled(self,script:dict,enabled:bool)->None:
         script["enabled"]=enabled
-        if self.ScriptAttachments:self.ScriptAttachments.Save();self.SetDirty(True)
+        if self.ScriptAttachments:self.ScriptAttachments.Save();self._SyncLuaScripts();self.SetDirty(True)
 
     def _SetScriptProperty(self,script:dict,name:str,value)->None:
         script.setdefault("properties",{})[name]=value
-        if self.ScriptAttachments:self.ScriptAttachments.Save();self.SetDirty(True)
+        if self.ScriptAttachments:self.ScriptAttachments.Save();self._SyncLuaScripts();self.SetDirty(True)
+
+    def _SyncLuaScripts(self)->bool:
+        if not self.ScriptAttachments:return True
+        bindings=self.ScriptAttachments.LuaSceneBindings()
+        self.LuaAssets.Track(value["source"] for value in bindings)
+        if not bindings:return self.Runtime.SyncLuaScripts([]) if hasattr(self.Runtime,"SyncLuaScripts") else True
+        if self.Runtime.SyncLuaScripts(bindings):return True
+        if not self.Runtime.RefreshLuaAssets({value["source"] for value in bindings}):return False
+        return self.Runtime.SyncLuaScripts(bindings)
+
+    def _LuaImportFinished(self):
+        if self._lua_play_pending:self._lua_play_pending=False;self.Play()
+    def _LuaImportFailed(self,error):
+        self._lua_play_pending=False;self._ScriptValidationFailed(error);self.Window.Toolbar.SetPlayState(PlayState.Stopped)
 
     def Stop(self) -> None:
+        self._lua_play_pending=False
         self.Runtime.SetGameInputActive(False)
         self.Runtime.Stop()
         self._RestorePlayAuthoring()

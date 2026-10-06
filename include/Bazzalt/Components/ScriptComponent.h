@@ -9,6 +9,7 @@ struct ScriptAttachment {
     std::string Source;
     std::string TypeName;
     bool Enabled = true;
+    bool Lua = false;
     std::vector<ScriptPropertyValue> Properties;
 };
 // Multiple user behaviors may be attached to one entity. This data is stable

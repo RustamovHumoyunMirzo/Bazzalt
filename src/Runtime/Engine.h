@@ -21,6 +21,7 @@ namespace Bazzalt::Runtime {
 class AssetDatabase;
 class RenderBackend;
 class NativeScriptRuntime;
+class LuaRuntime;
 struct ScriptBinding;
 
 // Runtime-owned orchestration. Kept outside the public include tree so only
@@ -37,7 +38,9 @@ public:
     // driver. Editor/game hosts retain native rendering by default.
     bool Init();
     bool Init(bool headless);
+    [[nodiscard]] bool IsInitialized() const { return m_isInitialized; }
     bool RefreshAssets();
+    bool RefreshLuaAsset(const std::filesystem::path& source);
     bool SetEnvironmentImportSettings(UUID id,const PropertyMap& settings);
     PropertyMap GetAssetImportSettings(UUID id);
     bool HasEnvironmentLighting() const;
@@ -88,7 +91,7 @@ public:
     void SetEditorOrientationVisible(bool visible);
     bool SetSceneRenderMode(const std::string& mode);
     bool ConfigureScripts(std::vector<ScriptBinding> bindings);
-    bool StartScripts();
+    bool StartScripts(bool resetTime = true);
     void StopScripts();
 
 private:
@@ -121,6 +124,8 @@ private:
     std::unique_ptr<AssetDatabase> m_assetDatabase;
     std::unique_ptr<RenderBackend> m_renderBackend;
     std::unique_ptr<NativeScriptRuntime> m_scriptRuntime;
+    std::unique_ptr<LuaRuntime> m_luaRuntime;
+    bool m_luaConfigured=false;
     bool m_editorIconsVisible=true;
     UUID m_hoveredObject{};
     std::unordered_set<UUID> m_editorHidden,m_editorUnselectable;

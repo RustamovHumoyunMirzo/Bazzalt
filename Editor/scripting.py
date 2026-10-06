@@ -39,6 +39,15 @@ class ScriptCompiler:
         path=Path(path)
         try:text=path.read_text(encoding="utf-8")
         except (OSError,UnicodeError):return None
+        if path.suffix.lower()==".lua":
+            # Metadata is declarative comments; never execute scripts to inspect them.
+            declarations=re.findall(r"^\s*--\s*COMPONENT\s*\(\s*([A-Za-z_]\w*)\s*\)\s*$",text,re.M)
+            if len(declarations)>1:raise ScriptValidationError(f"{path}: declare at most one Lua COMPONENT")
+            name=declarations[0] if declarations else path.stem
+            if not re.fullmatch(r"[A-Za-z_]\w*",name):raise ScriptValidationError(f"{path}: invalid Lua component name")
+            properties=tuple(ScriptProperty(m.group(1).strip(),m.group(2),m.group(3).strip()) for line in text.splitlines() if line.lstrip().startswith("--") for m in _PROPERTY.finditer(line))
+            if len({p.name for p in properties})!=len(properties):raise ScriptValidationError(f"{path}: duplicate Lua properties")
+            return ScriptDescriptor(path.resolve(),name,properties)
         mask=_CodeMask(text);matches=list(_COMPONENT.finditer(mask))
         if not matches:return None
         if len(matches)!=1:raise ScriptValidationError(f"{path}: declare exactly one COMPONENT per source file")
@@ -57,7 +66,7 @@ class ScriptCompiler:
         return ScriptDescriptor(path.resolve(),match.group(1),properties)
     def Discover(self)->list[ScriptDescriptor]:
         assets=self.project/"Assets"
-        paths=sorted((path for path in assets.rglob("*") if path.is_file() and path.suffix.lower()==".cpp"),key=str) if assets.is_dir() else []
+        paths=sorted((path for path in assets.rglob("*") if path.is_file() and path.suffix.lower() in {".cpp",".lua"}),key=str) if assets.is_dir() else []
         return self._Validate(paths)
     def _Validate(self,paths):
         self.Diagnostics=[];groups={}
@@ -101,8 +110,8 @@ class ScriptCompiler:
             return BuildResult(False, diagnostics=(Diagnostic("error", str(error)),))
 
     def _Build(self, used: list[str|Path])->BuildResult:
-        used=list(dict.fromkeys(Path(path).resolve() for path in used));assets=self.project/"Assets"
-        project_sources=[path for path in assets.rglob("*") if path.is_file() and path.suffix.lower()==".cpp"] if assets.is_dir() else []
+        used=list(dict.fromkeys(Path(path).resolve() for path in used if Path(path).suffix.lower()!=".lua"));assets=self.project/"Assets"
+        project_sources=[path for path in assets.rglob("*") if path.is_file() and path.suffix.lower() in {".cpp",".lua"}] if assets.is_dir() else []
         validated=self._Validate([*project_sources,*used]);by_path={value.path:value for value in validated}
         if self.Diagnostics:return BuildResult(False,diagnostics=tuple(self.Diagnostics))
         missing=[str(path) for path in used if path not in by_path]
@@ -209,12 +218,26 @@ class ScriptAttachments:
             names=[value.get("type") for value in entries]
             paths=[str(Path(value.get("source","")).resolve()) for value in entries]
             if len(names)!=len(set(names)) or len(paths)!=len(set(paths)):raise ScriptValidationError(f"Entity {entity} has duplicate script component types or sources. Remove the duplicate component and add it again.")
-        sources=self.UsedSources();modules={str(Path(source).resolve()):str(output) for source,output in zip(sources,outputs)};result=[]
+        sources=[source for source in self.UsedSources() if Path(source).suffix.lower()!=".lua"]
+        modules={str(Path(source).resolve()):str(output) for source,output in zip(sources,outputs)};result=[]
+        for source in self.UsedSources():
+            if Path(source).suffix.lower()==".lua":modules[str(Path(source).resolve())]=str(Path(source).resolve())
         for entity,entries in self.values.get("entities",{}).items():
             for value in entries:
                 source=str(Path(value.get("source","")).resolve())
                 if value.get("enabled",True) and source in modules:result.append({"module":modules[source],"entity":entity,"type":value.get("type",Path(source).stem),"properties":dict(value.get("properties",{}))})
         return result
+    def LuaSceneBindings(self)->list[dict]:
+        return [{"entity":entity,"source":value["source"],"type":value["type"],"enabled":value.get("enabled",True),"properties":dict(value.get("properties",{}))}
+                for entity,entries in self.values.get("entities",{}).items() for value in entries if Path(value.get("source","")).suffix.lower()==".lua"]
+    def MergeLuaSceneBindings(self,bindings)->None:
+        changed=False
+        for binding in bindings:
+            if Path(binding.get("source","")).suffix.lower()!=".lua":continue
+            entries=self.values.setdefault("entities",{}).setdefault(binding["entity"],[])
+            if any(value.get("type")==binding["type"] for value in entries):continue
+            entries.append({key:binding[key] for key in ("source","type","enabled","properties")});changed=True
+        if changed:self.Save()
 
 def _Literal(value: str):
     value=value.strip()

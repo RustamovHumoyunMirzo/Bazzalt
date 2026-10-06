@@ -125,6 +125,9 @@ def Install(entry: dict, archive: Path, versions: Path) -> Path:
             manifest = json.loads((payload / "editor.json").read_text(encoding="utf-8-sig"))
             if manifest.get("version") != entry["version"] or manifest.get("architecture") != entry["architecture"] or manifest.get("executable") != "Bazzalt.exe":
                 raise ValueError("Editor manifest does not match download catalog")
+            if manifest.get("lua_version"):
+                for name in ("Editor/bazzalt_lua.dll","ScriptSDK/lib/bazzalt_lua.dll"):
+                    if not (payload/name).is_file():raise ValueError("Missing Lua runtime library: "+name)
             for required in ("Bazzalt.exe", "Editor/Bazzalt.dll", "Editor/bshad.dll", "ScriptSDK/lib/Bazzalt.lib", "ScriptSDK/include/Bazzalt/Scene.h"):
                 if not (payload / required).is_file(): raise ValueError("Incomplete editor package: " + required)
             if not list((payload/"Editor").glob("_bazzalt_runtime*.pyd")):raise ValueError("Editor package has no native runtime")

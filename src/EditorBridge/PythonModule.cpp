@@ -25,6 +25,7 @@
 #include "Runtime/Engine.h"
 #include "Bazzalt/Material.h"
 #include "Runtime/NativeScriptRuntime.h"
+#include "Bazzalt/Components/ScriptComponent.h"
 #include "Runtime/InputAccess.h"
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Components/Light.h"
@@ -222,7 +223,7 @@ public:
     py::dict AssetInfo(const std::string& text) const {
         py::dict result;UUID id;
         const auto asset=UUID::TryParse(text,id)?AssetManager::GetAsset(id):AssetManager::GetAsset(std::filesystem::u8path(text));
-        if(asset){result["uuid"]=asset->Id.ToString();result["path"]=PathText(asset->SourcePath);result["cache"]=PathText(asset->CachePath);result["importer"]=asset->Importer;result["settings"]=m_engine->GetAssetImportSettings(asset->Id);}
+        if(asset){result["uuid"]=asset->Id.ToString();result["path"]=PathText(asset->SourcePath);result["cache"]=PathText(asset->CachePath);result["importer"]=asset->Importer;result["error"]=asset->LastError;result["settings"]=m_engine->GetAssetImportSettings(asset->Id);}
         return result;
     }
     py::str AssetDirectory() const {
@@ -500,7 +501,9 @@ public:
             if(!m_engine->SaveSceneAsset(SceneAt(i),path)){CleanupSnapshot();return false;}
             m_extraSnapshots.emplace_back(SceneAt(i).GetUUID(),path);
         }
-        if (!m_engine->Init()||!m_engine->StartScripts()) {m_engine->StopScripts();m_engine->LoadScene(m_snapshot);CleanupSnapshot();return false;}
+        const bool initialized=m_engine->IsInitialized();
+        // Init starts scripts on the first Play; do not invoke OnCreate twice.
+        if (!m_engine->Init()||(initialized&&!m_engine->StartScripts())) {m_engine->StopScripts();m_engine->LoadScene(m_snapshot);CleanupSnapshot();return false;}
         m_playing = true; m_paused = false; return true;
     }
     void Pause(bool paused) { if (m_playing) {m_paused = paused;if(paused)Runtime::InputAccess::SetActive(false);} }
@@ -531,6 +534,52 @@ public:
         std::vector<Runtime::ScriptBinding> bindings;
         try{for(const py::handle itemHandle:values){const auto item=py::reinterpret_borrow<py::dict>(itemHandle);Runtime::ScriptBinding binding;binding.Module=std::filesystem::u8path(py::str(item["module"]).cast<std::string>());binding.Entity=py::str(item["entity"]).cast<std::string>();binding.TypeName=py::str(item["type"]).cast<std::string>();const auto properties=py::reinterpret_borrow<py::dict>(item["properties"]);for(const auto& pair:properties){const std::string name=py::str(pair.first).cast<std::string>();const py::handle value=pair.second;std::string text;if(py::isinstance<py::bool_>(value))text=value.cast<bool>()?"true":"false";else if(py::isinstance<py::sequence>(value)&&!py::isinstance<py::str>(value)){const auto sequence=py::reinterpret_borrow<py::sequence>(value);for(const auto part:sequence){if(!text.empty())text+=',';text+=py::str(part).cast<std::string>();}}else text=py::str(value).cast<std::string>();binding.Properties.emplace(name,std::move(text));}bindings.push_back(std::move(binding));}}catch(const py::error_already_set& error){m_bridgeError=error.what();return false;}
         m_bridgeError.clear();return m_engine->ConfigureScripts(std::move(bindings));
+    }
+
+    bool SyncLuaScripts(const py::list& values) {
+        if(m_playing)return false;
+        std::vector<std::pair<Entity,ScriptAttachment>> pending;
+        try{for(auto handle:values){auto item=py::reinterpret_borrow<py::dict>(handle);
+            auto entity=FindEntity(py::str(item["entity"]).cast<std::string>()).second;if(!entity)continue;
+            auto source=std::filesystem::u8path(py::str(item["source"]).cast<std::string>());
+            auto asset=AssetManager::GetAsset(source);if(!asset||asset->State!=AssetState::Ready){m_bridgeError="Lua asset is not imported";return false;}
+            ScriptAttachment attachment;attachment.Source=asset->Id.ToString();attachment.Lua=true;attachment.TypeName=py::str(item["type"]).cast<std::string>();attachment.Enabled=py::cast<bool>(item["enabled"]);
+            for(auto pair:py::reinterpret_borrow<py::dict>(item["properties"])){ScriptPropertyValue property;property.Name=py::str(pair.first).cast<std::string>();const auto value=pair.second;
+                if(py::isinstance<py::bool_>(value)){property.Type="bool";property.Value=py::cast<bool>(value)?"true":"false";}
+                else if(py::isinstance<py::sequence>(value)&&!py::isinstance<py::str>(value)){property.Type="vector";for(auto part:py::reinterpret_borrow<py::sequence>(value)){if(!property.Value.empty())property.Value+=',';property.Value+=py::str(part).cast<std::string>();}}
+                else{property.Type=py::isinstance<py::float_>(value)||py::isinstance<py::int_>(value)?"number":"string";property.Value=py::str(value).cast<std::string>();}
+                attachment.Properties.push_back(std::move(property));
+            }pending.emplace_back(entity,std::move(attachment));
+        }}catch(const std::exception& error){m_bridgeError=error.what();return false;}
+        for(std::size_t i=0;i<m_loadedScenes.size();++i)for(auto handle:SceneAt(i).GetRegistry().view<ScriptComponents>()){
+            auto& entries=SceneAt(i).GetRegistry().get<ScriptComponents>(handle).Values;
+            std::erase_if(entries,[](const ScriptAttachment& entry){return entry.Lua;});
+        }
+        for(auto& [entity,attachment]:pending){auto* scripts=entity.TryGetComponent<ScriptComponents>();if(!scripts)scripts=&entity.AddComponent<ScriptComponents>();scripts->Values.push_back(std::move(attachment));}
+        m_bridgeError.clear();return true;
+    }
+    bool RefreshLuaAssets(const std::vector<std::string>& paths){
+        if(m_playing)return false;
+        for(const auto& path:paths)if(!m_engine->RefreshLuaAsset(std::filesystem::u8path(path)))return false;
+        return true;
+    }
+
+    py::list LuaSceneScripts() {
+        py::list result;
+        for(std::size_t i=0;i<m_loadedScenes.size();++i){auto& scene=SceneAt(i);
+            for(auto handle:scene.GetRegistry().view<ScriptComponents>())for(const auto& attachment:scene.GetRegistry().get<ScriptComponents>(handle).Values){
+                if(!attachment.Lua)continue;UUID id;if(!UUID::TryParse(attachment.Source,id))continue;
+                auto asset=AssetManager::GetAsset(id);if(!asset)continue;
+                py::dict value,properties;value["entity"]=scene.GetEntity(static_cast<Entity::Id>(handle)).GetUUID().ToString();
+                const auto path=asset->SourcePath.u8string();value["source"]=std::string(reinterpret_cast<const char*>(path.data()),path.size());value["type"]=attachment.TypeName;value["enabled"]=attachment.Enabled;
+                for(const auto& property:attachment.Properties){
+                    if(property.Type=="bool")properties[py::str(property.Name)]=py::bool_(property.Value=="true");
+                    else if(property.Type=="number"||property.Type=="float"){try{properties[py::str(property.Name)]=py::float_(std::stod(property.Value));}catch(const std::exception&){properties[py::str(property.Name)]=property.Value;}}
+                    else properties[py::str(property.Name)]=property.Value;
+                }
+                value["properties"]=properties;result.append(value);
+            }
+        }return result;
     }
 
 private:
@@ -655,6 +704,9 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("set_editor_orientation_visible", &Bazzalt::EditorBridge::EditorHost::SetEditorOrientationVisible)
         .def("set_scene_render_mode", &Bazzalt::EditorBridge::EditorHost::SetSceneRenderMode)
         .def("configure_scripts", &Bazzalt::EditorBridge::EditorHost::ConfigureScripts)
+        .def("sync_lua_scripts", &Bazzalt::EditorBridge::EditorHost::SyncLuaScripts)
+        .def("lua_scene_scripts", &Bazzalt::EditorBridge::EditorHost::LuaSceneScripts)
+        .def("refresh_lua_assets", &Bazzalt::EditorBridge::EditorHost::RefreshLuaAssets)
         .def("play", &Bazzalt::EditorBridge::EditorHost::Play)
         .def("pause", &Bazzalt::EditorBridge::EditorHost::Pause)
         .def("step", &Bazzalt::EditorBridge::EditorHost::Step)

@@ -10,6 +10,7 @@ find_package(Python COMPONENTS Interpreter REQUIRED)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+include(cmake/Lua.cmake)
 
 set(BAZZALT_ENTT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/entt" CACHE PATH
     "Path to an EnTT source tree")
@@ -143,6 +144,16 @@ file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/EditorBridge/")
+list(FILTER LIB_SOURCES EXCLUDE REGEX "/Script/Lua[^/]*\\.cpp$|/Runtime/LuaRuntime\\.cpp$")
+file(GLOB BAZZALT_LUA_BINDING_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/Script/Lua*.cpp")
+add_library(BazzaltLuaBindings STATIC ${BAZZALT_LUA_BINDING_SOURCES} src/Runtime/LuaRuntime.cpp)
+set_target_properties(BazzaltLuaBindings PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(BazzaltLuaBindings PRIVATE include src "${BAZZALT_SOL2_DIR}/include")
+target_link_libraries(BazzaltLuaBindings PRIVATE BazzaltLua EnTT::EnTT)
+target_compile_definitions(BazzaltLuaBindings PRIVATE BAZZALT_BUILDING_LIBRARY SOL_ALL_SAFETIES_ON=1)
+if(MSVC)
+    target_compile_options(BazzaltLuaBindings PRIVATE /utf-8 /bigobj)
+endif()
 
 file(GLOB_RECURSE LIB_HEADERS CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp"
@@ -161,13 +172,24 @@ set_target_properties(Bazzalt PROPERTIES POSITION_INDEPENDENT_CODE ON
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/ScriptSDK/lib"
     BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
 target_compile_definitions(Bazzalt PRIVATE BAZZALT_BUILDING_LIBRARY)
+if(APPLE)
+    set_target_properties(Bazzalt PROPERTIES BUILD_RPATH "@loader_path" INSTALL_RPATH "@loader_path")
+endif()
 # SDK staged beside the editor: public headers only, with the EnTT dependency.
 add_custom_command(TARGET Bazzalt POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/include/Bazzalt" "${CMAKE_BINARY_DIR}/ScriptSDK/include/Bazzalt"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${BAZZALT_ENTT_DIR}/src/entt" "${CMAKE_BINARY_DIR}/ScriptSDK/include/entt"
     COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:Bazzalt>" "${CMAKE_BINARY_DIR}/ScriptSDK/lib/$<TARGET_FILE_NAME:Bazzalt>"
+    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:BazzaltLua>" "${CMAKE_BINARY_DIR}/ScriptSDK/lib/$<TARGET_FILE_NAME:BazzaltLua>"
     COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_LINKER_FILE:Bazzalt>" "${CMAKE_BINARY_DIR}/ScriptSDK/lib/$<TARGET_LINKER_FILE_NAME:Bazzalt>"
     VERBATIM)
+
+if(NOT WIN32)
+    add_custom_command(TARGET Bazzalt POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -DINPUT=$<TARGET_LINKER_FILE:BazzaltLua>
+            -DDESTINATION=${CMAKE_BINARY_DIR}/ScriptSDK/lib
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CopyRuntimeLibrary.cmake" VERBATIM)
+endif()
 
 target_include_directories(Bazzalt
     PUBLIC
@@ -178,13 +200,14 @@ target_include_directories(Bazzalt
     "${_bazzalt_generated_dir}"
 )
 
-target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE SDL3::SDL3-static ryml::ryml Filament::Filament ${CMAKE_DL_LIBS})
+target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE BazzaltLuaBindings BazzaltLua SDL3::SDL3-static ryml::ryml Filament::Filament ${CMAKE_DL_LIBS})
 
 target_compile_features(Bazzalt PUBLIC cxx_std_20)
 if(MSVC)
     # Public API strings and checked-in sources use UTF-8, regardless of the
     # developer/CI machine's ANSI code page (including Unicode path literals).
     target_compile_options(Bazzalt PUBLIC /utf-8)
+    target_compile_options(Bazzalt PRIVATE /bigobj)
 endif()
 # Match these flags to the linked Filament SDK when using a custom build.
 option(BAZZALT_FILAMENT_OPENGL "SDK contains the OpenGL backend" ON)
@@ -255,7 +278,7 @@ target_link_libraries(BazzaltExample
 )
 if(WIN32)
     add_custom_command(TARGET BazzaltExample POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE_DIR:BazzaltExample>/$<TARGET_FILE_NAME:Bazzalt>")
+        "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE:BazzaltLua>" "$<TARGET_FILE_DIR:BazzaltExample>")
 endif()
 
 include(CTest)
@@ -264,7 +287,7 @@ if(BUILD_TESTING)
         target_sources(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests/TestDiagnostics.cpp")
         if(WIN32)
             add_custom_command(TARGET ${target} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE_DIR:${target}>/$<TARGET_FILE_NAME:Bazzalt>")
+                "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE:BazzaltLua>" "$<TARGET_FILE_DIR:${target}>")
         endif()
         if(MSVC)
             target_compile_options(${target} PRIVATE /UNDEBUG)
@@ -343,6 +366,11 @@ if(BUILD_TESTING)
     bazzalt_enable_test_assertions(BazzaltPublicScriptApiTests)
     add_test(NAME BazzaltPublicScriptApiTests COMMAND BazzaltPublicScriptApiTests $<TARGET_FILE:BazzaltPublicApiModule>)
     add_executable(BazzaltNativeScriptRuntimeTests tests/NativeScriptRuntimeTests.cpp)
+    add_executable(BazzaltLuaRuntimeTests tests/LuaRuntimeTests.cpp)
+    target_include_directories(BazzaltLuaRuntimeTests PRIVATE src)
+    target_link_libraries(BazzaltLuaRuntimeTests PRIVATE Bazzalt)
+    bazzalt_enable_test_assertions(BazzaltLuaRuntimeTests)
+    add_test(NAME BazzaltLuaRuntimeTests COMMAND BazzaltLuaRuntimeTests)
     target_include_directories(BazzaltNativeScriptRuntimeTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_link_libraries(BazzaltNativeScriptRuntimeTests PRIVATE Bazzalt ${CMAKE_DL_LIBS})
     bazzalt_enable_test_assertions(BazzaltNativeScriptRuntimeTests)

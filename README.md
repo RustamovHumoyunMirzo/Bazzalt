@@ -20,6 +20,11 @@ changes, keep third-party types out of `include/Bazzalt`, preserve UUID and YAML
 forward compatibility, and run the native and editor test suites before
 submitting changes.
 
+Public gameplay API changes must update the Lua bindings, API coverage tests,
+and documentation too. Lua names follow the same PascalCase conventions as C++.
+See [Lua integration](docs/private/lua-scripting.md) for bindings, lifecycle,
+bytecode assets, and DLL deployment rules.
+
 ## License
 
 This project uses a modular multi-license structure:

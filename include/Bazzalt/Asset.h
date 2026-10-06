@@ -24,6 +24,7 @@ struct AssetInfo {
     std::string Importer;
     std::uint32_t ImporterVersion = 0;
     AssetState State = AssetState::Unknown;
+    std::string LastError;
 };
 
 } // namespace Bazzalt

@@ -20,6 +20,7 @@
 #include "Bazzalt/Components/SceneQueryBounds.h"
 #include "Bazzalt/Components/Transform.h"
 #include "Bazzalt/Components/Vignette.h"
+#include "Bazzalt/Components/ScriptComponent.h"
 #include "Bazzalt/Scene.h"
 
 namespace Bazzalt { namespace {
@@ -63,7 +64,31 @@ void ComponentSerializationRegistry::RegisterDescriptor(Descriptor d){
 }
 const ComponentSerializationRegistry::Descriptor* ComponentSerializationRegistry::Find(const std::string& t)const{for(const auto& d:m_descriptors)if(d.Type==t)return &d;return nullptr;}
 
-SceneSerializer::SceneSerializer(){m_components.Register<Transform>("Bazzalt.Transform",1,
+SceneSerializer::SceneSerializer(){
+m_components.Register<ScriptComponents>("Bazzalt.ScriptComponents",1,
+    [](const ScriptComponents& value,PropertyMap& output){
+        output["Count"]=std::to_string(value.Values.size());output["Enabled"]=value.Enabled?"true":"false";
+        for(std::size_t i=0;i<value.Values.size();++i){const auto& script=value.Values[i];const auto prefix="Script."+std::to_string(i)+".";
+            output[prefix+"Source"]=script.Source;output[prefix+"TypeName"]=script.TypeName;output[prefix+"Enabled"]=script.Enabled?"true":"false";output[prefix+"Count"]=std::to_string(script.Properties.size());
+            output[prefix+"Lua"]=script.Lua?"true":"false";
+            for(std::size_t j=0;j<script.Properties.size();++j){const auto key=prefix+"Property."+std::to_string(j)+".";output[key+"Name"]=script.Properties[j].Name;output[key+"Type"]=script.Properties[j].Type;output[key+"Value"]=script.Properties[j].Value;}
+        }
+    },[](ScriptComponents& value,const PropertyMap& properties,std::uint32_t version){
+        if(version!=1)return false;
+        try{
+            const auto count=std::stoul(properties.at("Count"));if(count>1024)return false;
+            std::unordered_set<std::string> types;
+            for(std::size_t i=0;i<count;++i){const auto prefix="Script."+std::to_string(i)+".";ScriptAttachment script;
+                script.Source=properties.at(prefix+"Source");script.TypeName=properties.at(prefix+"TypeName");script.Enabled=properties.at(prefix+"Enabled")=="true";
+                if(auto found=properties.find(prefix+"Lua");found!=properties.end())script.Lua=found->second=="true";
+                if(script.Source.empty()||script.TypeName.empty()||!types.insert(script.TypeName).second)return false;
+                const auto fields=std::stoul(properties.at(prefix+"Count"));if(fields>1024)return false;std::unordered_set<std::string> names;
+                for(std::size_t j=0;j<fields;++j){const auto key=prefix+"Property."+std::to_string(j)+".";ScriptPropertyValue field{properties.at(key+"Name"),properties.at(key+"Type"),properties.at(key+"Value")};if(!names.insert(field.Name).second)return false;script.Properties.push_back(std::move(field));}
+                value.Values.push_back(std::move(script));
+            }return true;
+        }catch(const std::exception&){return false;}
+    });
+m_components.Register<Transform>("Bazzalt.Transform",1,
 [](const Transform& v,PropertyMap& o){o["Position.X"]=Float(v.Position.X);o["Position.Y"]=Float(v.Position.Y);o["Position.Z"]=Float(v.Position.Z);o["Rotation.X"]=Float(v.Rotation.X);o["Rotation.Y"]=Float(v.Rotation.Y);o["Rotation.Z"]=Float(v.Rotation.Z);o["Rotation.W"]=Float(v.Rotation.W);o["Scale.X"]=Float(v.Scale.X);o["Scale.Y"]=Float(v.Scale.Y);o["Scale.Z"]=Float(v.Scale.Z);},
 [](Transform& v,const PropertyMap& i,std::uint32_t n){return n==1&&Float(i,"Position.X",v.Position.X)&&Float(i,"Position.Y",v.Position.Y)&&Float(i,"Position.Z",v.Position.Z)&&Float(i,"Rotation.X",v.Rotation.X)&&Float(i,"Rotation.Y",v.Rotation.Y)&&Float(i,"Rotation.Z",v.Rotation.Z)&&Float(i,"Rotation.W",v.Rotation.W)&&Float(i,"Scale.X",v.Scale.X)&&Float(i,"Scale.Y",v.Scale.Y)&&Float(i,"Scale.Z",v.Scale.Z);});
 

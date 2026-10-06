@@ -356,6 +356,12 @@ class RuntimeService(QObject):
 
     def ConfigureScripts(self,bindings:list[dict])->bool:
         return bool(self._host and hasattr(self._host,"configure_scripts") and self._host.configure_scripts(bindings))
+    def SyncLuaScripts(self,bindings:list[dict])->bool:
+        return bool(self._host and hasattr(self._host,"sync_lua_scripts") and self._host.sync_lua_scripts(bindings))
+    def LuaSceneScripts(self)->list[dict]:
+        return list(self._host.lua_scene_scripts()) if self._host and hasattr(self._host,"lua_scene_scripts") else []
+    def RefreshLuaAssets(self,paths)->bool:
+        return bool(self._host and hasattr(self._host,"refresh_lua_assets") and self._host.refresh_lua_assets(list(paths)))
 
     def Pause(self, paused: bool) -> None:
         if self._host is not None: self._host.pause(paused)

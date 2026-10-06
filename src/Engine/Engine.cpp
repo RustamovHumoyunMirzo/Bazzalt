@@ -1,6 +1,7 @@
 #include "Runtime/Engine.h"
 #include "Runtime/AssetDatabase.h"
 #include "Runtime/NativeScriptRuntime.h"
+#include "Runtime/LuaRuntime.h"
 #include "Runtime/TimeAccess.h"
 #include "Runtime/InputAccess.h"
 #include "Runtime/MaterialLibrary.h"
@@ -11,10 +12,12 @@
 #include "Rendering/ModelGeometry.h"
 #include "Rendering/LightGuides.h"
 #include <map>
+#include <set>
 #include <tuple>
 #include <limits>
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Components/Light.h"
+#include "Bazzalt/Components/ScriptComponent.h"
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -28,7 +31,7 @@ namespace Bazzalt::Runtime {
 
 Engine::Engine()
     : m_scene(std::make_unique<Scene>()), m_assetDatabase(std::make_unique<AssetDatabase>()),
-      m_renderBackend(std::make_unique<RenderBackend>()),m_scriptRuntime(std::make_unique<NativeScriptRuntime>())
+      m_renderBackend(std::make_unique<RenderBackend>()),m_scriptRuntime(std::make_unique<NativeScriptRuntime>()),m_luaRuntime(std::make_unique<LuaRuntime>())
 {
     SceneManager::Bind(this);
     AssetManager::Bind(this);
@@ -75,7 +78,7 @@ bool Engine::Init(bool headless)
     m_lastFrameTime = std::chrono::steady_clock::now();
     TimeAccess::Reset();
     m_fixedAccumulator = 0.0;
-    if(!m_scriptRuntime->Start(m_lastError)){DetachRenderSystems();m_renderBackend->Shutdown();InputAccess::Shutdown();m_isInitialized=false;return false;}
+    if(!StartScripts()){DetachRenderSystems();m_renderBackend->Shutdown();InputAccess::Shutdown();m_isInitialized=false;return false;}
 
     std::cout << "[Engine] Initialization complete.\n";
     return true;
@@ -107,10 +110,12 @@ void Engine::Update()
         TimeAccess::FixedScope fixed;
         m_scene->FixedUpdate(step);
         m_scriptRuntime->FixedUpdate(step);
+        m_luaRuntime->FixedUpdate(step);
     }
     if(fixedSteps > 64)m_fixedAccumulator = std::fmod(m_fixedAccumulator, double(Time::GetFixedDeltaTime()));
     m_scene->Update(m_deltaTime);
     m_scriptRuntime->Update(m_deltaTime);
+    m_luaRuntime->Update(m_deltaTime);
     UpdateEditorOverlays();
     m_renderBackend->SetEnvironment(m_scene->GetEnvironment());
     m_renderBackend->Render();
@@ -266,6 +271,7 @@ void Engine::Shutdown()
 
     InputAccess::SetActive(false);
     m_scriptRuntime->Stop();
+    m_luaRuntime->Stop();
     DetachRenderSystems();
     m_renderBackend->Shutdown();
     InputAccess::Shutdown();
@@ -284,12 +290,58 @@ void Engine::RequestClose()
     m_shouldClose = true;
 }
 
-bool Engine::ConfigureScripts(std::vector<ScriptBinding> bindings){return m_scriptRuntime->Configure(std::move(bindings),m_lastError);}
-bool Engine::StartScripts(){TimeAccess::Reset();m_fixedAccumulator=0.0;m_lastFrameTime=std::chrono::steady_clock::now();return m_scriptRuntime->Start(m_lastError);}
-void Engine::StopScripts(){m_scriptRuntime->Stop();ResetRuntimeMaterials();}
+bool Engine::ConfigureScripts(std::vector<ScriptBinding> bindings){
+    std::vector<ScriptBinding> native,lua;
+    std::set<std::pair<std::string,std::string>> unique;
+    for(const auto& binding:bindings)if(!unique.emplace(binding.Entity,binding.TypeName).second){m_lastError="Duplicate script component across Lua/native bindings";return false;}
+    for(auto& binding:bindings){
+        auto extension=binding.Module.extension().string();std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){return char(std::tolower(c));});
+        if(extension==".lua"){
+            auto asset=m_assetDatabase->Find(binding.Module);
+            if(!asset||asset->State!=AssetState::Ready){m_lastError=asset&&!asset->LastError.empty()?asset->LastError:"Lua script is not imported; refresh the asset database first";return false;}
+            binding.Module=asset->CachePath;lua.push_back(std::move(binding));
+        }else if(extension==".blua")lua.push_back(std::move(binding));
+        else native.push_back(std::move(binding));
+    }
+    if(!m_scriptRuntime->Configure(std::move(native),m_lastError))return false;
+    m_luaConfigured=m_luaRuntime->Configure(std::move(lua),m_lastError);return m_luaConfigured;
+}
+bool Engine::RefreshLuaAsset(const std::filesystem::path& source){
+    auto extension=source.extension().string();std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){return char(std::tolower(c));});
+    if(extension!=".lua"){m_lastError="Not a Lua source asset";return false;}
+    const bool result=m_assetDatabase->RefreshSource(source);m_lastError=result?"":m_assetDatabase->GetLastError();return result;
+}
+bool Engine::StartScripts(bool resetTime){
+    if(!m_luaConfigured){
+        std::vector<ScriptBinding> bindings;
+        for(auto handle:m_scene->GetRegistry().view<ScriptComponents>()){
+            const auto& scripts=m_scene->GetRegistry().get<ScriptComponents>(handle);if(!scripts.IsEnabled())continue;
+            for(const auto& script:scripts.Values){
+                auto path=std::filesystem::u8path(script.Source);
+                if(!script.Enabled)continue;
+                UUID sourceId;auto asset=UUID::TryParse(script.Source,sourceId)?m_assetDatabase->Find(sourceId):std::optional<AssetInfo>{};
+                if(asset)path=asset->SourcePath;
+                auto extension=path.extension().string();std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){return char(std::tolower(c));});
+                if(extension!=".lua"&&extension!=".blua")continue;
+                if(path.is_relative())path=m_projectPath.parent_path()/path;
+                if(!asset)asset=m_assetDatabase->Find(path);if(!asset||asset->State!=AssetState::Ready){m_lastError="Lua scene asset is not ready";return false;}
+                ScriptBinding binding;binding.Module=asset->CachePath;binding.TypeName=script.TypeName;
+                binding.Entity=m_scene->GetEntity(static_cast<Entity::Id>(handle)).GetUUID().ToString();
+                for(const auto& property:script.Properties)binding.Properties[property.Name]=property.Value;
+                bindings.push_back(std::move(binding));
+            }
+        }
+        if(!m_luaRuntime->Configure(std::move(bindings),m_lastError))return false;
+    }
+    if(resetTime)TimeAccess::Reset();m_fixedAccumulator=0.0;m_lastFrameTime=std::chrono::steady_clock::now();
+    if(!m_scriptRuntime->Start(m_lastError))return false;
+    if(!m_luaRuntime->Start(m_lastError)){m_scriptRuntime->Stop();return false;}return true;
+}
+void Engine::StopScripts(){m_luaRuntime->Stop();m_scriptRuntime->Stop();ResetRuntimeMaterials();}
 
 Scene& Engine::CreateScene()
 {
+    m_luaRuntime->Stop();m_luaConfigured=false;
     m_scene = std::make_unique<Scene>();
     AttachRenderSystems();
     return *m_scene;
@@ -298,6 +350,7 @@ Scene& Engine::CreateScene()
 void Engine::SetScene(std::unique_ptr<Scene> scene)
 {
     if (!scene) throw std::invalid_argument("Engine scene cannot be null");
+    m_luaRuntime->Stop();m_luaConfigured=false;
     DetachRenderSystems();
     m_scene = std::move(scene);
     AttachRenderSystems();
@@ -305,6 +358,7 @@ void Engine::SetScene(std::unique_ptr<Scene> scene)
 
 std::unique_ptr<Scene> Engine::TakeScene()
 {
+    m_luaRuntime->Stop();m_luaConfigured=false;
     DetachRenderSystems();
     return std::move(m_scene);
 }
@@ -326,6 +380,7 @@ bool Engine::LoadScene(const std::filesystem::path& path)
         m_lastError = m_sceneSerializer.GetLastError();
         return false;
     }
+    m_luaRuntime->Stop();m_luaConfigured=false;
     m_scene = std::move(scene);
     AttachRenderSystems();
     return true;
@@ -423,7 +478,7 @@ void Engine::ProcessPendingSceneLoad()
     if (!m_pendingScenePath) return;
     const std::filesystem::path path = std::move(*m_pendingScenePath);
     m_pendingScenePath.reset();
-    LoadScene(path);
+    if(LoadScene(path)&&!StartScripts(false))std::cerr<<"[Scripts] "<<m_lastError<<'\n';
 }
 
 bool Engine::SaveProject(const std::filesystem::path& path)

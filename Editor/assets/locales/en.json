@@ -161,6 +161,7 @@
   "assets.file_busy": "Cannot modify '{name}' because the scene is loaded. Unload it first.",
   "assets.rename_failed": "Could not rename '{name}': {error}",
   "assets.native_cpp": "Native C++ File",
+  "assets.lua": "Lua Behavior",
   "assets.shader": "Shader",
   "assets.material": "Material",
   "assets.import": "Import Assets",

@@ -7,7 +7,7 @@ from .platform_services import ChooseApplication, LaunchApplication, ValidateApp
 
 class ExternalAssetOpener:
     SettingsKey = "external_asset_applications"
-    DefaultExtensions = frozenset({".cpp"})
+    DefaultExtensions = frozenset({".cpp", ".lua"})
 
     def __init__(self, settings, save=None, extensions=None):
         self.Settings = settings

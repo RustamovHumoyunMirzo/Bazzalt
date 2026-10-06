@@ -39,6 +39,7 @@ public:
     void RegisterImporter(std::unique_ptr<AssetImporter> importer);
     bool Open(std::filesystem::path projectDirectory, std::filesystem::path assetDirectory);
     bool Refresh();
+    bool RefreshSource(const std::filesystem::path& source);
     bool SetEnvironmentImportSettings(UUID id,const PropertyMap& settings);
     PropertyMap GetImportSettings(UUID id);
 
