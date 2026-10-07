@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="This separate authoring library is for engine/tool developers. Gameplay uses the material API, not compiler contexts.">
+  <title>Bshader compiler C API | BAZZALT Docs 0.5.0</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../" data-version="0.5.0" data-page="bshader/compiler">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"><option value="0.5.0" selected>0.5.0</option></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"><option value="en" selected>English</option></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for the navigation tree. Page content and links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Shaders / Bshader compiler C API</nav>
+      <article class="doc"><h1>Bshader compiler C API</h1>
+<p class="lead">This separate authoring library is for engine/tool developers. Gameplay uses the material API, not compiler contexts.</p>
+<h2 id="lifecycle">Context and result ownership</h2>
+<pre><code class="language-cpp">#include "shader_translator.h"
+ShaderContext* context = ShaderContextCreate();
+if (!context) { /* allocation failed */ }
+else {
+    ShaderCompilationResult* result = ShaderTranslatorCompileString(context,
+        "shader Red { material { color=vec4(1.0,0.0,0.0,1.0); } }");
+    if (result &amp;&amp; ShaderResultIsSuccess(result)) {
+        // Copy/process annotated material source; this is not a GPU binary.
+        const char* source = ShaderResultGetOutput(result);
+        (void)source;
+    }
+    ShaderCompilationResultFree(result);
+    ShaderContextDestroy(context);
+}</code></pre>
+<p>A context owns parser/transform temporary memory and registrations. It is not thread-safe; serialize access or use one per worker. Results own independent copies, remain valid after context reset/destruction, and must each be freed. Reset between repeated compilations to release arena allocations. Registration strings are copied; userData is borrowed and must outlive callbacks.</p>
+<h2 id="functions">Lifecycle and compilation functions</h2>
+<table><thead><tr><th>Function</th><th>Contract</th></tr></thead><tbody>
+<tr><td>ShaderContextCreate()</td><td>Create a context with built-in transforms; NULL if context allocation fails.</td></tr>
+<tr><td>ShaderContextDestroy(ctx)</td><td>Free context, arena, and registrations; NULL accepted.</td></tr>
+<tr><td>ShaderContextReset(ctx)</td><td>Reset temporary arena, preserve transforms/helpers; NULL accepted.</td></tr>
+<tr><td>ShaderTranslatorCompile(ctx, source, size)</td><td>Translate exact byte length, without requiring a terminator. Returns an owned diagnostic result; NULL if result allocation fails.</td></tr>
+<tr><td>ShaderTranslatorCompileString(ctx, source)</td><td>Convenience for a NUL-terminated string.</td></tr>
+<tr><td>ShaderCompilationResultFree(result)</td><td>Release owned strings/diagnostics; NULL accepted.</td></tr>
+</tbody></table>
+<h2 id="results">Result inspection</h2>
+<p><code>ShaderResultIsSuccess</code> checks success. <code>ShaderResultGetOutput</code> returns a borrowed NUL-terminated source pointer, or NULL on failure; <code>ShaderResultGetOutputSize</code> is its byte length excluding the terminator. <code>ShaderResultGetError</code> returns the borrowed error summary, or NULL on success. <code>ShaderResultGetDiagnosticCount</code> gives the entry count; <code>ShaderResultGetDiagnostic(result, index)</code> returns severity, line, column, and borrowed message. An out-of-range entry has a NULL message. All borrowed result strings expire when the result is freed.</p>
+<p>The output contains editor defaults and native Filament parameter references. Extract reflection, strip default metadata, then run matc to produce .filamat. The supported Bazzalt implementation is <code>Editor/materials.py</code>, which also handles legacy flat references; do not hand the translator's text to a runtime material loader. <code>BSHADER_VERSION_MAJOR</code>, <code>MINOR</code>, and <code>PATCH</code> identify the C library version, not the documentation folder.</p>
+<h2 id="extensions">Registering a high-level function</h2>
+<p><code>ShaderContextRegisterTransform(ctx, name, callback, userData)</code> registers or replaces a call transform, including a built-in with the same name. The callback receives <code>ShaderTransformNode*</code>, <code>ShaderTransformBuilder*</code>, and userData. Node and builder are valid only during that callback; do not retain them. Registrations survive Reset and disappear with Destroy.</p>
+<pre><code class="language-cpp">static void DoubleLiteral(ShaderTransformNode* node,
+                          ShaderTransformBuilder* builder, void* userData) {
+    (void)userData;
+    // This extension intentionally accepts only a numeric literal.
+    char text[64];
+    snprintf(text, sizeof(text), "%.9f",
+             ShaderTransformNodeGetArgAsNumber(node, 0) * 2.0);
+    ShaderTransformBuilderSetReplacementExpr(builder, text);
+}
+// Called once for a newly created context:
+// ShaderContextRegisterTransform(context, "doubleLiteral", DoubleLiteral, NULL);</code></pre>
+<p>Include stdio.h for snprintf. The resulting source can use <code>float value = doubleLiteral(0.25);</code>. This accessor API is deliberately narrow: it does not type-check or evaluate arbitrary argument expressions. The built-in blur path handles arbitrary UV/radius expressions internally; copying the literal callback does not provide that ability for a custom function.</p>
+<h2 id="arguments">Argument accessors</h2>
+<table><thead><tr><th>Function</th><th>Behavior</th></tr></thead><tbody>
+<tr><td>ShaderTransformNodeGetArgCount(node)</td><td>Number of call arguments.</td></tr>
+<tr><td>ShaderTransformNodeGetArgAsIdentifier(node, index)</td><td>Borrowed name only for a bare identifier; otherwise NULL.</td></tr>
+<tr><td>ShaderTransformNodeGetArgAsNumber(node, index)</td><td>Numeric literal or unary-negative literal; unsupported/missing argument returns 0.0, indistinguishable from a real zero.</td></tr>
+<tr><td>ShaderTransformNodeArgIsProperty(node, index)</td><td>True only for a bare identifier declared as a property.</td></tr>
+<tr><td>ShaderTransformNodeResolveIdentifier(node, name)</td><td>Maps properties to generated parameter names; other names unchanged. Returned scratch text expires on the next resolution on that node; copy it before resolving again.</td></tr>
+</tbody></table>
+<p>ResolveIdentifier does not lower built-in aliases, validate locals, or serialize compound expressions. Treat callback output as target code, not Bshader source. Do not silently guess a caller's argument intent; document an extension's allowed inputs.</p>
+<h2 id="emission">Builder and helper functions</h2>
+<p><code>ShaderTransformBuilderSetReplacementExpr(builder, text)</code> supplies the replacement target-language expression. Call it once for every invocation. Missing replacement is a compilation error. <code>ShaderTransformBuilderEmitLine(builder, code)</code> emits target code before the containing statement; take special care with branches and conditions, because this is not an expression-local execution model. Avoid side effects.</p>
+<p><code>ShaderContextRegisterHelperSource(ctx, name, source)</code> stores a named target-language helper. <code>ShaderTransformBuilderRequireHelper(builder, name)</code> requests it; the compiler inserts it once per stage in which it is used. An unregistered helper is an error. Helpers must be valid for their stage and avoid collisions with Filament/generated identifiers. Registered replacement/helper source is trusted code and is validated by matc, not sandboxed.</p>
+<h2 id="build">Building and testing the library</h2>
+<pre><code>cmake -S Bshader -B build/bshader-tests -DBSHADER_BUILD_TESTS=ON
+cmake --build build/bshader-tests --config Release
+ctest --test-dir build/bshader-tests -C Release --output-on-failure</code></pre>
+<p>This builds the small C11 translator without downloading renderer dependencies. Native tests cover parsing, defaults, validation, scope, loops, and callbacks. Editor material tests also compile real GPU packages using the installed Filament SDK; run them when changing generated code. A string-output assertion is not a substitute for that compiler check.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../0.5.0/bshader/troubleshooting/en.html"><small>Previous</small>Bshader diagnostics and limits</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#lifecycle">Context and result ownership</a><a class="toc-link" href="#functions">Lifecycle and compilation functions</a><a class="toc-link" href="#results">Result inspection</a><a class="toc-link" href="#extensions">Registering a high-level function</a><a class="toc-link" href="#arguments">Argument accessors</a><a class="toc-link" href="#emission">Builder and helper functions</a><a class="toc-link" href="#build">Building and testing the library</a></nav></aside>
+  </div>
+  <footer>BAZZALT 0.5.0 documentation · English</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

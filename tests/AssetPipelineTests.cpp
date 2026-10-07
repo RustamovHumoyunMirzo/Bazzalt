@@ -74,6 +74,7 @@ fragment {
     // Precompiled files are accepted directly; OBJ/FBX take the same importer path
     // but are compiled by the SDK's filamesh tool.
     WriteText(assets / "fixture.filamesh", "filamesh-test-fixture");
+    WriteText(assets / "surface.bshader", "shader Surface { material { color=vec4(1.0); } }");
 
     Runtime::Engine engine;
     if (!engine.LoadProject(directory / "Pipeline.bproject", false)) {
@@ -83,6 +84,8 @@ fragment {
     const auto gltf = AssetManager::GetAsset(assets / "empty.gltf");
     const auto texture = AssetManager::GetAsset(assets / "white.png");
     const auto material = AssetManager::GetAsset(assets / "unlit.mat");
+    const auto bshader = AssetManager::GetAsset(assets / "surface.bshader");
+    assert(bshader && bshader->Importer == "Bazzalt.FilamentMaterial" && bshader->CachePath.extension() == ".bshader");
     const auto mesh = AssetManager::GetAsset(assets / "fixture.filamesh");
     const auto human = AssetManager::GetAsset(assets / "human.gltf");
     assert(gltf && gltf->Importer == "Bazzalt.glTF" && gltf->CachePath.extension() == ".gltf");

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Inputs come from the current draw and camera. Properties come from the material instance. Neither is a gameplay component.">
+  <title>Bshader inputs and functions | BAZZALT Docs 0.5.0</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../" data-version="0.5.0" data-page="bshader/builtins">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"><option value="0.5.0" selected>0.5.0</option></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"><option value="en" selected>English</option></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for the navigation tree. Page content and links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Shaders / Bshader inputs and functions</nav>
+      <article class="doc"><h1>Bshader inputs and functions</h1>
+<p class="lead">Inputs come from the current draw and camera. Properties come from the material instance. Neither is a gameplay component.</p>
+<h2 id="inputs">Built-in inputs</h2>
+<table><thead><tr><th>Name</th><th>Type / stages</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>UV</td><td>vec2, both</td><td>First texture-coordinate channel; writable in vertex.</td></tr>
+<tr><td>vertexColor</td><td>vec4, both</td><td>Mesh vertex color; interpolated in material, writable in vertex.</td></tr>
+<tr><td>worldPosition</td><td>vec3, both</td><td>Current vertex/fragment world position in Filament's render coordinate system.</td></tr>
+<tr><td>worldNormal</td><td>vec3, lit stages</td><td>Geometric world normal, distinct from tangent-space normal output.</td></tr>
+<tr><td>time</td><td>float, both</td><td>Elapsed renderer time in seconds, not a repeating 0-to-1 fraction.</td></tr>
+<tr><td>cameraPosition</td><td>vec3, both</td><td>Position of the camera rendering this view.</td></tr>
+<tr><td>viewMatrix</td><td>mat4, both</td><td>World-to-view matrix.</td></tr>
+<tr><td>projectionMatrix</td><td>mat4, both</td><td>View-to-clip matrix.</td></tr>
+<tr><td>modelMatrix</td><td>mat4, vertex only</td><td>Model-to-world matrix.</td></tr>
+<tr><td>position</td><td>vec3, vertex only</td><td>Read/write alias for vertex world-position XYZ.</td></tr>
+</tbody></table>
+<p>The compiler automatically declares required UV/color mesh attributes. Lit shaders require tangent data. Ensure your mesh provides appropriate data; a declaration cannot manufacture meaningful UVs. Vertex values are processed per vertex; material inputs are interpolated/derived for each fragment. Matrices and camera inputs are supplied for each rendered view, so Scene and Game cameras may produce different results.</p>
+<h2 id="coordinates">Coordinate and time contracts</h2>
+<p>Filament may use camera-relative world coordinates for precision. Do not compare worldPosition with an absolute C++ entity position without a deliberate coordinate conversion. cameraPosition and shader world-space inputs are intended to be used together. Matrix/vector multiplication uses column vectors: <code>projectionMatrix * viewMatrix * vec4(worldPosition, 1.0)</code>.</p>
+<p><code>time</code> lowers to <code>getUserTime().x</code>, supplied by Filament for rendering frames. It is not automatically synchronized with Bazzalt's scaled gameplay clock or paused simulation. For pause-aware animation, declare a float property and set it from C++/Lua using the desired game time. Do not multiply by frame delta inside a shader to produce elapsed time.</p>
+<h2 id="math">Mathematical functions</h2>
+<p>Ordinary GLSL calls pass through to Filament; they do not need custom transform registration. Common functions include <code>sin</code>, <code>cos</code>, <code>tan</code>, <code>asin</code>, <code>acos</code>, <code>atan</code>, <code>abs</code>, <code>min</code>, <code>max</code>, <code>clamp</code>, <code>mix</code>, <code>step</code>, <code>smoothstep</code>, <code>floor</code>, <code>ceil</code>, <code>fract</code>, <code>sqrt</code>, <code>pow</code>, <code>exp</code>, <code>log</code>, <code>dot</code>, <code>cross</code>, <code>length</code>, <code>distance</code>, <code>normalize</code>, <code>reflect</code>, and <code>refract</code>. Matrix operations include <code>transpose</code>, <code>inverse</code>, and <code>determinant</code>. Use radians for trigonometry. Filament validates supported overloads and stages; an unknown call is not an automatically defined function.</p>
+<h2 id="textures">Texture sampling</h2>
+<p><code>texture(image, UV)</code> returns a vec4 sample from a texture2d property. UVs are normalized coordinates, not pixel indices. Sampler/filtering behavior belongs to the material's texture binding. Use RGB for color or all four channels for RGBA. A color texture's import/color-space interpretation is distinct from linear numeric data such as normals.</p>
+<h2 id="blur">High-level blur</h2>
+<pre><code class="language-bshader">color = blur(albedo, UV * 0.5, radius + 1.0);
+// The optional third argument defaults to 1.0:
+color = blur(albedo, UV);</code></pre>
+<p><code>blur(texture2d, vec2, float)</code> is fragment-only. Radius is measured in source texture texels. It samples the center with weight two and four diagonal offsets with weight one, divided by six. This is a small weighted blur, not a separable Gaussian, scene-depth blur, or fullscreen effect. Radius zero samples the center. Arbitrary UV/radius expressions are preserved. One helper is injected per stage when needed; invalid arguments fail translation or GPU compilation.</p>
+<p>For fullscreen camera effects use the public post-processing API, not a mesh material. Large radii do not add samples and can look like separated taps. For higher-quality filtering, write a small bounded sampling loop or use the appropriate post-processing effect.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../0.5.0/bshader/language/en.html"><small>Previous</small>Bshader language reference</a>
+<a class="next" href="../../../0.5.0/bshader/pipeline/en.html"><small>Next</small>Shader assets and compilation</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#inputs">Built-in inputs</a><a class="toc-link" href="#coordinates">Coordinate and time contracts</a><a class="toc-link" href="#math">Mathematical functions</a><a class="toc-link" href="#textures">Texture sampling</a><a class="toc-link" href="#blur">High-level blur</a></nav></aside>
+  </div>
+  <footer>BAZZALT 0.5.0 documentation · English</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

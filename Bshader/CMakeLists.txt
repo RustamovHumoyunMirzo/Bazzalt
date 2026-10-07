@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 
 project(bshader
-    VERSION 1.0.0
+    VERSION 1.1.0
     DESCRIPTION "Bshader: a high-level shading language and compiler"
     LANGUAGES C
 )

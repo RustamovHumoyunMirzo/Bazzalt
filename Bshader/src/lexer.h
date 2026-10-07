@@ -29,6 +29,18 @@ typedef enum sc_token_kind {
     SC_TOK_KW_VEC3,
     SC_TOK_KW_VEC4,
     SC_TOK_KW_TEXTURE2D,
+    SC_TOK_KW_MAT3,
+    SC_TOK_KW_MAT4,
+    SC_TOK_KW_VERTEX,
+    SC_TOK_KW_OPTIONS,
+    SC_TOK_KW_FOR,
+    SC_TOK_KW_WHILE,
+    SC_TOK_KW_BREAK,
+    SC_TOK_KW_CONTINUE,
+    SC_TOK_LBRACKET,
+    SC_TOK_RBRACKET,
+    SC_TOK_PLUS_PLUS,
+    SC_TOK_MINUS_MINUS,
 
     /* punctuation */
     SC_TOK_LBRACE,    /* { */

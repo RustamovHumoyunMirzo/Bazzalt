@@ -18,6 +18,7 @@ int sc_strset_contains(const sc_strset* s, const char* name);
 /* Adds by reference (does not copy); caller guarantees the pointer
  * outlives the set. */
 void sc_strset_add(sc_strset* s, const char* name);
+void sc_strset_push(sc_strset* s, const char* name);
 void sc_strset_free(sc_strset* s);
 
 #endif /* BSHADER_STRSET_H */

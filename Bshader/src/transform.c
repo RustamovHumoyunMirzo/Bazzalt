@@ -161,7 +161,7 @@ const char* ShaderTransformNodeResolveIdentifier(const ShaderTransformNode* node
     if (!node || !identifier) return identifier;
     if (node->properties && sc_strset_contains(node->properties, identifier)) {
         snprintf(((ShaderTransformNode*)node)->resolve_scratch,
-                 sizeof(node->resolve_scratch), "materialParams_%s", identifier);
+                 sizeof(node->resolve_scratch), node->samplers&&sc_strset_contains(node->samplers,identifier)?"materialParams_%s":"materialParams.%s", identifier);
         return node->resolve_scratch;
     }
     return identifier;
@@ -236,6 +236,8 @@ static const char* SC_BLUR_HELPER_SOURCE =
     "    sum += texture(tex, uv) * 2.0;\n"
     "    return sum / 6.0;\n"
     "}\n";
+
+int sc_is_builtin_blur(const sc_transform_entry* entry){return entry&&entry->fn==sc_builtin_blur_transform;}
 
 void sc_register_builtin_transforms(sc_transform_registry* reg) {
     sc_transform_registry_register(reg, "blur", sc_builtin_blur_transform, NULL);

@@ -7,18 +7,24 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--disable-gpu")
 from pathlib import Path
+import json
 import unittest
 
 try:
     from PySide6.QtCore import QEventLoop, QTimer, QUrl
     from PySide6.QtWidgets import QApplication
-    from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
+    from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineUrlRequestInterceptor
     from PySide6.QtWebEngineWidgets import QWebEngineView
     AVAILABLE = True
 except ImportError:
     AVAILABLE = False
 
 ROOT = Path(__file__).resolve().parents[1] / "docs/public"
+
+if AVAILABLE:
+    class Requests(QWebEngineUrlRequestInterceptor):
+        def __init__(self,parent):super().__init__(parent);self.urls=[]
+        def interceptRequest(self,info):self.urls.append(info.requestUrl().toString())
 
 
 @unittest.skipUnless(AVAILABLE, "Optional Qt WebEngine is not installed")
@@ -29,6 +35,7 @@ class PublicDocsWebTests(unittest.TestCase):
 
     def setUp(self):
         self.profile = QWebEngineProfile()  # Off-the-record: no persistent browser data.
+        self.requests=Requests(self.profile);self.profile.setUrlRequestInterceptor(self.requests)
         self.view = QWebEngineView()
         self.page = QWebEnginePage(self.profile, self.view)
         self.view.setPage(self.page)
@@ -120,6 +127,23 @@ class PublicDocsWebTests(unittest.TestCase):
         self.settle()
         first=self.js("document.querySelector('.toc-link').hash.slice(1)")
         self.assertEqual(self.js("document.querySelector('.toc-link[aria-current=location]').hash.slice(1)"),first)
+
+    def test_shared_sidebar_highlighting_and_stable_asset_loading(self):
+        self.load("0.5.0/bshader/cookbook/en.html")
+        self.assertGreater(self.js("document.querySelectorAll('#sidebar .nav-link').length"),170)
+        self.assertEqual(self.js("document.querySelector('.nav-link[aria-current=page]').textContent"),"Bshader examples")
+        self.assertEqual(self.js("document.querySelector('.code-language').textContent"),"Bshader")
+        self.assertGreater(self.js("document.querySelectorAll('.token-keyword').length"),0)
+        self.assertTrue(self.js("document.querySelector('pre code').textContent.startsWith('shader SolidColor {')"))
+        self.assertNotIn('/ /',self.js("document.querySelector('.breadcrumbs').textContent"))
+        self.settle();before=len(self.requests.urls)
+        self.await_callback(lambda done:QTimer.singleShot(650,lambda:done(True)))
+        self.assertEqual(len(self.requests.urls),before,"Idle pages must not reload assets")
+        for resource in ('catalog.js','docs.js','docs.css','theme.js'):
+            self.assertEqual(sum(url.endswith('/assets/'+resource) for url in self.requests.urls),1,resource)
+        self.assertEqual(self.js("document.querySelectorAll('.code-toolbar').length"),6)
+        self.js("eval("+json.dumps((ROOT/'assets/docs.js').read_text(encoding='utf-8'))+")")
+        self.assertEqual(self.js("document.querySelectorAll('.code-toolbar').length"),6,"Repeated initialization must be harmless")
 
 
 if __name__ == "__main__": unittest.main()

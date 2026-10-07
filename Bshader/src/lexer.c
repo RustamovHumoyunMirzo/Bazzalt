@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 typedef struct sc_keyword_entry {
     const char* text;
@@ -24,6 +25,10 @@ static const sc_keyword_entry SC_KEYWORDS[] = {
     {"vec3", SC_TOK_KW_VEC3},
     {"vec4", SC_TOK_KW_VEC4},
     {"texture2d", SC_TOK_KW_TEXTURE2D},
+    {"mat3", SC_TOK_KW_MAT3}, {"mat4", SC_TOK_KW_MAT4},
+    {"vertex", SC_TOK_KW_VERTEX}, {"options", SC_TOK_KW_OPTIONS},
+    {"for", SC_TOK_KW_FOR}, {"while", SC_TOK_KW_WHILE},
+    {"break", SC_TOK_KW_BREAK}, {"continue", SC_TOK_KW_CONTINUE},
 };
 
 void sc_lexer_init(sc_lexer* lexer, const char* src, size_t length) {
@@ -67,6 +72,7 @@ static void sc_skip_whitespace_and_comments(sc_lexer* lexer) {
         } else if (c == '/' && sc_peek_next(lexer) == '/') {
             while (!sc_at_end(lexer) && sc_peek(lexer) != '\n') sc_advance(lexer);
         } else if (c == '/' && sc_peek_next(lexer) == '*') {
+            int comment_line=lexer->line;
             sc_advance(lexer);
             sc_advance(lexer);
             while (!sc_at_end(lexer) && !(sc_peek(lexer) == '*' && sc_peek_next(lexer) == '/')) {
@@ -75,6 +81,10 @@ static void sc_skip_whitespace_and_comments(sc_lexer* lexer) {
             if (!sc_at_end(lexer)) {
                 sc_advance(lexer);
                 sc_advance(lexer);
+            } else {
+                lexer->has_error=1;
+                snprintf(lexer->error_message,sizeof(lexer->error_message),"unterminated block comment at line %d",comment_line);
+                return;
             }
         } else {
             break;
@@ -106,10 +116,12 @@ static sc_token_kind sc_keyword_lookup(const char* text, size_t len) {
 }
 
 sc_token sc_lexer_next(sc_lexer* lexer) {
+    lexer->has_error=0;
     sc_skip_whitespace_and_comments(lexer);
 
     int line = lexer->line;
     int col = lexer->column;
+    if(lexer->has_error)return sc_make_token(lexer,SC_TOK_ERROR,lexer->src+lexer->pos,0,line,col);
 
     if (sc_at_end(lexer)) {
         return sc_make_token(lexer, SC_TOK_EOF, lexer->src + lexer->pos, 0, line, col);
@@ -127,19 +139,27 @@ sc_token sc_lexer_next(sc_lexer* lexer) {
         return sc_make_token(lexer, kind, start, len, line, col);
     }
 
-    if (isdigit((unsigned char)c)) {
+    if (isdigit((unsigned char)c) || (c=='.' && isdigit((unsigned char)sc_peek(lexer)))) {
         while (!sc_at_end(lexer) && isdigit((unsigned char)sc_peek(lexer))) sc_advance(lexer);
-        if (sc_peek(lexer) == '.' && isdigit((unsigned char)sc_peek_next(lexer))) {
+        if (c!='.' && sc_peek(lexer) == '.') {
             sc_advance(lexer);
             while (!sc_at_end(lexer) && isdigit((unsigned char)sc_peek(lexer))) sc_advance(lexer);
+        }
+        if(sc_peek(lexer)=='e'||sc_peek(lexer)=='E'){
+            sc_advance(lexer);
+            if(sc_peek(lexer)=='+'||sc_peek(lexer)=='-')sc_advance(lexer);
+            if(!isdigit((unsigned char)sc_peek(lexer))){snprintf(lexer->error_message,sizeof(lexer->error_message),"expected exponent digits");return sc_make_token(lexer,SC_TOK_ERROR,start,(size_t)(lexer->src+lexer->pos-start),line,col);}
+            while(isdigit((unsigned char)sc_peek(lexer)))sc_advance(lexer);
         }
         size_t len = (size_t)((lexer->src + lexer->pos) - start);
         sc_token tok = sc_make_token(lexer, SC_TOK_NUMBER, start, len, line, col);
         char buf[64];
-        size_t copy_len = len < sizeof(buf) - 1 ? len : sizeof(buf) - 1;
+        if(len>=sizeof(buf)){snprintf(lexer->error_message,sizeof(lexer->error_message),"numeric literal too long");return sc_make_token(lexer,SC_TOK_ERROR,start,len,line,col);}
+        size_t copy_len = len;
         memcpy(buf, start, copy_len);
         buf[copy_len] = '\0';
-        tok.number_value = atof(buf);
+        tok.number_value = strtod(buf,NULL);
+        if(!isfinite(tok.number_value)){snprintf(lexer->error_message,sizeof(lexer->error_message),"numeric literal must be finite");tok.kind=SC_TOK_ERROR;}
         return tok;
     }
 
@@ -156,6 +176,7 @@ sc_token sc_lexer_next(sc_lexer* lexer) {
             lexer->has_error = 1;
             snprintf(lexer->error_message, sizeof(lexer->error_message),
                      "unterminated string literal at line %d", line);
+            return sc_make_token(lexer,SC_TOK_ERROR,str_start,str_len,line,col);
         }
         return sc_make_token(lexer, SC_TOK_STRING, str_start, str_len, line, col);
     }
@@ -169,8 +190,10 @@ sc_token sc_lexer_next(sc_lexer* lexer) {
         case ';': return sc_make_token(lexer, SC_TOK_SEMI, start, 1, line, col);
         case ',': return sc_make_token(lexer, SC_TOK_COMMA, start, 1, line, col);
         case '.': return sc_make_token(lexer, SC_TOK_DOT, start, 1, line, col);
-        case '+': return sc_make_token(lexer, SC_TOK_PLUS, start, 1, line, col);
-        case '-': return sc_make_token(lexer, SC_TOK_MINUS, start, 1, line, col);
+        case '[': return sc_make_token(lexer, SC_TOK_LBRACKET, start, 1, line, col);
+        case ']': return sc_make_token(lexer, SC_TOK_RBRACKET, start, 1, line, col);
+        case '+': if(sc_peek(lexer)=='+'){sc_advance(lexer);return sc_make_token(lexer,SC_TOK_PLUS_PLUS,start,2,line,col);}return sc_make_token(lexer, SC_TOK_PLUS, start, 1, line, col);
+        case '-': if(sc_peek(lexer)=='-'){sc_advance(lexer);return sc_make_token(lexer,SC_TOK_MINUS_MINUS,start,2,line,col);}return sc_make_token(lexer, SC_TOK_MINUS, start, 1, line, col);
         case '*': return sc_make_token(lexer, SC_TOK_STAR, start, 1, line, col);
         case '/': return sc_make_token(lexer, SC_TOK_SLASH, start, 1, line, col);
         case '=':
@@ -221,6 +244,18 @@ const char* sc_token_kind_name(sc_token_kind kind) {
         case SC_TOK_KW_VEC3: return "'vec3'";
         case SC_TOK_KW_VEC4: return "'vec4'";
         case SC_TOK_KW_TEXTURE2D: return "'texture2d'";
+        case SC_TOK_KW_MAT3: return "'mat3'";
+        case SC_TOK_KW_MAT4: return "'mat4'";
+        case SC_TOK_KW_VERTEX: return "'vertex'";
+        case SC_TOK_KW_OPTIONS: return "'options'";
+        case SC_TOK_KW_FOR: return "'for'";
+        case SC_TOK_KW_WHILE: return "'while'";
+        case SC_TOK_KW_BREAK: return "'break'";
+        case SC_TOK_KW_CONTINUE: return "'continue'";
+        case SC_TOK_LBRACKET: return "'['";
+        case SC_TOK_RBRACKET: return "']'";
+        case SC_TOK_PLUS_PLUS: return "'++'";
+        case SC_TOK_MINUS_MINUS: return "'--'";
         case SC_TOK_LBRACE: return "'{'";
         case SC_TOK_RBRACE: return "'}'";
         case SC_TOK_LPAREN: return "'('";

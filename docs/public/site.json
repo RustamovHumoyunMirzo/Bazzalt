@@ -1,0 +1,13 @@
+{
+  "sections": ["manual", "native", "lua", "bshader"],
+  "navigation": {
+    "manual": {
+      "title": "Editor manual",
+      "order": ["first-launch", "workspace", "first-scene", "panels", "menus", "assets", "scenes", "settings", "glossary"]
+    },
+    "manual/panels": {"title": "Panels", "order": ["hierarchy", "inspector", "scene", "game", "assets", "console"]},
+    "native": {"title": "C++", "order": ["basics", "behaviors", "entities", "materials", "reference"]},
+    "lua": {"title": "Lua", "order": ["basics", "api", "reference"]},
+    "bshader": {"title": "Shaders", "order": ["language", "builtins", "pipeline", "cookbook", "troubleshooting", "compiler"]}
+  }
+}

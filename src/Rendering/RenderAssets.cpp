@@ -232,7 +232,7 @@ struct RenderAssets::Impl {
             if (!asset || asset->State != AssetState::Ready) return nullptr;
             auto path=asset->CachePath;
             const auto extension=LowerExtension(asset->SourcePath);
-            if(extension==".mat"||extension==".shad")path+=".filamat";
+            if(extension==".mat"||extension==".shad"||extension==".bshader")path+=".filamat";
             else if(extension!=".filamat")return nullptr;
             std::error_code error;const auto modified=std::filesystem::last_write_time(path,error);
             if(error)return nullptr;

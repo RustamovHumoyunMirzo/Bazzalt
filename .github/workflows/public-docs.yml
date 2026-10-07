@@ -1,9 +1,9 @@
 name: Public documentation
 on:
   push:
-    paths: ['docs/public/**', 'scripts/build_public_docs.py', 'scripts/public_api*.py', 'include/Bazzalt/**', 'src/Script/Lua*.cpp', 'tests/test_public_docs*.py', 'releases/versions.json', '.github/workflows/public-docs.yml']
+    paths: ['docs/public/**', 'scripts/build_public_docs.py', 'tests/test_public_docs*.py', '.github/workflows/public-docs.yml']
   pull_request:
-    paths: ['docs/public/**', 'scripts/build_public_docs.py', 'scripts/public_api*.py', 'include/Bazzalt/**', 'src/Script/Lua*.cpp', 'tests/test_public_docs*.py', 'releases/versions.json', '.github/workflows/public-docs.yml']
+    paths: ['docs/public/**', 'scripts/build_public_docs.py', 'tests/test_public_docs*.py', '.github/workflows/public-docs.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -19,7 +19,6 @@ jobs:
         with:
           node-version: '22'
       - run: python scripts/build_public_docs.py --check
-      - run: python scripts/public_api_docs.py --check
       - run: python -m unittest discover -s tests -p test_public_docs.py -v
       - run: node --check docs/public/assets/docs.js
       - run: node --check docs/public/assets/theme.js

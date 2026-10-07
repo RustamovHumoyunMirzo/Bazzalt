@@ -14,7 +14,7 @@ from ...model_thumbnails import ModelThumbnailCache
 
 IMAGE_EXTENSIONS={".png",".jpg",".jpeg",".bmp",".gif",".webp"}
 MODEL_EXTENSIONS={".gltf",".glb",".obj",".fbx",".dae",".filamesh"}
-SHADER_EXTENSIONS={".mat",".shad",".vert",".frag",".glsl"}
+SHADER_EXTENSIONS={".mat",".shad",".bshader",".vert",".frag",".glsl"}
 ENVIRONMENT_EXTENSIONS={".hdr",".exr",".ktx",".ktx2"}
 
 class AssetList(QListWidget):

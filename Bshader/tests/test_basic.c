@@ -33,12 +33,12 @@ static const char* SOURCE_BLUR =
     "        useBlur: bool = false;\n"
     "    }\n"
     "    material {\n"
-    "        float finalRoughness = roughnessFactor;\n"
+    "        vec4 finalColor = texture(baseColor, UV);\n"
     "        if (useBlur) {\n"
-    "            finalRoughness = blur(baseColor, UV, 2.0);\n"
+    "            finalColor = blur(baseColor, UV, 2.0);\n"
     "        }\n"
-    "        color = texture(baseColor, UV);\n"
-    "        roughness = finalRoughness;\n"
+    "        color = finalColor;\n"
+    "        roughness = roughnessFactor;\n"
     "    }\n"
     "}\n";
 
@@ -62,8 +62,9 @@ static void test_compiles_blur_shader(void) {
          * is the whole point of the transform pipeline. */
         CHECK(strstr(out, "blur(") == NULL, "raw blur() call should not appear in output");
         CHECK(strstr(out, "sc_blur_sample") != NULL, "blur() should expand to the sampling helper");
-        CHECK(strstr(out, "materialParams_roughnessFactor") != NULL,
-              "property references should be lowered to materialParams_<name>");
+        CHECK(strstr(out, "materialParams.roughnessFactor") != NULL,
+              "non-sampler properties use Filament's parameter struct");
+        CHECK(strstr(out,"materialParams_baseColor")!=NULL,"samplers remain separate uniforms");
     }
 
     ShaderCompilationResultFree(result);
@@ -186,12 +187,59 @@ static void test_context_reuse(void) {
     ShaderContextDestroy(ctx);
 }
 
+static void test_language_extensions(void) {
+    SECTION("defaults, stage inputs, bounded loops and validation");
+    ShaderContext* ctx=ShaderContextCreate();
+    const char* valid="shader Advanced { options { shading:unlit; blending:transparent; doubleSided:true; } properties { tint:vec4=vec4(.5,1e-1,0.0,1.0); matrix:mat4=mat4(1.0); } vertex { position=position+vec3(sin(time)); UV=UV*2.0; } material { vec4 value=matrix*tint; for(int i=0;i<4;i++){value[i]=value[i]*.5;continue;} int n=0; while(n<2){n++;break;} color=value; } }";
+    ShaderCompilationResult* result=ShaderTranslatorCompileString(ctx,valid);
+    CHECK(ShaderResultIsSuccess(result),"extended language should translate");
+    if(ShaderResultIsSuccess(result)) {
+        const char* out=ShaderResultGetOutput(result);
+        CHECK(strstr(out,"materialVertex")!=NULL,"vertex entry generated");
+        CHECK(strstr(out,"1024")!=NULL,"loops contain an iteration guard");
+        CHECK(strstr(out,"getUserTime().x")!=NULL,"time is elapsed render time");
+        CHECK(strstr(out,"default : [")!=NULL,"vector and matrix defaults are reflected");
+        CHECK(strstr(out,"shadingModel : unlit")!=NULL,"unlit is a real shading model");
+    }
+    ShaderCompilationResultFree(result);ShaderContextReset(ctx);
+    const char* invalid[]={
+        "shader X { properties { a:vec3=vec3(1.0,2.0); } material {color=vec4(1.0);} }",
+        "shader X { properties { a:float=1.0; } material {a=2.0;} }",
+        "shader X { properties { a:vec4; } material {a.x=2.0;} }",
+        "shader X { properties { a:float; a:int; } material {} }",
+        "shader X { material {if(true){float hidden=1.0;} roughness=hidden;} }",
+        "shader X { material {float n=1.0; float n=2.0;} }",
+        "shader X { material {break;} }",
+        "shader X { options {shading:unlit;} material {roughness=.5;} }",
+        "shader X { vertex {color=vec4(1.0);} material {} }",
+        "shader X { material {color=modelMatrix*vec4(1.0);} }",
+        "shader X { material {} } garbage",
+        "shader X { material {} } /* unfinished",
+        "shader X { properties {a:float=1e999;} material {} }",
+        "shader X { properties {a:int=2147483648;} material {} }",
+        "shader X { options {shading:unknown;} material {} }",
+        "shader X { material { color=blur(); } }"
+        ,"shader X { material {for(int ;true;missing++) {}} }"
+        ,"shader X { material {for(int i;i<2;i++) {}} }"
+    };
+    for(size_t i=0;i<sizeof(invalid)/sizeof(invalid[0]);++i){
+        result=ShaderTranslatorCompileString(ctx,invalid[i]);
+        CHECK(!ShaderResultIsSuccess(result),invalid[i]);
+        CHECK(ShaderResultGetDiagnosticCount(result)>0,"invalid input provides diagnostics");
+        ShaderCompilationResultFree(result);ShaderContextReset(ctx);
+    }
+    result=ShaderTranslatorCompileString(ctx,"shader X {material {float a=1.0;if(true){float a=2.0;roughness=a;}roughness=a;}} ");
+    CHECK(ShaderResultIsSuccess(result),"inner scope may shadow outer locals");
+    ShaderCompilationResultFree(result);ShaderContextDestroy(ctx);
+}
+
 int main(void) {
     test_compiles_blur_shader();
     test_reports_syntax_errors();
     test_reports_undeclared_identifier();
     test_custom_transform();
     test_context_reuse();
+    test_language_extensions();
 
     printf("\n%d/%d tests passed\n", g_tests_run - g_tests_failed, g_tests_run);
     return g_tests_failed == 0 ? 0 : 1;

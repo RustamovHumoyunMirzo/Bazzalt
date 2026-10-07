@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Translation validates the language. Filament compilation validates GPU types and stages. A successful translation alone does not prove a shader is renderable.">
+  <title>Bshader diagnostics and limits | BAZZALT Docs 0.5.0</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../" data-version="0.5.0" data-page="bshader/troubleshooting">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"><option value="0.5.0" selected>0.5.0</option></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"><option value="en" selected>English</option></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for the navigation tree. Page content and links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Shaders / Bshader diagnostics and limits</nav>
+      <article class="doc"><h1>Bshader diagnostics and limits</h1>
+<p class="lead">Translation validates the language. Filament compilation validates GPU types and stages. A successful translation alone does not prove a shader is renderable.</p>
+<h2 id="diagnostics">Reading errors</h2>
+<p>The translator provides severity, source line, column, and message for each diagnostic. Some semantic diagnostics identify the line with column 1 rather than an exact token column. Error diagnostics prevent output. Fix the first meaningful error, then rebuild; syntax recovery can produce follow-up errors. Filament errors refer to generated material source, which is available beside the cache for inspection.</p>
+<table><thead><tr><th>Problem</th><th>Action</th></tr></thead><tbody>
+<tr><td>Expected shader declaration / missing material</td><td>Use exactly one shader Name { ... } containing material { ... }.</td></tr>
+<tr><td>Duplicate properties/material/vertex/options</td><td>Merge repeated blocks. Merge duplicate property declarations too.</td></tr>
+<tr><td>Unknown type / expected semicolon</td><td>Check name: type syntax and statement terminators.</td></tr>
+<tr><td>Invalid vector/matrix default</td><td>Use a matching constant constructor and the correct component count.</td></tr>
+<tr><td>Texture default forbidden</td><td>Remove the initializer and assign an image through the material asset.</td></tr>
+<tr><td>Undeclared name / assignment target</td><td>Declare a local before use; check spelling, stage, and block scope.</td></tr>
+<tr><td>Read-only property</td><td>Compute into a local or output. Members and indices cannot bypass this rule.</td></tr>
+<tr><td>Lit output in unlit shader / wrong stage input</td><td>Choose lit or remove lit-only outputs. modelMatrix and position are vertex-only.</td></tr>
+<tr><td>Unexpected character / unfinished comment or string</td><td>Inspect the reported source location and close the comment/string.</td></tr>
+<tr><td>Filament type or overload error</td><td>Use correct vector dimensions and float literals, e.g. 1.0 rather than 1 for float arithmetic.</td></tr>
+<tr><td>Missing translator or matc</td><td>Repair/rebuild the editor's authoring tools; gameplay cannot replace them.</td></tr>
+<tr><td>Transform missing replacement/helper</td><td>Fix the registered extension; compilation now fails instead of silently substituting zero.</td></tr>
+</tbody></table>
+<h2 id="visual">A shader compiles but looks wrong</h2>
+<p>Check the material assignment, camera, light/environment, UV/tangent data, texture binding, and Console. A lit surface without lights is not an unlit surface. Opacity needs transparent blending. Set normal as a tangent-space direction; do not assign worldNormal directly. A five-tap texture blur is not Depth of Field. Shader vertex offsets do not change hierarchy transforms or picking. A material parameter must have the exact declared name/type, and editing one shared material changes all its users.</p>
+<h2 id="limits">Current boundaries</h2>
+<p>Source size is limited to 4 MiB, token count to 100,000, nested expressions/blocks to 128, and individual loop execution to 1,024 iterations. Property names are limited to 200 characters. These are guardrails, not guarantees that adversarial shaders are safe or cheap. Nested loops can multiply work. The compiler is an authoring tool for trusted project sources, not a sandbox for untrusted input.</p>
+<p>There are no user-defined functions, structs, array declarations, custom varyings, compute/geometry stages, includes, preprocessor macros, or source-level render-pass definitions. GLSL calls are passed through and checked by matc. Camera-relative coordinates, render time, and GPU-deformed picking need explicit care. Use lower-level .mat source for Filament features outside this language, and public camera post-processing for fullscreen effects.</p>
+<h2 id="report">Reporting an issue</h2>
+<p>Include the smallest source that reproduces it, editor/version/backend, full Console diagnostics, and the generated translated material if the problem occurs in matc. Do not report only that the translator returned success. Avoid sending unrelated project assets or private data.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../0.5.0/bshader/cookbook/en.html"><small>Previous</small>Bshader examples</a>
+<a class="next" href="../../../0.5.0/bshader/compiler/en.html"><small>Next</small>Bshader compiler C API</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#diagnostics">Reading errors</a><a class="toc-link" href="#visual">A shader compiles but looks wrong</a><a class="toc-link" href="#limits">Current boundaries</a><a class="toc-link" href="#report">Reporting an issue</a></nav></aside>
+  </div>
+  <footer>BAZZALT 0.5.0 documentation · English</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

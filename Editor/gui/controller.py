@@ -358,7 +358,7 @@ class EditorController(QObject):
         for label,value in (("Name",path.name),("Type",path.suffix.lower() or "Folder"),("Path",str(path)),("Size",self._FormatAssetSize(self._AssetSize(path)))):section.AddField(self.Window.Localization.Translate(f"properties.asset_{label.lower()}") if label!="Name" else self.Window.Localization.Translate("properties.asset_name"),QLabel(value))
         if path.suffix.lower()==".matinst":self._InspectMaterial(path)
         elif path.suffix.lower() in {".hdr",".exr",".ktx"}:self._InspectEnvironment(path)
-        elif path.suffix.lower() in {".mat",".shad"}:
+        elif path.suffix.lower() in {".mat",".shad",".bshader"}:
             try:
                 reflection=self.MaterialCompiler.InspectShader(path)
                 section.AddField(self.Window.Localization.Translate("materials.parameters"),QLabel(str(len(reflection["parameters"]))))
@@ -443,7 +443,7 @@ class EditorController(QObject):
         try:
             data=self.MaterialCompiler.ReadMaterial(path)
             section=self.Window.Properties.AddComponentSection("material",tr("materials.title"),removable=False)
-            section.AddField(tr("materials.shader"),self._AssetPicker(data["shader"],{".mat",".shad"},lambda v:self._SetMaterialShader(path,data,v)))
+            section.AddField(tr("materials.shader"),self._AssetPicker(data["shader"],{".mat",".shad",".bshader"},lambda v:self._SetMaterialShader(path,data,v)))
             if data["shader"]==ZERO:return
             reflection=self.MaterialCompiler.InspectShader(data["shader"])
             for parameter in reflection["parameters"]:
@@ -512,7 +512,7 @@ class EditorController(QObject):
                 if not info:continue  # Runtime-only material instances have no source asset.
                 extension=Path(info["path"]).suffix.lower()
                 if extension==".matinst":self.MaterialCompiler.PrepareMaterial(material)
-                elif extension in {".mat",".shad"}:self.MaterialCompiler.CompileShader(material)
+                elif extension in {".mat",".shad",".bshader"}:self.MaterialCompiler.CompileShader(material)
             for shader in shaders:self.MaterialCompiler.CompileShader(shader)
             self._material_error="";return True
         except (OSError,ValueError) as error:self._MaterialError(error);return False
@@ -636,7 +636,7 @@ class EditorController(QObject):
             editor.PickRequested.connect(pick)
             return editor
         if prop and prop.type.replace("Bazzalt::","").strip() in ("Material","Shader"):
-            return self._AssetPicker(value,{".matinst"} if "Material" in prop.type else {".mat",".shad"},commit)
+            return self._AssetPicker(value,{".matinst"} if "Material" in prop.type else {".mat",".shad",".bshader"},commit)
         if isinstance(value,bool):editor=BoolInput(value);editor.ValueChanged.connect(commit);return editor
         if isinstance(value,int):editor=IntInput(value=value);editor.valueChanged.connect(commit);return editor
         if isinstance(value,float):editor=FloatInput(value=value);editor.valueChanged.connect(commit);return editor
@@ -648,7 +648,7 @@ class EditorController(QObject):
         if "mesh" in name or "model" in name:return set(MODEL_EXTENSIONS)
         if "texture" in name or "image" in name:return set(IMAGE_EXTENSIONS)|set(ENVIRONMENT_EXTENSIONS)
         if "material" in name:return {".matinst"}
-        if "shader" in name:return {".mat",".shad"}
+        if "shader" in name:return {".mat",".shad",".bshader"}
         if "scene" in name:return {".bscene"}
         return set()
 

@@ -1,13 +1,20 @@
 # Bshader
 
 Bshader is a small, high-level shading language and a C library that
-compiles it into a ready-to-use compiled material. It gives shader
+translates it into annotated Filament material source. It gives shader
 authors a clean, modern surface (typed properties, ordinary control
 flow, high-level helpers like `blur(...)`) without exposing anything
 about how that surface is actually lowered under the hood — client code
 only ever sees `shader_translator.h`.
 
 This document covers three things:
+
+For the maintained language reference, defaults, loops, vertex stages,
+camera inputs, examples, and full C API, start at
+[the public Bshader docs](../docs/public/0.5.0/bshader/en.html).
+Translation alone is not GPU compilation: `Editor/materials.py` extracts
+reflection, removes default metadata, lowers uniform references, and invokes
+Filament `matc` to build a runtime-loadable `.filamat` package.
 
 1. [Public API Guide](#1-public-api-guide) — how to call the library.
 2. [Internal Architecture Overview](#2-internal-architecture-overview) — how the pieces fit together.
@@ -45,11 +52,8 @@ int main(void) {
     ShaderCompilationResult* result = ShaderTranslatorCompileString(ctx, source);
 
     if (ShaderResultIsSuccess(result)) {
-        /* Write it to disk, hand it to your material loader, whatever
-         * your renderer expects -- the contents are a ready-to-use
-         * compiled material payload. Its exact internal format is not
-         * part of the contract this library exposes and should be
-         * treated as opaque. */
+        /* Annotated source, NOT a renderer-loadable package.
+         * Process reflection and uniforms, then compile with matc. */
         printf("%s\n", ShaderResultGetOutput(result));
     } else {
         fprintf(stderr, "compile failed: %s\n", ShaderResultGetError(result));
@@ -95,7 +99,7 @@ stays valid independently of the context (including across
 | Function | Purpose |
 |---|---|
 | `ShaderResultIsSuccess(result)` | Did it compile? |
-| `ShaderResultGetOutput(result)` / `ShaderResultGetOutputSize(result)` | The compiled payload (NULL on failure). |
+| `ShaderResultGetOutput(result)` / `ShaderResultGetOutputSize(result)` | Annotated material source (NULL on failure), not GPU data. |
 | `ShaderResultGetError(result)` | A one-line summary of the first error (NULL on success). |
 | `ShaderResultGetDiagnosticCount(result)` / `ShaderResultGetDiagnostic(result, i)` | The full list of errors *and* warnings, each with a line/column and severity. |
 
@@ -163,16 +167,13 @@ produced while parsing is allocated from `ShaderContext`'s arena
 2. At code generation time (`sc_emit_call` in `generator_filament.c`),
    the generator looks up the call's name in the transform registry. It
    finds the built-in entry registered for `"blur"`.
-3. It builds a `ShaderTransformNode` (wrapping the call expression) and
-   a fresh `ShaderTransformBuilder`, then invokes the registered
-   `ShaderTransformFn`.
-4. The built-in `blur` transform (`sc_builtin_blur_transform` in
-   `src/transform.c`) reads its arguments, resolves any property
-   references (so `baseColor` becomes `materialParams_baseColor` in the
-   generated code, exactly as it would if you'd written that yourself),
-   calls `ShaderTransformBuilderRequireHelper(builder, "sc_blur_sample")`
-   to request that a multi-tap sampling helper function be available,
-   and calls `ShaderTransformBuilderSetReplacementExpr(builder, "sc_blur_sample(materialParams_baseColor, UV, 2)")`.
+3. For built-in blur, the generator lowers argument expressions recursively,
+   preserving compound UV/radius expressions and stage aliases, then requests
+   `sc_blur_sample`. Ordinary parameters use `materialParams.name`; samplers
+   use `materialParams_name`.
+4. For custom registered transforms (including overrides of blur), it builds a
+   node and builder and invokes the callback. The callback must supply its own
+   replacement and respect the documented literal/identifier argument contract.
 5. The generator substitutes that replacement text wherever the
    original `blur(...)` call appeared, and injects the
    `sc_blur_sample` helper's source into the compiled fragment block
@@ -219,7 +220,7 @@ ordinary function call. Inside `fn`, you:
 2. **Emit code** through `builder`:
    - `ShaderTransformBuilderEmitLine(builder, code)` — adds an extra statement immediately before the statement that contained your call (e.g. to declare a temporary).
    - `ShaderTransformBuilderRequireHelper(builder, helperName)` — requests that a named helper function (registered separately, see below) be included in the compiled output. Safe to call redundantly from many call sites; each helper is only injected once per compile.
-   - `ShaderTransformBuilderSetReplacementExpr(builder, exprText)` — **required**: the text that replaces your call expression at its use site. If you never call this, the call is replaced with a safe default and a warning is recorded.
+   - `ShaderTransformBuilderSetReplacementExpr(builder, exprText)` — **required**: the text that replaces your call expression at its use site. Missing replacement or requested helper source fails translation.
 
 If your feature needs supporting code (a helper function, a constant
 table, etc.), register its source once with
@@ -242,7 +243,7 @@ static void desaturate_transform(ShaderTransformNode* node,
     ShaderTransformBuilderRequireHelper(builder, "sc_desaturate");
 
     char expr[256];
-    snprintf(expr, sizeof(expr), "sc_desaturate(%s, %g)", color, amount);
+    snprintf(expr, sizeof(expr), "sc_desaturate(%s, %.9f)", color, amount);
     ShaderTransformBuilderSetReplacementExpr(builder, expr);
 }
 
@@ -260,7 +261,8 @@ ShaderContextRegisterHelperSource(ctx, "sc_desaturate", DESATURATE_HELPER);
 With this registered, a Bshader author can now write:
 
 ```glsl
-color = desaturate(baseColorSample, 0.5);
+vec3 baseColorSample = vec3(1.0, 0.2, 0.1);
+color = vec4(desaturate(baseColorSample, 0.5), 1.0);
 ```
 
 and it will expand exactly the way `blur(...)` does — no parser or
@@ -283,16 +285,15 @@ existing naming convention (`sc_parse_<thing>`), and keep the four
 concerns above (lex, parse, represent, generate) in their own files,
 the same way `blur` and every existing construct does.
 
-### 3.4 Known limitations (by design, for a small reference compiler)
+### 3.4 Implemented capabilities and remaining boundaries
 
-- Local variable scoping is currently flat per `material { }` block: a
-  variable declared inside an `if` is visible for the rest of the
-  block, not just within that branch.
-- Property references are always lowered to `materialParams_<name>`,
-  regardless of type; there is no struct-style parameter access.
-- Vector-typed properties (`vec2`/`vec3`/`vec4`) cannot currently carry
-  a default value in a `properties { }` block.
+The earlier limitations are resolved: locals have lexical block scope,
+ordinary properties use `materialParams.name`, samplers remain separate,
+and vector/matrix properties support constant defaults. Vertex blocks, camera
+inputs, bounded loops, swizzle/index assignments, and render options are also
+supported. Native tests and real matc tests cover these paths.
 
-None of these are architectural dead ends — each is a small, local
-change in `src/parser.c` and/or `src/generator_filament.c` if you need
-to lift them.
+Remaining deliberate boundaries include no user function definitions, arrays,
+structs, custom varyings, compute stages, or preprocessor. Callback argument
+accessors accept identifiers/literals, not arbitrary expression serialization.
+See the public language/compiler references for limits, stages, and ownership.

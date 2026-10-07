@@ -100,6 +100,8 @@ const char* sc_property_type_name(sc_property_type type) {
         case SC_PROP_VEC3: return "vec3";
         case SC_PROP_VEC4: return "vec4";
         case SC_PROP_TEXTURE2D: return "texture2d";
+        case SC_PROP_MAT3: return "mat3";
+        case SC_PROP_MAT4: return "mat4";
         default: return "unknown";
     }
 }

@@ -3,6 +3,8 @@
   'use strict';
   const catalog = window.BazzaltDocs;
   if (!catalog) return; // Content and ordinary links remain usable without JS.
+  if (document.documentElement.dataset.docsReady) return;
+  document.documentElement.dataset.docsReady = 'true'; // Never install duplicate handlers/renderers.
   document.documentElement.classList.add('js-enabled');
   const body = document.body;
   const root = new URL(body.dataset.root || './', location.href);
@@ -13,22 +15,58 @@
   const read = key => { try { return localStorage.getItem(key); } catch (_) { return null; } };
   const save = (key, value) => { try { localStorage.setItem(key, value); } catch (_) {} };
   const entries = (v, l) => catalog.pages.filter(p => p.version === v && p.language === l);
+  // A single local script contains the shared tree: no per-page copies, fetch
+  // polling, lazy asset loaders, or HTTP dependency (including under file://).
+  if (!landing) {
+    const sidebar = document.getElementById('sidebar');
+    const available = new Map(entries(version, language).map(p => [p.id, p]));
+    function renderNavigation(nodes) {
+      const fragment = document.createDocumentFragment();
+      for (const node of nodes) {
+        const record = available.get(node.id);
+        const children = renderNavigation(node.children || []);
+        if (!record && !children.childElementCount) continue;
+        let container = fragment;
+        if (children.childElementCount) {
+          const details = document.createElement('details');
+          const summary = document.createElement('summary');summary.textContent = node.title;
+          const containsCurrent = branch => branch.some(n => n.id === page || containsCurrent(n.children || []));
+          details.open = node.id === page || containsCurrent(node.children || []);
+          const list = document.createElement('div');list.className = 'tree-list';
+          details.append(summary, list);fragment.append(details);container = list;
+        }
+        if (record) {
+          const link = document.createElement('a');link.className = 'nav-link';
+          link.href = new URL(record.url, root).href;link.textContent = record.title;
+          if (record.id === page) link.setAttribute('aria-current', 'page');
+          container.append(link);
+        }
+        container.append(children);
+      }
+      return fragment;
+    }
+    sidebar?.replaceChildren(renderNavigation(catalog.navigation?.[version]?.[language] || []));
+  }
   const languageSelect = document.getElementById('language');
   const versionSelect = document.getElementById('version');
+  const languageName = code => {
+    try {return new Intl.DisplayNames([code], {type:'language'}).of(code) || code;} catch (_) {return catalog.languages[code] || code;}
+  };
+  languageSelect?.querySelectorAll('option').forEach(option => {option.textContent = languageName(option.value);});
   function destination(v, l, id) {
     // Never invent a translation or a versioned URL that has not been built.
     const pages = entries(v, l);
-    return pages.find(p => p.id === id) || pages.find(p => p.id === 'manual') || pages[0];
+    return pages.find(p => p.id === id) || entries(v, catalog.defaultLanguage).find(p => p.id === id) || pages.find(p => p.id === 'manual') || pages[0];
   }
   function navigate(v, l) {
-    const target = destination(v, l, page) || destination(v, 'en', page);
+    const target = destination(v, l, page) || destination(v, catalog.defaultLanguage, page);
     if (!target) return;
     const url = new URL(target.url, root);
     if (target.id === page && target.anchors.includes(location.hash.slice(1))) url.hash = location.hash;
-    location.assign(url.href);
+    if (url.href !== location.href) location.assign(url.href);
   }
   function landingLanguage(l) {
-    language = catalog.landing[l] ? l : 'en';
+    language = catalog.landing[l] ? l : catalog.defaultLanguage;
     document.documentElement.lang = language;
     const texts = catalog.landing[language];
     document.querySelectorAll('[data-i18n]').forEach(node => {
@@ -42,8 +80,8 @@
     });
   }
   if (landing) {
-    languageSelect.replaceChildren(...Object.keys(catalog.landing).map(l => new Option(catalog.languages[l], l)));
-    landingLanguage(read('bz-doc-language') || 'en');
+    languageSelect.replaceChildren(...Object.keys(catalog.landing).map(l => new Option(languageName(l), l)));
+    landingLanguage(read('bz-doc-language') || catalog.defaultLanguage);
   }
   languageSelect?.addEventListener('change', () => {
     save('bz-doc-language', languageSelect.value);
@@ -115,20 +153,47 @@
   });
 
   document.querySelectorAll('pre > code').forEach(code => {
+    const original = code.textContent;
+    const explicit = [...code.classList].find(name => name.startsWith('language-'))?.slice(9);
+    const lang = explicit || (page.startsWith('lua') ? 'lua' : page.startsWith('native') ? 'cpp' : 'text');
+    const names = {cpp:'C++',c:'C',lua:'Lua',bshader:'Bshader',glsl:'GLSL',json:'JSON',yaml:'YAML',bash:'Shell',text:'Text'};
+    const toolbar = document.createElement('div');toolbar.className = 'code-toolbar';
+    const label = document.createElement('span');label.className = 'code-language';label.textContent = names[lang] || lang;
     const button = document.createElement('button');button.className = 'copy-code';button.textContent = 'Copy';
     button.setAttribute('aria-label', 'Copy code example');
     button.addEventListener('click', async () => {
       let copied = false;
-      try { await navigator.clipboard.writeText(code.textContent);copied = true; } catch (_) {
+      try { await navigator.clipboard.writeText(original);copied = true; } catch (_) {
         // Clipboard API can be unavailable for file:// or non-secure HTTP.
-        const field = document.createElement('textarea');field.value = code.textContent;
+        const field = document.createElement('textarea');field.value = original;
         field.style.position = 'fixed';field.style.opacity = '0';document.body.append(field);field.select();
         try {copied = document.execCommand('copy');} catch (_) {} field.remove();button.focus();
       }
       if (!copied) {const range = document.createRange();range.selectNodeContents(code);const selection = window.getSelection();selection.removeAllRanges();selection.addRange(range);}
       button.textContent = copied ? 'Copied' : 'Selected: press Ctrl+C';setTimeout(() => {button.textContent = 'Copy';}, 1800);
     });
-    code.parentElement.append(button);
+    toolbar.append(label,button);code.parentElement.prepend(toolbar);
+    // Small local lexer, not HTML replacement: text stays byte-for-byte intact
+    // and code containing markup cannot inject DOM nodes. No CDN/plugins.
+    if (['cpp','c','lua','bshader','glsl','json','yaml'].includes(lang)) {
+      const tokens = /(--\[\[[\s\S]*?\]\]|--[^\n]*|\/\*[\s\S]*?\*\/|\/\/[^\n]*|#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b\d+(?:\.\d*)?(?:[eE][+-]?\d+)?\b|\b[A-Za-z_][A-Za-z_0-9]*\b)/g;
+      const keywords = new Set(('shader properties material vertex options float int bool vec2 vec3 vec4 mat3 mat4 texture2d if else for while break continue return true false nil local function end then do elseif and or not in repeat until class struct enum namespace const auto static void public private protected using include nullptr new delete virtual override template typename').split(' '));
+      const fragment = document.createDocumentFragment();let position = 0;
+      for (const match of original.matchAll(tokens)) {
+        fragment.append(document.createTextNode(original.slice(position,match.index)));
+        const text = match[0];let kind = null;
+        if (text.startsWith('--') || text.startsWith('//') || text.startsWith('/*')) kind = 'comment';
+        else if (text.startsWith('#')) kind = 'directive';
+        else if (text.startsWith('"') || text.startsWith("'")) kind = 'string';
+        else if (/^\d/.test(text)) kind = 'number';
+        else if (keywords.has(text)) kind = 'keyword';
+        else if (/^\s*\(/.test(original.slice(match.index + text.length))) kind = 'function';
+        if (kind) {const span = document.createElement('span');span.className = 'token-'+kind;span.textContent = text;fragment.append(span);}
+        else fragment.append(document.createTextNode(text));
+        position = match.index + text.length;
+      }
+      fragment.append(document.createTextNode(original.slice(position)));code.replaceChildren(fragment);
+    }
   });
   const headings = [...document.querySelectorAll('.doc h2,.doc h3')];
   const toc = [...document.querySelectorAll('.toc-link')];let scheduled = false;let clickedHeading = null;

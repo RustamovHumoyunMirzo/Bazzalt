@@ -5,16 +5,16 @@
  *
  * Bshader is a small, high-level shading language and compiler. Source
  * code written in Bshader is parsed into an AST, run through an
- * extensible transform pipeline (for high-level features such as
- * `blur(...)`), and lowered into a fully self-contained, ready-to-use
- * material payload.
+ * extensible transform pipeline and lowered into Filament material source
+ * containing editor-only parameter defaults. This is NOT a GPU package:
+ * extract reflection, remove default metadata, then compile with Filament matc.
+ * Non-sampler properties already use materialParams.name; samplers are separate.
+ * Editor/materials.py implements this complete pipeline.
  *
  * This header is the ONLY contract client code should depend on. Nothing
  * about the internal representation used for the compiled output is
- * exposed here, and none of it should be assumed by callers -- treat the
- * string returned by ShaderResultGetOutput() as an opaque compiled
- * artifact to be written to disk or handed to your renderer's material
- * loader.
+ * exposed here. Only the final matc-produced .filamat binary belongs in a
+ * renderer material loader; ShaderResultGetOutput() returns source text.
  *
  * Naming convention: all public identifiers use PascalCase.
  * -----------------------------------------------------------------------
@@ -35,7 +35,7 @@ extern "C" {
 /* -------------------------------------------------------------------- */
 
 #define BSHADER_VERSION_MAJOR 1
-#define BSHADER_VERSION_MINOR 0
+#define BSHADER_VERSION_MINOR 1
 #define BSHADER_VERSION_PATCH 0
 
 /* -------------------------------------------------------------------- */
@@ -83,14 +83,15 @@ void ShaderContextReset(ShaderContext* ctx);
 /* -------------------------------------------------------------------- */
 
 /**
- * Compile Bshader source code into a ready-to-use compiled material.
+ * Translate Bshader source code into annotated Filament material source.
  *
  * ctx        - a valid context created with ShaderContextCreate().
  * sourceCode - a buffer containing Bshader source text. Does not need to
  *              be NUL-terminated if sourceSize is provided accurately.
  * sourceSize - length of sourceCode in bytes.
  *
- * Always returns a non-NULL ShaderCompilationResult (even on failure);
+ * Returns a diagnostic result on source errors, or NULL if allocating the
+ * result fails. Source is limited to 4 MiB; nested expressions/blocks to 128.
  * check ShaderResultIsSuccess() to determine outcome. The caller owns
  * the returned result and must release it with
  * ShaderCompilationResultFree().
@@ -119,12 +120,10 @@ void ShaderCompilationResultFree(ShaderCompilationResult* result);
 bool ShaderResultIsSuccess(const ShaderCompilationResult* result);
 
 /**
- * Returns the compiled material payload as a NUL-terminated string, or
+ * Returns annotated material source as a NUL-terminated string, or
  * NULL if compilation failed. The returned pointer is owned by the
  * result and stays valid until ShaderCompilationResultFree() is called.
- * Treat the contents as an opaque artifact -- write it to a file with
- * whatever extension your runtime expects, or hand it directly to your
- * material-loading code.
+ * This is not loadable by a renderer. See the translation pipeline above.
  */
 const char* ShaderResultGetOutput(const ShaderCompilationResult* result);
 
@@ -238,7 +237,7 @@ void ShaderTransformBuilderEmitLine(ShaderTransformBuilder* builder, const char*
  * Request that a named helper function be made available in the
  * generated output. `helperName` must match a helper registered with
  * ShaderContextRegisterHelperSource(); the same helper is only ever
- * injected once per compilation no matter how many call sites request
+ * injected once per shader stage no matter how many call sites request
  * it. See DOCS.md for the built-in helper used by `blur`.
  */
 void ShaderTransformBuilderRequireHelper(ShaderTransformBuilder* builder, const char* helperName);
@@ -247,8 +246,8 @@ void ShaderTransformBuilderRequireHelper(ShaderTransformBuilder* builder, const 
  * Set the expression text that should replace the original call
  * expression at its use site (e.g. "sc_blur_sample(baseColor, UV, 2.0)").
  * Must be called exactly once per invocation of the transform. If never
- * called, the call expression is replaced with a safe zero-value default
- * and a warning diagnostic is recorded.
+ * called, translation fails with an error diagnostic. Missing requested
+ * helper sources also fail translation.
  */
 void ShaderTransformBuilderSetReplacementExpr(ShaderTransformBuilder* builder, const char* exprText);
 

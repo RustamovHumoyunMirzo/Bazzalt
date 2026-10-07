@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Bshader describes a mesh surface and, optionally, changes its vertices. It is not C++, Lua, a compute language, or a fullscreen post-processing language.">
+  <title>Bshader language reference | BAZZALT Docs 0.5.0</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../" data-version="0.5.0" data-page="bshader/language">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"><option value="0.5.0" selected>0.5.0</option></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"><option value="en" selected>English</option></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for the navigation tree. Page content and links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Shaders / Bshader language reference</nav>
+      <article class="doc"><h1>Bshader language reference</h1>
+<p class="lead">Bshader describes a mesh surface and, optionally, changes its vertices. It is not C++, Lua, a compute language, or a fullscreen post-processing language.</p>
+<h2 id="structure">File structure</h2>
+<pre><code class="language-bshader">shader Surface {
+    options { shading: lit; blending: opaque; doubleSided: false; }
+    properties { tint: vec4 = vec4(1.0); }
+    vertex { position = position + vec3(0.0, 0.1, 0.0); }
+    material { color = tint; roughness = 0.5; }
+}</code></pre>
+<p>Exactly one named <code>shader</code> declaration is allowed. <code>material</code> is required. <code>properties</code>, <code>vertex</code>, and <code>options</code> are optional; each block may occur once. Names are case-sensitive. Statements and property/option declarations end in semicolons. Use <code>//</code> for line comments or <code>/* ... */</code> for block comments.</p>
+<h2 id="types">Types and defaults</h2>
+<table><thead><tr><th>Type</th><th>Meaning</th><th>Default example</th></tr></thead><tbody>
+<tr><td>float</td><td>32-bit floating-point scalar</td><td><code>strength: float = 0.5;</code></td></tr>
+<tr><td>int</td><td>Signed 32-bit integer</td><td><code>count: int = 4;</code></td></tr>
+<tr><td>bool</td><td>Boolean</td><td><code>enabled: bool = true;</code></td></tr>
+<tr><td>vec2 / vec3 / vec4</td><td>Float vectors</td><td><code>tint: vec4 = vec4(1.0, 0.2, 0.1, 1.0);</code></td></tr>
+<tr><td>mat3 / mat4</td><td>Column-major float matrices</td><td><code>basis: mat3 = mat3(1.0);</code></td></tr>
+<tr><td>texture2d</td><td>Material-bound 2D texture</td><td><code>albedo: texture2d;</code></td></tr>
+</tbody></table>
+<p>Properties are read-only inputs. Locals are declared with <code>type name = expression;</code>. A texture is a property, not a local variable. Vector/matrix defaults accept constant constructors, nested constructors, unary minus, and scalar arithmetic. A single scalar splats a vector; a single matrix scalar fills its diagonal and leaves other entries zero. Otherwise provide exactly 2/3/4 or 9/16 components. Matrix component lists are column-major. Defaults cannot sample textures, read properties, call arbitrary functions, or depend on time. Texture defaults are not supported: assign an asset in the material Inspector.</p>
+<p>Write float literals as <code>1.0</code>, <code>.5</code>, or <code>1e-3</code>, and integer literals as <code>1</code>. Their types are preserved. Do not rely on implicit integer-to-float conversions. Non-finite numbers and out-of-range defaults are rejected.</p>
+<h2 id="expressions">Operators, swizzles, and indexing</h2>
+<p>Precedence, from lowest to highest: <code>||</code>, <code>&amp;&amp;</code>, <code>== !=</code>, <code>&lt; &gt; &lt;= &gt;=</code>, <code>+ -</code>, <code>* /</code>, unary <code>! -</code>, then calls/member/index access. Parentheses override precedence. Constructors and mathematical function calls use ordinary comma-separated arguments.</p>
+<pre><code class="language-bshader">vec4 sample = texture(albedo, UV);
+vec3 rgb = sample.rgb;
+sample[0] = sample[0] * 0.5;
+mat3 basis = mat3(1.0);
+vec3 direction = basis * rgb;
+color = sample;</code></pre>
+<p>Members/swizzles and vector/matrix indexing work in expressions and assignments. You may write locals or stage outputs, never properties, including their members or elements. Index and swizzle validity, function signatures, and expression type compatibility are checked by Filament's compiler. There are no array declarations, structs, pointers, user function definitions, preprocessor directives, ternary operator, modulo operator, or compound assignments.</p>
+<h2 id="control-flow">Branches, loops, and scope</h2>
+<pre><code class="language-bshader">float total = 0.0;
+for (int i = 0; i &lt; 4; i++) {
+    if (i == 2) { continue; }
+    total = total + 0.1;
+}
+int remaining = 3;
+while (remaining &gt; 0) {
+    remaining--;
+    if (remaining == 1) { break; }
+}
+roughness = total;</code></pre>
+<p><code>if</code>, <code>else if</code>, and <code>else</code> use brace-delimited bodies. Locals belong to their block; inner blocks may shadow outer locals but cannot redeclare a name in the same block. A loop counter belongs to the loop. <code>for</code> requires an initialized <code>int</code> counter, a condition, and an assignment or postfix increment/decrement step. <code>while</code> requires a condition. Loop bodies require braces. <code>break</code> and <code>continue</code> are valid only inside loops.</p>
+<p>The compiler inserts a 1,024-iteration guard into each loop. This prevents one accidental infinite loop, but nested loops can still perform many operations. Keep per-pixel iterations small; reaching the guard truncates the loop. Statement-emitting custom transforms are not allowed in loop conditions/steps or assignment indices.</p>
+<h2 id="options">Shading and render options</h2>
+<p><code>shading: lit</code> uses lighting and surface parameters; <code>shading: unlit</code> displays base color without surface lighting. <code>blending: opaque</code> ignores opacity for transparency; use <code>blending: transparent</code> when writing alpha should reveal objects behind the surface. <code>doubleSided: true</code> allows both sides of the mesh. Defaults are lit, opaque, and single-sided. Duplicate or unknown options are errors. Unlit materials cannot write roughness, metallic, normal, or ao. Exposure and post-processing can still affect an unlit surface.</p>
+<h2 id="outputs">Stage outputs</h2>
+<table><thead><tr><th>Stage</th><th>Name / type</th><th>Purpose</th></tr></thead><tbody>
+<tr><td>material</td><td><code>color</code> vec4</td><td>Base RGBA; alpha comes from its fourth component.</td></tr>
+<tr><td>material</td><td><code>alpha</code> float</td><td>Overwrite base-color alpha. Later assignments win.</td></tr>
+<tr><td>material</td><td><code>roughness</code>, <code>metallic</code>, <code>ao</code> float</td><td>Lit surface factors, normally in [0, 1].</td></tr>
+<tr><td>material</td><td><code>normal</code> vec3</td><td>Lit tangent-space surface normal, not worldNormal.</td></tr>
+<tr><td>material</td><td><code>emissive</code> vec4</td><td>Emission RGB plus Filament's exposure-weight component.</td></tr>
+<tr><td>vertex</td><td><code>position</code> vec3</td><td>Writable world-position XYZ before final projection.</td></tr>
+<tr><td>vertex</td><td><code>normal</code> vec3</td><td>Writable world normal, lit shaders only.</td></tr>
+<tr><td>vertex</td><td><code>UV</code> vec2; <code>vertexColor</code> vec4</td><td>Values interpolated to the material stage.</td></tr>
+</tbody></table>
+<p>Do not assign a fragment output in the vertex block. Vertex displacement does not update CPU mesh bounds, picking geometry, or physics. Expand authoring bounds or avoid large displacement when those systems matter. No custom varying declarations are exposed.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../0.5.0/bshader/en.html"><small>Previous</small>Shaders and material assets</a>
+<a class="next" href="../../../0.5.0/bshader/builtins/en.html"><small>Next</small>Bshader inputs and functions</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#structure">File structure</a><a class="toc-link" href="#types">Types and defaults</a><a class="toc-link" href="#expressions">Operators, swizzles, and indexing</a><a class="toc-link" href="#control-flow">Branches, loops, and scope</a><a class="toc-link" href="#options">Shading and render options</a><a class="toc-link" href="#outputs">Stage outputs</a></nav></aside>
+  </div>
+  <footer>BAZZALT 0.5.0 documentation · English</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

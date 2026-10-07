@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Save a complete example as .bshader or .shad, create a Material asset, and assign it to a renderable object. Texture examples also need an assigned image.">
+  <title>Bshader examples | BAZZALT Docs 0.5.0</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../" data-version="0.5.0" data-page="bshader/cookbook">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"><option value="0.5.0" selected>0.5.0</option></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"><option value="en" selected>English</option></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for the navigation tree. Page content and links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Shaders / Bshader examples</nav>
+      <article class="doc"><h1>Bshader examples</h1>
+<p class="lead">Save a complete example as .bshader or .shad, create a Material asset, and assign it to a renderable object. Texture examples also need an assigned image.</p>
+<h2 id="solid">Solid color</h2>
+<pre><code class="language-bshader">shader SolidColor {
+    properties { tint: vec4 = vec4(1.0, 0.0, 0.0, 1.0); }
+    material { color = tint; roughness = 0.5; }
+}</code></pre>
+<p>This is lit: it needs scene lighting to look bright. Edit tint on the material, not by recompiling for every color change.</p>
+<h2 id="unlit">Unlit textured mesh</h2>
+<pre><code class="language-bshader">shader UnlitTextured {
+    options { shading: unlit; }
+    properties { albedo: texture2d; }
+    material { color = texture(albedo, UV); }
+}</code></pre>
+<p>This selects real unlit shading; adding emissive to a lit shader is not equivalent. For translucent textures also choose <code>blending: transparent;</code>.</p>
+<h2 id="pulse">Pulsing emission</h2>
+<pre><code class="language-bshader">shader PulsingGlow {
+    properties {
+        glowColor: vec4 = vec4(1.0, 0.3, 0.1, 1.0);
+        pulseSpeed: float = 2.0;
+    }
+    material {
+        float pulse = sin(time * pulseSpeed) * 0.5 + 0.5;
+        color = glowColor;
+        emissive = vec4(glowColor.rgb * pulse, 1.0);
+    }
+}</code></pre>
+<p>pulseSpeed is radians per second. Emission brightness and bloom depend on the camera's exposure/post-processing settings. For simulation-paused animation, replace time with an application-controlled property.</p>
+<h2 id="blur-toggle">Property-driven blur</h2>
+<pre><code class="language-bshader">shader BlurToggle {
+    properties {
+        albedo: texture2d;
+        useBlur: bool = false;
+        blurRadius: float = 2.0;
+    }
+    material {
+        if (useBlur) { color = blur(albedo, UV, blurRadius); }
+        else { color = texture(albedo, UV); }
+        roughness = 0.5;
+    }
+}</code></pre>
+<p>This blurs the object's texture, not objects behind it. Toggle useBlur on the material and adjust radius in texture texels.</p>
+<h2 id="vertex-wave">Vertex wave</h2>
+<pre><code class="language-bshader">shader VertexWave {
+    properties { amplitude: float = 0.05; tint: vec4 = vec4(0.2, 0.6, 1.0, 1.0); }
+    vertex { position = position + vec3(0.0, sin(time) * amplitude, 0.0); }
+    material { color = tint; roughness = 0.5; }
+}</code></pre>
+<p>This offsets vertices along render-world Y. It does not move the entity Transform or deform CPU picking bounds. A detailed mesh is needed for spatial waves; moving all vertices by the same value simply moves its rendered surface.</p>
+<h2 id="camera-input">Camera-dependent surface</h2>
+<pre><code class="language-bshader">shader Facing {
+    properties { tint: vec4 = vec4(1.0); }
+    material {
+        vec3 direction = normalize(cameraPosition - worldPosition);
+        float facing = max(dot(worldNormal, direction), 0.0);
+        color = vec4(tint.rgb * facing, tint.a);
+        roughness = 0.5;
+    }
+}</code></pre>
+<p>Camera and surface position use matching render coordinates. The result changes with the camera; it is not a replacement for physical lighting.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../0.5.0/bshader/pipeline/en.html"><small>Previous</small>Shader assets and compilation</a>
+<a class="next" href="../../../0.5.0/bshader/troubleshooting/en.html"><small>Next</small>Bshader diagnostics and limits</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#solid">Solid color</a><a class="toc-link" href="#unlit">Unlit textured mesh</a><a class="toc-link" href="#pulse">Pulsing emission</a><a class="toc-link" href="#blur-toggle">Property-driven blur</a><a class="toc-link" href="#vertex-wave">Vertex wave</a><a class="toc-link" href="#camera-input">Camera-dependent surface</a></nav></aside>
+  </div>
+  <footer>BAZZALT 0.5.0 documentation · English</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

@@ -1,5 +1,7 @@
 import ctypes
+import html
 import json
+import re
 from pathlib import Path
 import tempfile
 import unittest
@@ -27,6 +29,7 @@ class Assets:
     def AssetDirectory(self):return str(self.root)
     def LoadedScenes(self):return []
     def Entities(self):return []
+    def IsPlaying(self):return False
 
 class MaterialTests(unittest.TestCase):
     def test_reflect_typed_fields_ignores_fragment_and_comments(self):
@@ -68,6 +71,49 @@ class MaterialTests(unittest.TestCase):
             assets=Assets(folder);shader=assets.Add("example.shad",(ROOT/"Bshader/examples/example.bshader").read_text())
             MaterialCompiler(assets,ROOT).CompileShader(shader)
 
+    def test_bshader_extended_language_compiles_real_packages(self):
+        if not (ROOT/"build/Editor/Release/bshad.dll").exists():self.skipTest("translator not built")
+        sources = {
+            "Extended": """shader Extended {
+                properties { tint:vec4=vec4(1.0,0.2,0.3,1.0); basis:mat3=mat3(1.0); transform:mat4=mat4(1.0); amount:float=.05; }
+                vertex { vec4 point=modelMatrix*vec4(0.0,0.0,0.0,1.0); position=position+vec3(0.0,sin(time)*amount,0.0); }
+                material { vec4 projected=projectionMatrix*viewMatrix*vec4(worldPosition,1.0); vec3 facing=normalize(cameraPosition-worldPosition); vec3 n=basis*worldNormal;
+                    float sum=0.0; for(int i=0;i<3;i++){ if(i==1){continue;} sum=sum+0.1; }
+                    int count=0; while(count<2){count++; if(count==2){break;}}
+                    vec4 result=transform*tint; result[0]=result[0]+sum; color=result; roughness=.5; }
+            }""",
+            "Unlit": """shader Unlit { options { shading:unlit; blending:transparent; doubleSided:true; }
+                properties { image:texture2d; radius:float=2.0; }
+                vertex { UV=UV*2.0; }
+                material { color=blur(image,UV*0.5,radius+1.0); alpha=.5; }
+            }""",
+            "Pulse": """shader Pulse { properties { tint:vec4=vec4(1.0,0.3,0.1,1.0); speed:float=2.0; }
+                material { float pulse=sin(time*speed)*0.5+0.5; color=tint; emissive=vec4(tint.rgb*pulse,1.0); }
+            }""",
+        }
+        with tempfile.TemporaryDirectory(dir=ROOT/"build") as folder:
+            assets=Assets(folder);compiler=MaterialCompiler(assets,ROOT)
+            for name,source in sources.items():
+                with self.subTest(shader=name):
+                    shader=assets.Add(name+".bshader",source);reflection=compiler.CompileShader(shader)
+                    self.assertTrue(Path(assets.AssetInfo(shader)["cache"]+".filamat").is_file())
+                    if name=="Extended":
+                        self.assertEqual(reflection["parameters"][0]["default"],[1.0,0.2,0.3,1.0])
+                        self.assertEqual(len(reflection["parameters"][1]["default"]),9)
+                        self.assertEqual(len(reflection["parameters"][2]["default"]),16)
+
+    def test_bshader_documented_examples_compile(self):
+        if not (ROOT/"build/Editor/Release/bshad.dll").exists():self.skipTest("translator not built")
+        page=(ROOT/"docs/public/0.5.0/bshader/cookbook/en.html").read_text(encoding="utf-8")
+        examples=re.findall(r'<code class="language-bshader">(.*?)</code>',page,re.S)
+        self.assertEqual(len(examples),6)
+        with tempfile.TemporaryDirectory(dir=ROOT/"build") as folder:
+            assets=Assets(folder);compiler=MaterialCompiler(assets,ROOT)
+            for index,example in enumerate(examples):
+                with self.subTest(example=index):
+                    reference=assets.Add(f"example{index}.bshader",html.unescape(example))
+                    compiler.CompileShader(reference)
+
     def test_material_inspector_has_typed_fields_and_saves_without_compiling_unused_shader(self):
         app=QApplication.instance() or QApplication([])
         with tempfile.TemporaryDirectory(dir=ROOT/"build") as folder:
@@ -77,6 +123,7 @@ class MaterialTests(unittest.TestCase):
             localization=LocalizationManager(ResourceManager());panel=PropertiesPanel(localization)
             controller=EditorController.__new__(EditorController);QObject.__init__(controller)
             controller.Runtime=assets;controller.MaterialCompiler=MaterialCompiler(assets,ROOT);controller.ScriptAttachments=None;controller._asset_database_dirty=False;controller._material_error=""
+            controller._material_scenes=[]
             errors=[];controller.Window=SimpleNamespace(Properties=panel,Localization=localization,Console=SimpleNamespace(AddMessage=lambda *args:errors.append(args)))
             controller._InspectMaterial(path)
             self.assertFalse(errors);fields=panel._sections["material"]._fields

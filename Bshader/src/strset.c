@@ -17,6 +17,10 @@ int sc_strset_contains(const sc_strset* s, const char* name) {
 
 void sc_strset_add(sc_strset* s, const char* name) {
     if (sc_strset_contains(s, name)) return;
+    sc_strset_push(s,name);
+}
+
+void sc_strset_push(sc_strset* s,const char* name){
     if (s->count == s->cap) {
         size_t new_cap = s->cap == 0 ? 8 : s->cap * 2;
         s->items = (char**)realloc(s->items, new_cap * sizeof(char*));

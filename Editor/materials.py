@@ -154,24 +154,24 @@ class MaterialCompiler:
             if p["kind"]!=6:translated=re.sub(r"\bmaterialParams_"+re.escape(p["name"])+r"\b","materialParams."+p["name"],translated)
         translated=re.sub(r",\s*default\s*:\s*(?:\[[^\]]*\]|[^,}\n]+)","",translated)
         split=translated.index("fragment {");configuration,fragment=translated[:split],translated[split:]
-        for name,replacement in {"UV":"getUV0()","worldPosition":"getWorldPosition()","worldNormal":"getWorldNormalVector()","vertexColor":"getColor()","time":"getTime()"}.items():
+        for name,replacement in {"UV":"getUV0()","worldPosition":"getWorldPosition()","worldNormal":"getWorldGeometricNormalVector()","vertexColor":"getColor()","time":"getUserTime().x"}.items():
             fragment=re.sub(r"(?<![.\w])\b"+name+r"\b",replacement,fragment)
         translated=configuration+fragment
-        requires=[]
-        if "getUV0()" in translated:requires.append("uv0")
-        if "getColor()" in translated:requires.append("color")
-        if requires:translated=translated.replace("shadingModel :",f"requires : [{', '.join(requires)}],\n    shadingModel :",1)
+        requires=list(reflection.get("requires",[]))
+        if "getUV0()" in translated and "uv0" not in requires:requires.append("uv0")
+        if "getColor()" in translated and "color" not in requires:requires.append("color")
+        if "requires" not in configuration and requires:translated=translated.replace("shadingModel :",f"requires : [{', '.join(requires)}],\n    shadingModel :",1)
         reflection["requires"]=requires
         return translated,reflection
     def InspectShader(self,reference)->dict:
         asset=self.runtime.AssetInfo(reference)
         if not asset:raise MaterialError("Shader asset is not registered")
         source=Path(asset["path"]);suffix=source.suffix.lower()
-        if suffix not in {".mat",".shad"}:raise MaterialError("Expected a .mat or .shad shader asset")
-        stamp=(str(source),source.stat().st_mtime_ns,source.stat().st_size,str(asset["cache"]))
+        if suffix not in {".mat",".shad",".bshader"}:raise MaterialError("Expected a .mat, .shad or .bshader shader asset")
+        stamp=(str(source),source.stat().st_mtime_ns,source.stat().st_size,str(asset["cache"]),"bshader-1.1-pipeline-v4")
         if stamp in self._reflections and Path(str(asset["cache"])+".reflection.json").exists() and Path(str(asset["cache"])+".translated.mat").exists():return self._reflections[stamp]
-        text=source.read_text(encoding="utf-8")
-        if suffix==".shad":translated,reflection=self._Translate(text)
+        text=source.read_text(encoding="utf-8-sig")
+        if suffix in {".shad",".bshader"}:translated,reflection=self._Translate(text)
         else:translated=text;reflection=Reflect(text)
         reflection["shader"]=asset["uuid"]
         cache=Path(asset["cache"])
@@ -183,7 +183,7 @@ class MaterialCompiler:
     def CompileShader(self,reference)->dict:
         reflection=self.InspectShader(reference);asset=self.runtime.AssetInfo(reference);cache=Path(asset["cache"])
         source=Path(str(cache)+".translated.mat");output=Path(str(cache)+".filamat");state=Path(str(cache)+".build.json");tool=self._Tool("matc")
-        digest=hashlib.sha256(source.read_bytes()+str(tool.stat().st_mtime_ns).encode()+b"bazzalt-material-v2").hexdigest()
+        digest=hashlib.sha256(source.read_bytes()+str(tool.stat().st_mtime_ns).encode()+b"bazzalt-material-v3").hexdigest()
         try:previous=json.loads(state.read_text(encoding="utf-8"))
         except (OSError,ValueError):previous={}
         if previous.get("hash")==digest and output.is_file():return reflection

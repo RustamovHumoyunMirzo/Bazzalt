@@ -15,6 +15,7 @@
 struct ShaderTransformNode {
     sc_expr* call_expr;
     const sc_strset* properties;
+    const sc_strset* samplers;
     char resolve_scratch[256]; /* backs ShaderTransformNodeResolveIdentifier */
 };
 
@@ -71,5 +72,6 @@ const sc_helper_entry* sc_transform_registry_find_helper(const sc_transform_regi
 
 /* Registers Bshader's built-in language features (currently: `blur`). */
 void sc_register_builtin_transforms(sc_transform_registry* reg);
+int sc_is_builtin_blur(const sc_transform_entry* entry);
 
 #endif /* BSHADER_TRANSFORM_INTERNAL_H */

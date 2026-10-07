@@ -313,9 +313,9 @@ public:
 class MaterialImporter final : public AssetImporter {
 public:
     std::string GetName() const override { return "Bazzalt.FilamentMaterial"; }
-    std::uint32_t GetVersion() const override { return 2; }
+    std::uint32_t GetVersion() const override { return 3; }
     bool Supports(const std::filesystem::path& source) const override {
-        const auto extension = LowerExtension(source); return extension == ".mat" || extension == ".shad" || extension == ".matinst" || extension == ".filamat";
+        const auto extension = LowerExtension(source); return extension == ".mat" || extension == ".shad" || extension == ".bshader" || extension == ".matinst" || extension == ".filamat";
     }
     std::string GetCacheExtension(const std::filesystem::path& source) const override { return LowerExtension(source); }
     bool Import(const AssetImportContext& context, std::string& error) override {

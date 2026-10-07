@@ -11,7 +11,9 @@ typedef enum sc_property_type {
     SC_PROP_VEC2,
     SC_PROP_VEC3,
     SC_PROP_VEC4,
-    SC_PROP_TEXTURE2D
+    SC_PROP_TEXTURE2D,
+    SC_PROP_MAT3,
+    SC_PROP_MAT4
 } sc_property_type;
 
 typedef struct sc_property_decl {
@@ -21,6 +23,7 @@ typedef struct sc_property_decl {
     /* Default value storage; only the field matching `type` is valid. */
     double default_number;   /* float/int */
     int default_bool;        /* bool */
+    double default_values[16]; /* vector/matrix constructor constants */
     struct sc_property_decl* next;
 } sc_property_decl;
 
@@ -33,7 +36,8 @@ typedef enum sc_expr_kind {
     SC_EXPR_CALL,
     SC_EXPR_BINARY,
     SC_EXPR_UNARY,
-    SC_EXPR_MEMBER /* e.g. foo.rgb */
+    SC_EXPR_MEMBER, /* e.g. foo.rgb */
+    SC_EXPR_INDEX
 } sc_expr_kind;
 
 typedef struct sc_expr sc_expr;
@@ -49,6 +53,7 @@ struct sc_expr {
 
     /* SC_EXPR_NUMBER */
     double number_value;
+    int number_is_float;
 
     /* SC_EXPR_BOOL */
     int bool_value;
@@ -75,7 +80,11 @@ typedef enum sc_stmt_kind {
     SC_STMT_VAR_DECL,   /* float x = expr; */
     SC_STMT_ASSIGN,     /* x = expr;  (also covers material output fields) */
     SC_STMT_IF,
-    SC_STMT_EXPR
+    SC_STMT_EXPR,
+    SC_STMT_FOR,
+    SC_STMT_WHILE,
+    SC_STMT_BREAK,
+    SC_STMT_CONTINUE
 } sc_stmt_kind;
 
 typedef struct sc_stmt sc_stmt;
@@ -97,6 +106,11 @@ struct sc_stmt {
     /* SC_STMT_ASSIGN */
     char* assign_target;
     sc_expr* assign_value;
+    sc_expr* assign_lvalue;
+    sc_stmt* loop_init;
+    sc_stmt* loop_step;
+    sc_expr* loop_cond;
+    sc_stmt_list* loop_body;
 
     /* SC_STMT_IF */
     sc_expr* if_cond;
@@ -112,6 +126,10 @@ typedef struct sc_shader_decl {
     sc_property_decl* properties; /* linked list */
     sc_stmt_list* material_body;  /* linked list */
     int line;
+    sc_stmt_list* vertex_body;
+    int unlit;
+    int transparent;
+    int double_sided;
 } sc_shader_decl;
 
 /* A Bshader source file currently contains exactly one `shader { }` block. */

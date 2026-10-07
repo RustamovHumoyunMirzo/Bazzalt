@@ -62,7 +62,7 @@ Definition* ShaderDefinition(UUID id) {
         }();return &builtins[preset];
     }
     const auto asset=AssetManager::GetAsset(id);if(!asset)return nullptr;
-    const auto ext=Extension(asset->SourcePath);if(ext!=".mat"&&ext!=".shad")return nullptr;
+    const auto ext=Extension(asset->SourcePath);if(ext!=".mat"&&ext!=".shad"&&ext!=".bshader")return nullptr;
     auto path=asset->CachePath;path+=".reflection.json";std::error_code error;const auto modified=std::filesystem::last_write_time(path,error);if(error)return nullptr;
     auto& result=Shaders[id];if(!result.Stamp.empty()&&result.Modified==modified)return &result;
     const auto json=Read(path);if(json.empty())return nullptr;

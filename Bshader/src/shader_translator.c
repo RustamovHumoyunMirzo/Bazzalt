@@ -118,11 +118,12 @@ ShaderCompilationResult* ShaderTranslatorCompile(ShaderContext* ctx,
                                                   const char* sourceCode,
                                                   size_t sourceSize) {
     ShaderCompilationResult* result = (ShaderCompilationResult*)malloc(sizeof(ShaderCompilationResult));
+    if(!result)return NULL;
     memset(result, 0, sizeof(*result));
 
-    if (!ctx || !sourceCode) {
+    if (!ctx || !sourceCode || sourceSize>4u*1024u*1024u) {
         result->success = 0;
-        result->error = sc_strdup("invalid arguments: context and source code must not be NULL");
+        result->error = sc_strdup("invalid arguments: context/source must be valid and source size must not exceed 4 MiB");
         return result;
     }
 
