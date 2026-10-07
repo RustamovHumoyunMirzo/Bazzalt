@@ -20,6 +20,7 @@
 #include <Bazzalt/System.h>
 #include <Bazzalt/Time.h>
 #include <Bazzalt/UUID.h>
+#include <Bazzalt/GUI.h>
 #include <Bazzalt/Components/Camera.h>
 #include <Bazzalt/Components/Light.h>
 #include <Bazzalt/Components/PrimitiveObject.h>
@@ -41,6 +42,9 @@ public:
         auto* scene = Bazzalt::SceneManager::GetActiveScene();
         if (!scene || Cube != GetEntity()) throw std::runtime_error("Not the host scene/entity");
         scene->AddSystem<ScriptSystem>();
+        auto hud=scene->CreateEntity("Module HUD");hud.AddComponent<Bazzalt::Frame>();
+        auto button=scene->CreateEntity("Module Button");button.SetParent(hud,false);button.AddComponent<Bazzalt::RectTransform>();button.AddComponent<Bazzalt::Rectangle>();button.AddComponent<Bazzalt::GuiButton>();
+        if(Bazzalt::GUI::GetFrame(button)!=hud)throw std::runtime_error("GUI module API failed");
         if (!Cube.HasComponent<Bazzalt::PrimitiveObject>() || !Cube.HasComponent<Bazzalt::Camera>() || !Cube.HasComponent<Bazzalt::Light>())
             throw std::runtime_error("Engine component IDs differ across modules");
         Cube.SetComponentEnabled<Bazzalt::Light>(false);

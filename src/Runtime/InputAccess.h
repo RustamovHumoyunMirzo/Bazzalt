@@ -11,6 +11,7 @@ public:
     static void ButtonEvent(int button,bool pressed);
     static void MotionEvent(float x,float y,float dx,float dy);
     static void ScrollEvent(float x,float y);
+    static void TextEvent(const std::string& text);
     static Detail::InputState* GetState(){return &Input::State();}
 };
 }

@@ -109,6 +109,24 @@ class DownloadTests(unittest.TestCase):
             target=Install(self.MakeEntry(archive.read_bytes(),"llvm"),archive,self.Root/"versions")
         self.assertEqual(target,tools/"llvm");self.assertFalse((self.Root/"versions").exists())
 
+    def test_gui_module_is_required_only_for_declared_editor_packages(self):
+        archive=self.EditorZip()
+        with zipfile.ZipFile(archive) as source:files={name:source.read(name) for name in source.namelist()}
+        files["editor.json"]=json.dumps({"version":"0.5.0","architecture":"x64","executable":"Bazzalt.exe","gui_abi":1})
+        archive=self.Zip(files)
+        with self.assertRaisesRegex(ValueError,"Missing GUI runtime library"):
+            Install(self.MakeEntry(archive.read_bytes()),archive,self.Root/"versions")
+        files.update({"Editor/bazzalt_gui.dll":PE(),"ScriptSDK/lib/bazzalt_gui.dll":PE()})
+        archive=self.Zip(files)
+        target=Install(self.MakeEntry(archive.read_bytes()),archive,self.Root/"versions")
+        self.assertTrue((target/"Editor/bazzalt_gui.dll").is_file())
+
+    def test_core_audit_requires_gui_runtime(self):
+        (self.Root/"include/Bazzalt").mkdir(parents=True);(self.Root/"include/Bazzalt/Scene.h").write_text("// header")
+        (self.Root/"lib").mkdir();(self.Root/"lib/Bazzalt.dll").write_bytes(PE());(self.Root/"lib/bazzalt_lua.dll").write_bytes(PE())
+        with self.assertRaisesRegex(ValueError,"bazzalt_gui.dll"):Audit(self.Root,"x64","core")
+        (self.Root/"lib/bazzalt_gui.dll").write_bytes(PE());Audit(self.Root,"x64","core")
+
     def test_release_architecture_and_hub_separation(self):
         executable=self.Root/"BazzaltHub.exe";executable.write_bytes(PE());self.assertEqual(Architecture(executable),"x64");Audit(self.Root,"x64","hub")
         with self.assertRaises(ValueError):Audit(self.Root,"x86","hub")

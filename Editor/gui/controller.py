@@ -144,7 +144,7 @@ class EditorController(QObject):
         self._stats_frames+=1;now=monotonic()
         if now-self._stats_started>=1.0:
             self.Window.Scene.StatsLabel.setText(self.Window.Localization.Translate("viewport.stats",fps=round(self._stats_frames/(now-self._stats_started)),objects=self.Runtime.EntityCount()));self._stats_frames=0;self._stats_started=now
-        self.Window.Output.SetGameCameraAvailable(self.Runtime.HasActiveCamera())
+        self.Window.Output.SetGameCameraAvailable(self.Runtime.HasGameOutput())
         # Editor gizmos follow the authoritative world transform every frame.
         # This also covers transforms changed by systems or native user code.
         if self.SelectedEntity:self._UpdateGizmo()
@@ -183,7 +183,7 @@ class EditorController(QObject):
 
     def RefreshHierarchy(self) -> None:
         if self.ScriptAttachments and not self.Runtime.IsPlaying():self.ScriptAttachments.MergeLuaSceneBindings(self.Runtime.LuaSceneScripts())
-        self.Window.Output.SetGameCameraAvailable(self.Runtime.HasActiveCamera())
+        self.Window.Output.SetGameCameraAvailable(self.Runtime.HasGameOutput())
         selected = list(self.SelectedEntities) or ([self.InspectedScene] if self.InspectedScene else [])
         hierarchy_blocker=QSignalBlocker(self.Window.Hierarchy.Tree)
         self.Window.Hierarchy.Tree.setUpdatesEnabled(False)
@@ -578,6 +578,10 @@ class EditorController(QObject):
         if isinstance(value, bool):
             editor=BoolInput(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
         if isinstance(value, int):
+            if component=="Frame" and name in ("Mode","ScaleMode"):
+                tr=self.Window.Localization.Translate
+                options=((tr("gui.mode.viewport"),0),(tr("gui.mode.camera_bound"),1),(tr("gui.mode.spatial"),2)) if name=="Mode" else ((tr("gui.scale.constant"),0),(tr("gui.scale.responsive"),1))
+                editor=EnumInput();editor.SetOptions(options);editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
             if component=="Light" and name=="Type":
                 editor=EnumInput();editor.SetOptions((("Directional",0),("Sun",1),("Point",2),("Spot",3)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitLightType(entity_id,editor.GetValue()));return editor
             if component=="Camera" and name=="Projection":
@@ -601,13 +605,29 @@ class EditorController(QObject):
                 minimum,maximum=bounds.get(name,(0,1e12))
                 editor=FloatInput(minimum=minimum,maximum=maximum,value=value);editor.valueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
             editor=FloatInput(value=value);editor.valueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
-        if isinstance(value, (tuple,list)) and len(value) in (3,4) and all(isinstance(v,(int,float)) for v in value):
+        if isinstance(value, (tuple,list)) and len(value) in (2,3,4) and all(isinstance(v,(int,float)) for v in value):
             if "Color" in name:
                 from PySide6.QtGui import QColor
                 values=tuple(float(v) for v in value);alpha=values[3] if len(values)==4 else 1.0
                 editor=ColorInput(QColor.fromRgbF(values[0],values[1],values[2],alpha));editor.ValueChanged.connect(lambda color:self._CommitComponent(entity_id,component,name,(color.redF(),color.greenF(),color.blueF(),color.alphaF()) if len(values)==4 else (color.redF(),color.greenF(),color.blueF())));return editor
-            editor=Vec3Input(value) if len(value)==3 else Vec4Input(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
+            editor={2:Vec2Input,3:Vec3Input,4:Vec4Input}[len(value)](value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
         if isinstance(value, str):
+            if component in ("Frame","GuiImage") and name=="Camera":
+                entities={str(item["uuid"]):item for item in self.Runtime.Entities()};tr=self.Window.Localization.Translate
+                cameras={identity:item for identity,item in entities.items() if "Camera" in item.get("components",[])}
+                editor=ObjectPickerInput(tr("gui.select_camera"),validator=lambda identity:identity in cameras)
+                editor.SetValue(value if value in cameras else None,cameras.get(value,{}).get("name",""))
+                def assign_camera(identity):
+                    editor.Display.setText(cameras.get(str(identity),{}).get("name",""));self._CommitComponent(entity_id,component,name,identity or ZERO)
+                def pick_camera():
+                    dialog=QDialog(editor);dialog.setWindowTitle(tr("gui.select_camera"));layout=QVBoxLayout(dialog);items=QListWidget(dialog);layout.addWidget(items)
+                    for identity,item in cameras.items():
+                        row=QListWidgetItem(item.get("name",""));row.setData(Qt.ItemDataRole.UserRole,identity);items.addItem(row)
+                    def accept_camera(item):editor.SetValue(item.data(Qt.ItemDataRole.UserRole));dialog.accept()
+                    items.itemDoubleClicked.connect(accept_camera);dialog.exec()
+                editor.ValueChanged.connect(assign_camera);editor.PickRequested.connect(pick_camera);return editor
+            if component=="GuiImage" and name=="Texture":
+                return self._AssetPicker(value,set(IMAGE_EXTENSIONS),lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
             if "Asset" in name:
                 tr=self.Window.Localization.Translate;editor=AssetPickerInput(tr("properties.select_project_asset"),accepted_extensions=self._AssetExtensions(name),picker_title=tr("properties.select_project_asset"),search_placeholder=tr("properties.search_project_assets"),missing_label=tr("properties.missing_asset"));editor.ConfigureAssets(self._ProjectAssets());editor.SetValue(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v or "0"));editor.PickRequested.connect(editor.OpenProjectPicker);return editor
             editor=StringInput(value);editor.editingFinished.connect(lambda:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
@@ -772,7 +792,7 @@ class EditorController(QObject):
 
     def ActivateScene(self,scene_id:str)->None:
         if self.Runtime.ActivateScene(scene_id):
-            self.ScenePath=str(self.Runtime.SceneInfo().get("path",""));self.SelectEntity(None);self.Window.Output.SetGameCameraAvailable(self.Runtime.HasActiveCamera())
+            self.ScenePath=str(self.Runtime.SceneInfo().get("path",""));self.SelectEntity(None);self.Window.Output.SetGameCameraAvailable(self.Runtime.HasGameOutput())
 
     def UnloadScene(self,scene_id:str)->None:
         if self.Runtime.UnloadScene(scene_id):self._dirty_scenes.discard(str(scene_id));self._SyncDirtyPresentation();self.SelectEntity(None)
@@ -803,6 +823,9 @@ class EditorController(QObject):
         if self._Mutate("Create entity",lambda:bool(self.Runtime.CreateEntity(self.Window.Localization.Translate("entity.new"),str(parent or "")))):self.SetDirty(True,[self._SceneForParent(parent)])
 
     def CreateTypedEntity(self, component_type: str, parent) -> None:  # type: ignore[no-untyped-def]
+        if component_type.startswith("GUI:"):
+            self._CreateGuiEntity(component_type.partition(":")[2], parent)
+            return
         component_name,_,shape_text=component_type.partition(":")
         primitive_keys=("cube","sphere","cylinder","capsule","plane","cone","torus")
         display_name=self.Window.Localization.Translate(f"primitive.{primitive_keys[int(shape_text)]}") if component_name=="Primitive Object" and shape_text else component_name
@@ -813,6 +836,39 @@ class EditorController(QObject):
             if component_name=="Primitive Object" and shape_text:self.Runtime.SetComponentProperty(entity_id,component_name,"Shape",int(shape_text))
         if entity_id:self.History.Commit();self.SetDirty(True,[self._SceneForParent(parent)])
         else:self.History.Cancel()
+
+    def _CreateGuiEntity(self, kind: str, parent) -> None:
+        """Create compositional widgets below a Frame, never on its root."""
+        title=self.Window.Localization.Translate(f"hierarchy.gui.{kind}")
+        self.History.Begin(f"Create {title}")
+        scene_id=self._SceneForParent(parent)
+        parent_id=str(parent or "")
+        created_root=""
+        try:
+            if kind not in {"viewport", "camera_bound", "spatial"}:
+                current=parent_id;visited=set();has_frame=False
+                while current and current not in visited:
+                    visited.add(current);details=self.Runtime.EntityDetails(current)
+                    if "Frame" in details.get("components",()):has_frame=True;break
+                    current=str(details.get("parent", "") or "")
+                if not has_frame:
+                    parent_id=self.Runtime.CreateEntity(self.Window.Localization.Translate("hierarchy.gui.viewport"),parent_id)
+                    created_root=parent_id
+                    if not parent_id or not self.Runtime.AddComponent(parent_id,"Frame"):raise RuntimeError("Could not create GUI Frame")
+            entity_id=self.Runtime.CreateEntity(title,parent_id)
+            if not created_root:created_root=entity_id
+            if not entity_id:raise RuntimeError("Could not create GUI entity")
+            components={"viewport":("Frame",),"camera_bound":("Frame",),"spatial":("Frame",),"container":("RectTransform",),"rectangle":("RectTransform","Rectangle"),"text":("RectTransform","GuiText"),"image":("RectTransform","GuiImage"),"button":("RectTransform","Rectangle","GuiText","GuiButton"),"text_input":("RectTransform","Rectangle","GuiTextInput")}[kind]
+            for component in components:
+                if not self.Runtime.AddComponent(entity_id,component):raise RuntimeError(f"Could not add {component}")
+            if kind in {"camera_bound","spatial"}:
+                if not self.Runtime.SetComponentProperty(entity_id,"Frame","Mode",1 if kind=="camera_bound" else 2):raise RuntimeError("Could not configure GUI Frame")
+            if kind in {"text","button"}:self.Runtime.SetComponentProperty(entity_id,"GuiText","Value",title)
+            self.History.Commit();self.SetDirty(True,[scene_id]);self.SelectEntity(entity_id,force=True)
+        except Exception:
+            if created_root:self.Runtime.DestroyEntity(created_root)
+            self.History.Cancel()
+            raise
 
     def ShowAddComponentMenu(self) -> None:
         if not self.SelectedEntity: return
@@ -968,7 +1024,7 @@ class EditorController(QObject):
         if not self.Runtime.Play():self.Window.Toolbar.SetPlayState(PlayState.Stopped)
         else:
             self._play_authoring=authoring;self.History.Clear()
-            self.Window.Output.SetGameCameraAvailable(self.Runtime.HasActiveCamera())
+            self.Window.Output.SetGameCameraAvailable(self.Runtime.HasGameOutput())
             self.Window.Docking.activate_panel("output");self.GameInput.FocusGame()
 
     def _AttachScript(self,descriptor,entity_id:str|None=None)->None:

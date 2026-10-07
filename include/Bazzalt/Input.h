@@ -2,6 +2,7 @@
 #include "Bazzalt/Export.h"
 #include <array>
 #include <cstdint>
+#include <string>
 #include "Bazzalt/Math.h"
 
 namespace Bazzalt {
@@ -30,6 +31,7 @@ struct InputState {
     std::array<std::uint8_t,512> Keys{},KeysDown{},KeysUp{};
     std::array<std::uint8_t,6> Buttons{},ButtonsDown{},ButtonsUp{};
     Vec2 MousePosition{},MouseDelta{},ScrollDelta{};
+    std::string TextInput;
 };
 }
 
@@ -47,6 +49,7 @@ public:
     [[nodiscard]] static Vec2 GetMousePosition(){return IsActive()?State().MousePosition:Vec2{};}
     [[nodiscard]] static Vec2 GetMouseDelta(){return IsActive()?State().MouseDelta:Vec2{};}
     [[nodiscard]] static Vec2 GetScrollDelta(){return IsActive()?State().ScrollDelta:Vec2{};}
+    [[nodiscard]] static const std::string& GetTextInput(){return IsActive()?State().TextInput:s_default.TextInput;}
     [[nodiscard]] static bool GetAnyKey(){if(!IsActive())return false;for(auto key:State().Keys)if(key)return true;for(auto button:State().Buttons)if(button)return true;return false;}
     [[nodiscard]] static float GetAxis(InputAxis axis){
         switch(axis){

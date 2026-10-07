@@ -99,6 +99,7 @@ private:
     friend class Bazzalt::SceneManager;
     friend class Bazzalt::AssetManager;
     friend struct EditorOutlineTestAccess;
+    friend struct GuiTestAccess;
 
     bool RequestSceneLoad(const std::filesystem::path& path);
     bool RequestSceneLoad(UUID assetId);

@@ -287,6 +287,10 @@ class HierarchyPanel(QWidget):
         primitives=create_menu.addMenu(self._localization.Translate("hierarchy.primitives"))
         for index,key in enumerate(("cube","sphere","cylinder","capsule","plane","cone","torus")):
             action=primitives.addAction(self._localization.Translate(f"primitive.{key}"));action.triggered.connect(lambda _=False,i=index:self.CreateTypedRequested.emit(f"Primitive Object:{i}",parent))
+        gui_menu=create_menu.addMenu(self._localization.Translate("hierarchy.gui"))
+        for kind in ("viewport", "camera_bound", "spatial", "container", "rectangle", "text", "image", "button", "text_input"):
+            action=gui_menu.addAction(self._localization.Translate(f"hierarchy.gui.{kind}"))
+            action.triggered.connect(lambda _=False,k=kind:self.CreateTypedRequested.emit(f"GUI:{k}",parent))
         menu.addSeparator();rename=menu.addAction(self._localization.Translate("hierarchy.rename"));rename.setShortcut(QKeySequence(Qt.Key.Key_F2));rename.setEnabled(item is not None and item.data(0,Qt.ItemDataRole.UserRole+1) in {"entity","scene"});rename.triggered.connect(lambda:self.Tree.editItem(item,0) if item else None)
         copy=menu.addAction(self._localization.Translate("hierarchy.copy"));copy.setShortcut(QKeySequence.StandardKey.Copy);copy.setEnabled(bool(self.GetSelectedData()));copy.triggered.connect(lambda:self.CopyRequested.emit(self.GetSelectedData()))
         paste=menu.addAction(self._localization.Translate("hierarchy.paste"));paste.setShortcut(QKeySequence.StandardKey.Paste);paste.triggered.connect(lambda:self.PasteRequested.emit(parent))

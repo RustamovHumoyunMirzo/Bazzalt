@@ -27,6 +27,7 @@ class GameInputRouter(QObject):
     def __init__(self,window,runtime):
         super().__init__(window);self.Window=window;self.Runtime=runtime;self.Surface=window.Output.Surface;self.Placeholder=window.Output._no_camera;self._last=None;self._closed=False
         self.Surface.installEventFilter(self)
+        self.Surface.setAttribute(Qt.WidgetAttribute.WA_InputMethodEnabled,True)
         window.Output._no_camera.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         window.Output._no_camera.setMouseTracking(True);window.Output._no_camera.installEventFilter(self)
         app=QApplication.instance();app.focusChanged.connect(self._FocusChanged);app.applicationStateChanged.connect(self._StateChanged)
@@ -57,14 +58,19 @@ class GameInputRouter(QObject):
         return active
     def eventFilter(self,watched,event):
         kind=event.type()
-        if self._closed or kind not in (QEvent.Type.FocusIn,QEvent.Type.FocusOut,QEvent.Type.Hide,QEvent.Type.ShortcutOverride,QEvent.Type.KeyPress,QEvent.Type.KeyRelease,QEvent.Type.MouseButtonPress,QEvent.Type.MouseButtonRelease,QEvent.Type.MouseMove,QEvent.Type.Wheel):return False
+        if self._closed or kind not in (QEvent.Type.FocusIn,QEvent.Type.FocusOut,QEvent.Type.Hide,QEvent.Type.ShortcutOverride,QEvent.Type.KeyPress,QEvent.Type.KeyRelease,QEvent.Type.InputMethod,QEvent.Type.MouseButtonPress,QEvent.Type.MouseButtonRelease,QEvent.Type.MouseMove,QEvent.Type.Wheel):return False
         if kind in (QEvent.Type.FocusOut,QEvent.Type.Hide):self.Runtime.SetGameInputActive(False);self._last=None;return False
         if kind==QEvent.Type.FocusIn:self.SyncFocus();return False
         if kind==QEvent.Type.MouseButtonPress:watched.setFocus(Qt.FocusReason.MouseFocusReason)
         if not self.SyncFocus():return False
+        if kind==QEvent.Type.InputMethod:
+            if event.commitString():self.Runtime.GameText(event.commitString())
+            event.accept();return True
         if kind==QEvent.Type.ShortcutOverride:
             event.accept();return True  # Gameplay keys must not activate editor shortcuts.
         if kind in (QEvent.Type.KeyPress,QEvent.Type.KeyRelease):
+            if kind==QEvent.Type.KeyPress and event.text() and not event.modifiers()&(Qt.KeyboardModifier.ControlModifier|Qt.KeyboardModifier.MetaModifier) and hasattr(self.Runtime,"GameText"):
+                self.Runtime.GameText(event.text())
             if event.isAutoRepeat():event.accept();return True
             if event.key()==Qt.Key.Key_Space and event.modifiers()&Qt.KeyboardModifier.ShiftModifier:
                 if kind==QEvent.Type.KeyPress:
@@ -73,11 +79,11 @@ class GameInputRouter(QObject):
             self.Runtime.GameKey(KeyScancode(event),kind==QEvent.Type.KeyPress);event.accept();return True
         if kind in (QEvent.Type.MouseButtonPress,QEvent.Type.MouseButtonRelease):
             buttons={Qt.MouseButton.LeftButton:1,Qt.MouseButton.MiddleButton:2,Qt.MouseButton.RightButton:3,Qt.MouseButton.BackButton:4,Qt.MouseButton.ForwardButton:5}
-            position=event.position();self.Runtime.GameMotion(position.x(),position.y(),0,0);self._last=position
+            position=event.position();ratio=watched.devicePixelRatioF();self.Runtime.GameMotion(position.x()*ratio,position.y()*ratio,0,0);self._last=position
             self.Runtime.GameButton(buttons.get(event.button(),0),kind==QEvent.Type.MouseButtonPress);event.accept();return True
         if kind==QEvent.Type.MouseMove:
             position=event.position();delta=position-self._last if self._last is not None else position-position;self._last=position
-            self.Runtime.GameMotion(position.x(),position.y(),delta.x(),delta.y());event.accept();return True
+            ratio=watched.devicePixelRatioF();self.Runtime.GameMotion(position.x()*ratio,position.y()*ratio,delta.x()*ratio,delta.y()*ratio);event.accept();return True
         if kind==QEvent.Type.Wheel:
             delta=event.angleDelta();self.Runtime.GameScroll(delta.x()/120,delta.y()/120);event.accept();return True
         return False

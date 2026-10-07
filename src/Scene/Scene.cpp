@@ -1,4 +1,5 @@
 #include "Bazzalt/Scene.h"
+#include "GUI/GuiSystem.h"
 
 #include <functional>
 #include <stdexcept>
@@ -13,6 +14,7 @@ namespace Bazzalt {
 Scene::Scene() {
     RetainGameplayModule();
     CreateRootEntity();
+    AddSystem<Runtime::GuiSystem>();
 }
 
 void Scene::RetainGameplayModule() {

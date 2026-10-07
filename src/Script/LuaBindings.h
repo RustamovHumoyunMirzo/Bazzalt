@@ -18,5 +18,6 @@
 namespace Bazzalt::Runtime {
 void BindLuaMath(sol::table api);
 void BindLuaComponents(sol::table api);
+void BindLuaGUI(sol::table api);
 void BindLuaServices(sol::table api);
 }

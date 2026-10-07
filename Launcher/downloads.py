@@ -128,6 +128,10 @@ def Install(entry: dict, archive: Path, versions: Path) -> Path:
             if manifest.get("lua_version"):
                 for name in ("Editor/bazzalt_lua.dll","ScriptSDK/lib/bazzalt_lua.dll"):
                     if not (payload/name).is_file():raise ValueError("Missing Lua runtime library: "+name)
+            if manifest.get("gui_abi"):
+                if manifest["gui_abi"]!=1:raise ValueError("Unsupported GUI runtime ABI")
+                for name in ("Editor/bazzalt_gui.dll","ScriptSDK/lib/bazzalt_gui.dll"):
+                    if not (payload/name).is_file():raise ValueError("Missing GUI runtime library: "+name)
             for required in ("Bazzalt.exe", "Editor/Bazzalt.dll", "Editor/bshad.dll", "ScriptSDK/lib/Bazzalt.lib", "ScriptSDK/include/Bazzalt/Scene.h"):
                 if not (payload / required).is_file(): raise ValueError("Incomplete editor package: " + required)
             if not list((payload/"Editor").glob("_bazzalt_runtime*.pyd")):raise ValueError("Editor package has no native runtime")
@@ -135,6 +139,8 @@ def Install(entry: dict, archive: Path, versions: Path) -> Path:
             if not (payload / "bin/clang++.exe").is_file(): raise ValueError("LLVM package lacks bin/clang++.exe")
         else:
             if not (payload / "include/Bazzalt/Scene.h").is_file() or not (payload / "lib/Bazzalt.dll").is_file(): raise ValueError("Incomplete Core SDK package")
+            metadata=payload/"core.json"
+            if metadata.is_file() and json.loads(metadata.read_text(encoding="utf-8-sig")).get("gui_abi") and not (payload/"lib/bazzalt_gui.dll").is_file():raise ValueError("Missing GUI runtime library: lib/bazzalt_gui.dll")
         for path in payload.rglob("*"):
             if path.is_file() and path.suffix.lower() in {".exe", ".dll", ".pyd"} and _PEArchitecture(path) != entry["architecture"]:
                 raise ValueError("Package contains a binary of the wrong architecture")

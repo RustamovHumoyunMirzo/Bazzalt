@@ -102,7 +102,7 @@ bool LuaRuntime::Start(std::string& error){
         sol::state_view lua(instance->Vm->State);
         lua.open_libraries(sol::lib::base,sol::lib::math,sol::lib::string,sol::lib::table,sol::lib::utf8);
         for(const char* key:{"dofile","loadfile","load","collectgarbage"})lua[key]=sol::nil;
-        auto api=lua.create_named_table("Bazzalt");BindLuaMath(api);BindLuaComponents(api);BindLuaServices(api);
+        auto api=lua.create_named_table("Bazzalt");BindLuaMath(api);BindLuaComponents(api);BindLuaGUI(api);BindLuaServices(api);
         m_impl->Instances.push_back(std::move(instance));auto& active=*m_impl->Instances.back();
         const auto bytes=Read(binding.Module);
         lua_sethook(lua.lua_state(),Budget,LUA_MASKCOUNT,1000000);

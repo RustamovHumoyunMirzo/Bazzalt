@@ -151,6 +151,8 @@ class RuntimeService(QObject):
     def HasActiveCamera(self) -> bool:
         return bool(self._host and hasattr(self._host, "has_active_camera") and
                     self._host.has_active_camera())
+    def HasGameOutput(self) -> bool:
+        return bool(self._host.has_game_output()) if self._host and hasattr(self._host,"has_game_output") else self.HasActiveCamera()
 
     def Rename(self, entity_id: str, name: str) -> bool:
         if self.IsEditorLocked(entity_id):return False
@@ -347,6 +349,8 @@ class RuntimeService(QObject):
         if self._host is not None and hasattr(self._host,"set_game_input_active"):self._host.set_game_input_active(active)
     def GameKey(self,key:int,down:bool,repeat:bool=False)->None:
         if self._host is not None and hasattr(self._host,"game_key"):self._host.game_key(key,down,repeat)
+    def GameText(self,text:str)->None:
+        if self._host is not None and hasattr(self._host,"game_text"):self._host.game_text(text)
     def GameButton(self,button:int,down:bool)->None:
         if self._host is not None and hasattr(self._host,"game_button"):self._host.game_button(button,down)
     def GameMotion(self,x:float,y:float,dx:float,dy:float)->None:

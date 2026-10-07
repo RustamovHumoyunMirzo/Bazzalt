@@ -6,8 +6,8 @@
       "order": ["first-launch", "workspace", "first-scene", "panels", "menus", "assets", "scenes", "settings", "glossary"]
     },
     "manual/panels": {"title": "Panels", "order": ["hierarchy", "inspector", "scene", "game", "assets", "console"]},
-    "native": {"title": "C++", "order": ["basics", "behaviors", "entities", "materials", "reference"]},
-    "lua": {"title": "Lua", "order": ["basics", "api", "reference"]},
+    "native": {"title": "C++", "order": ["basics", "behaviors", "entities", "materials", "gui", "reference"]},
+    "lua": {"title": "Lua", "order": ["basics", "api", "gui", "reference"]},
     "bshader": {"title": "Shaders", "order": ["language", "builtins", "pipeline", "cookbook", "troubleshooting", "compiler"]}
   }
 }

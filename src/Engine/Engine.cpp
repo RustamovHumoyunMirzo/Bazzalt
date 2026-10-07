@@ -1,4 +1,5 @@
 #include "Runtime/Engine.h"
+#include "GUI/GuiSystem.h"
 #include "Runtime/AssetDatabase.h"
 #include "Runtime/NativeScriptRuntime.h"
 #include "Runtime/LuaRuntime.h"
@@ -101,6 +102,7 @@ void Engine::Update()
 
     m_frameCount++;
     InputAccess::BeginFrame();
+    m_scene->GetSystem<GuiSystem>().PresentationSize={float(m_renderBackend->GetPresentationWidth()),float(m_renderBackend->GetPresentationHeight())};
     m_fixedAccumulator += m_deltaTime;
     // Bound catch-up work even if game code chooses an extremely short step.
     int fixedSteps = 0;
@@ -406,6 +408,7 @@ bool Engine::SaveSceneAsset(const Scene& scene, const std::filesystem::path& pat
 void Engine::AttachRenderSystems()
 {
     if (!m_renderBackend->IsInitialized()) return;
+    m_renderBackend->SetGuiScene(m_scene.get());
     m_scene->AddSystem<CameraSystem>(*m_renderBackend);
     m_scene->AddSystem<LightSystem>(*m_renderBackend);
     m_scene->AddSystem<MeshSystem>(*m_renderBackend);
@@ -415,6 +418,7 @@ void Engine::AttachRenderSystems()
 void Engine::DetachRenderSystems()
 {
     if (!m_scene || !m_renderBackend->IsInitialized()) return;
+    m_renderBackend->SetGuiScene(nullptr);
     m_scene->RemoveSystem<PrimitiveSystem>();
     m_scene->RemoveSystem<MeshSystem>();
     m_scene->RemoveSystem<LightSystem>();

@@ -1,0 +1,17 @@
+material {
+    name : BazzaltGUI,
+    shadingModel : unlit,
+    blending : transparent,
+    depthWrite : false,
+    doubleSided : true,
+    flipUV : false,
+    parameters : [{type:sampler2d,name:image}],
+    requires : [uv0,color]
+}
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec4 value=texture(materialParams_image,getUV0())*getColor();
+        material.baseColor=vec4(value.rgb*value.a,value.a);
+    }
+}

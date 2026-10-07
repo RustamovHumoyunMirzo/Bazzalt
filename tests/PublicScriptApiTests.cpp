@@ -5,6 +5,7 @@
 #include "Bazzalt/Components/Light.h"
 #include "Bazzalt/Components/PrimitiveObject.h"
 #include "Bazzalt/Time.h"
+#include "Bazzalt/GUI.h"
 #include <cassert>
 #include <cmath>
 #ifdef _WIN32
@@ -32,6 +33,8 @@ int main(int argc,char** argv) {
         std::string error;
         assert(scripts.Configure({binding},error));
         assert(scripts.Start(error));
+        assert(scene.FindEntityByName("Module HUD").HasComponent<Bazzalt::Frame>());
+        assert(scene.FindEntityByName("Module Button").HasComponent<Bazzalt::GuiButton>());
         assert(cube.GetComponent<Bazzalt::Transform>().Position.X==3.0f);
         assert(!cube.IsComponentEnabled<Bazzalt::Light>());
         assert(Bazzalt::Time::GetTimeScale()==0.5f);

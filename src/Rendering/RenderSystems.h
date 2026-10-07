@@ -14,7 +14,7 @@
 #include "Bazzalt/UUID.h"
 #include "Rendering/RenderAssets.h"
 
-namespace filament { class Camera; class View; }
+namespace filament { class Camera; class View; class Texture; class RenderTarget; }
 namespace Bazzalt::Runtime {
 
 class RenderBackend;
@@ -22,12 +22,13 @@ class RenderBackend;
 class CameraSystem final : public ComponentSystem<Transform, Camera> {
 public:
     explicit CameraSystem(RenderBackend& backend) : m_backend(backend) {}
+    void Synchronize(Scene& scene){OnUpdate(scene,0);}
 protected:
     void OnCreate(Scene& scene) override;
     void OnUpdate(Scene& scene, float deltaTime) override;
     void OnDestroy(Scene& scene) override;
 private:
-    struct Resource { utils::Entity Entity; filament::Camera* Camera = nullptr; filament::View* View = nullptr; };
+    struct Resource { utils::Entity Entity; filament::Camera* Camera = nullptr; filament::View* View = nullptr; filament::Texture* Color=nullptr;filament::Texture* Depth=nullptr;filament::RenderTarget* Target=nullptr; };
     void Destroy(UUID id);
     RenderBackend& m_backend;
     std::unordered_map<UUID, Resource> m_resources;

@@ -620,6 +620,7 @@ void RenderAssets::BeginEditorView(const std::unordered_set<UUID>& hidden){
 void RenderAssets::EndEditorView(){if(!m_impl)return;for(auto entity:m_impl->EditorSuspended)m_impl->Scene.addEntity(entity);m_impl->EditorSuspended.clear();}
 
 bool RenderAssets::SetDebugMode(const std::string& mode){if(!m_impl||mode!="lit"&&mode!="unlit"&&mode!="wireframe"&&mode!="lighting_only"&&mode!="overdraw")return false;m_impl->DebugMode=mode;for(auto& [_,instance]:m_impl->Instances)m_impl->ApplyDebug(instance);return true;}
+filament::Texture* RenderAssets::GetGuiTexture(UUID id){return m_impl?m_impl->LoadTexture(id,true):nullptr;}
 
 void RenderAssets::Shutdown() {
     if (!m_impl) return;

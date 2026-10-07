@@ -1,9 +1,12 @@
 #include "Runtime/InputAccess.h"
 #include <SDL3/SDL.h>
 #include <cmath>
+#include <algorithm>
+#include <cstring>
 
 namespace Bazzalt::Runtime {
 namespace { unsigned references=0; }
+namespace { std::string pendingText; }
 bool InputAccess::Initialize(){
     if(references++>0)return true;
     if(!SDL_InitSubSystem(SDL_INIT_EVENTS)){references=0;return false;}
@@ -12,7 +15,7 @@ bool InputAccess::Initialize(){
 void InputAccess::Shutdown(){if(!references||--references)return;SetActive(false);SDL_QuitSubSystem(SDL_INIT_EVENTS);}
 void InputAccess::SetActive(bool active){
     auto& state=*GetState();if(state.Active==active&&active)return;
-    state={};state.Active=active;
+    state={};state.Active=active;pendingText.clear();
     // Discard queued presses on focus loss, so none can leak into a later Play.
     if(references)SDL_FlushEvents(SDL_EVENT_KEY_DOWN,SDL_EVENT_MOUSE_WHEEL);
 }
@@ -34,6 +37,7 @@ void InputAccess::ScrollEvent(float x,float y){
 }
 void InputAccess::BeginFrame(){
     auto& state=*GetState();state.KeysDown.fill(0);state.KeysUp.fill(0);state.ButtonsDown.fill(0);state.ButtonsUp.fill(0);state.MouseDelta={};state.ScrollDelta={};
+    state.TextInput=std::move(pendingText);pendingText.clear();
     if(!references)return;
     SDL_Event event{};while(SDL_PollEvent(&event)){
         if(!state.Active)continue;
@@ -51,6 +55,8 @@ void InputAccess::BeginFrame(){
             state.Buttons[button]=down;
         }else if(event.type==SDL_EVENT_MOUSE_MOTION){state.MousePosition={event.motion.x,event.motion.y};state.MouseDelta.X+=event.motion.xrel;state.MouseDelta.Y+=event.motion.yrel;}
         else if(event.type==SDL_EVENT_MOUSE_WHEEL){state.ScrollDelta.X+=event.wheel.x;state.ScrollDelta.Y+=event.wheel.y;}
+        else if(event.type==SDL_EVENT_TEXT_INPUT&&event.text.text&&state.TextInput.size()<65536){state.TextInput.append(event.text.text,0,std::min<std::size_t>(std::strlen(event.text.text),65536-state.TextInput.size()));}
     }
 }
+void InputAccess::TextEvent(const std::string& text){if(Input::IsActive()&&pendingText.size()<65536)pendingText.append(text,0,std::min<std::size_t>(text.size(),65536-pendingText.size()));}
 }

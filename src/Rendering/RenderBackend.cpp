@@ -1,4 +1,9 @@
 #include "Rendering/RenderBackend.h"
+#include "GUI/GuiRenderer.h"
+#include "GUI/GuiSystem.h"
+#include "Bazzalt/Components/Camera.h"
+#include "Bazzalt/Input.h"
+#include "Rendering/RenderSystems.h"
 
 #include <algorithm>
 #include <cmath>
@@ -211,6 +216,7 @@ bool RenderBackend::Initialize(bool headless) {
     if (m_engine == nullptr) return false;
     m_renderer = m_engine->createRenderer();
     m_scene = m_engine->createScene();
+    m_targetClearSky=filament::Skybox::Builder().color({0,0,0,1}).showSun(false).build(*m_engine);
     if (m_renderer == nullptr || m_scene == nullptr) { Shutdown(); return false; }
     m_renderer->setClearOptions({.clearColor = {0.055, 0.065, 0.085, 1.0}, .clear = true});
     m_gizmo = std::make_unique<GizmoResource>();
@@ -301,6 +307,7 @@ bool RenderBackend::Initialize(bool headless) {
     static constexpr float iconVertices[]={-.5f,-.5f,0, 0,0, .5f,-.5f,0, 1,0, .5f,.5f,0, 1,1, -.5f,.5f,0, 0,1};static constexpr std::uint16_t iconIndices[]={0,1,2,0,2,3};
     m_gizmo->IconVertices=filament::VertexBuffer::Builder().vertexCount(4).bufferCount(1).attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3,0,20).attribute(filament::VertexAttribute::UV0,0,filament::VertexBuffer::AttributeType::FLOAT2,12,20).build(*m_engine);m_gizmo->IconVertices->setBufferAt(*m_engine,0,{iconVertices,sizeof(iconVertices)});m_gizmo->IconIndices=filament::IndexBuffer::Builder().indexCount(6).bufferType(filament::IndexBuffer::IndexType::USHORT).build(*m_engine);m_gizmo->IconIndices->setBuffer(*m_engine,{iconIndices,sizeof(iconIndices)});
     m_assets = std::make_unique<RenderAssets>(*m_engine, *m_scene);
+    m_guiRenderer=std::make_unique<GuiRenderer>(*this);
     SetEditorGrid(m_gridVisible,m_gridPlane);SetEditorGizmo(m_gizmoVisible,m_gizmoX,m_gizmoY,m_gizmoZ,m_gizmoMode);
     return true;
 }
@@ -585,11 +592,38 @@ void RenderBackend::SetEnvironment(const SceneEnvironment& value) {
 }
 bool RenderBackend::HasEnvironmentLighting() const{return m_scene&&m_scene->getIndirectLight()!=nullptr;}
 bool RenderBackend::HasEnvironmentSkybox() const{return m_scene&&m_scene->getSkybox()!=nullptr;}
+void RenderBackend::SetGuiScene(Bazzalt::Scene* scene){if(m_guiScene!=scene)ClearGuiResources();m_guiScene=scene;}
+void RenderBackend::ClearGuiResources(){if(m_guiRenderer)m_guiRenderer->Clear();}
+void RenderBackend::RenderCameraView(filament::View* view){
+    if(!view)return;
+    auto* scene=view->getScene();auto* sky=scene?scene->getSkybox():nullptr;
+    const bool clearTarget=view->getRenderTarget()&&scene&&!sky;
+    if(clearTarget){if(!m_targetClearSky)m_targetClearSky=filament::Skybox::Builder().color({0,0,0,1}).showSun(false).build(*m_engine);scene->setSkybox(m_targetClearSky);}
+    try{m_renderer->render(view);}catch(...){if(clearTarget)scene->setSkybox(sky);throw;}
+    if(clearTarget)scene->setSkybox(sky);
+}
+filament::Texture* RenderBackend::GetCameraTexture(UUID id) const {
+    if(!m_guiScene)return nullptr;const auto entity=m_guiScene->GetEntity(id);const auto* camera=entity.TryGetComponent<Camera>();if(!camera||!camera->Enabled||!camera->Active)return nullptr;
+    auto it=m_cameraViews.find(id);if(it==m_cameraViews.end()||!it->second->getRenderTarget())return nullptr;
+    return const_cast<filament::Texture*>(it->second->getRenderTarget()->getTexture(filament::RenderTarget::AttachmentPoint::COLOR));
+}
 
 void RenderBackend::Render() {
     if (!m_renderer) return;
+    if(m_guiScene&&m_guiRenderer){auto& system=m_guiScene->GetSystem<GuiSystem>();system.Layout(*m_guiScene,{float(m_presentationWidth),float(m_presentationHeight)});if(!Input::IsActive())system.ProcessInput(*m_guiScene);m_guiRenderer->PrepareSpatial(*m_guiScene);}
     for (const auto& [id, resource] : m_viewports) {
         (void)id;
+        if(resource->Kind==ViewportKind::Game&&m_guiScene&&(m_presentationWidth!=resource->Width||m_presentationHeight!=resource->Height)){
+            SetPresentationSize(resource->Width,resource->Height);m_guiScene->GetSystem<CameraSystem>().Synchronize(*m_guiScene);
+            m_guiScene->GetSystem<GuiSystem>().Layout(*m_guiScene,{float(resource->Width),float(resource->Height)});m_guiRenderer->PrepareSpatial(*m_guiScene);
+        }
+        if(resource->Kind==ViewportKind::Game&&m_guiScene&&m_guiRenderer){
+            for(auto* view:m_activeViews){if(!view||!view->getRenderTarget())continue;auto registered=std::find_if(m_cameraViews.begin(),m_cameraViews.end(),[&](const auto& entry){return entry.second==view;});if(registered==m_cameraViews.end())continue;
+                auto* target=const_cast<filament::RenderTarget*>(view->getRenderTarget());const auto* texture=target->getTexture(filament::RenderTarget::AttachmentPoint::COLOR);
+                m_guiRenderer->PrepareOverlay(*m_guiScene,{float(texture->getWidth()),float(texture->getHeight())},registered->first,target);
+            }
+            m_guiRenderer->PrepareOverlay(*m_guiScene,{float(resource->Width),float(resource->Height)});
+        }
         if (!resource->SwapChain || !m_renderer->beginFrame(resource->SwapChain)) continue;
         if (resource->Kind == ViewportKind::Scene) {
             bool outlined=false;
@@ -614,25 +648,36 @@ void RenderBackend::Render() {
             }
             m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});
         } else {
-            if (m_activeViews.empty()) {
+            const bool directCamera=std::any_of(m_activeViews.begin(),m_activeViews.end(),[](filament::View* view){return view&&!view->getRenderTarget();});
+            if (!directCamera) {
                 // Render an empty view solely to clear the swap chain.  Its
                 // scene is deliberately null, so a missing game camera can
                 // never expose the editor fallback camera.
                 m_renderer->setClearOptions({.clearColor={0,0,0,1},.clear=true});
                 if (resource->View) m_renderer->render(resource->View);
                 m_renderer->setClearOptions({.clearColor={0.055,0.065,0.085,1.0},.clear=true});
-            } else {
-                for (filament::View* view : m_activeViews)
-                    if (view) m_renderer->render(view);
             }
+            for (filament::View* view : m_activeViews)
+                if (view&&view->getRenderTarget()) RenderCameraView(view);
+            if(m_guiRenderer&&m_guiScene){for(auto* view:m_activeViews){
+                if(!view||!view->getRenderTarget())continue;
+                auto registered=std::find_if(m_cameraViews.begin(),m_cameraViews.end(),[&](const auto& entry){return entry.second==view;});if(registered==m_cameraViews.end())continue;const UUID camera=registered->first;
+                auto* target=const_cast<filament::RenderTarget*>(view->getRenderTarget());const auto* texture=target->getTexture(filament::RenderTarget::AttachmentPoint::COLOR);
+                m_guiRenderer->RenderCameraOverlay(*m_guiScene,camera,{float(texture->getWidth()),float(texture->getHeight())},target);
+            }m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});}
+            for (filament::View* view : m_activeViews)
+                if (view&&!view->getRenderTarget()) m_renderer->render(view);
         }
+        if(resource->Kind==ViewportKind::Game&&m_guiScene&&m_guiRenderer){m_guiRenderer->RenderOverlay(*m_guiScene,{float(resource->Width),float(resource->Height)});m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});}
         m_renderer->endFrame();
     }
 }
 
 void RenderBackend::Shutdown() {
     if (m_engine == nullptr) return;
+    m_guiScene=nullptr;m_guiRenderer.reset();m_cameraViews.clear();
     m_scene->setSkybox(nullptr);m_scene->setIndirectLight(nullptr);
+    if(m_targetClearSky){m_engine->destroy(m_targetClearSky);m_targetClearSky=nullptr;}
     if(m_environment){if(m_environment->Sky)m_engine->destroy(m_environment->Sky);if(m_environment->Light)m_engine->destroy(m_environment->Light);if(m_environment->SkyTexture)m_engine->destroy(m_environment->SkyTexture);if(m_environment->Reflections)m_engine->destroy(m_environment->Reflections);m_environment.reset();}
     while (!m_viewports.empty()) DestroyViewport(m_viewports.begin()->first);
     m_activeViews.clear();

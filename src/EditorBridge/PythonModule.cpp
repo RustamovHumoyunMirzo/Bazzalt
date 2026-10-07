@@ -27,6 +27,7 @@
 #include "Runtime/NativeScriptRuntime.h"
 #include "Bazzalt/Components/ScriptComponent.h"
 #include "Runtime/InputAccess.h"
+#include "EditorBridge/GuiBridge.h"
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Components/Light.h"
 #include "Rendering/LightParameters.h"
@@ -83,7 +84,6 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
     if (entity.HasComponent<GaussianBlur>()) components.append("Gaussian Blur");
     if (entity.HasComponent<Vignette>()) components.append("Vignette");
     if (entity.HasComponent<SceneQueryBounds>()) components.append("Scene Query Bounds");
-    result["components"] = components;
     py::dict enabled;
     if (const auto* value=entity.TryGetComponent<Camera>()) enabled["Camera"]=value->IsEnabled();
     if (const auto* value=entity.TryGetComponent<Light>()) enabled["Light"]=value->IsEnabled();
@@ -94,7 +94,6 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
     if (const auto* value=entity.TryGetComponent<GaussianBlur>()) enabled["Gaussian Blur"]=value->IsEnabled();
     if (const auto* value=entity.TryGetComponent<Vignette>()) enabled["Vignette"]=value->IsEnabled();
     if (const auto* value=entity.TryGetComponent<SceneQueryBounds>()) enabled["Scene Query Bounds"]=value->IsEnabled();
-    result["component_enabled"] = enabled;
     py::dict data;
     if (const auto* camera=entity.TryGetComponent<Camera>()) {
         py::dict v;v["Projection"]=static_cast<int>(camera->Projection);v["Field of View"]=ToDegrees(camera->VerticalFieldOfView);v["Orthographic Size"]=camera->OrthographicSize;v["Near"]=camera->NearPlane;v["Far"]=camera->FarPlane;v["Aspect Ratio"]=camera->AspectRatio;v["Aspect Mode"]=static_cast<int>(camera->AspectMode);v["Viewport"]=py::make_tuple(camera->Viewport.X,camera->Viewport.Y,camera->Viewport.Width,camera->Viewport.Height);v["Priority"]=camera->Priority;v["Active"]=camera->Active;v["Clear Color"]=py::make_tuple(camera->ClearColor.X,camera->ClearColor.Y,camera->ClearColor.Z,camera->ClearColor.W);v["Post Processing"]=camera->PostProcessing.Enabled;v["Bloom"]=camera->PostProcessing.Bloom;v["Ambient Occlusion"]=camera->PostProcessing.AmbientOcclusion;v["Anti Aliasing"]=static_cast<int>(camera->PostProcessing.AntiAliasingMode);v["Tone Mapping"]=static_cast<int>(camera->PostProcessing.ToneMappingMode);v["Exposure"]=camera->PostProcessing.Exposure;v["Depth of Field"]=camera->PostProcessing.DepthOfField.Enabled;v["Focus Distance"]=camera->PostProcessing.DepthOfField.FocusDistance;v["Aperture"]=camera->PostProcessing.DepthOfField.Aperture;v["Shutter Speed"]=camera->PostProcessing.DepthOfField.ShutterSpeed;v["Sensitivity"]=camera->PostProcessing.DepthOfField.Sensitivity;data["Camera"]=v;
@@ -116,6 +115,8 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
     if (const auto* blur=entity.TryGetComponent<GaussianBlur>()) { py::dict v;v["Size"]=blur->Size;data["Gaussian Blur"]=v; }
     if (const auto* vignette=entity.TryGetComponent<Vignette>()) { py::dict v;v["Color"]=py::make_tuple(vignette->Color.X,vignette->Color.Y,vignette->Color.Z,vignette->Color.W);v["Intensity"]=vignette->Intensity;v["Smoothness"]=vignette->Smoothness;v["Roundness"]=vignette->Roundness;data["Vignette"]=v; }
     if (const auto* bounds=entity.TryGetComponent<SceneQueryBounds>()) { py::dict v;v["Shape"]=static_cast<int>(bounds->Shape);v["Center"]=py::make_tuple(bounds->Center.X,bounds->Center.Y,bounds->Center.Z);v["Extents"]=py::make_tuple(bounds->Extents.X,bounds->Extents.Y,bounds->Extents.Z);v["Radius"]=bounds->Radius;v["Layer Mask"]=bounds->LayerMask;data["Scene Query Bounds"]=v; }
+    InspectGUI(entity,components,enabled,data);
+    result["components"]=components;result["component_enabled"]=enabled;
     result["component_data"] = data;
     return result;
 }
@@ -284,6 +285,12 @@ public:
                 camera.Active && camera.IsEnabled()) return true;
         return false;
     }
+    bool HasGameOutput() const {
+        const auto& registry=m_engine->GetScene().GetRegistry();
+        for(auto handle:registry.view<Frame>()){const auto& frame=registry.get<Frame>(handle);if(frame.Enabled&&frame.Visible&&frame.Mode==FrameMode::Viewport)return true;}
+        for(auto handle:registry.view<Camera>()){const auto& camera=registry.get<Camera>(handle);const auto* target=registry.try_get<CameraRenderTarget>(handle);if(camera.Enabled&&camera.Active&&(!target||!target->Enabled))return true;}
+        return false;
+    }
     std::string CreateEntity(const std::string& name, const std::string& parent) {
         Scene* scene=&m_engine->GetScene();Entity parentEntity;
         if(!parent.empty()){if(const auto loaded=FindLoadedScene(parent))scene=&SceneAt(*loaded);else{auto found=FindEntity(parent);scene=found.first;parentEntity=found.second;if(!scene||!parentEntity)return {};}}
@@ -339,7 +346,7 @@ public:
         else if (type == "Gaussian Blur") { if (!entity.HasComponent<GaussianBlur>()) entity.AddComponent<GaussianBlur>(); }
         else if (type == "Vignette") { if (!entity.HasComponent<Vignette>()) entity.AddComponent<Vignette>(); }
         else if (type == "Scene Query Bounds") { if (!entity.HasComponent<SceneQueryBounds>()) entity.AddComponent<SceneQueryBounds>(); }
-        else return false;
+        else return GuiDispatch(entity,type,[]<class T>(Entity e){if(!e.HasComponent<T>())e.AddComponent<T>();});
         return true;
     }
     bool RemoveComponent(const std::string& id, const std::string& type) {
@@ -351,7 +358,7 @@ public:
         else if (type == "Gaussian Blur" && entity.HasComponent<GaussianBlur>()) entity.RemoveComponent<GaussianBlur>();
         else if (type == "Vignette" && entity.HasComponent<Vignette>()) entity.RemoveComponent<Vignette>();
         else if (type == "Scene Query Bounds" && entity.HasComponent<SceneQueryBounds>()) entity.RemoveComponent<SceneQueryBounds>();
-        else return false;
+        else return GuiDispatch(entity,type,[]<class T>(Entity e){e.RemoveComponent<T>();});
         return true;
     }
     bool SetComponentEnabled(const std::string& id, const std::string& type, bool enabled) {
@@ -365,13 +372,14 @@ public:
         else if (type == "Gaussian Blur" && entity.HasComponent<GaussianBlur>()) entity.SetComponentEnabled<GaussianBlur>(enabled);
         else if (type == "Vignette" && entity.HasComponent<Vignette>()) entity.SetComponentEnabled<Vignette>(enabled);
         else if (type == "Scene Query Bounds" && entity.HasComponent<SceneQueryBounds>()) entity.SetComponentEnabled<SceneQueryBounds>(enabled);
-        else return false;
+        else return GuiDispatch(entity,type,[enabled]<class T>(Entity e){if(e.HasComponent<T>())e.SetComponentEnabled<T>(enabled);});
         return true;
     }
     py::list ComponentTypes() const {
         py::list result;
         for (const char* name : {"Camera", "Light", "Mesh", "Primitive Object", "Scene Query Bounds", "Gaussian Blur", "Vignette"})
             result.append(name);
+        for(auto name:GuiNames)result.append(name);
         return result;
     }
     py::dict SceneInfo() const {
@@ -421,6 +429,7 @@ public:
     bool SetComponentProperty(const std::string& id, const std::string& type,
                               const std::string& property, py::object value) {
         Entity entity=RequireEntity(id);
+        if(GuiRegistry().Find("Bazzalt."+type))return SetGUIProperty(entity,type,property,value);
         if(type=="Camera"&&entity.HasComponent<Camera>()){auto&v=entity.GetComponent<Camera>();if(property=="Projection")v.Projection=static_cast<CameraProjection>(value.cast<int>());else if(property=="Field of View")v.VerticalFieldOfView=ToRadians(value.cast<float>());else if(property=="Orthographic Size")v.OrthographicSize=value.cast<float>();else if(property=="Near")v.NearPlane=value.cast<float>();else if(property=="Far")v.FarPlane=value.cast<float>();else if(property=="Aspect Ratio")v.AspectRatio=value.cast<float>();else if(property=="Aspect Mode")v.AspectMode=static_cast<CameraAspectMode>(value.cast<int>());else if(property=="Viewport"){auto a=value.cast<std::array<float,4>>();v.Viewport={a[0],a[1],a[2],a[3]};}else if(property=="Priority")v.Priority=value.cast<int>();else if(property=="Active")v.Active=value.cast<bool>();else if(property=="Clear Color"){auto a=value.cast<std::array<float,4>>();v.ClearColor={a[0],a[1],a[2],a[3]};}else if(property=="Post Processing")v.PostProcessing.Enabled=value.cast<bool>();else if(property=="Bloom")v.PostProcessing.Bloom=value.cast<bool>();else if(property=="Ambient Occlusion")v.PostProcessing.AmbientOcclusion=value.cast<bool>();else if(property=="Anti Aliasing")v.PostProcessing.AntiAliasingMode=static_cast<AntiAliasing>(value.cast<int>());else if(property=="Tone Mapping")v.PostProcessing.ToneMappingMode=static_cast<ToneMapping>(value.cast<int>());else if(property=="Exposure")v.PostProcessing.Exposure=value.cast<float>();else if(property=="Depth of Field")v.PostProcessing.DepthOfField.Enabled=value.cast<bool>();else if(property=="Focus Distance")v.PostProcessing.DepthOfField.FocusDistance=value.cast<float>();else if(property=="Aperture")v.PostProcessing.DepthOfField.Aperture=value.cast<float>();else if(property=="Shutter Speed")v.PostProcessing.DepthOfField.ShutterSpeed=value.cast<float>();else if(property=="Sensitivity")v.PostProcessing.DepthOfField.Sensitivity=value.cast<float>();else return false;return true;}
         if(type=="Light"&&entity.HasComponent<Light>()){
             auto& stored=entity.GetComponent<Light>();auto v=stored;
@@ -512,6 +521,7 @@ public:
     void GameButton(int button,bool down){if(m_playing&&!m_paused)Runtime::InputAccess::ButtonEvent(button,down);}
     void GameMotion(float x,float y,float dx,float dy){if(m_playing&&!m_paused)Runtime::InputAccess::MotionEvent(x,y,dx,dy);}
     void GameScroll(float x,float y){if(m_playing&&!m_paused)Runtime::InputAccess::ScrollEvent(x,y);}
+    void GameText(const std::string& text){if(m_playing&&!m_paused)Runtime::InputAccess::TextEvent(text);}
     py::dict InputSnapshot(){const auto& state=*Runtime::InputAccess::GetState();py::dict out;out["active"]=state.Active;py::list keys,down,up;for(int i=1;i<512;++i){if(state.Keys[i])keys.append(i);if(state.KeysDown[i])down.append(i);if(state.KeysUp[i])up.append(i);}out["keys"]=keys;out["down"]=down;out["up"]=up;return out;}
     void Step() { if (m_playing) m_engine->Update(); }
     void Tick() {
@@ -665,6 +675,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("restore_transforms", &Bazzalt::EditorBridge::EditorHost::RestoreTransforms)
         .def("entity_count", &Bazzalt::EditorBridge::EditorHost::EntityCount)
         .def("has_active_camera", &Bazzalt::EditorBridge::EditorHost::HasActiveCamera)
+        .def("has_game_output", &Bazzalt::EditorBridge::EditorHost::HasGameOutput)
         .def("create_entity", &Bazzalt::EditorBridge::EditorHost::CreateEntity,
              py::arg("name"), py::arg("parent") = "")
         .def("destroy_entity", &Bazzalt::EditorBridge::EditorHost::DestroyEntity)
@@ -717,6 +728,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("rename_asset_directory", &Bazzalt::EditorBridge::EditorHost::RenameAssetDirectory)
         .def("set_game_input_active", &Bazzalt::EditorBridge::EditorHost::SetGameInputActive)
         .def("game_key", &Bazzalt::EditorBridge::EditorHost::GameKey)
+        .def("game_text", &Bazzalt::EditorBridge::EditorHost::GameText)
         .def("game_button", &Bazzalt::EditorBridge::EditorHost::GameButton)
         .def("game_motion", &Bazzalt::EditorBridge::EditorHost::GameMotion)
         .def("game_scroll", &Bazzalt::EditorBridge::EditorHost::GameScroll)

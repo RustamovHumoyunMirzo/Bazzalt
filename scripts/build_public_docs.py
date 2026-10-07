@@ -79,7 +79,9 @@ def discover(root):
     folders.sort(key=lambda p: tuple(map(int,VERSION.fullmatch(p.name).groups()[:3]))+(VERSION.fullmatch(p.name)[4] is None,VERSION.fullmatch(p.name)[4] or ''), reverse=True)
     records=[]
     for folder in folders:
-        for path in sorted(folder.rglob('*.html')):
+        # pathlib ordering is case-insensitive on Windows, case-sensitive on
+        # Linux. Never let the build host change the generated catalog.
+        for path in sorted(folder.rglob('*.html'), key=lambda p: (p.relative_to(root).as_posix().casefold(), p.relative_to(root).as_posix())):
             if not LANGUAGE.fullmatch(path.stem): raise ValueError(f'Guide filename must be a language code: {path}')
             if not path.resolve().is_relative_to(root.resolve()): raise ValueError('A guide cannot escape the docs folder')
             source=path.read_text(encoding='utf-8');body=read_article(source);parsed=Content(body)
@@ -100,7 +102,7 @@ def tree(records, options, folder=''):
     names={p['id'][len(folder)+1 if folder else 0:].split('/')[0] for p in records if p['id'].startswith(folder+'/' if folder else '') and p['id']!=folder}
     order=options.get('navigation',{}).get(folder,{}).get('order',[]) if folder else options.get('sections',[])
     children=[]
-    for name in sorted(names,key=lambda n:(order.index(n) if n in order else len(order),n.casefold())):
+    for name in sorted(names,key=lambda n:(order.index(n) if n in order else len(order),n.casefold(),n)):
         identifier=folder+'/'+name if folder else name
         children.append(tree(records,options,identifier))
     config=options.get('navigation',{}).get(folder,{})

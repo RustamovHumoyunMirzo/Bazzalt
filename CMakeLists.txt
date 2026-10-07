@@ -122,6 +122,7 @@ bazzalt_embed_post_process(runtime_lit RuntimeLitFilamat)
 bazzalt_embed_post_process(runtime_unlit RuntimeUnlitFilamat)
 bazzalt_embed_post_process(runtime_lit_transparent RuntimeLitTransparentFilamat)
 bazzalt_embed_post_process(runtime_unlit_transparent RuntimeUnlitTransparentFilamat)
+bazzalt_embed_post_process(gui GuiFilamat)
 bazzalt_embed_binary(Editor/assets/gizmos/singlearrowx.glb EditorTranslateGizmoGlb editor_translate_gizmo_glb)
 bazzalt_embed_binary(Editor/assets/gizmos/scalearrowx.glb EditorScaleGizmoGlb editor_scale_gizmo_glb)
 bazzalt_embed_binary(Editor/assets/gizmos/rotring.glb EditorRotateGizmoGlb editor_rotate_gizmo_glb)
@@ -148,6 +149,7 @@ file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/EditorBridge/")
+list(FILTER LIB_SOURCES EXCLUDE REGEX "/GUI/(GuiSystem|GuiRenderer|GuiSerialization|GuiModule)\\.cpp$")
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/Script/Lua[^/]*\\.cpp$|/Runtime/LuaRuntime\\.cpp$")
 file(GLOB BAZZALT_LUA_BINDING_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/Script/Lua*.cpp")
 add_library(BazzaltLuaBindings STATIC ${BAZZALT_LUA_BINDING_SOURCES} src/Runtime/LuaRuntime.cpp)
@@ -205,6 +207,27 @@ target_include_directories(Bazzalt
 )
 
 target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE BazzaltLuaBindings BazzaltLua SDL3::SDL3-static ryml::ryml Filament::Filament ${CMAKE_DL_LIBS})
+
+# One-way link: GUI imports core; core loads the sibling module through a private
+# versioned table. This avoids circular DLL dependencies/import libraries.
+add_library(BazzaltGui SHARED src/GUI/GuiModule.cpp src/GUI/GuiSystem.cpp
+    src/GUI/GuiRenderer.cpp src/GUI/GuiSerialization.cpp ${BAZZALT_EMBEDDED_HEADERS})
+target_include_directories(BazzaltGui PRIVATE include src "${_bazzalt_generated_dir}")
+target_link_libraries(BazzaltGui PRIVATE Bazzalt Filament::Filament)
+target_compile_features(BazzaltGui PRIVATE cxx_std_20)
+set_target_properties(BazzaltGui PROPERTIES OUTPUT_NAME bazzalt_gui
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"
+    BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+if(APPLE)
+    set_target_properties(BazzaltGui PROPERTIES BUILD_RPATH "@loader_path" INSTALL_RPATH "@loader_path")
+endif()
+if(MSVC)
+    target_compile_options(BazzaltGui PRIVATE /utf-8 /bigobj)
+endif()
+add_custom_command(TARGET BazzaltGui POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:BazzaltGui>"
+        "${CMAKE_BINARY_DIR}/ScriptSDK/lib/$<TARGET_FILE_NAME:BazzaltGui>" VERBATIM)
 
 target_compile_features(Bazzalt PUBLIC cxx_std_20)
 if(MSVC)
@@ -264,7 +287,7 @@ if(BAZZALT_BUILD_EDITOR_BRIDGE)
         C_VISIBILITY_PRESET default WINDOWS_EXPORT_ALL_SYMBOLS ON
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor")
-    add_dependencies(_bazzalt_runtime bshader)
+    add_dependencies(_bazzalt_runtime bshader BazzaltGui)
     target_link_libraries(_bazzalt_runtime PRIVATE Bazzalt)
     target_include_directories(_bazzalt_runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     set_target_properties(_bazzalt_runtime PROPERTIES
@@ -280,9 +303,10 @@ target_link_libraries(BazzaltExample
     PRIVATE
     Bazzalt
 )
+add_dependencies(BazzaltExample BazzaltGui)
 if(WIN32)
     add_custom_command(TARGET BazzaltExample POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE:BazzaltLua>" "$<TARGET_FILE_DIR:BazzaltExample>")
+        "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE:BazzaltLua>" "$<TARGET_FILE:BazzaltGui>" "$<TARGET_FILE_DIR:BazzaltExample>")
 endif()
 
 include(CTest)
@@ -297,10 +321,11 @@ if(BUILD_TESTING)
         add_test(NAME BazzaltBshaderTests COMMAND BazzaltBshaderTests)
     endif()
     function(bazzalt_enable_test_assertions target)
+        add_dependencies(${target} BazzaltGui)
         target_sources(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests/TestDiagnostics.cpp")
         if(WIN32)
             add_custom_command(TARGET ${target} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE:BazzaltLua>" "$<TARGET_FILE_DIR:${target}>")
+                "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE:BazzaltLua>" "$<TARGET_FILE:BazzaltGui>" "$<TARGET_FILE_DIR:${target}>")
         endif()
         if(MSVC)
             target_compile_options(${target} PRIVATE /UNDEBUG)
@@ -319,6 +344,11 @@ if(BUILD_TESTING)
     bazzalt_enable_test_assertions(BazzaltInputTests)
     add_test(NAME BazzaltInputTests COMMAND BazzaltInputTests $<TARGET_FILE:BazzaltScriptLifecycleModule>)
     add_executable(BazzaltMaterialTests tests/MaterialTests.cpp)
+    add_executable(BazzaltGuiTests tests/GuiTests.cpp)
+    target_link_libraries(BazzaltGuiTests PRIVATE Bazzalt Filament::Filament)
+    target_include_directories(BazzaltGuiTests PRIVATE src)
+    bazzalt_enable_test_assertions(BazzaltGuiTests)
+    add_test(NAME BazzaltGuiTests COMMAND BazzaltGuiTests)
     target_link_libraries(BazzaltMaterialTests PRIVATE Bazzalt Filament::Filament)
     target_include_directories(BazzaltMaterialTests PRIVATE src)
     target_compile_definitions(BazzaltMaterialTests PRIVATE BAZZALT_MATERIAL_TEST_PACKAGE="${_bazzalt_generated_dir}/primitive_lit.filamat")

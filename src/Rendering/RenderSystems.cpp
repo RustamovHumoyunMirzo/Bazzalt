@@ -12,6 +12,9 @@
 #include <filament/TransformManager.h>
 #include <filament/View.h>
 #include <filament/Viewport.h>
+#include <filament/Texture.h>
+#include <filament/RenderTarget.h>
+#include "Bazzalt/Components/CameraRenderTarget.h"
 #include <math/mat4.h>
 #include <math/vec3.h>
 #include <math/vec4.h>
@@ -105,6 +108,22 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
         }
 
         auto& resource = found->second;
+        const auto* target=entity.TryGetComponent<CameraRenderTarget>();
+        const bool offscreen=target&&target->Enabled;
+        resource.View->setVisibleLayers(0xff,offscreen?0x3f:0x7f); // Never sample a camera feed inside its own capture.
+        const auto textureWidth=offscreen?std::clamp(target->Width,1u,4096u):0u,textureHeight=offscreen?std::clamp(target->Height,1u,4096u):0u;
+        if((resource.Target&&!offscreen)||(offscreen&&(!resource.Color||resource.Color->getWidth()!=textureWidth||resource.Color->getHeight()!=textureHeight))){
+            m_backend.ClearGuiResources();resource.View->setRenderTarget(nullptr);
+            if(resource.Target)engine.destroy(resource.Target);if(resource.Color)engine.destroy(resource.Color);if(resource.Depth)engine.destroy(resource.Depth);
+            resource.Target=nullptr;resource.Color=resource.Depth=nullptr;
+            if(offscreen){using T=filament::Texture;
+                resource.Color=T::Builder().width(textureWidth).height(textureHeight).levels(1).sampler(T::Sampler::SAMPLER_2D).format(T::InternalFormat::RGBA8).usage(T::Usage::COLOR_ATTACHMENT|T::Usage::SAMPLEABLE|T::Usage::BLIT_SRC).build(engine);
+                resource.Depth=T::Builder().width(textureWidth).height(textureHeight).levels(1).sampler(T::Sampler::SAMPLER_2D).format(T::InternalFormat::DEPTH32F).usage(T::Usage::DEPTH_ATTACHMENT).build(engine);
+                resource.Target=filament::RenderTarget::Builder().texture(filament::RenderTarget::AttachmentPoint::COLOR,resource.Color).texture(filament::RenderTarget::AttachmentPoint::DEPTH,resource.Depth).build(engine);
+                resource.View->setRenderTarget(resource.Target);
+            }
+        }
+        m_backend.RegisterCameraView(id,resource.View);
         const Mat4 world = entity.GetWorldMatrix();
         const Vec3 position = SafeVector(world.TransformPoint({}));
         const Vec3 forward = SafeDirection(world.TransformDirection({0.0f, 0.0f, -1.0f}), {0,0,-1});
@@ -119,8 +138,8 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
                                                0.0f, 1.0f - viewportX);
         const float viewportHeight = std::clamp(FiniteOr(camera.Viewport.Height, 1.0f),
                                                 0.0f, 1.0f - viewportY);
-        const auto targetWidth = m_backend.GetPresentationWidth();
-        const auto targetHeight = m_backend.GetPresentationHeight();
+        const auto targetWidth = offscreen?textureWidth:m_backend.GetPresentationWidth();
+        const auto targetHeight = offscreen?textureHeight:m_backend.GetPresentationHeight();
         const auto left = static_cast<std::int32_t>(std::lround(viewportX * targetWidth));
         const auto bottom = static_cast<std::int32_t>(std::lround(viewportY * targetHeight));
         const auto right = static_cast<std::int32_t>(std::lround(
@@ -253,7 +272,11 @@ void CameraSystem::OnDestroy(Scene&) {
 void CameraSystem::Destroy(UUID id) {
     auto found = m_resources.find(id); if (found == m_resources.end()) return;
     auto& engine = m_backend.GetEngine();
+    m_backend.ClearGuiResources();m_backend.UnregisterCameraView(id);
     if (found->second.View) engine.destroy(found->second.View);
+    if(found->second.Target)engine.destroy(found->second.Target);
+    if(found->second.Color)engine.destroy(found->second.Color);
+    if(found->second.Depth)engine.destroy(found->second.Depth);
     engine.destroyCameraComponent(found->second.Entity);
     engine.getEntityManager().destroy(found->second.Entity);
     m_resources.erase(found);

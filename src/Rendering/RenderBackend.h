@@ -18,11 +18,14 @@ class Renderer;
 class Scene;
 class View;
 class Texture;
+class Skybox;
 }
+namespace Bazzalt { class Scene; }
 
 namespace Bazzalt::Runtime {
 
 class RenderAssets;
+class GuiRenderer;
 
 // Owns Filament's low-level objects. No Filament type crosses the public API.
 class RenderBackend final {
@@ -56,6 +59,12 @@ public:
     void SetEditorGuides(const std::vector<EditorGuide>& guides);
     void SetEditorOutline(std::unordered_set<UUID> selected,std::unordered_set<UUID> hovered){m_outlineSelected=std::move(selected);m_outlineHovered=std::move(hovered);}
     void Render();
+    void RenderCameraView(filament::View* view);
+    void SetGuiScene(Bazzalt::Scene* scene);
+    void ClearGuiResources();
+    filament::Texture* GetCameraTexture(UUID id) const;
+    void RegisterCameraView(UUID id,filament::View* view){m_cameraViews[id]=view;}
+    void UnregisterCameraView(UUID id){m_cameraViews.erase(id);}
     static void ConfigureEditorFog(filament::View& view,float gridScale);
     void SetEditorHidden(std::unordered_set<UUID> hidden){m_editorHidden=std::move(hidden);}
     void RegisterEditorLight(UUID id,utils::Entity entity){m_editorLights[id]=entity;}
@@ -99,11 +108,15 @@ private:
     std::string m_backend = "automatic";
     filament::Renderer* m_renderer = nullptr;
     filament::Scene* m_scene = nullptr;
+    filament::Skybox* m_targetClearSky=nullptr;
     std::vector<filament::View*> m_activeViews;
     std::uint32_t m_presentationWidth = 1280;
     std::uint32_t m_presentationHeight = 720;
     std::unordered_map<filament::View*, std::vector<CustomPostProcessEffect>> m_postProcessEffects;
     std::unique_ptr<RenderAssets> m_assets;
+    std::unique_ptr<GuiRenderer> m_guiRenderer;
+    Bazzalt::Scene* m_guiScene=nullptr;
+    std::unordered_map<UUID,filament::View*> m_cameraViews;
     std::unordered_map<std::uint64_t, std::unique_ptr<ViewportResource>> m_viewports;
     std::unique_ptr<GizmoResource> m_gizmo;
     bool m_gizmoVisible = false;

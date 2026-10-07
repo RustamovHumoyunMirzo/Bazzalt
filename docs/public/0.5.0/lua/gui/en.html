@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Lua uses the same scene entities, layout, styles, and interaction state as C++. There is no separate Lua or editor renderer.">
+  <title>GUI in Lua | BAZZALT Docs 0.5.0</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../" data-version="0.5.0" data-page="lua/gui">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"><option value="0.5.0" selected>0.5.0</option></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"><option value="en" selected>English</option></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for the navigation tree. Page content and links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Lua / GUI in Lua</nav>
+      <article class="doc"><h1>GUI in Lua</h1>
+<p class="lead">Lua uses the same scene entities, layout, styles, and interaction state as C++. There is no separate Lua or editor renderer.</p>
+<h2 id="create">Create a GUI hierarchy</h2>
+<pre><code class="language-lua">local B = Bazzalt
+local Behavior = {}
+function Behavior:OnCreate()
+    local scene = self.Entity:GetScene()
+    local hud = scene:CreateEntity("HUD")
+    hud:AddComponent("Frame")
+    self.Button = scene:CreateEntity("Continue")
+    self.Button:SetParent(hud, false)
+    local layout = self.Button:AddComponent("RectTransform")
+    layout.Position = B.Vec2.new(24, 24)
+    layout.Size = B.Vec2.new(180, 40)
+    self.Button:SetComponent("RectTransform", layout)
+    self.Button:AddComponent("Rectangle")
+    self.Button:AddComponent("GuiButton")
+    local text = self.Button:AddComponent("GuiText")
+    text.Value = "Continue"
+    self.Button:SetComponent("GuiText", text)
+end
+function Behavior:OnUpdate(dt)
+    if B.GUI.GetInteraction(self.Button).Clicked then
+        -- Apply your gameplay action here.
+    end
+end
+return Behavior</code></pre>
+<p>GetComponent/AddComponent return component values: modify your copy and write it back with SetComponent. Layout and widgets belong on Frame descendants, not the Frame entity itself. The engine handles updates and drawing. A missing Frame or RectTransform leaves widgets unrendered.</p>
+<h2 id="types">Types, fields, and enums</h2>
+<p>Constructors use <code>Bazzalt.Type.new()</code>. Frame, RectTransform, Rectangle, GuiImage, GuiText, GuiButton, GuiTextInput, and CameraRenderTarget expose exactly the fields listed in the <a href="../../native/gui/en.html">complete GUI reference</a>, with the same defaults and validation. GuiStyle is a value object used by Rectangle.Style. Every component supports Enabled/IsEnabled/SetEnabled and the normal entity component add/get/set/remove/enable APIs.</p>
+<p>FrameMode exposes Viewport, CameraBound, and Spatial. GuiScaleMode exposes ConstantPixels and ScaleWithViewport. Camera/Texture fields accept Bazzalt UUID values; Camera means an entity UUID, Texture means an asset UUID. Vec2/Vec4 fields use Bazzalt math values.</p>
+<h2 id="interaction">GUI method reference</h2>
+<p><code>B.GUI.GetInteraction(entity)</code> returns GuiInteraction with Hovered, Pressed, Focused, PointerEntered, PointerExited, Clicked, ValueChanged, and Submitted. The first three are states; the rest last one gameplay update. <code>B.GUI.GetBounds(entity)</code> returns GuiBounds.Position/Size; <code>bounds:Contains(point)</code> tests its half-open rectangle. <code>B.GUI.GetFrame(entity)</code> returns the nearest ancestor render root. <code>B.GUI.Focus(entity)</code> returns success, <code>B.GUI.ClearFocus(scene)</code> releases keyboard focus, and <code>B.GUI.IsPointerOverUI(scene)</code> helps gate world interaction. <code>B.Input.GetTextInput()</code> returns current committed UTF-8 input.</p>
+<h2 id="input">Editable text</h2>
+<pre><code class="language-lua">local input = entity:AddComponent("GuiTextInput")
+input.Placeholder = "Player name"
+input.MaxLength = 32
+entity:SetComponent("GuiTextInput", input)
+-- In OnUpdate, after input has been focused/clicked:
+local state = Bazzalt.GUI.GetInteraction(entity)
+if state.Submitted then
+    local value = entity:GetComponent("GuiTextInput").Value
+    -- Use value in your game.
+end</code></pre>
+<p>Add RectTransform and parent it beneath a Frame; add Rectangle for a visible background. MaxLength counts code points, and Backspace removes a whole code point. Password masks display but is not encryption. ReadOnly prevents editing. See the C++ reference for keyboard traversal, pointer capture, focus loss, and current text/font limitations.</p>
+<h2 id="split-screen">Split-screen and camera feeds</h2>
+<pre><code class="language-lua">local frame = hud:GetComponent("Frame")
+frame.Mode = Bazzalt.FrameMode.CameraBound
+frame.Camera = playerCamera:GetUUID()
+hud:SetComponent("Frame", frame)
+local target = feedCamera:AddComponent("CameraRenderTarget")
+target.Width = 512; target.Height = 512
+feedCamera:SetComponent("CameraRenderTarget", target)
+local image = imageEntity:AddComponent("GuiImage")
+image.Camera = feedCamera:GetUUID()
+imageEntity:SetComponent("GuiImage", image)</code></pre>
+<p>CameraBound follows the active camera's viewport, including split-screen rectangles. CameraRenderTarget makes a camera render offscreen for a GuiImage feed. No low-level texture handle or render API enters Lua. Read the shared reference's foundation boundaries before using spatial picking or expecting complete text-editing/stylesheet support.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../0.5.0/lua/api/en.html"><small>Previous</small>Lua API conventions</a>
+<a class="next" href="../../../0.5.0/lua/reference/en.html"><small>Next</small>Lua API reference</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#create">Create a GUI hierarchy</a><a class="toc-link" href="#types">Types, fields, and enums</a><a class="toc-link" href="#interaction">GUI method reference</a><a class="toc-link" href="#input">Editable text</a><a class="toc-link" href="#split-screen">Split-screen and camera feeds</a></nav></aside>
+  </div>
+  <footer>BAZZALT 0.5.0 documentation · English</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

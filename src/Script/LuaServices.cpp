@@ -30,6 +30,7 @@ void BindLuaServices(sol::table api){
     }
     {auto type=api.create_named("Input");
      type["IsActive"]=&Input::IsActive;
+     type["GetTextInput"]=&Input::GetTextInput;
      type["GetKey"]=&Input::GetKey;
      type["GetKeyDown"]=&Input::GetKeyDown;
      type["GetKeyUp"]=&Input::GetKeyUp;

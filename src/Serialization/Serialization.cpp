@@ -1,4 +1,5 @@
 #include "Bazzalt/Serialization.h"
+#include "GUI/GuiSerialization.h"
 #include <charconv>
 #include <cmath>
 #include <fstream>
@@ -65,6 +66,7 @@ void ComponentSerializationRegistry::RegisterDescriptor(Descriptor d){
 const ComponentSerializationRegistry::Descriptor* ComponentSerializationRegistry::Find(const std::string& t)const{for(const auto& d:m_descriptors)if(d.Type==t)return &d;return nullptr;}
 
 SceneSerializer::SceneSerializer(){
+Runtime::RegisterGuiComponents(m_components);
 m_components.Register<ScriptComponents>("Bazzalt.ScriptComponents",1,
     [](const ScriptComponents& value,PropertyMap& output){
         output["Count"]=std::to_string(value.Values.size());output["Enabled"]=value.Enabled?"true":"false";

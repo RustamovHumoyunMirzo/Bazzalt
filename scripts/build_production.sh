@@ -33,6 +33,11 @@ done
 for LIBRARY in "$BUILD/Editor/libbshad.so" "$BUILD/Editor/libbshad.dylib"; do
   if [ -f "$LIBRARY" ]; then cp "$LIBRARY" "$TARGET/Editor/"; fi
 done
-printf '{\n  "version": "%s",\n  "executable": "Bazzalt",\n  "project_format_max": 1\n}\n' "$VERSION" > "$TARGET/editor.json"
+# Copy versioned Lua names as well as their unversioned links. GUI is loaded
+# relative to core; both must be in the same directory, not just ScriptSDK/lib.
+for LIBRARY in "$BUILD"/Editor/libbazzalt_lua.* "$BUILD"/Editor/libbazzalt_gui.*; do
+  if [ -f "$LIBRARY" ]; then cp "$LIBRARY" "$TARGET/Editor/"; fi
+done
+printf '{\n  "version": "%s",\n  "executable": "Bazzalt",\n  "project_format_max": 1,\n  "gui_abi": 1\n}\n' "$VERSION" > "$TARGET/editor.json"
 python "$ROOT/scripts/compile_resources.py" --audit "$HUB"
 printf 'Independent Hub: %s\nManaged Editor: %s\n' "$HUB" "$TARGET"

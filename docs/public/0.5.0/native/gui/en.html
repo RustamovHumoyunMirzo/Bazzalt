@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Build gameplay interfaces from ordinary scene entities. A Frame owns rendering; child entities supply layout and widgets. The engine updates and draws them automatically.">
+  <title>GUI in C++ | BAZZALT Docs 0.5.0</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../" data-version="0.5.0" data-page="native/gui">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"><option value="0.5.0" selected>0.5.0</option></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"><option value="en" selected>English</option></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for the navigation tree. Page content and links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / C++ / GUI in C++</nav>
+      <article class="doc"><h1>GUI in C++</h1>
+<p class="lead">Build gameplay interfaces from ordinary scene entities. A Frame owns rendering; child entities supply layout and widgets. The engine updates and draws them automatically.</p>
+<p>In the editor, use <strong>Hierarchy → Add New → GUI</strong> to create Frames, containers, rectangles, text, images, buttons and text inputs. Creating a widget outside an existing Frame automatically creates a Viewport Frame parent. For Camera-Bound Frames, select the destination camera in the inspector. Runtime builds ship the separate GUI library beside the core library (<code>bazzalt_gui.dll</code> on Windows); scripts still use the normal core C++ API.</p>
+<h2 id="ownership">A Frame and its children</h2>
+<p>Include <code>Bazzalt/GUI.h</code>, or individual headers under <code>Bazzalt/Components/GUI/</code>. Add Frame to an entity, then parent widget entities underneath it. A widget requires RectTransform. Widgets outside a Frame do not render. Other GUI components on the Frame entity itself do not render: create a child for its background. Non-layout intermediate entities pass the parent's rectangle through. A nested Frame is an independent render root, not another widget.</p>
+<pre><code class="language-cpp">#include &lt;Bazzalt/GUI.h&gt;
+#include &lt;Bazzalt/Scene.h&gt;
+
+void CreateHUD(Bazzalt::Scene&amp; scene) {
+    auto frame = scene.CreateEntity("HUD");
+    frame.AddComponent&lt;Bazzalt::Frame&gt;();
+    auto button = scene.CreateEntity("Continue");
+    button.SetParent(frame, false);
+    auto&amp; layout = button.AddComponent&lt;Bazzalt::RectTransform&gt;();
+    layout.Position = {24, 24};
+    layout.Size = {180, 40};
+    button.AddComponent&lt;Bazzalt::Rectangle&gt;();
+    button.AddComponent&lt;Bazzalt::GuiButton&gt;();
+    button.AddComponent&lt;Bazzalt::GuiText&gt;().Value = "Continue";
+}
+// Inside your behavior's OnUpdate:
+// if (Bazzalt::GUI::GetInteraction(button).Clicked) { /* continue game */ }</code></pre>
+<p>The engine owns initialization, event dispatch, and drawing. No GUI BeginFrame, renderer, GPU object, or engine-loop override is exposed. GUI authoring components serialize with scenes, including enabled flags. Interaction state is transient and never saved. Editor Add Component and Inspector support these components.</p>
+<h2 id="modes">Frame modes</h2>
+<table><thead><tr><th>FrameMode</th><th>Behavior</th></tr></thead><tbody>
+<tr><td>Viewport</td><td>Composited over the entire Game presentation surface, independent of a camera. It remains available with no game camera. Scene-editor overlays are separate from gameplay GUI.</td></tr>
+<tr><td>CameraBound</td><td>Uses the referenced enabled, active Camera's normalized viewport, including its offscreen target if enabled. Useful for split-screen HUDs and GUI in camera feeds. A missing, disabled, or inactive camera suppresses the frame. It is composited GUI, not a depth-tested camera-space plane.</td></tr>
+<tr><td>Spatial</td><td>Draws in the 3D scene. The Frame entity's world Transform positions/orients/scales the whole GUI. PixelsPerUnit converts layout units to world units. Its local XY plane is centered on the Frame's origin; layout Y points downward. Depth-tested against the scene.</td></tr>
+</tbody></table>
+<p>Every mode uses the same widget components, styles, layout, clipping, and input state. Changing Frame.Mode does not require replacing the widget hierarchy. Lower Frame.ZIndex draws first; ties use Frame UUID. Within a parent, lower RectTransform.ZIndex draws first; equal values preserve hierarchy order. A parent draws before its descendants.</p>
+<h2 id="frame-reference">Frame reference</h2>
+<table><thead><tr><th>Field</th><th>Default / contract</th></tr></thead><tbody>
+<tr><td>Mode</td><td>FrameMode::Viewport.</td></tr><tr><td>ScaleMode</td><td>GuiScaleMode::ScaleWithViewport; ConstantPixels disables reference scaling.</td></tr>
+<tr><td>ReferenceSize</td><td>Vec2(1280,720); positive reference layout resolution. Spatial uses this as its rectangle directly.</td></tr>
+<tr><td>MatchWidthOrHeight</td><td>0.5, in [0,1]. Zero matches width; one matches height. Intermediate values geometrically blend the two scale ratios.</td></tr>
+<tr><td>PixelsPerUnit</td><td>100, positive; spatial conversion only.</td></tr><tr><td>Camera</td><td>Camera entity UUID, not an asset. Required for CameraBound; optional spatial picking camera. If omitted for spatial, an enabled active scene camera is used.</td></tr>
+<tr><td>ZIndex</td><td>0; render priority.</td></tr><tr><td>Visible</td><td>true; hides this frame and its widgets.</td></tr><tr><td>Interactable</td><td>true; false leaves it visible but suppresses pointer/keyboard interaction.</td></tr></tbody></table>
+<h2 id="layout">RectTransform and responsiveness</h2>
+<p>Coordinates are top-left based. AnchorMin and AnchorMax are fractions of the parent rectangle. Size is an additive pixel size; Position is a pixel offset from AnchorMin. Pivot is a fraction of the resolved size. The exact formula is <code>size = parentSize * (AnchorMax - AnchorMin) + Size * scale</code>, then <code>position = parentPosition + parentSize * AnchorMin + Position * scale - Pivot * size</code>. MinSize/MaxSize clamp the result. Unlike the 3D Transform, this component only controls GUI layout.</p>
+<table><thead><tr><th>Field</th><th>Default</th></tr></thead><tbody><tr><td>AnchorMin, AnchorMax, Pivot, Position</td><td>Vec2(0,0).</td></tr><tr><td>Size</td><td>Vec2(160,40).</td></tr><tr><td>MinSize / MaxSize</td><td>Vec2(0,0) / Vec2(100000,100000).</td></tr><tr><td>ZIndex</td><td>0, sibling ordering.</td></tr><tr><td>Visible</td><td>true; hidden/disabled layout suppresses descendants.</td></tr><tr><td>ClipChildren</td><td>false; true clips descendants to this rectangle. Every Frame clips at its own boundary.</td></tr></tbody></table>
+<p>For a centered fixed-size element, set both anchors and Pivot to (0.5,0.5). For full stretch, use AnchorMin=(0,0), AnchorMax=(1,1), Pivot=(0,0), Size=(0,0). For a right-aligned element, use both anchors=(1,0), Pivot=(1,0). Resizing recalculates bounds automatically. GUI.GetBounds returns the latest resolved rectangle in presentation pixels, or spatial layout units.</p>
+<h2 id="widgets">Widget components</h2>
+<table><thead><tr><th>Component</th><th>Fields and behavior</th></tr></thead><tbody>
+<tr><td>Rectangle</td><td>Style (GuiStyle); RaycastTarget=true. Draws a filled rectangle with optional border; can block pointer hits without being a button.</td></tr>
+<tr><td>GuiImage</td><td>Texture=zero asset UUID, Camera=zero entity UUID, Color=(1,1,1,1), RaycastTarget=false. Samples an imported PNG/JPEG texture or camera target; nonzero Camera takes precedence. Missing sources draw nothing.</td></tr>
+<tr><td>GuiText</td><td>Value empty, Color=(1,1,1,1), FontSize=16, Wrap=true. Draws built-in monospace text, clipped to its rectangle. Explicit newlines and optional wrapping are supported.</td></tr>
+<tr><td>GuiButton</td><td>Interactable=true, TabIndex=0. Supplies click/focus behavior, not its own visuals. Combine with Rectangle, GuiText, or GuiImage.</td></tr>
+<tr><td>GuiTextInput</td><td>Value/Placeholder empty, MaxLength=256 Unicode code points, ReadOnly=false, Password=false, Interactable=true, TabIndex=0. Single-line committed-text input with backspace and Enter submit. Supplies built-in value/placeholder visuals; add Rectangle for a background.</td></tr></tbody></table>
+<p>Each component inherits Enabled/IsEnabled/SetEnabled from Component. A disabled widget contributes no draw/behavior of its own; enabled components on the same entity still operate. Disabling its RectTransform or owning Frame suppresses the subtree. Negative TabIndex excludes a control from keyboard traversal. A disabled Button/Input's rectangle can still block underlying hits.</p>
+<h2 id="style">GuiStyle reference</h2>
+<p>Color defaults to (0.22,0.24,0.28,1), HoverColor to (0.3,0.34,0.4,1), PressedColor to (0.12,0.22,0.36,1), DisabledColor to (0.16,0.17,0.19,0.7), and BorderColor to (0.05,0.06,0.08,1). BorderWidth defaults to zero and is scaled with the frame; Opacity defaults to one and is clamped to [0,1]. Focus uses HoverColor. State colors apply to Rectangle when composed with an interactive control. Images/text have their own tint. There is no CSS parser or cascade yet.</p>
+<h2 id="interaction">GUI methods and interaction</h2>
+<table><thead><tr><th>Method</th><th>Contract</th></tr></thead><tbody><tr><td>GetInteraction(Entity)</td><td>Returns GuiInteraction by value. Missing/unrendered entities return default state.</td></tr><tr><td>GetBounds(Entity)</td><td>Latest GuiBounds; missing layouts return zero bounds.</td></tr><tr><td>GetFrame(Entity)</td><td>Nearest ancestor with Frame, excluding the entity itself; invalid if none.</td></tr><tr><td>Focus(Entity)</td><td>Focus a visible enabled/interactable Button/Input with resolved layout; returns false if unavailable.</td></tr><tr><td>ClearFocus(Scene&amp;)</td><td>Release the scene's GUI keyboard focus.</td></tr><tr><td>IsPointerOverUI(Scene&amp;)</td><td>Whether an eligible GUI hit target currently owns hover.</td></tr></tbody></table>
+<p>GuiInteraction.Hovered, Pressed, and Focused describe current state. PointerEntered, PointerExited, Clicked, ValueChanged, and Submitted are one-update pulses. Read them from gameplay OnUpdate; querying does not consume them. Press captures the control; releasing outside it cancels click. Only the frontmost eligible target receives pointer interaction. Tab/Shift+Tab navigate, Escape clears focus, Enter activates/submits, and Space activates buttons. Losing game-window focus clears GUI hover, capture, and keyboard focus. Gameplay input remains readable; use IsPointerOverUI and your focused-control state to gate game actions.</p>
+<p>GuiBounds contains Position and Size. Contains(Vec2) uses inclusive left/top and exclusive right/bottom edges; empty bounds never contain a point. Input.GetTextInput returns UTF-8 committed text for the current input frame, not physical key names.</p>
+<h2 id="camera-textures">Camera render textures</h2>
+<pre><code class="language-cpp">#include &lt;Bazzalt/Components/CameraRenderTarget.h&gt;
+// camera already has a Camera component:
+auto&amp; target = camera.AddComponent&lt;Bazzalt::CameraRenderTarget&gt;();
+target.Width = 512; target.Height = 512;
+imageEntity.AddComponent&lt;Bazzalt::GuiImage&gt;().Camera = camera.GetUUID();</code></pre>
+<p>CameraRenderTarget inherits Component and has Width/Height, both defaulting to 512. Attach it to a Camera, not a GUI Image. The engine owns color/depth buffers, target creation, resizing, and teardown. The valid serialized range is 1–4096 per dimension; runtime writes are clamped to that range. An enabled target sends that camera offscreen rather than directly presenting its view. Removing/disabling it restores ordinary viewport output. GuiImage refers to the camera UUID, never a GPU handle. Camera feeds work in every Frame mode. Offscreen cameras exclude spatial GUI from capture to prevent feedback; targets render before presentation cameras.</p>
+<h2 id="limits">Foundation boundaries</h2>
+<p>This is a retained GUI foundation, not a complete desktop UI toolkit. The built-in font is a small ASCII-oriented bitmap font (lowercase currently shares uppercase glyph shapes); unsupported Unicode glyphs show a box while input values preserve UTF-8. There is no font asset/shaping, IME preedit display, caret/selection editing, clipboard editing, scrolling container, accessibility tree, stylesheet, animation system, or drag/drop widget yet. Spatial input ray-tests the GUI plane, not occluding 3D geometry. Offscreen GUI frames are display-only: interacting through a camera feed requires texture-space input forwarding, not yet implemented. A camera's GUI image cannot sample that same camera during its target composition. One game input surface owns scene GUI focus at a time. Hierarchy/layout traversal is bounded to 128 levels. These boundaries are explicit rather than silently simulated.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../0.5.0/native/materials/en.html"><small>Previous</small>Runtime materials</a>
+<a class="next" href="../../../0.5.0/native/reference/en.html"><small>Next</small>C++ API reference</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#ownership">A Frame and its children</a><a class="toc-link" href="#modes">Frame modes</a><a class="toc-link" href="#frame-reference">Frame reference</a><a class="toc-link" href="#layout">RectTransform and responsiveness</a><a class="toc-link" href="#widgets">Widget components</a><a class="toc-link" href="#style">GuiStyle reference</a><a class="toc-link" href="#interaction">GUI methods and interaction</a><a class="toc-link" href="#camera-textures">Camera render textures</a><a class="toc-link" href="#limits">Foundation boundaries</a></nav></aside>
+  </div>
+  <footer>BAZZALT 0.5.0 documentation · English</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

@@ -11,7 +11,7 @@
 #include "Bazzalt/PostProcessing.h"
 #include "Bazzalt/Math.h"
 
-namespace filament { class Engine; class Scene; class MaterialInstance; }
+namespace filament { class Engine; class Scene; class MaterialInstance; class Texture; }
 
 namespace Bazzalt::Runtime {
 struct ModelGeometry;
@@ -46,6 +46,7 @@ public:
     void BeginEditorView(const std::unordered_set<UUID>& hidden);
     void EndEditorView();
     bool SetDebugMode(const std::string& mode);
+    filament::Texture* GetGuiTexture(UUID id);
     void Shutdown();
 
 private:

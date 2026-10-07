@@ -2,6 +2,7 @@
 from html.parser import HTMLParser
 import json
 from pathlib import Path
+from unittest.mock import patch
 import shutil
 import tempfile
 import unittest
@@ -39,6 +40,21 @@ class PublicDocsTests(unittest.TestCase):
     def test_refreshed_documents_are_current(self):
         for path,content in self.generated.items():
             with self.subTest(path=path): self.assertEqual(path.read_text(encoding='utf-8'),content)
+
+    def test_discovery_has_host_independent_case_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);self.fixture(root)
+            for name in ('zebra','Alpha','alphaExtra','Beta'):
+                self.add_page(root,f'0.5.0/native/{name}/en.html',name)
+            # Deliberately feed discovery opposite filesystem enumeration orders.
+            paths=list((root/'0.5.0').rglob('*.html'))
+            with patch.object(type(root),'rglob',return_value=iter(paths)):
+                first=discover(root)[3]
+            with patch.object(type(root),'rglob',return_value=iter(reversed(paths))):
+                second=discover(root)[3]
+            self.assertEqual(first,second)
+            self.assertEqual([p['id'] for p in first],['native/Alpha','native/alphaExtra','native/Beta','native/zebra'])
+            self.assertEqual([n['title'] for n in tree(first,{},'native')['children']],['Alpha','alphaExtra','Beta','zebra'])
 
     def test_all_links_and_anchors_resolve(self):
         pages={path:Page(source) for path,source in self.generated.items() if path.suffix=='.html'}
