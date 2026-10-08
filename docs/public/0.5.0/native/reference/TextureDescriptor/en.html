@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Writable 2D texture settings shared by assets and runtime Texture.Create/SetDescriptor. Include Bazzalt/Texture.h. These are resource settings, not an entity component.">
+  <title>TextureDescriptor | BAZZALT Docs 0.5.0</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../" data-version="0.5.0" data-page="native/reference/TextureDescriptor">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"><option value="0.5.0" selected>0.5.0</option></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"><option value="en" selected>English</option></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for the navigation tree. Page content and links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / C++ / C++ API reference / TextureDescriptor</nav>
+      <article class="doc"><h1>TextureDescriptor</h1>
+<p>Writable 2D texture settings shared by assets and runtime Texture.Create/SetDescriptor. Include Bazzalt/Texture.h. These are resource settings, not an entity component.</p>
+<h2 id="fields">Fields and defaults</h2>
+<table><thead><tr><th>Field</th><th>Default</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>Width / Height</td><td>512 / 512</td><td>Pixel dimensions, 1–4096 per axis.</td></tr>
+<tr><td>Samples</td><td>1</td><td>Requested MSAA: 1, 2, 4 or 8. Rendering resolves into a single-sample texture for ordinary sampling; device/backend limits may constrain MSAA.</td></tr>
+<tr><td>Mipmaps</td><td>false</td><td>Allocates and regenerates a mip pyramid after producer rendering, before later consumers.</td></tr>
+<tr><td>MipLevels</td><td>0</td><td>Zero selects the full pyramid when enabled. Explicit counts cannot exceed floor(log2(max(width,height)))+1. With mipmaps disabled, only zero/one are valid.</td></tr>
+<tr><td>ColorFormat</td><td>RGBA8</td><td>TextureColorFormat: RGBA8, RGBA16F (HDR), RGBA32F. Unsupported backend formats produce a diagnostic rather than silently changing format.</td></tr>
+<tr><td>DepthFormat</td><td>Depth32F</td><td>TextureDepthFormat: None, Depth16, Depth24, Depth32F. Controls the target's depth attachment.</td></tr>
+<tr><td>Filter</td><td>Linear</td><td>TextureFilter: Point, Linear, Trilinear. Mipmapped point/bilinear select the nearest mip; trilinear interpolates between mips. Without mipmaps, trilinear uses ordinary linear sampling.</td></tr>
+<tr><td>Wrap</td><td>Clamp</td><td>TextureWrap: Clamp, Repeat, Mirror. Applies to GUI and material consumers.</td></tr>
+<tr><td>ClearColor</td><td>(0,0,0,1)</td><td>Initial/idle color, restored when the producer is disabled or removed. Floating-point formats preserve HDR values; RGBA8 clamps to normalized bytes. Camera/environment configuration controls rendered scene backgrounds.</td></tr>
+</tbody></table>
+<h2 id="IsValid">IsValid()</h2><p>Checks dimensions, sample counts, enum ranges, finite clear color and legal mip counts. This is CPU validation, not a GPU capability query. Invalid descriptors do not partially modify a Texture.</p>
+<h2 id="GetMipLevelCount">GetMipLevelCount()</h2><p>Returns one when mipmaps are disabled; otherwise the explicit count or the computed full pyramid. Call IsValid before allocating from user-provided values.</p>
+<h2 id="memory">Memory and scope</h2><p>Camera history uses two color attachments; depth is shared by sequential captures. HDR, large dimensions, MSAA and mipmaps increase GPU memory. A 2D texture is sampleable without a camera and starts at ClearColor. Array/cubemap targets, compute/UAV access and raw native handles are not part of this API.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../../0.5.0/native/reference/Texture/en.html"><small>Previous</small>Texture</a>
+<a class="next" href="../../../../0.5.0/native/reference/Time/en.html"><small>Next</small>Time</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#fields">Fields and defaults</a><a class="toc-link" href="#IsValid">IsValid()</a><a class="toc-link" href="#GetMipLevelCount">GetMipLevelCount()</a><a class="toc-link" href="#memory">Memory and scope</a></nav></aside>
+  </div>
+  <footer>BAZZALT 0.5.0 documentation · English</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

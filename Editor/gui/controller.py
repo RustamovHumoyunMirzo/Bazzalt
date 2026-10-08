@@ -21,6 +21,8 @@ from .panels import ConsoleLevel
 from .panels.assets import (ENVIRONMENT_EXTENSIONS, IMAGE_EXTENSIONS,
                             MODEL_EXTENSIONS, SHADER_EXTENSIONS)
 from .gizmos import GizmoMode, Vec3
+from .display_names import DisplayName
+from .preferences import STATISTIC_FIELDS
 from .widgets import AssetPickerInput, ObjectPickerInput, BoolInput, ColorInput, EnumInput, FloatInput, IntInput, PlayState, StringInput, UIntInput, Vec2Input, Vec3Input, Vec4Input
 
 
@@ -31,6 +33,7 @@ class EditorController(QObject):
         self.Runtime = runtime
         self.GameInput=GameInputRouter(window,runtime)
         self.SelectedEntity = ""
+        self._inspected_asset=None
         self.InspectedScene = ""
         self.SelectedEntities: list[str] = []
         self.ScenePath = ""
@@ -137,13 +140,21 @@ class EditorController(QObject):
         surface=self.Window.Scene.Surface
         if monotonic()-self._material_check>2.0 and not surface._navigating and surface._gizmo_drag is None:
             self._material_check=monotonic();self._PrepareUsedMaterials()
+        tick_start=monotonic()
         if self.Runtime.Tick() is False:
             self.Timer.stop()
             return
+        tick_ms=(monotonic()-tick_start)*1000
         if self._play_authoring is not None and not self.Runtime.IsPlaying():self._RestorePlayAuthoring()
         self._stats_frames+=1;now=monotonic()
         if now-self._stats_started>=1.0:
-            self.Window.Scene.StatsLabel.setText(self.Window.Localization.Translate("viewport.stats",fps=round(self._stats_frames/(now-self._stats_started)),objects=self.Runtime.EntityCount()));self._stats_frames=0;self._stats_started=now
+            preferences=self.Window.GetPreferences()["statistics"]
+            if self.Window.Scene.StatsToggle.isChecked():
+                fps=self._stats_frames/(now-self._stats_started);values=self.Runtime.Statistics()
+                values={key:int(value) for key,value in values.items()};values.update(fps=round(fps),frame_ms=round(1000/max(.01,fps),2),tick_ms=round(tick_ms,2),selected=len(self.SelectedEntities))
+                text="\n".join(self.Window.Localization.Translate("statistics.value."+key,value=values.get(key,0)) for key in STATISTIC_FIELDS if preferences.get(key,False))
+                self.Window.Scene.StatsLabel.setText(text)
+            self._stats_frames=0;self._stats_started=now
         self.Window.Output.SetGameCameraAvailable(self.Runtime.HasGameOutput())
         # Editor gizmos follow the authoritative world transform every frame.
         # This also covers transforms changed by systems or native user code.
@@ -218,6 +229,7 @@ class EditorController(QObject):
         if self.SelectedEntity and self.SelectedEntity not in items:self.SelectEntity(None)
 
     def SelectEntity(self, entity_id, force: bool = False) -> None:  # type: ignore[no-untyped-def]
+        self._inspected_asset=None
         if isinstance(entity_id,(list,tuple)):
             self.SelectEntities([str(value) for value in entity_id]);return
         next_entity = str(entity_id or "")
@@ -352,11 +364,13 @@ class EditorController(QObject):
             else:self._RefreshInspectorValues();self._UpdateGizmo()
 
     def SelectAsset(self,path)->None:
+        self._inspected_asset=Path(path)
         path=Path(path);self.SelectedEntity="";self.SelectedEntities=[];self.Window.Scene.Surface.SetSelection(None);self.Runtime.SetGizmo("",0);self.Window.Properties.Clear();self.Window.Properties.AddComponentButton.setVisible(False)
         self.InspectedScene="";self._UpdateGizmo()
         section=self.Window.Properties.AddComponentSection("asset",self.Window.Localization.Translate("properties.asset"),removable=False)
         for label,value in (("Name",path.name),("Type",path.suffix.lower() or "Folder"),("Path",str(path)),("Size",self._FormatAssetSize(self._AssetSize(path)))):section.AddField(self.Window.Localization.Translate(f"properties.asset_{label.lower()}") if label!="Name" else self.Window.Localization.Translate("properties.asset_name"),QLabel(value))
         if path.suffix.lower()==".matinst":self._InspectMaterial(path)
+        elif path.suffix.lower()==".btexture":self._InspectTexture(path)
         elif path.suffix.lower() in {".hdr",".exr",".ktx"}:self._InspectEnvironment(path)
         elif path.suffix.lower() in {".mat",".shad",".bshader"}:
             try:
@@ -438,6 +452,32 @@ class EditorController(QObject):
         editor=AssetPickerInput(tr("properties.select_project_asset"),accepted_extensions=extensions,picker_title=tr("properties.select_project_asset"),search_placeholder=tr("properties.search_project_assets"),missing_label=tr("properties.missing_asset"))
         editor.ConfigureAssets(self._ProjectAssets());editor.SetValue(value);editor.PickRequested.connect(editor.OpenProjectPicker);editor.ValueChanged.connect(lambda v:commit(v or ZERO));return editor
 
+    def _InspectTexture(self,path:Path)->None:
+        tr=self.Window.Localization.Translate;data=self.Runtime.TextureAssetInfo(path)
+        if not data:self.Window.Console.AddMessage(self.Runtime.LastError(),ConsoleLevel.Error);return
+        section=self.Window.Properties.AddComponentSection("asset.texture",tr("texture.title"),removable=False)
+        options={"Samples":(("1×",1),("2×",2),("4×",4),("8×",8)),"Color Format":(("RGBA8",0),("RGBA16F",1),("RGBA32F",2)),"Depth Format":((tr("texture.depth.none"),0),("Depth16",1),("Depth24",2),("Depth32F",3)),"Filter":tuple((tr("texture.filter."+key),index) for index,key in enumerate(("point","linear","trilinear"))),"Wrap":tuple((tr("texture.wrap."+key),index) for index,key in enumerate(("clamp","repeat","mirror")))}
+        def commit(name,value):
+            updated=dict(data);updated[name]=value
+            if not updated["Mipmaps"]:updated["Mip Levels"]=0
+            try:ok=self.Runtime.SaveTextureAsset(path,updated)
+            except (ValueError,TypeError,RuntimeError) as error:ok=False;self.Window.Console.AddMessage(str(error),ConsoleLevel.Error)
+            if ok:data.update(updated)
+            else:self.Window.Console.AddMessage(self.Runtime.LastError(),ConsoleLevel.Error)
+            # Reload normalized settings; changing size or mipmaps may constrain levels.
+            QTimer.singleShot(0,self,lambda:self.SelectAsset(path) if self._inspected_asset==path and not self.SelectedEntity and path.exists() else None)
+        for name,value in data.items():
+            callback=lambda v,key=name:commit(key,v)
+            if name in options:
+                editor=EnumInput();editor.SetOptions(options[name]);editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0,e=editor,c=callback:c(e.GetValue()))
+            elif isinstance(value,bool):editor=BoolInput(value);editor.ValueChanged.connect(callback)
+            elif isinstance(value,int):
+                editor=IntInput(value=value);editor.setRange(1,4096) if name in {"Width","Height"} else editor.setRange(0,max(data["Width"],data["Height"]).bit_length());editor.valueChanged.connect(callback)
+                if name=="Mip Levels":editor.setEnabled(bool(data["Mipmaps"]))
+            else:
+                color=tuple(float(part) for part in value);editor=Vec4Input(color);editor.ValueChanged.connect(callback)
+            section.AddField(tr("texture.field."+name),editor)
+
     def _InspectMaterial(self,path:Path)->None:
         tr=self.Window.Localization.Translate
         try:
@@ -449,7 +489,7 @@ class EditorController(QObject):
             for parameter in reflection["parameters"]:
                 name=parameter["name"];value=data["properties"].get(name,parameter["default"]);kind=parameter["kind"]
                 commit=lambda v,p=parameter:self._SetMaterialProperty(path,data,p,v)
-                if kind==6:editor=self._AssetPicker(value,{".png",".jpg",".jpeg",".hdr",".exr"},commit)
+                if kind==6:editor=self._AssetPicker(value,{".png",".jpg",".jpeg",".hdr",".exr",".btexture"},commit)
                 elif kind==5:editor=BoolInput(value);editor.ValueChanged.connect(commit)
                 elif kind==4:editor=IntInput(value=value);editor.valueChanged.connect(commit)
                 elif kind==0:editor=FloatInput(value=value);editor.valueChanged.connect(commit)
@@ -575,6 +615,7 @@ class EditorController(QObject):
 
     def _ComponentEditor(self, entity_id: str, component: str, name: str, value):  # type: ignore[no-untyped-def]
         if name=="Material Slots":return None  # Slot UUIDs are not numeric vector fields.
+        if component=="Camera" and name=="Render Target":return self._AssetPicker(value,{".btexture"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
         if isinstance(value, bool):
             editor=BoolInput(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
         if isinstance(value, int):
@@ -627,7 +668,7 @@ class EditorController(QObject):
                     items.itemDoubleClicked.connect(accept_camera);dialog.exec()
                 editor.ValueChanged.connect(assign_camera);editor.PickRequested.connect(pick_camera);return editor
             if component=="GuiImage" and name=="Texture":
-                return self._AssetPicker(value,set(IMAGE_EXTENSIONS),lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
+                return self._AssetPicker(value,set(IMAGE_EXTENSIONS)|{".btexture"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
             if "Asset" in name:
                 tr=self.Window.Localization.Translate;editor=AssetPickerInput(tr("properties.select_project_asset"),accepted_extensions=self._AssetExtensions(name),picker_title=tr("properties.select_project_asset"),search_placeholder=tr("properties.search_project_assets"),missing_label=tr("properties.missing_asset"));editor.ConfigureAssets(self._ProjectAssets());editor.SetValue(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v or "0"));editor.PickRequested.connect(editor.OpenProjectPicker);return editor
             editor=StringInput(value);editor.editingFinished.connect(lambda:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
@@ -657,6 +698,7 @@ class EditorController(QObject):
             return editor
         if prop and prop.type.replace("Bazzalt::","").strip() in ("Material","Shader"):
             return self._AssetPicker(value,{".matinst"} if "Material" in prop.type else {".mat",".shad",".bshader"},commit)
+        if prop and prop.type.replace("Bazzalt::","").strip()=="Texture":return self._AssetPicker(value,set(IMAGE_EXTENSIONS)|{".btexture"},commit)
         if isinstance(value,bool):editor=BoolInput(value);editor.ValueChanged.connect(commit);return editor
         if isinstance(value,int):editor=IntInput(value=value);editor.valueChanged.connect(commit);return editor
         if isinstance(value,float):editor=FloatInput(value=value);editor.valueChanged.connect(commit);return editor
@@ -666,7 +708,7 @@ class EditorController(QObject):
     def _AssetExtensions(self,field_name:str)->set[str]:
         name=field_name.casefold()
         if "mesh" in name or "model" in name:return set(MODEL_EXTENSIONS)
-        if "texture" in name or "image" in name:return set(IMAGE_EXTENSIONS)|set(ENVIRONMENT_EXTENSIONS)
+        if "texture" in name or "image" in name:return set(IMAGE_EXTENSIONS)|set(ENVIRONMENT_EXTENSIONS)|{".btexture"}
         if "material" in name:return {".matinst"}
         if "shader" in name:return {".mat",".shad",".bshader"}
         if "scene" in name:return {".bscene"}
@@ -877,7 +919,9 @@ class EditorController(QObject):
         search_action=QWidgetAction(menu);search_action.setDefaultWidget(search);menu.addAction(search_action)
         targets=self.SelectedEntities or [self.SelectedEntity];existing=set.intersection(*(set(self.Runtime.EntityDetails(target).get("components",())) for target in targets))
         for component_type in self.Runtime.ComponentTypes():
-            action = menu.addAction(component_type); action.setEnabled(component_type not in existing)
+            if component_type=="CameraRenderTarget":continue # Legacy scenes keep this component; new cameras use Texture assets.
+            action = menu.addAction(DisplayName(self.Window.Localization,component_type)); action.setEnabled(component_type not in existing)
+            action.setData(component_type)
             action.triggered.connect(lambda _=False, name=component_type: self._AddComponent(name))
         scripts=self.ScriptCompiler.Discover() if self.ScriptCompiler else []
         if self.ScriptCompiler and self.ScriptCompiler.Diagnostics:
@@ -1089,14 +1133,12 @@ class EditorController(QObject):
         return str(active.get("uuid",""))
 
     def ApplyGizmoTranslation(self, delta) -> bool:  # type: ignore[no-untyped-def]
-        if "move" in self._snap_modes:delta=Vec3(*(round(value/.5)*.5 for value in (delta.X,delta.Y,delta.Z)))
         targets=self.SelectedEntities or ([self.SelectedEntity] if self.SelectedEntity else [])
         results=[self.Runtime.Translate(entity,(delta.X,delta.Y,delta.Z)) for entity in targets];changed=any(results)
         if changed:self.SetDirty(True)
         self._UpdateGizmo();return changed
 
     def ApplyGizmoRotation(self, axis, angle: float) -> bool:  # type: ignore[no-untyped-def]
-        if "rotate" in self._snap_modes:angle=round(angle/(3.141592653589793/12))*(3.141592653589793/12)
         if len(self.SelectedEntities)>1:
             details=[self.Runtime.EntityDetails(value) for value in self.SelectedEntities]
             center=Vec3(*(sum(item["position"][index] for item in details)/len(details) for index in range(3)));unit=axis.Normalized();sine,cosine=sin(angle),cos(angle);half_sine=sin(angle*.5);changed=False
@@ -1113,7 +1155,6 @@ class EditorController(QObject):
         return changed
 
     def ApplyGizmoScale(self, factor) -> bool:  # type: ignore[no-untyped-def]
-        if "scale" in self._snap_modes:factor=Vec3(*(max(.1,round(value/.1)*.1) for value in (factor.X,factor.Y,factor.Z)))
         if len(self.SelectedEntities)>1:
             details=[self.Runtime.EntityDetails(value) for value in self.SelectedEntities];center=tuple(sum(item["position"][i] for item in details)/len(details) for i in range(3));factors=(factor.X,factor.Y,factor.Z);changed=False
             for entity,item in zip(self.SelectedEntities,details):

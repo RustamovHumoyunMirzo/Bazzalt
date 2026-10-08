@@ -106,7 +106,7 @@ struct GuiRendererModule::Impl {
             if((item.Root.GetComponent<Frame>().Mode==FrameMode::Spatial)!=spatial)continue;
             const auto& frame=item.Root.GetComponent<Frame>();
             if(camera&&(frame.Mode!=FrameMode::CameraBound||frame.Camera!=camera))continue;
-            if(!camera&&!spatial&&frame.Mode==FrameMode::CameraBound){const auto owner=scene.GetEntity(frame.Camera);const auto* target=owner.TryGetComponent<CameraRenderTarget>();if(target&&target->Enabled)continue;}
+            if(!camera&&!spatial&&frame.Mode==FrameMode::CameraBound){const auto owner=scene.GetEntity(frame.Camera);const auto* source=owner.TryGetComponent<Camera>();const auto* target=owner.TryGetComponent<CameraRenderTarget>();if((source&&source->RenderTarget)||(target&&target->Enabled))continue;}
             const auto state=GUI::GetInteraction(item.Owner);auto bounds=item.Bounds;
             if(const auto* r=item.Owner.TryGetComponent<Rectangle>();r&&r->Enabled){
                 Vec4 color=r->Style.Color;
@@ -123,7 +123,7 @@ struct GuiRendererModule::Impl {
                 }
                 color.W*=opacity;Quad(output,item,bounds,color,Atlas,{.02f,.04f,.02f,.04f},spatial);
             }
-            if(const auto* image=item.Owner.TryGetComponent<GuiImage>();image&&image->Enabled&&(!camera||image->Camera!=camera)){auto* texture=image->Camera?Backend.GetCameraTexture(image->Camera):Backend.GetAssets().GetGuiTexture(image->Texture);Quad(output,item,item.Bounds,image->Color,texture,{0,0,1,1},spatial);}
+            if(const auto* image=item.Owner.TryGetComponent<GuiImage>();image&&image->Enabled){auto* texture=image->Camera?Backend.GetCameraTexture(image->Camera):Backend.GetAssets().GetGuiTexture(image->Texture);Quad(output,item,item.Bounds,image->Color,texture,{0,0,1,1},spatial);}
             if(const auto* text=item.Owner.TryGetComponent<GuiText>();text&&text->Enabled){auto clipped=item;clipped.Clip=Intersect(item.Clip,item.Bounds);Text(output,clipped,text->Value,text->FontSize,text->Color,text->Wrap,spatial);}
             if(const auto* input=item.Owner.TryGetComponent<GuiTextInput>();input&&input->Enabled){auto clipped=item;clipped.Clip=Intersect(item.Clip,item.Bounds);std::string value=input->Value.empty()?input->Placeholder:input->Value;if(input->Password&&!input->Value.empty()){value.clear();for(unsigned char c:input->Value)if((c&0xc0)!=0x80)value+='*';}Text(output,clipped,value,16,{1,1,1,input->Value.empty()?.5f:1.f},false,spatial);}
         }
@@ -134,7 +134,7 @@ struct GuiRendererModule::Impl {
         while(cache.size()<generated.size()){Batch b;b.Entity=Engine.getEntityManager().create();Engine.getTransformManager().create(b.Entity);b.Material=Material->createInstance();b.Material->setDepthCulling(spatial);cache.push_back(std::move(b));}
         auto& manager=Engine.getRenderableManager();
         for(std::size_t i=0;i<generated.size();++i){auto& b=cache[i];auto& data=generated[i].Data;const auto count=static_cast<std::uint32_t>(data.size());if(!count)continue;
-            b.Material->setParameter("image",generated[i].Texture,filament::TextureSampler(filament::TextureSampler::MinFilter::LINEAR,filament::TextureSampler::MagFilter::LINEAR));
+            b.Material->setParameter("image",generated[i].Texture,Backend.GetAssets().GetTextureSampler(generated[i].Texture));
             if(b.Capacity<count){manager.destroy(b.Entity);if(b.Vertices)Engine.destroy(b.Vertices);if(b.Indices)Engine.destroy(b.Indices);b.Capacity=std::max<std::size_t>(64,count*2);
                 b.Vertices=filament::VertexBuffer::Builder().vertexCount(static_cast<std::uint32_t>(b.Capacity)).bufferCount(1)
                     .attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3,0,sizeof(Vertex))

@@ -37,10 +37,11 @@ public:
     // Windowless native tests use real Filament resource managers with its NOOP
     // driver. Editor/game hosts retain native rendering by default.
     bool Init();
-    bool Init(bool headless);
+    bool Init(bool headless, bool startScripts = true);
     [[nodiscard]] bool IsInitialized() const { return m_isInitialized; }
     bool RefreshAssets();
     bool RefreshLuaAsset(const std::filesystem::path& source);
+    bool RefreshTextureAsset(const std::filesystem::path& source);
     bool SetEnvironmentImportSettings(UUID id,const PropertyMap& settings);
     PropertyMap GetAssetImportSettings(UUID id);
     bool HasEnvironmentLighting() const;
@@ -49,6 +50,8 @@ public:
     bool ConfigureRenderingBackend(const std::string& backend);
     void Update();
     void RenderEditorFrame();
+    std::unordered_map<std::string,double> GetEditorStatistics() const;
+    void SetEditorStatisticsText(std::string text,bool visible);
     void Shutdown();
     [[nodiscard]] bool ShouldClose() const;
     void RequestClose();

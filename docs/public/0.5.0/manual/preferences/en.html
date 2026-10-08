@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Open Edit → Preferences to change this computer&#x27;s editor settings. These preferences are saved separately from your project and scenes. Changing a navigation or snapping increment does not rewrite an object&#x27;s transform until you use the relevant tool.">
+  <title>Editor preferences | BAZZALT Docs 0.5.0</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../" data-version="0.5.0" data-page="manual/preferences">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"><option value="0.5.0" selected>0.5.0</option></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"><option value="en" selected>English</option></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for the navigation tree. Page content and links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Editor manual / Editor preferences</nav>
+      <article class="doc"><h1>Editor preferences</h1>
+<p>Open Edit → Preferences to change this computer's editor settings. These preferences are saved separately from your project and scenes. Changing a navigation or snapping increment does not rewrite an object's transform until you use the relevant tool.</p>
+<h2 id="transform-units">Transform Units</h2>
+<p>Translation increment is measured in world units (default 0.5), rotation increment in degrees (default 15), and scale increment as a factor (default 0.1). These values are shared by Scene gizmos and Object → Snapping. They do not change the engine's coordinate system. Positive finite values from 0.0001 to 10000 are accepted; invalid saved values fall back to safe defaults.</p>
+<p>Enable Snap transform drags for persistent snapping, or hold Ctrl temporarily while dragging a gizmo. Without snapping, movement is continuous. Snapping uses the entire drag displacement, so many small mouse movements still reach the next increment. Drag multipliers change translation, rotation, and scaling sensitivity independently; their default is 1.</p>
+<h2 id="placement">Placement and snapping shortcuts</h2>
+<table><thead><tr><th>Command</th><th>Shortcut</th><th>Behavior</th></tr></thead><tbody>
+<tr><td>Place Selection at Scene Cursor</td><td>Ctrl+Shift+P</td><td>Uses the last pointer position inside Scene, raycasts against other geometry, or falls back to the chosen grid plane. Moving to the menu does not lose the position.</td></tr>
+<tr><td>Place at View Center</td><td>Ctrl+Shift+V</td><td>Moves selection to the editor camera's focus point.</td></tr>
+<tr><td>Align to View</td><td>Ctrl+Shift+A</td><td>Aligns object orientation with the editor camera.</td></tr>
+<tr><td>Snap Pivots to Grid</td><td>Ctrl+Shift+G</td><td>Rounds world positions using the translation increment.</td></tr>
+<tr><td>Project onto Grid Plane</td><td>Ctrl+Shift+J</td><td>Places selection on the chosen grid plane.</td></tr>
+<tr><td>Snap Rotation to Increment</td><td>Ctrl+Alt+R</td><td>Rounds Euler rotation angles using the rotation increment.</td></tr>
+<tr><td>Snap Scale to Increment</td><td>Ctrl+Alt+S</td><td>Rounds scale values using the scale increment.</td></tr>
+</tbody></table>
+<p>These commands participate in undo/redo. Parent/child selections are reduced to root objects for placement so descendants do not move twice. Shortcuts yield to text entry, modal dialogs, fly navigation and active Game input. The numeric 1–4 shortcuts select Select, Translate, Rotate and Scale modes.</p>
+<h2 id="statistics">Scene Statistics</h2>
+<p>The Statistics chip shows or hides small text at Scene's top right, beside the orientation helper. It is rendered as a native editor overlay, not a floating OS window or Game object. It never appears in Game output. Preferences → Scene Statistics selects the individual lines; FPS and active-scene object count are enabled initially.</p>
+<p>Available lines include editor FPS, frame interval, native tick CPU time, selected objects, component instances, enabled cameras/lights, runtime renderables, primitive slots, native viewports, allocated camera targets and runtime GUI batches. Counters update once per second while visible. Frame interval is not a GPU timing measurement; primitive slots are not measured GPU draw calls. Unsupported GPU/VRAM metrics are not fabricated.</p>
+<h2 id="selection-and-labels">Selection and translated labels</h2>
+<p>The top-level selection chip chooses the model parent instead of an internal child. Its icon follows the current theme. Component titles and Add Component entries use localized display names; GUI field labels contain normal spaces, such as Font Size and Reference Size. The C++/Lua component identifiers and saved property keys remain unchanged.</p>
+<h2 id="storage">Storage and compatibility</h2>
+<p>Apply saves the settings using the existing per-user editor settings store. Toolbar changes continue to save automatically. Older settings files acquire defaults for the new sections. Restore Defaults resets editor preferences; it does not delete assets, scenes, or project metadata.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../0.5.0/manual/glossary/en.html"><small>Previous</small>Terms used in these guides</a>
+<a class="next" href="../../../0.5.0/native/en.html"><small>Next</small>C++ gameplay API</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#transform-units">Transform Units</a><a class="toc-link" href="#placement">Placement and snapping shortcuts</a><a class="toc-link" href="#statistics">Scene Statistics</a><a class="toc-link" href="#selection-and-labels">Selection and translated labels</a><a class="toc-link" href="#storage">Storage and compatibility</a></nav></aside>
+  </div>
+  <footer>BAZZALT 0.5.0 documentation · English</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

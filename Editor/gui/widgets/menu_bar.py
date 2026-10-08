@@ -197,13 +197,15 @@ class EditorMenuBar(QMenuBar):
         groups={
             "selection":("select_all","deselect_all","invert","select_parent","select_children","select_descendants","select_siblings"),
             "placement":("place_cursor","view_center","align_view","center_origin","reset_rotation","reset_scale"),
-            "snapping":("snap_grid","project_grid"),
+            "snapping":("snap_grid","snap_rotation","snap_scale","project_grid"),
         }
         self.ObjectModeMenu=self.ObjectMenu.AddSubMenu("")
         for group,commands in groups.items():
             menu=self.ObjectMenu.AddSubMenu("");self.ObjectMenus[group]=menu
             for command in commands:
                 action=menu.addAction("");action.triggered.connect(lambda _=False,key=command:self.ObjectCommandRequested.emit(key));self.ObjectActions[command]=action
+                shortcuts={"place_cursor":"Ctrl+Shift+P","view_center":"Ctrl+Shift+V","align_view":"Ctrl+Shift+A","snap_grid":"Ctrl+Shift+G","project_grid":"Ctrl+Shift+J","snap_rotation":"Ctrl+Alt+R","snap_scale":"Ctrl+Alt+S"}
+                if command in shortcuts:action.setShortcut(QKeySequence(shortcuts[command]))
 
     def _RefreshWindowMenu(self) -> None:
         self.WindowMenu.clear()

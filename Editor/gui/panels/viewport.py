@@ -8,7 +8,8 @@ from PySide6.QtCore import QPoint, QPointF, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QGuiApplication, QKeyEvent, QMouseEvent, QPainter, QPen, QWheelEvent
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel,
                                QStackedLayout, QToolButton,QVBoxLayout, QWidget)
-from ..gizmos import GizmoDrag, GizmoHandle, GizmoMode, PickAxis, PickRotationAxis, Ray, Vec3
+from ..gizmos import GizmoDrag, GizmoDelta, GizmoHandle, GizmoMode, PickAxis, PickRotationAxis, Ray, Vec3
+from ..transform_units import TransformUnits
 
 
 class SelectionMarquee(QWidget):
@@ -52,6 +53,7 @@ class NativeRenderSurface(QWidget):
         self._orientation_animation=None
         self._orientation_visible=True
         self._has_scene_pointer=False
+        self._scene_pointer=QPoint();self.TransformUnits=TransformUnits()
         self._high_level_selection=False
         self._selection_box_start=None
         self._selection_box_additive=False;self._selection_band=None
@@ -230,7 +232,8 @@ class NativeRenderSurface(QWidget):
 
     def PlacementPosition(self,plane:int,excluded=()):
         if not self._has_scene_pointer:return None
-        ray=self._Ray(self._last);origin=(ray.Origin.X,ray.Origin.Y,ray.Origin.Z);direction=(ray.Direction.X,ray.Direction.Y,ray.Direction.Z)
+        point=QPoint(max(0,min(self.width()-1,self._scene_pointer.x())),max(0,min(self.height()-1,self._scene_pointer.y())))
+        ray=self._Ray(point);origin=(ray.Origin.X,ray.Origin.Y,ray.Origin.Z);direction=(ray.Direction.X,ray.Direction.Y,ray.Direction.Z)
         hit=self.Runtime.RaycastEditor(origin,direction,excluded)
         if hit is not None and all(isfinite(value) for value in hit):return tuple(hit)
         axis={0:2,1:1,2:0}.get(plane,1)
@@ -297,6 +300,7 @@ class NativeRenderSurface(QWidget):
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         self._last = event.position().toPoint(); self.setFocus()
+        self._scene_pointer=QPoint(self._last)
         if self.IsScene:self._has_scene_pointer=True
         if self.IsScene:self.Runtime.SetObjectHover("",self._eye)
         if self.IsScene and event.button()==Qt.MouseButton.RightButton:self._keys.clear();self._fly_navigation=False;self._navigating=True;self.NavigationChanged.emit(True);event.accept();return
@@ -321,6 +325,7 @@ class NativeRenderSurface(QWidget):
         if self.IsScene:self._has_scene_pointer=True
         if not self.IsScene: return
         current = event.position().toPoint(); delta = current - self._last; self._last = current
+        self._scene_pointer=QPoint(current)
         if self._selection_box_start is not None and event.buttons()&Qt.MouseButton.LeftButton:
             distance=(current-self._selection_box_start).manhattanLength()
             if distance<=4 and not self._selection_box_dragging:return
@@ -333,7 +338,18 @@ class NativeRenderSurface(QWidget):
             self._PreviewSelectionBox(current)
             return
         if self._gizmo_drag is not None and event.buttons()&Qt.MouseButton.LeftButton:
-            result=self._gizmo_drag.Calculate(self._Ray(current),translation_snap=.1,rotation_snap=radians(5),scale_snap=.05)
+            units=self.TransformUnits;snapping=units["snapping_enabled"] or bool(event.modifiers()&Qt.KeyboardModifier.ControlModifier)
+            # Quantize cumulative drag values, never per-event differences.
+            result=self._gizmo_drag.Calculate(self._Ray(current))
+            from ..gizmos import Snap
+            translation=result.Translation*units["translation_sensitivity"]
+            angle=result.RotationRadians*units["rotation_sensitivity"]
+            scale=Vec3(*(max(.0001,1+(value-1)*units["scale_sensitivity"]) for value in (result.Scale.X,result.Scale.Y,result.Scale.Z)))
+            if snapping:
+                translation=Vec3(*(Snap(value,units["translation_step"]) for value in (translation.X,translation.Y,translation.Z)))
+                angle=Snap(angle,radians(units["rotation_step"]))
+                scale=Vec3(*(max(.0001,1+Snap(value-1,units["scale_step"])) for value in (scale.X,scale.Y,scale.Z)))
+            result=GizmoDelta(Translation=translation,RotationRadians=angle,RotationAxis=result.RotationAxis,Scale=scale)
             if self._mode is GizmoMode.Translate:
                 step=result.Translation-self._last_delta;self._last_delta=result.Translation;self.TranslationDragged.emit(step)
             elif self._mode is GizmoMode.Rotate:
@@ -426,6 +442,16 @@ class NativeRenderSurface(QWidget):
         step=direction.Normalized()*speed;self._target[0]+=step.X;self._target[1]+=step.Y;self._target[2]+=step.Z;self._UpdateCamera()
 
 
+class StatisticsText:
+    """Native-renderer overlay state; deliberately creates no Qt/OS window."""
+    def __init__(self,runtime):self.Runtime=runtime;self._text="";self._visible=False
+    def setText(self,text):self._text=str(text);self._Publish()
+    def text(self):return self._text
+    def setVisible(self,visible):self._visible=bool(visible);self._Publish()
+    def isVisible(self):return self._visible
+    def _Publish(self):
+        if hasattr(self.Runtime,"SetEditorStatisticsText"):self.Runtime.SetEditorStatisticsText(self._text,self._visible)
+
 class ViewportPanel(QFrame):
     def __init__(self, runtime, scene: bool, localization, resources=None, themes=None, parent=None) -> None:
         super().__init__(parent); self.setObjectName("ViewportPanel")
@@ -434,7 +460,13 @@ class ViewportPanel(QFrame):
             controls=QFrame();controls.setObjectName("SceneViewControls");row=QHBoxLayout(controls);row.setContentsMargins(7,3,7,3);row.setSpacing(6)
             self.LocalToggle=QToolButton();self.LocalToggle.setObjectName("SceneToolChip");self.LocalToggle.setCheckable(True);self.LocalToggle.setToolTip("Local transform space")
             self.HighLevelToggle=QToolButton();self.HighLevelToggle.setObjectName("SceneToolChip");self.HighLevelToggle.setCheckable(True)
-            def update_selection_text(_locale=None):self.HighLevelToggle.setToolTip(localization.Translate("viewport.high_level_selection"))
+            def update_selection_text(_locale=None):
+                self.HighLevelToggle.setToolTip(localization.Translate("viewport.top_level_selection"))
+                if hasattr(self,"PivotMode"):
+                    self.LocalToggle.setToolTip(localization.Translate("viewport.local_space"));self.PivotMode.setToolTip(localization.Translate("viewport.pivot_mode"))
+                    for index,key in enumerate(("pivot","center")):self.PivotMode.setItemText(index,localization.Translate("viewport."+key))
+                    for index,key in enumerate(("lit","unlit","wireframe","lighting_only","overdraw")):self.ShadingMode.setItemText(index,localization.Translate("view.shading."+key))
+                    for button,key in ((self.GridToggle,"grid"),(self.GizmoToggle,"gizmos"),(self.StatsToggle,"stats")):button.setToolTip(localization.Translate("view."+key))
             update_selection_text();localization.LocaleChanged.connect(update_selection_text)
             self.PivotMode=QComboBox();self.PivotMode.setObjectName("ScenePivotMode");self.PivotMode.addItems(("Pivot","Center"));self.PivotMode.setToolTip("Gizmo pivot position")
             self.ShadingMode=QComboBox();self.ShadingMode.addItems(("Lit","Unlit","Wireframe","Lighting Only","Overdraw"))
@@ -442,13 +474,14 @@ class ViewportPanel(QFrame):
             grid=self.GridToggle=QToolButton();self.GizmoToggle=QToolButton();self.StatsToggle=QToolButton()
             for button,tooltip,checked in ((grid,"Grid",True),(self.GizmoToggle,"Gizmos",True),(self.StatsToggle,"Statistics",False)):
                 button.setObjectName("SceneToolChip");button.setCheckable(True);button.setChecked(checked);button.setToolTip(tooltip)
-            self.StatsLabel=QLabel();self.StatsLabel.setObjectName("SceneStats");self.StatsLabel.hide()
+            self.StatsLabel=StatisticsText(runtime)
             for widget in (self.LocalToggle,self.PivotMode,self.HighLevelToggle,self.ShadingMode,plane,grid,self.GizmoToggle,self.StatsToggle):row.addWidget(widget)
-            row.addWidget(self.StatsLabel);row.addStretch();layout.addWidget(controls)
+            row.addStretch();layout.addWidget(controls)
+            update_selection_text()
             def update_icons(_theme=None):
                 theme="light" if themes and themes.GetTheme().background=="#d4d4d4" else "dark"
                 if resources:
-                    self.HighLevelToggle.setIcon(resources.Icon(f"icons/{theme}/tab_hierarchy.svg"));self.HighLevelToggle.setIconSize(QSize(16,16))
+                    self.HighLevelToggle.setIcon(resources.Icon(f"icons/{theme}/toplvlsel.svg"));self.HighLevelToggle.setIconSize(QSize(16,16))
                     for button,name in ((self.LocalToggle,"localpos.svg"),(grid,"grid.svg"),(self.GizmoToggle,"gizmos.svg"),(self.StatsToggle,"stats.svg")):button.setIcon(resources.Icon(f"icons/stoolbar/{theme}/{name}"));button.setIconSize(QSize(16,16))
             update_icons();themes.ThemeChanged.connect(update_icons) if themes else None
         self.Surface = NativeRenderSurface(runtime, scene)

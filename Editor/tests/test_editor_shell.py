@@ -64,7 +64,7 @@ class EditorShellTests(unittest.TestCase):
     def test_preferences_are_modal_persistent_and_applied(self) -> None:
         dialog=PreferencesDialog(self.Window)
         self.assertIs(dialog.parent(),self.Window);self.assertTrue(dialog.isModal())
-        self.assertEqual(dialog.Sections.count(),9) # Includes file associations.
+        self.assertEqual(dialog.Sections.count(),11) # Includes transform units and statistics.
         self.assertEqual(dialog.Sections.count(),dialog.Pages.count())
         dialog.Controls["expand_new_hierarchy_items"].setChecked(True)
         dialog.Controls["theme"].setCurrentIndex(dialog.Controls["theme"].findData("light"))

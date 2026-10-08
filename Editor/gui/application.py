@@ -239,6 +239,7 @@ class Editor(QMainWindow):
         scene=value["scene"];self.Runtime.SetGrid(scene["grid_visible"],scene["grid_plane"])
         self.Scene.GridToggle.setChecked(bool(scene["grid_visible"]));self.Scene.GridPlane.setCurrentIndex(int(scene["grid_plane"]))
         self.Scene.Surface.SetMoveSpeed(scene["navigation_speed"])
+        self.Scene.Surface.TransformUnits=dict(value["transform"])
         self.Scene.HighLevelToggle.setChecked(bool(scene["high_level_selection"]));self.Scene.Surface.SetHighLevelSelection(bool(scene["high_level_selection"]))
         self.Scene.PivotMode.setCurrentIndex(1 if scene["pivot_center"] else 0);self.Scene.LocalToggle.setChecked(bool(scene["local_space"]))
         self.Scene.GizmoToggle.setChecked(bool(scene["gizmos_visible"]));self.Scene.StatsToggle.setChecked(bool(scene["stats_visible"]))

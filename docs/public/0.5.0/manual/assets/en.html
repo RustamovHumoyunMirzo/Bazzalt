@@ -41,16 +41,16 @@
 <p>Add supported source files to the project asset directory. The importer converts them into data the runtime can load and records the result in a <strong>cache</strong>. For example, Lua source becomes Lua bytecode, and shader source becomes a compiled renderer package. The cache is generated data; keep the source files as the editable originals.</p>
 <p>An import error does not mean that the file vanished. Check Console for the asset's path and error. Invalid Lua syntax, an unavailable shader compiler, or a failed environment-map conversion must be fixed before that asset can be used normally.</p>
 <h2 id="assigning-assets">Assign an asset to a field</h2>
-<p>Drag an Asset Browser item into an Inspector asset field, or use that field's picker to choose a registered project asset. Pickers filter by the field's expected type. A texture is not a valid model, and a shader is not a material asset.</p>
+<p>Drag an Asset Browser item into an Properties asset field, or use that field's picker to choose a registered project asset. Pickers filter by the field's expected type. A texture is not a valid model, and a shader is not a material asset.</p>
 <p>Fields show asset names rather than raw UUIDs. Clearing a field removes its reference; it does not delete the source file.</p>
 <h2 id="models">Models and their parts</h2>
 <p>A glTF model is one asset, but placing it in a scene creates a parent object and child objects matching the model's node hierarchy. A node may represent a mesh part or a grouping transform. This is why a model can have many Hierarchy entries even though you imported one file.</p>
-<p>Children can have their own components. Adding an ordinary component to a parent does not add it to every child. Transforms compose through the hierarchy, so moving a parent moves its descendants. Use high-level selection in Scene view when you want to manipulate the model as one object.</p>
+<p>Children can have their own components. Adding an ordinary component to a parent does not add it to every child. Transforms compose through the hierarchy, so moving a parent moves its descendants. Use top-level selection in Scene view when you want to manipulate the model as one object.</p>
 <h2 id="opening-files">Open source files</h2>
 <p>Double-click a scene to load it into the Hierarchy. C++ files support Open and Open with: Open remembers a selected application, while Open with asks again. Configure or reset those choices in Preferences → File Associations.</p>
 <p>Asset names normally omit their extensions in the browser. Renaming shows the extension so you can see the full filename. Do not change a file's extension simply to make it appear as another asset type; the contents must match that type.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../0.5.0/manual/menus/en.html"><small>Previous</small>Menus and play controls</a>
-<a class="next" href="../../../0.5.0/manual/scenes/en.html"><small>Next</small>Multiple scenes and saving</a></nav>
+<a class="next" href="../../../0.5.0/manual/assets/textures/en.html"><small>Next</small>Camera textures</a></nav>
     </main>
     <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#project-files">Which files matter</a><a class="toc-link" href="#importing">Importing and the cache</a><a class="toc-link" href="#assigning-assets">Assign an asset to a field</a><a class="toc-link" href="#models">Models and their parts</a><a class="toc-link" href="#opening-files">Open source files</a></nav></aside>
   </div>

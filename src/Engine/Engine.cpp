@@ -1,4 +1,5 @@
 #include "Runtime/Engine.h"
+#include "Runtime/TextureLibrary.h"
 #include "GUI/GuiSystem.h"
 #include "Runtime/AssetDatabase.h"
 #include "Runtime/NativeScriptRuntime.h"
@@ -51,7 +52,7 @@ Engine::~Engine()
 
 bool Engine::Init() { return Init(false); }
 
-bool Engine::Init(bool headless)
+bool Engine::Init(bool headless, bool startScripts)
 {
     if (m_isInitialized)
     {
@@ -79,7 +80,7 @@ bool Engine::Init(bool headless)
     m_lastFrameTime = std::chrono::steady_clock::now();
     TimeAccess::Reset();
     m_fixedAccumulator = 0.0;
-    if(!StartScripts()){DetachRenderSystems();m_renderBackend->Shutdown();InputAccess::Shutdown();m_isInitialized=false;return false;}
+    if(startScripts&&!StartScripts()){DetachRenderSystems();m_renderBackend->Shutdown();InputAccess::Shutdown();m_isInitialized=false;return false;}
 
     std::cout << "[Engine] Initialization complete.\n";
     return true;
@@ -148,6 +149,17 @@ void Engine::RenderEditorFrame()
     m_renderBackend->Render();
     if(profile){const auto end=std::chrono::steady_clock::now();const auto ms=[](auto a,auto b){return std::chrono::duration<double,std::milli>(b-a).count();};std::cout<<"FRAME systems="<<ms(start,systems)<<" overlays="<<ms(systems,overlays)<<" render="<<ms(overlays,end)<<" ms\n";}
 }
+
+std::unordered_map<std::string,double> Engine::GetEditorStatistics() const{
+    auto result=m_isInitialized?m_renderBackend->GetStatistics():std::unordered_map<std::string,double>{};
+    result["objects"]=m_scene->GetEntityCount();result["components"]=0;
+    for(auto&& [id,storage]:m_scene->GetRegistry().storage()){(void)id;result["components"]+=storage.size();}
+    result["cameras"]=0;result["lights"]=0;
+    for(auto handle:m_scene->GetRegistry().view<Camera>())if(m_scene->GetRegistry().get<Camera>(handle).Enabled)++result["cameras"];
+    for(auto handle:m_scene->GetRegistry().view<Light>())if(m_scene->GetRegistry().get<Light>(handle).Enabled)++result["lights"];
+    return result;
+}
+void Engine::SetEditorStatisticsText(std::string text,bool visible){m_renderBackend->SetEditorStatisticsText(std::move(text),visible);}
 
 void Engine::UpdateEditorOverlays()
 {
@@ -223,7 +235,8 @@ std::unordered_map<UUID,std::pair<Vec3,Vec3>> Engine::GetEditorMeshBounds() cons
 
 bool Engine::CreateEditorViewport(std::uint64_t id, std::uintptr_t nativeWindow, bool scene,
                                   std::uint32_t width, std::uint32_t height, float pixelRatio) {
-    if (!m_isInitialized && !Init()) return false;
+    // Authoring viewports need rendering/input, never gameplay lifecycle callbacks.
+    if (!m_isInitialized && !Init(false, false)) return false;
     return m_renderBackend->CreateViewport(id, nativeWindow,
         scene ? RenderBackend::ViewportKind::Scene : RenderBackend::ViewportKind::Game,
         width, height, pixelRatio);
@@ -339,7 +352,8 @@ bool Engine::StartScripts(bool resetTime){
     if(!m_scriptRuntime->Start(m_lastError))return false;
     if(!m_luaRuntime->Start(m_lastError)){m_scriptRuntime->Stop();return false;}return true;
 }
-void Engine::StopScripts(){m_luaRuntime->Stop();m_scriptRuntime->Stop();ResetRuntimeMaterials();}
+void Engine::StopScripts(){m_luaRuntime->Stop();m_scriptRuntime->Stop();ResetRuntimeMaterials();ResetRuntimeTextures();}
+bool Engine::RefreshTextureAsset(const std::filesystem::path& source){if(!m_assetDatabase)return false;const bool result=m_assetDatabase->RefreshSource(source);if(!result)m_lastError=m_assetDatabase->GetLastError();return result;}
 
 Scene& Engine::CreateScene()
 {

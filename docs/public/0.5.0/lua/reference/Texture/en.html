@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Lua uses the same independent texture resources and producer/consumer rules as C++. No native engine loop or GPU object is exposed.">
+  <title>Texture | BAZZALT Docs 0.5.0</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../" data-version="0.5.0" data-page="lua/reference/Texture">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"><option value="0.5.0" selected>0.5.0</option></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"><option value="en" selected>English</option></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for the navigation tree. Page content and links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / Lua API reference / Texture</nav>
+      <article class="doc"><h1>Texture</h1><p>Lua uses the same independent texture resources and producer/consumer rules as C++. No native engine loop or GPU object is exposed.</p>
+<h2 id="example">Create and share a camera texture</h2>
+<pre><code class="language-lua">local B = Bazzalt
+local settings = B.TextureDescriptor.new()
+settings.Width = 1024; settings.Height = 512
+settings.Samples = 4; settings.Mipmaps = true
+settings.ColorFormat = B.TextureColorFormat.RGBA16F
+local texture = B.Texture.Create(settings)
+local camera = cameraEntity:GetComponent("Camera")
+camera:SetRenderTarget(texture)
+cameraEntity:SetComponent("Camera", camera)
+local image = imageEntity:GetComponent("GuiImage")
+image:SetTexture(texture)
+imageEntity:SetComponent("GuiImage", image)
+material:SetTexture("baseColorTexture", texture)
+-- For project assets: B.Texture.Load(assetUUID)
+</code></pre>
+<h2 id="methods">Method reference</h2>
+<table><thead><tr><th>Method</th><th>Contract</th></tr></thead><tbody>
+<tr><td>B.Texture.new()</td><td>Empty handle.</td></tr><tr><td>B.Texture.Load(UUID)</td><td>Non-owning asset/resource reference.</td></tr><tr><td>B.Texture.Create([descriptor])</td><td>Transient writable texture; default settings if omitted. Invalid settings raise an error.</td></tr>
+<tr><td>GetAssetUUID()</td><td>Stable resource UUID shared by all consumers.</td></tr><tr><td>IsValid()</td><td>Valid writable descriptor or ready ordinary image asset.</td></tr><tr><td>IsRenderTarget()</td><td>True only for writable .btexture/transient resources.</td></tr><tr><td>IsRuntime()</td><td>True for transient runtime descriptors.</td></tr>
+<tr><td>GetDescriptor()</td><td>Copy of writable settings; ordinary image assets do not expose a writable descriptor.</td></tr><tr><td>SetDescriptor(descriptor)</td><td>Runtime override; never writes asset files.</td></tr><tr><td>ResetDescriptor()</td><td>Restores source/original descriptor.</td></tr><tr><td>Resize(width,height)</td><td>Validates dimensions, constrains explicit mip counts and preserves resource identity.</td></tr><tr><td>Destroy()</td><td>Destroys transient resources only; returns false for assets/already-destroyed handles.</td></tr>
+</tbody></table>
+<h2 id="consumers">Components and materials</h2><p>Camera:SetRenderTarget(texture), Camera:GetRenderTarget(), GuiImage:SetTexture(texture or UUID), Material:SetTexture(name, texture or UUID), and MaterialBuilder:SetTexture(name, texture or UUID) share this resource. Lua entity components are copies: call SetComponent after editing a Camera or GuiImage. Texture setters modify their resource directly.</p>
+<h2 id="lifetime">Lifetime and history</h2><p>Disabled/inactive/removed producers restore ClearColor. Conflicting active writers are suppressed, not raced. Chained GUI captures use producer-first scheduling; cycles/shared world feeds use completed history. Runtime textures/overrides are reset on Stop. CameraRenderTarget remains a legacy transient configuration; new scenes use the Camera picker. <a href="../../../native/reference/Texture/en.html">Shared C++ contract</a></p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../../0.5.0/lua/reference/ShaderPreset/en.html"><small>Previous</small>ShaderPreset</a>
+<a class="next" href="../../../../0.5.0/lua/reference/TextureDescriptor/en.html"><small>Next</small>TextureDescriptor</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Create and share a camera texture</a><a class="toc-link" href="#methods">Method reference</a><a class="toc-link" href="#consumers">Components and materials</a><a class="toc-link" href="#lifetime">Lifetime and history</a></nav></aside>
+  </div>
+  <footer>BAZZALT 0.5.0 documentation · English</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

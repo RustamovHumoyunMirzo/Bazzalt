@@ -147,6 +147,10 @@ class RuntimeService(QObject):
     def EntityCount(self)->int:
         if self._host is not None and hasattr(self._host,"entity_count"):return int(self._host.entity_count())
         return len(self.Entities())
+    def Statistics(self)->dict:
+        return dict(self._host.statistics()) if self._host and hasattr(self._host,"statistics") else {}
+    def SetEditorStatisticsText(self,text:str,visible:bool)->None:
+        if self._host and hasattr(self._host,"set_statistics_text"):self._host.set_statistics_text(text,visible)
 
     def HasActiveCamera(self) -> bool:
         return bool(self._host and hasattr(self._host, "has_active_camera") and
@@ -188,6 +192,10 @@ class RuntimeService(QObject):
 
     def RefreshAssets(self) -> bool:
         return bool(self._host and self._host.refresh_assets())
+    def TextureAssetInfo(self,path)->dict:
+        return dict(self._host.texture_asset_info(str(path))) if self._host and hasattr(self._host,"texture_asset_info") else {}
+    def SaveTextureAsset(self,path,values:dict)->bool:
+        return bool(self._host and hasattr(self._host,"save_texture_asset") and self._host.save_texture_asset(str(path),values))
 
     def UsedShaderAssets(self) -> list[str]:
         return list(self._host.used_shader_assets()) if self._host and hasattr(self._host,"used_shader_assets") else []

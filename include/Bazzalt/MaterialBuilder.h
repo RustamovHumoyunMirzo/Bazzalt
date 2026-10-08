@@ -23,6 +23,8 @@ public:
     BAZZALT_MATERIAL_BUILDER_SET(SetInteger,std::int32_t)
     BAZZALT_MATERIAL_BUILDER_SET(SetBoolean,bool)
     BAZZALT_MATERIAL_BUILDER_SET(SetTexture,UUID)
+    BAZZALT_MATERIAL_BUILDER_SET(SetTexture,Texture)
+    BAZZALT_MATERIAL_BUILDER_SET(SetRenderTexture,RenderTexture)
 #undef BAZZALT_MATERIAL_BUILDER_SET
     [[nodiscard]] Material Build() const {
         Material material=Material::Create(m_shader);

@@ -27,6 +27,7 @@ struct Definition {
     std::vector<ShaderParameter> Parameters;
     std::unordered_map<std::string,Detail::MaterialValue> Values;
     std::unordered_map<std::string,Detail::MaterialValue> Overrides;
+    std::unordered_map<std::string,UUID> CameraTextures;
     bool Transient=false;
     MaterialRenderState State{};
 };
@@ -54,9 +55,10 @@ bool ParseValue(ryml::ConstNodeRef node,ShaderParameterType type,Detail::Materia
 Definition* ShaderDefinition(UUID id) {
     if(const int preset=PresetIndex(id);preset>=0){
         static std::array<Definition,4> builtins=[](){std::array<Definition,4> values;
-            for(int i=0;i<4;++i){auto& value=values[i];value.Shader=UUID{BuiltinShaderNamespace,std::uint64_t(i+1)};value.Stamp="builtin-runtime-1";
+            for(int i=0;i<4;++i){auto& value=values[i];value.Shader=UUID{BuiltinShaderNamespace,std::uint64_t(i+1)};value.Stamp="builtin-runtime-2";
                 value.Parameters={{"baseColor",ShaderParameterType::Float4},{"emissive",ShaderParameterType::Float3}};
                 Detail::MaterialValue color;std::fill_n(color.Numbers,4,1.f);value.Values["baseColor"]=color;value.Values["emissive"]={};
+                if(i==1||i==3){value.Parameters.push_back({"baseColorTexture",ShaderParameterType::Texture2D});value.Values["baseColorTexture"]={};}
                 if(i==0||i==2){for(auto name:{"roughness","metallic","reflectance"}){value.Parameters.push_back({name,ShaderParameterType::Float});Detail::MaterialValue number;number.Numbers[0]=std::string(name)=="metallic"?0.f:.5f;value.Values[name]=number;}}
             }return values;
         }();return &builtins[preset];
@@ -96,7 +98,7 @@ Definition* MaterialDefinition(UUID id) {
         auto* definition=ShaderDefinition(shader);if(!definition)return nullptr;
         const auto stamp=json+definition->Stamp;auto& result=Materials[id];if(result.Stamp==stamp)return &result;
         Definition next=*definition;next.Shader=shader;next.Stamp=stamp;next.ShaderStamp=definition->Stamp;next.Modified=modified;next.State=result.State;
-        for(const auto& parameter:next.Parameters)for(const auto& old:result.Parameters)if(parameter.Name==old.Name&&parameter.Type==old.Type)if(auto value=result.Overrides.find(parameter.Name);value!=result.Overrides.end())next.Overrides.emplace(value->first,value->second);
+        for(const auto& parameter:next.Parameters)for(const auto& old:result.Parameters)if(parameter.Name==old.Name&&parameter.Type==old.Type){if(auto value=result.Overrides.find(parameter.Name);value!=result.Overrides.end())next.Overrides.emplace(value->first,value->second);if(auto feed=result.CameraTextures.find(parameter.Name);feed!=result.CameraTextures.end())next.CameraTextures.emplace(feed->first,feed->second);}
         if(root.has_child("properties"))for(const auto& p:next.Parameters)if(root["properties"].has_child(ryml::to_csubstr(p.Name))){
             if(!ParseValue(root["properties"][ryml::to_csubstr(p.Name)],p.Type,next.Values[p.Name]))return nullptr;
         }
@@ -114,7 +116,8 @@ bool Get(UUID id,const char* name,Detail::MaterialValue* value){auto* d=Material
     auto f=d->Values.find(name);if(f==d->Values.end())return false;*value=f->second;return true;}
 bool Set(UUID id,const char* name,ShaderParameterType type,const Detail::MaterialValue* value){auto* d=MaterialDefinition(id);if(!d||!value||!name)return false;
     for(const auto& p:d->Parameters)if(p.Name==name&&p.Type==type){for(float v:value->Numbers)if(!std::isfinite(v))return false;
-        if(type==ShaderParameterType::Texture2D&&value->Texture){auto a=AssetManager::GetAsset(value->Texture);if(!a)return false;const auto ext=Extension(a->SourcePath);if(ext!=".png"&&ext!=".jpg"&&ext!=".jpeg"&&ext!=".hdr"&&ext!=".exr")return false;}
+        if(type==ShaderParameterType::Texture2D&&value->Texture&&!Texture::Load(value->Texture).IsValid()){auto a=AssetManager::GetAsset(value->Texture);if(!a)return false;const auto ext=Extension(a->SourcePath);if(ext!=".png"&&ext!=".jpg"&&ext!=".jpeg"&&ext!=".hdr"&&ext!=".exr")return false;}
+        if(type==ShaderParameterType::Texture2D)d->CameraTextures.erase(name);
         d->Overrides[name]=*value;return true;}return false;}
 UUID Clone(UUID id,bool shader){auto* d=shader?ShaderDefinition(id):MaterialDefinition(id);if(!d)return {};auto copy=*d;copy.Transient=true;copy.Shader=shader?id:d->Shader;auto uuid=UUID::Generate();Materials.emplace(uuid,std::move(copy));return uuid;}
 Detail::MaterialServices Services{Valid,GetShader,Parameter,Get,Set,Clone};
@@ -122,6 +125,11 @@ Detail::MaterialServices Services{Valid,GetShader,Parameter,Get,Set,Clone};
 Detail::MaterialServices* GetMaterialServices(){return &Services;}
 void ResetMaterialLibrary(){Materials.clear();Shaders.clear();}
 void ResetRuntimeMaterials(){Materials.clear();}
+UUID GetMaterialCameraTexture(UUID material,const std::string& parameter){
+    auto* definition=MaterialDefinition(material);if(!definition)return {};
+    auto found=definition->CameraTextures.find(parameter);
+    return found==definition->CameraTextures.end()?UUID{}:found->second;
+}
 MaterialShaderPackage GetBuiltinMaterialPackage(UUID shader){
     switch(PresetIndex(shader)){
     case 0:return {Embedded::RuntimeLitFilamat,Embedded::RuntimeLitFilamatSize};
@@ -142,19 +150,31 @@ void Material::SetShader(Shader shader,bool preserve){
     auto* source=Runtime::ShaderDefinition(shader.GetAssetUUID());auto* current=Runtime::MaterialDefinition(m_asset);
     if(!source||!current)throw std::invalid_argument("SetShader requires a valid material and shader");
     auto next=*source;next.Shader=shader.GetAssetUUID();next.Transient=current->Transient;next.Modified=current->Modified;next.Stamp=current->Stamp;next.ShaderStamp=source->Stamp;next.State=current->State;
-    if(preserve)for(const auto& parameter:next.Parameters)for(const auto& old:current->Parameters)if(parameter.Name==old.Name&&parameter.Type==old.Type){Detail::MaterialValue value;if(Runtime::Get(m_asset,parameter.Name.c_str(),&value))next.Overrides[parameter.Name]=value;}
+    if(preserve)for(const auto& parameter:next.Parameters)for(const auto& old:current->Parameters)if(parameter.Name==old.Name&&parameter.Type==old.Type){Detail::MaterialValue value;if(Runtime::Get(m_asset,parameter.Name.c_str(),&value))next.Overrides[parameter.Name]=value;if(auto feed=current->CameraTextures.find(parameter.Name);feed!=current->CameraTextures.end())next.CameraTextures[parameter.Name]=feed->second;}
     *current=std::move(next);
 }
 void Material::CopyPropertiesFrom(Material source,bool state){
     auto* target=Runtime::MaterialDefinition(m_asset);auto* input=Runtime::MaterialDefinition(source.m_asset);
     if(!target||!input)throw std::invalid_argument("CopyPropertiesFrom requires valid materials");
+    if(target==input)return;
     auto next=target->Overrides;
-    for(const auto& parameter:target->Parameters)for(const auto& old:input->Parameters)if(parameter.Name==old.Name&&parameter.Type==old.Type){Detail::MaterialValue value;if(Runtime::Get(source.m_asset,parameter.Name.c_str(),&value))next[parameter.Name]=value;}
+    for(const auto& parameter:target->Parameters)for(const auto& old:input->Parameters)if(parameter.Name==old.Name&&parameter.Type==old.Type){Detail::MaterialValue value;if(Runtime::Get(source.m_asset,parameter.Name.c_str(),&value))next[parameter.Name]=value;target->CameraTextures.erase(parameter.Name);if(auto feed=input->CameraTextures.find(parameter.Name);feed!=input->CameraTextures.end())target->CameraTextures[parameter.Name]=feed->second;}
     target->Overrides=std::move(next);if(state)target->State=input->State;
 }
-void Material::ResetParameter(const std::string& name){auto* d=Runtime::MaterialDefinition(m_asset);if(!d||!HasParameter(name))throw std::invalid_argument("Unknown material parameter: "+name);d->Overrides.erase(name);}
-void Material::ResetProperties(){auto* d=Runtime::MaterialDefinition(m_asset);if(!d)throw std::invalid_argument("Invalid material");d->Overrides.clear();}
-bool Material::HasOverride(const std::string& name) const {auto* d=Runtime::MaterialDefinition(m_asset);return d&&d->Overrides.contains(name);}
+void Material::ResetParameter(const std::string& name){auto* d=Runtime::MaterialDefinition(m_asset);if(!d||!HasParameter(name))throw std::invalid_argument("Unknown material parameter: "+name);d->Overrides.erase(name);d->CameraTextures.erase(name);}
+void Material::ResetProperties(){auto* d=Runtime::MaterialDefinition(m_asset);if(!d)throw std::invalid_argument("Invalid material");d->Overrides.clear();d->CameraTextures.clear();}
+bool Material::HasOverride(const std::string& name) const {auto* d=Runtime::MaterialDefinition(m_asset);return d&&(d->Overrides.contains(name)||d->CameraTextures.contains(name));}
+void Material::SetRenderTexture(const std::string& name,RenderTexture value){
+    auto* d=Runtime::MaterialDefinition(m_asset);if(!d)throw std::invalid_argument("Invalid material");
+    const auto parameters=GetParameters();
+    if(std::none_of(parameters.begin(),parameters.end(),[&](const auto& p){return p.Name==name&&p.Type==ShaderParameterType::Texture2D;}))throw std::invalid_argument("RenderTexture requires a Texture2D parameter: "+name);
+    if(value.GetCameraUUID())d->CameraTextures[name]=value.GetCameraUUID();else d->CameraTextures.erase(name);
+}
+RenderTexture Material::GetRenderTexture(const std::string& name) const {
+    const auto parameters=GetParameters();
+    if(!IsValid()||std::none_of(parameters.begin(),parameters.end(),[&](const auto& p){return p.Name==name&&p.Type==ShaderParameterType::Texture2D;}))throw std::invalid_argument("RenderTexture requires a Texture2D parameter: "+name);
+    return RenderTexture::FromCameraUUID(Runtime::GetMaterialCameraTexture(m_asset,name));
+}
 MaterialRenderState Material::GetRenderState() const {auto* d=Runtime::MaterialDefinition(m_asset);if(!d)throw std::invalid_argument("Invalid material");return d->State;}
 void Material::SetRenderState(MaterialRenderState state){auto* d=Runtime::MaterialDefinition(m_asset);if(!d||static_cast<unsigned>(state.Culling)>3||static_cast<unsigned>(state.DepthFunction)>7)throw std::invalid_argument("Invalid material render state");state.Override=true;d->State=state;}
 void Material::ResetRenderState(){auto* d=Runtime::MaterialDefinition(m_asset);if(!d)throw std::invalid_argument("Invalid material");d->State={};}

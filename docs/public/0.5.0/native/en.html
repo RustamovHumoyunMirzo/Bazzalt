@@ -40,8 +40,8 @@
 <tr><td><code>Bazzalt/SceneManager.h</code></td><td>Active-scene access and deferred scene-loading requests.</td></tr>
 </tbody></table>
 <h2 id="how-code-runs">How gameplay code runs</h2>
-<p>A behavior is a script component attached to an entity. The runtime creates its instance, applies Inspector property values, then calls its lifecycle methods. Put initialization in OnCreate, per-frame work in OnUpdate, and cleanup in OnDestroy. You do not write <code>main()</code> or call an engine's update function.</p>
-<p>A data component is not necessarily a behavior. A C++ struct derived from Component can hold data for a System to process. Creating such a struct alone does not create automatic Inspector reflection or persistent scene serialization. See <a href="entities/en.html">Entities and components</a> for this distinction.</p>
+<p>A behavior is a script component attached to an entity. The runtime creates its instance, applies Properties property values, then calls its lifecycle methods. Put initialization in OnCreate, per-frame work in OnUpdate, and cleanup in OnDestroy. You do not write <code>main()</code> or call an engine's update function.</p>
+<p>A data component is not necessarily a behavior. A C++ struct derived from Component can hold data for a System to process. Creating such a struct alone does not create automatic Properties reflection or persistent scene serialization. See <a href="entities/en.html">Entities and components</a> for this distinction.</p>
 <h2 id="script-toolchain">Script toolchain</h2>
 <p>The editor compiles enabled attached C++ behaviors when entering Play. It uses a matching Script SDK and toolchain. On Windows, the production setup uses the Hub's shared LLVM tools plus Microsoft C++ Build Tools and the Windows SDK. Clang by itself is not the complete Windows development environment.</p>
 <p>Preferences → Build Tools can point to another supported compiler/SDK setup. Use the SDK for your engine version and architecture. Do not mix a 32-bit module with the 64-bit editor, or assume a module built against an older SDK exports every new API.</p>
@@ -56,7 +56,7 @@ bool RequestNextScene(Bazzalt::UUID sceneAsset) {
 <h2 id="next-steps">Next steps</h2>
 <p>The <a href="reference/en.html">complete C++ reference</a> has individual type pages with every public overload, field, defaults, arguments and behavior notes. Its introduction explains how to read declarations rather than assuming that pointers, references and templates are already familiar.</p>
 <p>Start with <a href="behaviors/en.html">a movement behavior</a>. Then read <a href="entities/en.html">entities and components</a> and <a href="materials/en.html">runtime materials</a>. Examples in these guides run inside a hosted runtime; they are not standalone engine applications.</p></article>
-      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../0.5.0/manual/glossary/en.html"><small>Previous</small>Terms used in these guides</a>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../0.5.0/manual/preferences/en.html"><small>Previous</small>Editor preferences</a>
 <a class="next" href="../../0.5.0/native/basics/en.html"><small>Next</small>Read your first C++ example</a></nav>
     </main>
     <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#public-headers">Public headers</a><a class="toc-link" href="#how-code-runs">How gameplay code runs</a><a class="toc-link" href="#script-toolchain">Script toolchain</a><a class="toc-link" href="#load-a-scene">Request a scene change</a><a class="toc-link" href="#next-steps">Next steps</a></nav></aside>

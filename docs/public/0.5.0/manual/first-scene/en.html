@@ -34,7 +34,7 @@
 <h2 id="create-a-cube">Create a cube</h2>
 <ol>
   <li>Right-click in the Hierarchy and use <strong>Add new → Primitives → Cube</strong>.</li>
-  <li>Select the cube. The Inspector shows its components.</li>
+  <li>Select the cube. The Properties shows its components.</li>
   <li>Set its Transform position to <code>(0, 0, 0)</code> and scale to <code>(1, 1, 1)</code>.</li>
   <li>Press <kbd>F</kbd> with Scene view active to frame the selection.</li>
 </ol>
@@ -46,7 +46,7 @@
 <p>A lit surface needs illumination. Keep the starter light or add a light and adjust its direction, intensity, and type. An environment map can also supply lighting when image-based lighting is enabled in the scene's environment settings.</p>
 <p>The visible sky and the light it supplies are separate settings. Hiding the skybox does not, by itself, turn off image-based lighting. To diagnose unexpected brightness, select the scene header and inspect its environment as well as the scene's Light components.</p>
 <h2 id="move-and-save">Move the cube and save</h2>
-<p>Choose Translate (<kbd>2</kbd>) and drag a gizmo axis to move the cube. A <strong>gizmo</strong> is an editor manipulation handle, not an object included in the game. You can also type Transform values in the Inspector.</p>
+<p>Choose Translate (<kbd>2</kbd>) and drag a gizmo axis to move the cube. A <strong>gizmo</strong> is an editor manipulation handle, not an object included in the game. You can also type Transform values in the Properties.</p>
 <p>An asterisk beside a scene name means it has unsaved changes. Use <strong>File → Save</strong> or <kbd>Ctrl S</kbd>, then check that the asterisk disappears. Saving your scene stores the authored objects and components; it does not turn temporary runtime-created materials into reusable material assets.</p>
 <h2 id="try-play">Try Play</h2>
 <p>Play runs attached behaviors. A static scene does not need a script to appear in Game output. If you want the cube to move, continue with the <a href="../../lua/en.html">Lua behavior guide</a> or the <a href="../../native/behaviors/en.html">C++ behavior guide</a>. Click Game output when testing movement so gameplay input has focus. Stop returns you to editing; do not rely on Play-mode changes as a way to save authored scene values.</p></article>

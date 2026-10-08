@@ -228,4 +228,4 @@ class MaterialCompiler:
                 value=ValidateValue(p,data["properties"].get(p["name"],p["default"]))
                 if p["kind"]==6 and value!=ZERO:
                     texture=self.runtime.AssetInfo(value)
-                    if not texture or Path(texture["path"]).suffix.lower() not in {".png",".jpg",".jpeg",".hdr",".exr"}:raise MaterialError("Material texture reference must be a project image or HDR environment asset")
+                    if not texture or Path(texture["path"]).suffix.lower() not in {".png",".jpg",".jpeg",".hdr",".exr",".btexture"}:raise MaterialError("Material texture reference must be a project texture or image asset")

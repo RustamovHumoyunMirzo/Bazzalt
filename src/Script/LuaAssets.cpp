@@ -2,6 +2,20 @@
 #include "Bazzalt/MaterialBuilder.h"
 namespace Bazzalt::Runtime {
 void BindLuaAssets(sol::table api){
+    api.new_enum("TextureColorFormat","RGBA8",TextureColorFormat::RGBA8,"RGBA16F",TextureColorFormat::RGBA16F,"RGBA32F",TextureColorFormat::RGBA32F);
+    api.new_enum("TextureDepthFormat","None",TextureDepthFormat::None,"Depth16",TextureDepthFormat::Depth16,"Depth24",TextureDepthFormat::Depth24,"Depth32F",TextureDepthFormat::Depth32F);
+    api.new_enum("TextureFilter","Point",TextureFilter::Point,"Linear",TextureFilter::Linear,"Trilinear",TextureFilter::Trilinear);
+    api.new_enum("TextureWrap","Clamp",TextureWrap::Clamp,"Repeat",TextureWrap::Repeat,"Mirror",TextureWrap::Mirror);
+    auto descriptor=api.new_usertype<TextureDescriptor>("TextureDescriptor",sol::constructors<TextureDescriptor()>());
+#define BAZZALT_TEXTURE_FIELD(Name) descriptor[#Name]=&TextureDescriptor::Name;
+    BAZZALT_TEXTURE_FIELD(Width) BAZZALT_TEXTURE_FIELD(Height) BAZZALT_TEXTURE_FIELD(Samples) BAZZALT_TEXTURE_FIELD(Mipmaps) BAZZALT_TEXTURE_FIELD(MipLevels) BAZZALT_TEXTURE_FIELD(ColorFormat) BAZZALT_TEXTURE_FIELD(DepthFormat) BAZZALT_TEXTURE_FIELD(Filter) BAZZALT_TEXTURE_FIELD(Wrap) BAZZALT_TEXTURE_FIELD(ClearColor)
+#undef BAZZALT_TEXTURE_FIELD
+    descriptor["IsValid"]=&TextureDescriptor::IsValid;descriptor["GetMipLevelCount"]=&TextureDescriptor::GetMipLevelCount;
+    auto texture=api.new_usertype<Texture>("Texture",sol::constructors<Texture()>());texture["Load"]=&Texture::Load;
+    texture["Create"]=[](sol::optional<TextureDescriptor> d){return Texture::Create(d.value_or(TextureDescriptor{}));};
+    texture["GetAssetUUID"]=&Texture::GetAssetUUID;texture["IsValid"]=&Texture::IsValid;texture["IsRuntime"]=&Texture::IsRuntime;
+    texture["IsRenderTarget"]=&Texture::IsRenderTarget;
+    texture["GetDescriptor"]=&Texture::GetDescriptor;texture["SetDescriptor"]=&Texture::SetDescriptor;texture["ResetDescriptor"]=&Texture::ResetDescriptor;texture["Resize"]=&Texture::Resize;texture["Destroy"]=&Texture::Destroy;
     auto parameterTypes=api.create_named("PostProcessParameterType");
     parameterTypes["Float"]=PostProcessParameterType::Float;parameterTypes["Float2"]=PostProcessParameterType::Float2;parameterTypes["Float3"]=PostProcessParameterType::Float3;parameterTypes["Float4"]=PostProcessParameterType::Float4;
     parameterTypes["Integer"]=PostProcessParameterType::Integer;parameterTypes["Boolean"]=PostProcessParameterType::Boolean;parameterTypes["Texture"]=PostProcessParameterType::Texture;
@@ -83,6 +97,7 @@ void BindLuaAssets(sol::table api){
     BAZZALT_LUA_STATE(Override) BAZZALT_LUA_STATE(DoubleSided) BAZZALT_LUA_STATE(DepthTest) BAZZALT_LUA_STATE(DepthWrite) BAZZALT_LUA_STATE(ColorWrite) BAZZALT_LUA_STATE(Culling) BAZZALT_LUA_STATE(DepthFunction)
 #undef BAZZALT_LUA_STATE
     material["IsRuntime"]=&Material::IsRuntime;material["Destroy"]=&Material::Destroy;
+    material["SetRenderTexture"]=&Material::SetRenderTexture;material["GetRenderTexture"]=&Material::GetRenderTexture;
     material["SetShader"]=[](Material& m,Shader s,sol::optional<bool> preserve){m.SetShader(s,preserve.value_or(true));};
     material["CopyPropertiesFrom"]=[](Material& m,Material s,sol::optional<bool> state){m.CopyPropertiesFrom(s,state.value_or(true));};
     material["ResetParameter"]=&Material::ResetParameter;material["ResetProperties"]=&Material::ResetProperties;material["HasOverride"]=&Material::HasOverride;
@@ -91,7 +106,8 @@ void BindLuaAssets(sol::table api){
     material["ApplyTo"]=[](const Material& m,Entity entity,sol::optional<std::int64_t> slot,sol::optional<bool> children){auto index=slot.value_or(-1);if(index < -1 || index>=4096)throw std::out_of_range("Invalid material slot");return m.ApplyTo(entity,index==-1?Material::AllSlots:static_cast<std::size_t>(index),children.value_or(false));};
     auto builder=api.new_usertype<MaterialBuilder>("MaterialBuilder",sol::constructors<MaterialBuilder(),MaterialBuilder(Shader)>());
 #define BAZZALT_LUA_BUILDER(Name) builder[#Name]=&MaterialBuilder::Name;
-    BAZZALT_LUA_BUILDER(SetShader) BAZZALT_LUA_BUILDER(SetRenderState) BAZZALT_LUA_BUILDER(SetFloat) BAZZALT_LUA_BUILDER(SetVec2) BAZZALT_LUA_BUILDER(SetVec3) BAZZALT_LUA_BUILDER(SetVec4) BAZZALT_LUA_BUILDER(SetColor) BAZZALT_LUA_BUILDER(SetMatrix3) BAZZALT_LUA_BUILDER(SetMatrix4) BAZZALT_LUA_BUILDER(SetInteger) BAZZALT_LUA_BUILDER(SetBoolean) BAZZALT_LUA_BUILDER(SetTexture) BAZZALT_LUA_BUILDER(Build) BAZZALT_LUA_BUILDER(Clear)
+    BAZZALT_LUA_BUILDER(SetShader) BAZZALT_LUA_BUILDER(SetRenderState) BAZZALT_LUA_BUILDER(SetFloat) BAZZALT_LUA_BUILDER(SetVec2) BAZZALT_LUA_BUILDER(SetVec3) BAZZALT_LUA_BUILDER(SetVec4) BAZZALT_LUA_BUILDER(SetColor) BAZZALT_LUA_BUILDER(SetMatrix3) BAZZALT_LUA_BUILDER(SetMatrix4) BAZZALT_LUA_BUILDER(SetInteger) BAZZALT_LUA_BUILDER(SetBoolean) BAZZALT_LUA_BUILDER(SetRenderTexture) BAZZALT_LUA_BUILDER(Build) BAZZALT_LUA_BUILDER(Clear)
+    builder["SetTexture"]=sol::overload([](MaterialBuilder& b,std::string name,UUID id)->MaterialBuilder&{return b.SetTexture(std::move(name),id);},[](MaterialBuilder& b,std::string name,Texture t)->MaterialBuilder&{return b.SetTexture(std::move(name),t);});
 #undef BAZZALT_LUA_BUILDER
     material["GetAssetUUID"]=&Material::GetAssetUUID;
     material["IsValid"]=&Material::IsValid;
@@ -107,7 +123,7 @@ void BindLuaAssets(sol::table api){
     material["SetMatrix4"]=&Material::SetMatrix4;
     material["SetInteger"]=&Material::SetInteger;
     material["SetBoolean"]=&Material::SetBoolean;
-    material["SetTexture"]=&Material::SetTexture;
+    material["SetTexture"]=sol::overload([](Material& m,const std::string& name,UUID id){m.SetTexture(name,id);},[](Material& m,const std::string& name,Texture t){m.SetTexture(name,t);});
     material["GetFloat"]=&Material::GetFloat;
     material["GetVec2"]=&Material::GetVec2;
     material["GetVec3"]=&Material::GetVec3;

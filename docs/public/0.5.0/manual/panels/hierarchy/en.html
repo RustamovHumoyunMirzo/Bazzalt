@@ -30,9 +30,9 @@
 <p class="lead">The Hierarchy is the list of scenes and objects you can edit. It is not a list of files on disk.</p>
 <h2 id="find-and-read">Find and read the panel</h2>
 <p>Click the Hierarchy tab, or open it from Window if it is closed. A scene header sits above its objects. The bold scene header is the active scene displayed in Scene view and Game output. An asterisk on the header means unsaved changes.</p>
-<p>An arrow beside an object means it has children. Click the arrow to expand or collapse them. Click the object's name to select it, rather than the arrow. Selecting an object shows its editable components in the Inspector.</p>
+<p>An arrow beside an object means it has children. Click the arrow to expand or collapse them. Click the object's name to select it, rather than the arrow. Selecting an object shows its editable components in the Properties.</p>
 <h2 id="create-object">Create an object</h2>
-<ol><li>Right-click in the Hierarchy to open its context menu.</li><li>Choose Add new, then the object you need. Primitives contains Cube, Sphere, Cylinder, Capsule, Plane, Cone, and Torus.</li><li>Click the newly created object. Look at the Inspector to confirm its name, Transform, and shape/rendering component.</li></ol>
+<ol><li>Right-click in the Hierarchy to open its context menu.</li><li>Choose Add new, then the object you need. Primitives contains Cube, Sphere, Cylinder, Capsule, Plane, Cone, and Torus.</li><li>Click the newly created object. Look at the Properties to confirm its name, Transform, and shape/rendering component.</li></ol>
 <p>A primitive is built-in geometry and does not require a downloaded 3D model. A Camera or Light is also an entity, even though its Scene view representation can be an icon rather than a solid model.</p>
 <h2 id="parents-and-children">Parents and children</h2>
 <p>Drag an object onto another to make it a child. The drop highlight tells you the intended parent. Reparenting keeps the child's world placement by default. Moving the parent afterward also moves the child because their transforms are composed.</p>
@@ -40,14 +40,14 @@
 <p>Objects belong to their scene. This is not a general file tree: do not expect a hierarchy object drag to move a disk file or arbitrarily move an object into another scene's storage.</p>
 <h2 id="search-and-selection">Search and selection</h2>
 <p>Type in the search field to find objects without scrolling through every model part. Clear the field to restore the full tree. The three-dot menu beside it contains expand/collapse and reveal helpers. New groups normally start collapsed; Preferences can change that.</p>
-<p>Scene view selection and Hierarchy selection are synchronized. A multi-selection means several objects are selected together. The Inspector may show shared editing instead of one object's complete unique components; clear the selection and select one object if you need its exact fields.</p>
+<p>Scene view selection and Hierarchy selection are synchronized. A multi-selection means several objects are selected together. The Properties may show shared editing instead of one object's complete unique components; clear the selection and select one object if you need its exact fields.</p>
 <h2 id="object-actions">Rename, delete, hide, and lock</h2>
 <p>Right-click an object for supported rename, copy/paste, duplicate, and delete actions. A name is a label, not identity. Deleting a parent also removes its descendants; check the expanded children before deleting a large model group.</p>
 <p>Editor visibility hides an object in Scene view and grays its row without changing game visibility. A lock prevents editor selection/manipulation. The lock icon only appears when locked. Use the Hierarchy action to unlock it before editing again.</p>
 <h2 id="scenes">Scene-header actions</h2>
 <p>Right-click a scene header to activate, rename, or unload it where allowed. Loading another scene does not activate it automatically. The active scene cannot be unloaded; choose another active scene first. Select the scene header to edit its environment rather than adding object components.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../../0.5.0/manual/first-scene/en.html"><small>Previous</small>Your first scene</a>
-<a class="next" href="../../../../0.5.0/manual/panels/inspector/en.html"><small>Next</small>Inspector</a></nav>
+<a class="next" href="../../../../0.5.0/manual/panels/properties/en.html"><small>Next</small>Properties</a></nav>
     </main>
     <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#find-and-read">Find and read the panel</a><a class="toc-link" href="#create-object">Create an object</a><a class="toc-link" href="#parents-and-children">Parents and children</a><a class="toc-link" href="#search-and-selection">Search and selection</a><a class="toc-link" href="#object-actions">Rename, delete, hide, and lock</a><a class="toc-link" href="#scenes">Scene-header actions</a></nav></aside>
   </div>

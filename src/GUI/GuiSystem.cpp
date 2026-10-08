@@ -19,7 +19,7 @@ bool Enabled(Entity e){const auto* b=e.TryGetComponent<GuiButton>();const auto* 
 bool HitTarget(Entity e){const auto* r=e.TryGetComponent<Rectangle>();const auto* i=e.TryGetComponent<GuiImage>();
     return Enabled(e)||(r&&r->Enabled&&r->RaycastTarget)||(i&&i->Enabled&&i->RaycastTarget);}
 bool VisibleArea(const GuiItem& item){const auto clipped=Intersect(item.Bounds,item.Clip);return clipped.Size.X>0&&clipped.Size.Y>0;}
-bool DirectInput(const GuiItem& item){const auto& frame=item.Root.GetComponent<Frame>();if(frame.Mode!=FrameMode::CameraBound)return true;const auto camera=item.Root.GetScene()->GetEntity(frame.Camera);const auto* target=camera.TryGetComponent<CameraRenderTarget>();return !target||!target->Enabled;}
+bool DirectInput(const GuiItem& item){const auto& frame=item.Root.GetComponent<Frame>();if(frame.Mode!=FrameMode::CameraBound)return true;const auto camera=item.Root.GetScene()->GetEntity(frame.Camera);const auto* source=camera.TryGetComponent<Camera>();const auto* target=camera.TryGetComponent<CameraRenderTarget>();return (!source||!source->RenderTarget)&&(!target||!target->Enabled);}
 std::size_t Characters(const std::string& text){std::size_t count=0;for(unsigned char c:text)if((c&0xc0)!=0x80)++count;return count;}
 void Backspace(std::string& text){if(text.empty())return;std::size_t start=text.size()-1;while(start&&(static_cast<unsigned char>(text[start])&0xc0)==0x80)--start;text.erase(start);}
 }

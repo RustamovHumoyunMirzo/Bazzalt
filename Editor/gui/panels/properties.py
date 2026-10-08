@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 
 from ...localization import LocalizationManager
 from ..widgets.options_button import OptionsButton
+from ..display_names import DisplayName
 
 
 class CenteredCheckBox(QCheckBox):
@@ -39,7 +40,8 @@ class ComponentSection(QFrame):
         self.Toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.Toggle.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Fixed)
         self.Toggle.setObjectName("ComponentHeader")
-        self._fields:dict[str,QWidget]={};self._localization=localization;self._removable=removable
+        self._fields:dict[str,QWidget]={};self._localization=localization;self._removable=removable;self._title=title;self._captions={}
+        if localization:localization.LocaleChanged.connect(self._RetranslateLabels)
         self.Body=QWidget(self);self.Form=QGridLayout(self.Body);self.Form.setContentsMargins(8,6,8,6)
         self.Form.setHorizontalSpacing(14);self.Form.setVerticalSpacing(6);self.Form.setColumnStretch(1,1)
         self.Form.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -62,13 +64,19 @@ class ComponentSection(QFrame):
         self.Body.setVisible(expanded)
 
     def AddField(self, label: str, editor: QWidget) -> None:
-        row=self.Form.rowCount();caption=QLabel(label,self.Body);caption.setObjectName("InspectorFieldLabel")
+        row=self.Form.rowCount();caption=QLabel(DisplayName(self._localization,label,"field"),self.Body);caption.setObjectName("InspectorFieldLabel");self._captions[label]=caption
+        caption.setWordWrap(True);caption.setToolTip(caption.text())
         caption.setMinimumWidth(72);caption.setMaximumWidth(120);caption.setSizePolicy(QSizePolicy.Policy.Preferred,QSizePolicy.Policy.Fixed);caption.setAlignment(Qt.AlignmentFlag.AlignLeading|Qt.AlignmentFlag.AlignVCenter)
         editor.setParent(self.Body)
         editor.setMinimumWidth(0);editor.setMaximumWidth(260);editor.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Fixed)
         self.Form.setRowMinimumHeight(row,24)
         self.Form.addWidget(caption,row,0,Qt.AlignmentFlag.AlignVCenter);self.Form.addWidget(editor,row,1,Qt.AlignmentFlag.AlignVCenter)
         self._fields[label]=editor
+
+    def _RetranslateLabels(self,*_):
+        self.Toggle.setText(DisplayName(self._localization,self._title))
+        self.Enabled.setToolTip(self._Text("properties.enable_component","Enable component"))
+        for key,caption in self._captions.items():caption.setText(DisplayName(self._localization,key,"field"));caption.setToolTip(caption.text())
 
     def _Text(self,key:str,fallback:str)->str:
         return self._localization.Translate(key) if self._localization else fallback
@@ -126,7 +134,7 @@ class PropertiesPanel(QWidget):
                             icon: QIcon | None = None,
                             enabled:bool|None=None) -> ComponentSection:
         if component_id in self._sections:return self._sections[component_id]
-        section=ComponentSection(title,expanded,removable,self._localization,icon,enabled,self.Container);section.RemoveRequested.connect(lambda:self.RemoveComponentRequested.emit(component_id));self._sections[component_id]=section
+        section=ComponentSection(title,expanded,removable,self._localization,icon,enabled,self.Container);section._RetranslateLabels();section.RemoveRequested.connect(lambda:self.RemoveComponentRequested.emit(component_id));self._sections[component_id]=section
         self.ComponentsLayout.insertWidget(self.ComponentsLayout.count()-1,section);return section
 
     def RemoveComponentSection(self, component_id: str) -> bool:

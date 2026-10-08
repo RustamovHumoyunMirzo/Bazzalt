@@ -55,6 +55,7 @@ class EntityEditorStateTests(unittest.TestCase):
             search.setText("camera")
             visible=[action.text() for action in menu.actions() if action.isVisible() and not action.isSeparator() and action.text()]
             self.assertEqual(visible,["Camera"])
+            self.assertTrue(all(action.data()!="CameraRenderTarget" for action in menu.actions()))
             search.setText("");self.assertGreater(sum(action.isVisible() for action in menu.actions()),1)
         class InspectMenu(QMenu):
             def exec(self,position):return inspect(self,position)

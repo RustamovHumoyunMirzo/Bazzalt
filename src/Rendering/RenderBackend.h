@@ -19,6 +19,8 @@ class Scene;
 class View;
 class Texture;
 class Skybox;
+class SwapChain;
+class RenderTarget;
 }
 namespace Bazzalt { class Scene; }
 
@@ -59,12 +61,16 @@ public:
     void SetEditorGuides(const std::vector<EditorGuide>& guides);
     void SetEditorOutline(std::unordered_set<UUID> selected,std::unordered_set<UUID> hovered){m_outlineSelected=std::move(selected);m_outlineHovered=std::move(hovered);}
     void Render();
+    std::unordered_map<std::string,double> GetStatistics() const;
+    void SetEditorStatisticsText(std::string text,bool visible){m_statisticsText=std::move(text);m_statisticsVisible=visible;}
     void RenderCameraView(filament::View* view);
     void SetGuiScene(Bazzalt::Scene* scene);
     void ClearGuiResources();
     filament::Texture* GetCameraTexture(UUID id) const;
     void RegisterCameraView(UUID id,filament::View* view){m_cameraViews[id]=view;}
-    void UnregisterCameraView(UUID id){m_cameraViews.erase(id);}
+    void UnregisterCameraView(UUID id){m_cameraViews.erase(id);m_cameraOutputs.erase(id);}
+    void RegisterCameraOutput(UUID id,filament::Texture* color,filament::Texture* history,filament::RenderTarget* target,filament::RenderTarget* historyTarget);
+    filament::RenderTarget* GetCameraOutputTarget(UUID id) const;
     static void ConfigureEditorFog(filament::View& view,float gridScale);
     void SetEditorHidden(std::unordered_set<UUID> hidden){m_editorHidden=std::move(hidden);}
     void RegisterEditorLight(UUID id,utils::Entity entity){m_editorLights[id]=entity;}
@@ -109,14 +115,22 @@ private:
     filament::Renderer* m_renderer = nullptr;
     filament::Scene* m_scene = nullptr;
     filament::Skybox* m_targetClearSky=nullptr;
+    filament::SwapChain* m_captureSwapChain=nullptr;
     std::vector<filament::View*> m_activeViews;
     std::uint32_t m_presentationWidth = 1280;
     std::uint32_t m_presentationHeight = 720;
     std::unordered_map<filament::View*, std::vector<CustomPostProcessEffect>> m_postProcessEffects;
     std::unique_ptr<RenderAssets> m_assets;
     std::unique_ptr<GuiRenderer> m_guiRenderer;
+    std::unique_ptr<GuiRenderer> m_statisticsRenderer;
+    std::unique_ptr<Bazzalt::Scene> m_statisticsScene;
+    std::string m_statisticsText;
+    bool m_statisticsVisible=false;
     Bazzalt::Scene* m_guiScene=nullptr;
     std::unordered_map<UUID,filament::View*> m_cameraViews;
+    struct CameraOutput {filament::Texture* Color=nullptr;filament::Texture* History=nullptr;filament::RenderTarget* Target=nullptr;filament::RenderTarget* HistoryTarget=nullptr;bool Ready=false;bool HistoryFront=false;};
+    std::unordered_map<UUID,CameraOutput> m_cameraOutputs;
+    std::unordered_map<UUID,filament::Texture*> m_captureReads;
     std::unordered_map<std::uint64_t, std::unique_ptr<ViewportResource>> m_viewports;
     std::unique_ptr<GizmoResource> m_gizmo;
     bool m_gizmoVisible = false;

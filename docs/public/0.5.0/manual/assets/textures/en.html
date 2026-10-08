@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A Texture asset is a reusable image resource, not an object in the Hierarchy. A camera can render into it, and unrelated images/materials can display its pixels using the same Texture reference.">
+  <title>Camera textures | BAZZALT Docs 0.5.0</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../" data-version="0.5.0" data-page="manual/assets/textures">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"><option value="0.5.0" selected>0.5.0</option></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"><option value="en" selected>English</option></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for the navigation tree. Page content and links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Editor manual / Assets and project files / Camera textures</nav>
+      <article class="doc"><h1>Camera textures</h1><p>A Texture asset is a reusable image resource, not an object in the Hierarchy. A camera can render into it, and unrelated images/materials can display its pixels using the same Texture reference.</p>
+<h2 id="create">Create the asset</h2><p>In Asset Browser, right-click → Create → Texture. Choose a name and select the file. Properties shows Texture Settings, not entity components or an Add Component button. The .btexture file is readable YAML and has normal UUID/.meta/cache tracking.</p>
+<h2 id="camera">Assign a producer</h2><p>Select a Camera object in Hierarchy. Its Render Target picker accepts writable Texture assets, not PNGs/models/materials. Drag your Texture from Asset Browser or choose it in the project picker. This camera now renders offscreen, so keep another normal camera if you also want direct Game output. Clearing Render Target restores normal presentation.</p>
+<h2 id="display">Display it anywhere</h2><p>Select a GUI Image and choose the same asset in Texture. It works under Viewport, Camera-Bound and Spatial Frames. The legacy Image Camera field is optional; when nonempty it takes precedence, so clear it if you want the Texture field to supply the source. A material's Texture2D sampler can select the same asset; custom shaders and the built-in Unlit baseColorTexture parameter sample it normally.</p>
+<h2 id="settings">Texture settings</h2><p>Width/Height control pixels; Samples requests MSAA; Mipmaps and Mip Levels control downsampled levels; Color Format chooses RGBA8 or HDR floating point; Depth Format configures depth; Filter and Wrap affect consumers. Clear Color is the initial/idle image. Changes save the asset immediately and safely recreate attachments as needed. GPU allocation is lazy and no CPU readback/upload loop is used for camera frames.</p>
+<h2 id="disabled">Disabled and conflicting cameras</h2><p>The camera must be enabled and Active. Disabling/removing it restores the texture's Clear Color rather than leaving stale pixels. A missing/deleted texture cannot redirect its camera into Game output. Only one active camera may write a texture: duplicate writers are suppressed with a diagnostic. Use separate assets or disable one producer. Runtime-created textures are temporary and do not save themselves as project assets.</p>
+<h2 id="legacy">Old Camera Render Target component</h2><p>It remains supported for existing camera-owned transient outputs, but new authoring uses the Camera Render Target field and Texture asset. An explicit Texture overrides the old component if both exist. Old scenes are not broken or silently rewritten.</p>
+<h2 id="scripts">Scripts and advanced controls</h2><p>C++ and Lua expose Texture and TextureDescriptor, typed Camera/Image/Material setters, runtime resizing and destruction. See <a href="../../../native/reference/Texture/en.html">C++ Texture</a> or <a href="../../../lua/reference/Texture/en.html">Lua Texture</a>. Changing settings programmatically does not overwrite project files. Recursive feeds use safe double-buffered history; texture-space interaction forwarding is still separate from drawing an image.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../../0.5.0/manual/assets/en.html"><small>Previous</small>Assets and project files</a>
+<a class="next" href="../../../../0.5.0/manual/scenes/en.html"><small>Next</small>Multiple scenes and saving</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#create">Create the asset</a><a class="toc-link" href="#camera">Assign a producer</a><a class="toc-link" href="#display">Display it anywhere</a><a class="toc-link" href="#settings">Texture settings</a><a class="toc-link" href="#disabled">Disabled and conflicting cameras</a><a class="toc-link" href="#legacy">Old Camera Render Target component</a><a class="toc-link" href="#scripts">Scripts and advanced controls</a></nav></aside>
+  </div>
+  <footer>BAZZALT 0.5.0 documentation · English</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

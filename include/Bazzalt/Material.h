@@ -5,6 +5,7 @@
 #include "Bazzalt/Entity.h"
 #include "Bazzalt/Shader.h"
 #include "Bazzalt/Math.h"
+#include "Bazzalt/RenderTexture.h"
 
 namespace Bazzalt {
 enum class MaterialCulling : std::uint8_t { None, Front, Back, FrontAndBack };
@@ -55,6 +56,10 @@ public:
     void SetInteger(const std::string& name,std::int32_t value) { Detail::MaterialValue v;v.Integer=value;Set(name,ShaderParameterType::Integer,v); }
     void SetBoolean(const std::string& name,bool value) { Detail::MaterialValue v;v.Boolean=value;Set(name,ShaderParameterType::Boolean,v); }
     void SetTexture(const std::string& name,UUID value) { Detail::MaterialValue v;v.Texture=value;Set(name,ShaderParameterType::Texture2D,v); }
+    void SetTexture(const std::string& name,Texture value) { SetTexture(name,value.GetAssetUUID()); }
+    // Runtime-only sampler binding. ResetParameter or SetTexture restores an asset source.
+    BAZZALT_API void SetRenderTexture(const std::string& name,RenderTexture value);
+    [[nodiscard]] BAZZALT_API RenderTexture GetRenderTexture(const std::string& name) const;
     [[nodiscard]] float GetFloat(const std::string& name) const { return Get(name,ShaderParameterType::Float).Numbers[0]; }
     [[nodiscard]] Vec2 GetVec2(const std::string& name) const { auto v=Get(name,ShaderParameterType::Float2);return {v.Numbers[0],v.Numbers[1]}; }
     [[nodiscard]] Vec3 GetVec3(const std::string& name) const { auto v=Get(name,ShaderParameterType::Float3);return {v.Numbers[0],v.Numbers[1],v.Numbers[2]}; }

@@ -84,7 +84,7 @@ class AssetBrowserPanel(QWidget):
             pixmap=QPixmap(64,64);pixmap.fill(Qt.GlobalColor.transparent);painter=QPainter(pixmap);gradient=QRadialGradient(25,20,35);gradient.setColorAt(0,QColor("#f4f4f4"));gradient.setColorAt(.35,QColor("#9aa5b5"));gradient.setColorAt(1,QColor("#1d222a"));painter.setBrush(gradient);painter.setPen(QColor("#59616d"));painter.drawEllipse(7,7,50,50);painter.end();return QIcon(pixmap)
         if ext in ENVIRONMENT_EXTENSIONS:
             pixmap=QPixmap(64,64);gradient=QLinearGradient(0,0,0,64);gradient.setColorAt(0,QColor("#456f9b"));gradient.setColorAt(.55,QColor("#d4b678"));gradient.setColorAt(1,QColor("#252d25"));painter=QPainter(pixmap);painter.fillRect(pixmap.rect(),gradient);painter.end();return QIcon(pixmap)
-        name="dir.svg" if path.is_dir() else "scene.svg" if ext==".bscene" else "nativecpp.svg" if ext in {".h",".hpp",".c",".cc",".cpp"} else "3dfiles.svg" if ext in MODEL_EXTENSIONS else "shader.svg" if ext in SHADER_EXTENSIONS else "file.svg"
+        name="dir.svg" if path.is_dir() else "texture.svg" if ext==".btexture" else "scene.svg" if ext==".bscene" else "nativecpp.svg" if ext in {".h",".hpp",".c",".cc",".cpp"} else "3dfiles.svg" if ext in MODEL_EXTENSIONS else "shader.svg" if ext in SHADER_EXTENSIONS else "file.svg"
         return self._resources.Icon(f"icons/abrowser/{name}") if self._resources else QIcon()
     def _ThumbnailReady(self,path,image):
         self._thumbnail_timer.start(0)
@@ -184,7 +184,10 @@ class AssetBrowserPanel(QWidget):
         while candidate.exists():candidate=candidate.with_name(f"{stem} {number}{suffix}");number+=1
         return candidate
     def _Create(self,kind)->None:
-        names={"folder":"New Folder","scene":"New Scene.bscene","cpp":"NewComponent.cpp","lua":"NewBehavior.lua","shader":"NewShader.shad","filament_shader":"NewShader.mat","material":"NewMaterial.matinst"};path=self._Unique(names[kind])
+        names={"folder":"New Folder","scene":"New Scene.bscene","texture":"New Texture.btexture","cpp":"NewComponent.cpp","lua":"NewBehavior.lua","shader":"NewShader.shad","filament_shader":"NewShader.mat","material":"NewMaterial.matinst"};path=self._Unique(names[kind])
+        if kind=="texture":
+            path.write_text("FormatVersion: 1\nWidth: 512\nHeight: 512\nSamples: 1\nMipmaps: false\nMipLevels: 0\nColorFormat: RGBA8\nDepthFormat: Depth32F\nFilter: Linear\nWrap: Clamp\nClearColor: [0, 0, 0, 1]\n",encoding="utf-8")
+            self.Refresh(path);self.Browser.editItem(self.Browser.currentItem());return
         if kind=="lua":
             name=path.stem.replace(" ","_")
             path.write_text(f'-- COMPONENT({name})\n-- PROPERTY(float, Speed, 1.0)\nlocal Behavior = {{ Speed = 1.0 }}\nfunction Behavior:OnUpdate(deltaTime)\n    -- self.Entity is the attached entity.\nend\nreturn Behavior\n',encoding="utf-8")
@@ -263,7 +266,7 @@ class AssetBrowserPanel(QWidget):
         if target is not None and widget is self.Browser and not target.isSelected():self.Browser.setCurrentItem(target)
         reveal_paths=[Path(target.data(0,Qt.ItemDataRole.UserRole))] if widget is self.Tree and target is not None else [Path(item.data(Qt.ItemDataRole.UserRole)) for item in self.Browser.selectedItems()]
         tr=self._localization.Translate;menu=QMenu(self);create=menu.addMenu(tr("assets.create"))
-        for key,label in (("folder","assets.folder"),("scene","assets.scene"),("cpp","assets.native_cpp"),("lua","assets.lua"),("shader","assets.shader"),("material","assets.material")):
+        for key,label in (("folder","assets.folder"),("scene","assets.scene"),("texture","assets.texture"),("cpp","assets.native_cpp"),("lua","assets.lua"),("shader","assets.shader"),("material","assets.material")):
             action=create.addAction(tr(label));action.triggered.connect(lambda _=False,k=key:self._Create(k))
         menu.addAction(tr("assets.import"),self._Import);menu.addSeparator();selected=bool(self.Browser.selectedItems()) if widget is self.Browser else False
         current=Path(self.Browser.currentItem().data(Qt.ItemDataRole.UserRole)) if widget is self.Browser and self.Browser.currentItem() else None

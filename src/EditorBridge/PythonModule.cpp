@@ -23,6 +23,7 @@
 #include <pybind11/stl.h>
 
 #include "Runtime/Engine.h"
+#include "Runtime/TextureLibrary.h"
 #include "Bazzalt/Material.h"
 #include "Runtime/NativeScriptRuntime.h"
 #include "Bazzalt/Components/ScriptComponent.h"
@@ -96,7 +97,7 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
     if (const auto* value=entity.TryGetComponent<SceneQueryBounds>()) enabled["Scene Query Bounds"]=value->IsEnabled();
     py::dict data;
     if (const auto* camera=entity.TryGetComponent<Camera>()) {
-        py::dict v;v["Projection"]=static_cast<int>(camera->Projection);v["Field of View"]=ToDegrees(camera->VerticalFieldOfView);v["Orthographic Size"]=camera->OrthographicSize;v["Near"]=camera->NearPlane;v["Far"]=camera->FarPlane;v["Aspect Ratio"]=camera->AspectRatio;v["Aspect Mode"]=static_cast<int>(camera->AspectMode);v["Viewport"]=py::make_tuple(camera->Viewport.X,camera->Viewport.Y,camera->Viewport.Width,camera->Viewport.Height);v["Priority"]=camera->Priority;v["Active"]=camera->Active;v["Clear Color"]=py::make_tuple(camera->ClearColor.X,camera->ClearColor.Y,camera->ClearColor.Z,camera->ClearColor.W);v["Post Processing"]=camera->PostProcessing.Enabled;v["Bloom"]=camera->PostProcessing.Bloom;v["Ambient Occlusion"]=camera->PostProcessing.AmbientOcclusion;v["Anti Aliasing"]=static_cast<int>(camera->PostProcessing.AntiAliasingMode);v["Tone Mapping"]=static_cast<int>(camera->PostProcessing.ToneMappingMode);v["Exposure"]=camera->PostProcessing.Exposure;v["Depth of Field"]=camera->PostProcessing.DepthOfField.Enabled;v["Focus Distance"]=camera->PostProcessing.DepthOfField.FocusDistance;v["Aperture"]=camera->PostProcessing.DepthOfField.Aperture;v["Shutter Speed"]=camera->PostProcessing.DepthOfField.ShutterSpeed;v["Sensitivity"]=camera->PostProcessing.DepthOfField.Sensitivity;data["Camera"]=v;
+        py::dict v;v["Render Target"]=camera->RenderTarget.ToString();v["Projection"]=static_cast<int>(camera->Projection);v["Field of View"]=ToDegrees(camera->VerticalFieldOfView);v["Orthographic Size"]=camera->OrthographicSize;v["Near"]=camera->NearPlane;v["Far"]=camera->FarPlane;v["Aspect Ratio"]=camera->AspectRatio;v["Aspect Mode"]=static_cast<int>(camera->AspectMode);v["Viewport"]=py::make_tuple(camera->Viewport.X,camera->Viewport.Y,camera->Viewport.Width,camera->Viewport.Height);v["Priority"]=camera->Priority;v["Active"]=camera->Active;v["Clear Color"]=py::make_tuple(camera->ClearColor.X,camera->ClearColor.Y,camera->ClearColor.Z,camera->ClearColor.W);v["Post Processing"]=camera->PostProcessing.Enabled;v["Bloom"]=camera->PostProcessing.Bloom;v["Ambient Occlusion"]=camera->PostProcessing.AmbientOcclusion;v["Anti Aliasing"]=static_cast<int>(camera->PostProcessing.AntiAliasingMode);v["Tone Mapping"]=static_cast<int>(camera->PostProcessing.ToneMappingMode);v["Exposure"]=camera->PostProcessing.Exposure;v["Depth of Field"]=camera->PostProcessing.DepthOfField.Enabled;v["Focus Distance"]=camera->PostProcessing.DepthOfField.FocusDistance;v["Aperture"]=camera->PostProcessing.DepthOfField.Aperture;v["Shutter Speed"]=camera->PostProcessing.DepthOfField.ShutterSpeed;v["Sensitivity"]=camera->PostProcessing.DepthOfField.Sensitivity;data["Camera"]=v;
     }
     if (const auto* light=entity.TryGetComponent<Light>()) {
         const auto effective=Runtime::SanitizeLight(*light);py::dict v;
@@ -216,6 +217,21 @@ public:
         return true;
     }
     bool RefreshAssets() { return m_engine && m_engine->RefreshAssets(); }
+    py::dict TextureAssetInfo(const std::string& source){
+        TextureDescriptor d;std::string error;py::dict result;if(!Runtime::ReadTextureDescriptor(std::filesystem::u8path(source),d,error)){m_bridgeError=error;return result;}
+        result["Width"]=d.Width;result["Height"]=d.Height;result["Samples"]=d.Samples;result["Mipmaps"]=d.Mipmaps;result["Mip Levels"]=d.MipLevels;
+        result["Color Format"]=int(d.ColorFormat);result["Depth Format"]=int(d.DepthFormat);result["Filter"]=int(d.Filter);result["Wrap"]=int(d.Wrap);result["Clear Color"]=py::make_tuple(d.ClearColor.X,d.ClearColor.Y,d.ClearColor.Z,d.ClearColor.W);return result;
+    }
+    bool SaveTextureAsset(const std::string& source,const py::dict& values){
+        if(m_projectPath.empty())return false;const auto path=std::filesystem::weakly_canonical(std::filesystem::u8path(source));const auto root=std::filesystem::weakly_canonical(m_projectPath.parent_path()/m_engine->GetProject().AssetDirectory);const auto relative=path.lexically_relative(root);
+        if(relative.empty()||*relative.begin()==".."||[&]{auto extension=path.extension().u8string();std::transform(extension.begin(),extension.end(),extension.begin(),[](char8_t c){return c>=u8'A'&&c<=u8'Z'?char8_t(c+32):c;});return extension!=u8".btexture";}()){m_bridgeError="Texture must be inside the project Assets directory.";return false;}
+        TextureDescriptor d;std::string error;if(!Runtime::ReadTextureDescriptor(path,d,error)){m_bridgeError=error;return false;}
+        d.Width=values["Width"].cast<std::uint32_t>();d.Height=values["Height"].cast<std::uint32_t>();d.Samples=values["Samples"].cast<std::uint8_t>();d.Mipmaps=values["Mipmaps"].cast<bool>();d.MipLevels=values["Mip Levels"].cast<std::uint8_t>();
+        d.ColorFormat=static_cast<TextureColorFormat>(values["Color Format"].cast<int>());d.DepthFormat=static_cast<TextureDepthFormat>(values["Depth Format"].cast<int>());d.Filter=static_cast<TextureFilter>(values["Filter"].cast<int>());d.Wrap=static_cast<TextureWrap>(values["Wrap"].cast<int>());
+        const auto color=values["Clear Color"].cast<std::array<float,4>>();d.ClearColor={color[0],color[1],color[2],color[3]};if(!d.Mipmaps)d.MipLevels=0;
+        else {unsigned levels=1,size=std::max(d.Width,d.Height);while(size>1){++levels;size>>=1;}d.MipLevels=static_cast<std::uint8_t>(std::min<unsigned>(levels,d.MipLevels));}
+        if(!Runtime::SaveTextureDescriptor(path,d,error)){m_bridgeError=error;return false;}return m_engine->RefreshTextureAsset(path);
+    }
     py::list UsedShaderAssets() {
         py::list result;
         for(std::size_t i=0;i<m_loadedScenes.size();++i){auto view=SceneAt(i).GetRegistry().view<Camera>();for(auto handle:view){const auto& camera=view.get<Camera>(handle);if(!camera.IsEnabled())continue;for(const auto& effect:camera.PostProcessing.CustomEffects.GetEffects())if(effect.Enabled&&effect.ShaderAsset)result.append(effect.ShaderAsset.ToString());}}
@@ -278,6 +294,8 @@ public:
         return true;
     }
     std::size_t EntityCount() const {return m_engine->GetScene().GetEntityCount();}
+    auto Statistics() const {return m_engine->GetEditorStatistics();}
+    void SetStatisticsText(std::string text,bool visible){m_engine->SetEditorStatisticsText(std::move(text),visible);}
     bool HasActiveCamera() const {
         const auto cameras = m_engine->GetScene().GetRegistry().view<Camera>();
         for (const auto handle : cameras)
@@ -288,7 +306,7 @@ public:
     bool HasGameOutput() const {
         const auto& registry=m_engine->GetScene().GetRegistry();
         for(auto handle:registry.view<Frame>()){const auto& frame=registry.get<Frame>(handle);if(frame.Enabled&&frame.Visible&&frame.Mode==FrameMode::Viewport)return true;}
-        for(auto handle:registry.view<Camera>()){const auto& camera=registry.get<Camera>(handle);const auto* target=registry.try_get<CameraRenderTarget>(handle);if(camera.Enabled&&camera.Active&&(!target||!target->Enabled))return true;}
+        for(auto handle:registry.view<Camera>()){const auto& camera=registry.get<Camera>(handle);const auto* target=registry.try_get<CameraRenderTarget>(handle);if(camera.Enabled&&camera.Active&&!camera.RenderTarget&&(!target||!target->Enabled))return true;}
         return false;
     }
     std::string CreateEntity(const std::string& name, const std::string& parent) {
@@ -430,7 +448,7 @@ public:
                               const std::string& property, py::object value) {
         Entity entity=RequireEntity(id);
         if(GuiRegistry().Find("Bazzalt."+type))return SetGUIProperty(entity,type,property,value);
-        if(type=="Camera"&&entity.HasComponent<Camera>()){auto&v=entity.GetComponent<Camera>();if(property=="Projection")v.Projection=static_cast<CameraProjection>(value.cast<int>());else if(property=="Field of View")v.VerticalFieldOfView=ToRadians(value.cast<float>());else if(property=="Orthographic Size")v.OrthographicSize=value.cast<float>();else if(property=="Near")v.NearPlane=value.cast<float>();else if(property=="Far")v.FarPlane=value.cast<float>();else if(property=="Aspect Ratio")v.AspectRatio=value.cast<float>();else if(property=="Aspect Mode")v.AspectMode=static_cast<CameraAspectMode>(value.cast<int>());else if(property=="Viewport"){auto a=value.cast<std::array<float,4>>();v.Viewport={a[0],a[1],a[2],a[3]};}else if(property=="Priority")v.Priority=value.cast<int>();else if(property=="Active")v.Active=value.cast<bool>();else if(property=="Clear Color"){auto a=value.cast<std::array<float,4>>();v.ClearColor={a[0],a[1],a[2],a[3]};}else if(property=="Post Processing")v.PostProcessing.Enabled=value.cast<bool>();else if(property=="Bloom")v.PostProcessing.Bloom=value.cast<bool>();else if(property=="Ambient Occlusion")v.PostProcessing.AmbientOcclusion=value.cast<bool>();else if(property=="Anti Aliasing")v.PostProcessing.AntiAliasingMode=static_cast<AntiAliasing>(value.cast<int>());else if(property=="Tone Mapping")v.PostProcessing.ToneMappingMode=static_cast<ToneMapping>(value.cast<int>());else if(property=="Exposure")v.PostProcessing.Exposure=value.cast<float>();else if(property=="Depth of Field")v.PostProcessing.DepthOfField.Enabled=value.cast<bool>();else if(property=="Focus Distance")v.PostProcessing.DepthOfField.FocusDistance=value.cast<float>();else if(property=="Aperture")v.PostProcessing.DepthOfField.Aperture=value.cast<float>();else if(property=="Shutter Speed")v.PostProcessing.DepthOfField.ShutterSpeed=value.cast<float>();else if(property=="Sensitivity")v.PostProcessing.DepthOfField.Sensitivity=value.cast<float>();else return false;return true;}
+        if(type=="Camera"&&entity.HasComponent<Camera>()){auto&v=entity.GetComponent<Camera>();if(property=="Render Target"){UUID id;if(!UUID::TryParse(value.cast<std::string>(),id))return false;if(id&&!Texture::Load(id).IsRenderTarget())return false;v.RenderTarget=id;}else if(property=="Projection")v.Projection=static_cast<CameraProjection>(value.cast<int>());else if(property=="Field of View")v.VerticalFieldOfView=ToRadians(value.cast<float>());else if(property=="Orthographic Size")v.OrthographicSize=value.cast<float>();else if(property=="Near")v.NearPlane=value.cast<float>();else if(property=="Far")v.FarPlane=value.cast<float>();else if(property=="Aspect Ratio")v.AspectRatio=value.cast<float>();else if(property=="Aspect Mode")v.AspectMode=static_cast<CameraAspectMode>(value.cast<int>());else if(property=="Viewport"){auto a=value.cast<std::array<float,4>>();v.Viewport={a[0],a[1],a[2],a[3]};}else if(property=="Priority")v.Priority=value.cast<int>();else if(property=="Active")v.Active=value.cast<bool>();else if(property=="Clear Color"){auto a=value.cast<std::array<float,4>>();v.ClearColor={a[0],a[1],a[2],a[3]};}else if(property=="Post Processing")v.PostProcessing.Enabled=value.cast<bool>();else if(property=="Bloom")v.PostProcessing.Bloom=value.cast<bool>();else if(property=="Ambient Occlusion")v.PostProcessing.AmbientOcclusion=value.cast<bool>();else if(property=="Anti Aliasing")v.PostProcessing.AntiAliasingMode=static_cast<AntiAliasing>(value.cast<int>());else if(property=="Tone Mapping")v.PostProcessing.ToneMappingMode=static_cast<ToneMapping>(value.cast<int>());else if(property=="Exposure")v.PostProcessing.Exposure=value.cast<float>();else if(property=="Depth of Field")v.PostProcessing.DepthOfField.Enabled=value.cast<bool>();else if(property=="Focus Distance")v.PostProcessing.DepthOfField.FocusDistance=value.cast<float>();else if(property=="Aperture")v.PostProcessing.DepthOfField.Aperture=value.cast<float>();else if(property=="Shutter Speed")v.PostProcessing.DepthOfField.ShutterSpeed=value.cast<float>();else if(property=="Sensitivity")v.PostProcessing.DepthOfField.Sensitivity=value.cast<float>();else return false;return true;}
         if(type=="Light"&&entity.HasComponent<Light>()){
             auto& stored=entity.GetComponent<Light>();auto v=stored;
             if(property=="Type"){const int index=value.cast<int>();if(index<0||index>3)return false;v.Type=static_cast<LightType>(index);}
@@ -510,9 +528,8 @@ public:
             if(!m_engine->SaveSceneAsset(SceneAt(i),path)){CleanupSnapshot();return false;}
             m_extraSnapshots.emplace_back(SceneAt(i).GetUUID(),path);
         }
-        const bool initialized=m_engine->IsInitialized();
-        // Init starts scripts on the first Play; do not invoke OnCreate twice.
-        if (!m_engine->Init()||(initialized&&!m_engine->StartScripts())) {m_engine->StopScripts();m_engine->LoadScene(m_snapshot);CleanupSnapshot();return false;}
+        // Initialize rendering without gameplay, then start exactly once per Play.
+        if (!m_engine->Init(false, false)||!m_engine->StartScripts()) {m_engine->StopScripts();m_engine->LoadScene(m_snapshot);CleanupSnapshot();return false;}
         m_playing = true; m_paused = false; return true;
     }
     void Pause(bool paused) { if (m_playing) {m_paused = paused;if(paused)Runtime::InputAccess::SetActive(false);} }
@@ -667,6 +684,8 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("asset_directory", &Bazzalt::EditorBridge::EditorHost::AssetDirectory)
         .def("asset_info", &Bazzalt::EditorBridge::EditorHost::AssetInfo)
         .def("refresh_assets", &Bazzalt::EditorBridge::EditorHost::RefreshAssets)
+        .def("texture_asset_info", &Bazzalt::EditorBridge::EditorHost::TextureAssetInfo)
+        .def("save_texture_asset", &Bazzalt::EditorBridge::EditorHost::SaveTextureAsset)
         .def("used_shader_assets", &Bazzalt::EditorBridge::EditorHost::UsedShaderAssets)
         .def("entities", &Bazzalt::EditorBridge::EditorHost::Entities)
         .def("loaded_scenes", &Bazzalt::EditorBridge::EditorHost::LoadedScenes)
@@ -674,6 +693,8 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("entity_pose", &Bazzalt::EditorBridge::EditorHost::EntityPose)
         .def("restore_transforms", &Bazzalt::EditorBridge::EditorHost::RestoreTransforms)
         .def("entity_count", &Bazzalt::EditorBridge::EditorHost::EntityCount)
+        .def("statistics", &Bazzalt::EditorBridge::EditorHost::Statistics)
+        .def("set_statistics_text", &Bazzalt::EditorBridge::EditorHost::SetStatisticsText)
         .def("has_active_camera", &Bazzalt::EditorBridge::EditorHost::HasActiveCamera)
         .def("has_game_output", &Bazzalt::EditorBridge::EditorHost::HasGameOutput)
         .def("create_entity", &Bazzalt::EditorBridge::EditorHost::CreateEntity,

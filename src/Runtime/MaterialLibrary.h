@@ -6,4 +6,5 @@ MaterialShaderPackage GetBuiltinMaterialPackage(UUID shader);
 Detail::MaterialServices* GetMaterialServices();
 void ResetMaterialLibrary();
 void ResetRuntimeMaterials();
+UUID GetMaterialCameraTexture(UUID material,const std::string& parameter);
 }

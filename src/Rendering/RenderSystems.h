@@ -28,10 +28,12 @@ protected:
     void OnUpdate(Scene& scene, float deltaTime) override;
     void OnDestroy(Scene& scene) override;
 private:
-    struct Resource { utils::Entity Entity; filament::Camera* Camera = nullptr; filament::View* View = nullptr; filament::Texture* Color=nullptr;filament::Texture* Depth=nullptr;filament::RenderTarget* Target=nullptr; };
+    struct Resource { utils::Entity Entity; filament::Camera* Camera = nullptr; filament::View* View = nullptr; filament::Texture* Color=nullptr;filament::Texture* History=nullptr;filament::Texture* Depth=nullptr;filament::RenderTarget* Target=nullptr;filament::RenderTarget* HistoryTarget=nullptr;UUID OutputAsset{};TextureDescriptor TextureSettings;bool Owned=true; };
     void Destroy(UUID id);
     RenderBackend& m_backend;
     std::unordered_map<UUID, Resource> m_resources;
+    std::string m_captureWarning;
+    std::unordered_map<UUID,std::string> m_textureWarnings;
 };
 
 class LightSystem final : public ComponentSystem<Transform, Light> {

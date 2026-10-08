@@ -1,4 +1,5 @@
 #include "Bazzalt/AssetManager.h"
+#include "Runtime/TextureLibrary.h"
 
 #include <algorithm>
 #include <array>
@@ -248,7 +249,7 @@ void AssetManager::Bind(Runtime::Engine* engine) {
 }
 void AssetManager::Unbind(Runtime::Engine* engine) {
     Engines.erase(std::remove(Engines.begin(), Engines.end(), engine), Engines.end());
-    if(Engines.empty()){Runtime::ResetMaterialLibrary();Detail::BoundMaterialServices=nullptr;}
+    if(Engines.empty()){Runtime::ResetMaterialLibrary();Runtime::ResetTextureLibrary();Detail::BoundMaterialServices=nullptr;}
 }
 
 } // namespace Bazzalt

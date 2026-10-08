@@ -36,6 +36,32 @@ function Behavior:OnCreate()
     assert(B.GUI.GetFrame(button)==hud)
     assert(B.GuiStyle.new().Opacity==1)
     assert(B.GUI.GetInteraction(button).Clicked==false)
+    local camera=self.Entity:GetScene():CreateEntity("Lua Feed")
+    camera:AddComponent("Camera")
+    camera:AddComponent("CameraRenderTarget")
+    local feed=B.RenderTexture.FromCamera(camera)
+    assert(feed:IsValid(self.Entity:GetScene()))
+    assert(feed:Resize(self.Entity:GetScene(),64,32))
+    assert(feed:GetSize(self.Entity:GetScene()).X==64)
+    local image=B.GuiImage.new()
+    image:SetRenderTexture(feed)
+    assert(image:GetRenderTexture():GetCameraUUID()==camera:GetUUID())
+    local material=B.Material.Create(B.ShaderPreset.Unlit)
+    local description=B.TextureDescriptor.new()
+    description.Width=64;description.Height=32;description.Mipmaps=true
+    assert(description:IsValid() and description:GetMipLevelCount()==7)
+    local texture=B.Texture.Create(description)
+    assert(texture:IsRuntime() and texture:IsRenderTarget())
+    local settings=camera:GetComponent("Camera");settings:SetRenderTarget(texture);camera:SetComponent("Camera",settings)
+    assert(camera:GetComponent("Camera"):GetRenderTarget():GetAssetUUID()==texture:GetAssetUUID())
+    image:SetTexture(texture);assert(image.Texture==texture:GetAssetUUID())
+    material:SetTexture("baseColorTexture",texture);assert(material:GetTexture("baseColorTexture")==texture:GetAssetUUID())
+    texture:Resize(128,64);assert(texture:GetDescriptor().Width==128);assert(texture:Destroy())
+    material:SetRenderTexture("baseColorTexture",feed)
+    assert(material:GetRenderTexture("baseColorTexture"):GetCameraUUID()==camera:GetUUID())
+    material:ResetProperties()
+    assert(not material:HasOverride("baseColorTexture"))
+    assert(material:Destroy())
     local object = self.Entity:AddComponent("Light")
     object.Intensity = 200
     self.Entity:SetComponent("Light", object)
@@ -88,7 +114,17 @@ return Behavior
     assert(restoredEntity.GetComponent<ScriptComponents>().Values.front().Lua);
     auto projectFile=directory/"Game.bproject";assert(engine.SaveProject(projectFile));
     assert(engine.LoadProject(projectFile,false));entity.RemoveComponent<Light>();
-    assert(engine.Init(true));const float before=entity.GetWorldTransform().Position.X;
+    // Editor initialization must not execute OnCreate before entering Play.
+    const auto authoringName=entity.GetComponent<Name>().Value;
+    assert(engine.Init(true,false));assert(!entity.HasComponent<Light>());
+    assert(entity.GetComponent<Name>().Value==authoringName);
+    binding.Module=asset->CachePath;
+    assert(engine.ConfigureScripts({binding}));assert(engine.StartScripts());
+    assert(entity.GetComponent<Light>().Intensity==200);
+    engine.StopScripts();entity.RemoveComponent<Light>();
+    assert(engine.ConfigureScripts({binding}));assert(engine.StartScripts());
+    assert(entity.GetComponent<Light>().Intensity==200);
+    const float before=entity.GetWorldTransform().Position.X;
     engine.Update();assert(entity.GetWorldTransform().Position.X>before);engine.Shutdown();
 
     // A source-free game retains the imported asset UUID and only ships bytecode.

@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QCheckBox,QComboBox,QDialog,QDoubleSpinBox,QFormLa
 import sys
 from pathlib import Path
 from ..platform_services import ChooseApplication
+from .transform_units import DEFAULT_UNITS,TransformUnits
 
 DEFAULT_PREFERENCES={"general":{"confirm_unsaved":True,"save_workspace":True},"appearance":{"theme":"dark","locale":"en"},"scene":{"navigation_speed":5.0,"grid_visible":True,"grid_plane":1},"console":{"clear_on_play":False},"scripting":{"show_compile_success":True}}
 DEFAULT_PREFERENCES["scene"].update(pivot_center=False,local_space=False,gizmos_visible=True,stats_visible=False,icons_visible=True,shading_mode=0,look_sensitivity=.35,fly_boost=3.0)
@@ -18,12 +19,16 @@ DEFAULT_PREFERENCES["history"]={"command_limit":100,"memory_mb":128}
 DEFAULT_PREFERENCES["rendering"]={"backend":"automatic"}
 DEFAULT_PREFERENCES["file_associations"]={"remember":True}
 DEFAULT_PREFERENCES["tools"]={"compiler_path":"","sdk_path":""}
+DEFAULT_PREFERENCES["transform"]=dict(DEFAULT_UNITS)
+STATISTIC_FIELDS=("fps","frame_ms","tick_ms","objects","selected","components","cameras","lights","renderables","render_primitives","viewports","captures","gui_batches")
+DEFAULT_PREFERENCES["statistics"]={key:key in {"fps","objects"} for key in STATISTIC_FIELDS}
 
 def MergePreferences(value)->dict:
     result=deepcopy(DEFAULT_PREFERENCES)
     if isinstance(value,dict):
         for section,fields in value.items():
             if section in result and isinstance(fields,dict):result[section].update({key:item for key,item in fields.items() if key in result[section]})
+    result["transform"]=TransformUnits(result["transform"])
     return result
 
 class PreferencesDialog(QDialog):
@@ -32,7 +37,7 @@ class PreferencesDialog(QDialog):
         self.setObjectName("PreferencesDialog");self.setWindowModality(Qt.WindowModality.WindowModal);self.setModal(True);self.setWindowTitle(self.Tr("preferences.title"));self.resize(680,460);self.setMinimumSize(560,380)
         root=QVBoxLayout(self);root.setContentsMargins(10,10,10,10);root.setSpacing(10);body=QHBoxLayout();body.setSpacing(10);self.Sections=QListWidget();self.Sections.setObjectName("PreferencesSections");self.Sections.setFixedWidth(155);self.Pages=QStackedWidget();body.addWidget(self.Sections);body.addWidget(self.Pages,1);root.addLayout(body,1)
         self._associations=editor.AssetBrowser.ExternalOpener.Associations()
-        self.Controls={};self._AddGeneral();self._AddAppearance();self._AddScene();self._AddConsole();self._AddScripting();self._AddTools();self._AddHistory();self._AddRendering();self._AddFileAssociations();self.Sections.currentRowChanged.connect(self.Pages.setCurrentIndex);self.Sections.setCurrentRow(0)
+        self.Controls={};self._AddGeneral();self._AddAppearance();self._AddScene();self._AddTransform();self._AddStatistics();self._AddConsole();self._AddScripting();self._AddTools();self._AddHistory();self._AddRendering();self._AddFileAssociations();self.Sections.currentRowChanged.connect(self.Pages.setCurrentIndex);self.Sections.setCurrentRow(0)
         buttons=QHBoxLayout();self.Restore=QPushButton(self.Tr("preferences.restore_defaults"));self.Cancel=QPushButton(self.Tr("preferences.cancel"));self.Apply=QPushButton(self.Tr("preferences.apply"));self.Apply.setDefault(True);buttons.addWidget(self.Restore);buttons.addStretch();buttons.addWidget(self.Cancel);buttons.addWidget(self.Apply);root.addLayout(buttons)
         self.Restore.clicked.connect(self._RestoreDefaults);self.Cancel.clicked.connect(self.reject);self.Apply.clicked.connect(self._Apply);self.SetValues(editor.GetPreferences())
     def _Page(self,key:str)->QFormLayout:
@@ -47,12 +52,23 @@ class PreferencesDialog(QDialog):
         for key in ("pivot_center","local_space","gizmos_visible","stats_visible","icons_visible","orientation_visible","high_level_selection"):
             field=QCheckBox(self.Tr(f"preferences.{key}"));layout.addRow(field);self.Controls[key]=field
         shading=QComboBox()
-        for index,name in enumerate(("Lit","Unlit","Wireframe","Lighting Only","Overdraw")):shading.addItem(name,index)
+        for index,name in enumerate(("lit","unlit","wireframe","lighting_only","overdraw")):shading.addItem(self.Tr("view.shading."+name),index)
         layout.addRow(self.Tr("preferences.shading_mode"),shading);self.Controls["shading_mode"]=shading
         for key,minimum,maximum,value in (("look_sensitivity",.05,2,.35),("fly_boost",1,10,3)):
             field=RangeInput(minimum,maximum,value,decimals=2);layout.addRow(self.Tr(f"preferences.{key}"),field);self.Controls[key]=field
     def _AddConsole(self):
         layout=self._Page("console");clear=QCheckBox(self.Tr("preferences.clear_console_play"));layout.addRow(clear);self.Controls["clear_on_play"]=clear
+    def _AddTransform(self):
+        layout=self._Page("transform")
+        for key,value in DEFAULT_UNITS.items():
+            if isinstance(value,bool):field=QCheckBox(self.Tr("preferences."+key));layout.addRow(field)
+            else:
+                field=QDoubleSpinBox();field.setRange(.0001,10000);field.setDecimals(4);field.setSingleStep(.1);layout.addRow(self.Tr("preferences."+key),field)
+            self.Controls[key]=field
+    def _AddStatistics(self):
+        layout=self._Page("statistics")
+        for key in STATISTIC_FIELDS:
+            field=QCheckBox(self.Tr("statistics.label."+key));layout.addRow(field);self.Controls["stat_"+key]=field
     def _AddHistory(self):
         layout=self._Page("history")
         for key,minimum,maximum,value in (("command_limit",1,1000,100),("memory_mb",1,2048,128)):
@@ -118,6 +134,9 @@ class PreferencesDialog(QDialog):
         self._ComboSet(c["rendering_backend"],p["rendering"]["backend"])
         c["remember_associations"].setChecked(bool(p["file_associations"]["remember"]))
         for key in ("compiler_path","sdk_path"):c[key].setText(str(p["tools"][key]))
+        for key,value in p["transform"].items():
+            c[key].setChecked(value) if isinstance(value,bool) else c[key].setValue(value)
+        for key in STATISTIC_FIELDS:c["stat_"+key].setChecked(bool(p["statistics"][key]))
     def Values(self)->dict:
         c=self.Controls;result=MergePreferences(self.Editor.GetPreferences())
         result.update(general={"confirm_unsaved":c["confirm_unsaved"].isChecked(),"save_workspace":c["save_workspace"].isChecked()},appearance={"theme":c["theme"].currentData(),"locale":c["locale"].currentData()},console={"clear_on_play":c["clear_on_play"].isChecked()},scripting={"show_compile_success":c["show_compile_success"].isChecked()})
@@ -129,6 +148,8 @@ class PreferencesDialog(QDialog):
         result["rendering"]={"backend":c["rendering_backend"].currentData() or "automatic"}
         result["file_associations"]={"remember":c["remember_associations"].isChecked()}
         result["tools"]={key:c[key].text().strip() for key in ("compiler_path","sdk_path")}
+        result["transform"]={key:c[key].isChecked() if isinstance(value,bool) else c[key].value() for key,value in DEFAULT_UNITS.items()}
+        result["statistics"]={key:c["stat_"+key].isChecked() for key in STATISTIC_FIELDS}
         return result
     def _Apply(self)->None:
         opener=self.Editor.AssetBrowser.ExternalOpener;previous=opener.Associations()

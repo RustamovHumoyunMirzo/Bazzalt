@@ -1,10 +1,12 @@
 #pragma once
 
 #include <cstdint>
+#include <stdexcept>
 
 #include "Bazzalt/Component.h"
 #include "Bazzalt/Math.h"
 #include "Bazzalt/PostProcessing.h"
+#include "Bazzalt/Texture.h"
 
 namespace Bazzalt {
 
@@ -65,6 +67,9 @@ struct CameraPostProcessing {
 };
 
 struct Camera : Component {
+    UUID RenderTarget{}; // Writable texture UUID; zero presents normally.
+    void SetRenderTarget(Texture texture){if(texture.GetAssetUUID()&&!texture.IsRenderTarget())throw std::invalid_argument("Camera RenderTarget must be a writable texture");RenderTarget=texture.GetAssetUUID();}
+    [[nodiscard]] Texture GetRenderTarget() const{return Texture::Load(RenderTarget);}
     CameraProjection Projection = CameraProjection::Perspective;
     float VerticalFieldOfView = ToRadians(60.0f);
     float OrthographicSize = 10.0f;

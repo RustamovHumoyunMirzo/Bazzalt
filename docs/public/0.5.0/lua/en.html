@@ -47,7 +47,7 @@ function Walk:OnUpdate(deltaTime)
 end
 
 return Walk</code></pre>
-<p>The script returns a behavior table. The editor reads COMPONENT and PROPERTY declaration comments to discover its name and Inspector fields; those comments are not Lua functions. The runtime supplies self.Entity and applies Inspector property values before calling OnCreate.</p>
+<p>The script returns a behavior table. The editor reads COMPONENT and PROPERTY declaration comments to discover its name and Properties fields; those comments are not Lua functions. The runtime supplies self.Entity and applies Properties property values before calling OnCreate.</p>
 <p>Direction is normalized so diagonal movement is not faster. Multiplying by deltaTime gives movement per second rather than per frame. The example moves in world X/Z directions, not relative to the game camera, and does not implement collision or gravity.</p>
 <h2 id="attach-and-test">Attach and test</h2>
 <ol><li>Select an entity with a Primitive Object or model so movement is visible.</li><li>Attach Walk through Add Component or drag the Lua script onto the entity.</li><li>Set Speed if needed, then press Play.</li><li>Click Game output for input focus and use WASD.</li></ol>

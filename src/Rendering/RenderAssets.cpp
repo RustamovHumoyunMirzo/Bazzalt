@@ -1,6 +1,8 @@
 #include "Rendering/RenderAssets.h"
+#include "Runtime/TextureLibrary.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -21,6 +23,7 @@
 #include <filament/RenderableManager.h>
 #include <filament/Scene.h>
 #include <filament/Texture.h>
+#include <filament/RenderTarget.h>
 #include <filament/TextureSampler.h>
 #include <filament/TransformManager.h>
 #include <filament/VertexBuffer.h>
@@ -175,7 +178,7 @@ struct RenderAssets::Impl {
         bool AddedToScene = false;
         bool DebugWireframeAdded = false;
         std::vector<Original> Originals;
-        struct Override { utils::Entity Entity;std::size_t Primitive;UUID Asset;filament::MaterialInstance* Base;filament::MaterialInstance* Value=nullptr;bool StateOverride=false; };
+        struct Override { utils::Entity Entity;std::size_t Primitive;UUID Asset;filament::MaterialInstance* Base;filament::MaterialInstance* Value=nullptr;bool StateOverride=false;bool CameraFeed=false; };
         std::vector<Override> Overrides;
         std::shared_ptr<ModelGeometryAsset> Geometry;
         std::uint32_t SourceIndex=Mesh::EntireAsset;
@@ -205,12 +208,26 @@ struct RenderAssets::Impl {
     std::unordered_map<UUID, std::filesystem::file_time_type> MaterialModified;
     std::vector<filament::Material*> RetiredMaterials;
     std::unordered_map<UUID, filament::Texture*> Textures;
+    std::unordered_map<UUID, filament::Texture*> CameraTextures;
+    struct TextureSurface {TextureDescriptor Descriptor;TextureTargets Targets;filament::Texture* Front=nullptr;};
+    std::unordered_map<UUID,TextureSurface> TextureSurfaces;
+    std::unordered_map<UUID,UUID> TextureProducers;
+    std::function<void()> InvalidateTextures;
+    std::function<filament::Texture*(UUID)> ResolveCamera;
+    filament::Texture* WhiteTexture=nullptr;
+    filament::Texture* BlackTexture=nullptr;
     filament::Material* DebugUnlit=nullptr;filament::Material* DebugLighting=nullptr;filament::Material* DebugOverdraw=nullptr;filament::Material* DebugWireframe=nullptr;
     filament::Material* PrimitiveMaterial=nullptr;
     filament::MaterialInstance* DebugUnlitInstance=nullptr;filament::MaterialInstance* DebugLightingInstance=nullptr;filament::MaterialInstance* DebugOverdrawInstance=nullptr;filament::MaterialInstance* DebugWireframeInstance=nullptr;
     std::string DebugMode="lit";
 
     Impl(filament::Engine& engine, filament::Scene& scene) : Engine(engine), Scene(scene) {
+        const auto solid=[&](std::uint8_t color){
+            auto* texture=filament::Texture::Builder().width(1).height(1).levels(1).format(filament::Texture::InternalFormat::RGBA8).build(Engine);
+            auto* pixel=new std::array<std::uint8_t,4>{color,color,color,255};
+            texture->setImage(Engine,0,filament::Texture::PixelBufferDescriptor(pixel->data(),pixel->size(),filament::Texture::Format::RGBA,filament::Texture::Type::UBYTE,[](void*,std::size_t,void* data){delete static_cast<std::array<std::uint8_t,4>*>(data);},pixel));return texture;
+        };
+        WhiteTexture=solid(255);BlackTexture=solid(0);
         GltfMaterials = filament::gltfio::createJitShaderProvider(&Engine);
         GltfTextures = filament::gltfio::createStbProvider(&Engine);
         StandaloneTextures = filament::gltfio::createStbProvider(&Engine);
@@ -250,7 +267,54 @@ struct RenderAssets::Impl {
         return material;
     }
 
+    void ClearSurface(TextureSurface& surface){
+        const auto& d=surface.Descriptor;const auto count=std::size_t(d.Width)*d.Height*4;
+        const auto upload=[&](auto* data,filament::Texture::Type type){
+            using Data=std::remove_pointer_t<decltype(data)>;auto owned=std::make_shared<Data>(std::move(*data));delete data;
+            for(auto* texture:{surface.Targets.Color,surface.Targets.History})texture->setImage(Engine,0,filament::Texture::PixelBufferDescriptor(owned->data(),owned->size()*sizeof(typename Data::value_type),filament::Texture::Format::RGBA,type,[](void*,std::size_t,void* user){delete static_cast<std::shared_ptr<Data>*>(user);},new std::shared_ptr<Data>(owned)));
+        };
+        if(d.ColorFormat==TextureColorFormat::RGBA8){auto* data=new std::vector<std::uint8_t>(count);const float color[]={d.ClearColor.X,d.ClearColor.Y,d.ClearColor.Z,d.ClearColor.W};for(std::size_t i=0;i<count;++i)(*data)[i]=static_cast<std::uint8_t>(std::lround(std::clamp(color[i%4],0.f,1.f)*255));upload(data,filament::Texture::Type::UBYTE);}
+        else {auto* data=new std::vector<float>(count);const float color[]={d.ClearColor.X,d.ClearColor.Y,d.ClearColor.Z,d.ClearColor.W};for(std::size_t i=0;i<count;++i)(*data)[i]=color[i%4];upload(data,filament::Texture::Type::FLOAT);}
+        if(d.Mipmaps){surface.Targets.Color->generateMipmaps(Engine);surface.Targets.History->generateMipmaps(Engine);}
+        surface.Front=surface.Targets.History; // Initial capture writes Color, never the sampled initial history.
+    }
+    void RetireSurface(UUID id){
+        auto found=TextureSurfaces.find(id);if(found==TextureSurfaces.end())return;
+        if(InvalidateTextures)InvalidateTextures();
+        for(auto& [handle,instance]:Instances){(void)handle;for(auto& material:instance.Overrides)if(material.Value){
+            auto source=Bazzalt::Material::Load(material.Asset);if(!source.IsValid())continue;
+            for(const auto& parameter:source.GetParameters())if(parameter.Type==ShaderParameterType::Texture2D&&source.GetTexture(parameter.Name)==id)
+                material.Value->setParameter(parameter.Name.c_str(),BlackTexture,filament::TextureSampler{});
+        }}
+        auto targets=found->second.Targets;TextureSurfaces.erase(found);
+        Engine.destroy(targets.Target);Engine.destroy(targets.HistoryTarget);Engine.destroy(targets.Color);Engine.destroy(targets.History);if(targets.Depth)Engine.destroy(targets.Depth);
+    }
+    TextureSurface& EnsureSurface(UUID id,const TextureDescriptor& descriptor){
+        if(auto old=TextureSurfaces.find(id);old!=TextureSurfaces.end()){
+            const auto& d=old->second.Descriptor;
+            const bool allocation=d.Width!=descriptor.Width||d.Height!=descriptor.Height||d.Samples!=descriptor.Samples||d.GetMipLevelCount()!=descriptor.GetMipLevelCount()||d.ColorFormat!=descriptor.ColorFormat||d.DepthFormat!=descriptor.DepthFormat;
+            if(!allocation){const bool clear=d.ClearColor.X!=descriptor.ClearColor.X||d.ClearColor.Y!=descriptor.ClearColor.Y||d.ClearColor.Z!=descriptor.ClearColor.Z||d.ClearColor.W!=descriptor.ClearColor.W;old->second.Descriptor=descriptor;if(clear)ClearSurface(old->second);return old->second;}
+            RetireSurface(id);
+        }
+        using T=filament::Texture;static constexpr T::InternalFormat colors[]={T::InternalFormat::RGBA8,T::InternalFormat::RGBA16F,T::InternalFormat::RGBA32F};
+        const auto format=colors[unsigned(descriptor.ColorFormat)];
+        if(!T::isTextureFormatSupported(Engine,format)||(descriptor.Mipmaps&&!T::isTextureFormatMipmappable(Engine,format)))throw std::invalid_argument("Texture format/mipmaps are not supported by this renderer");
+        TextureSurface surface;surface.Descriptor=descriptor;
+        struct AllocationGuard {filament::Engine& Engine;TextureSurface& Surface;bool Complete=false;~AllocationGuard(){if(Complete)return;auto& t=Surface.Targets;if(t.Target)Engine.destroy(t.Target);if(t.HistoryTarget)Engine.destroy(t.HistoryTarget);if(t.Color)Engine.destroy(t.Color);if(t.History)Engine.destroy(t.History);if(t.Depth)Engine.destroy(t.Depth);}} allocationGuard{Engine,surface};
+        auto usage=T::Usage::COLOR_ATTACHMENT|T::Usage::SAMPLEABLE|T::Usage::UPLOADABLE|T::Usage::BLIT_SRC|T::Usage::BLIT_DST;
+        if(descriptor.Mipmaps)usage|=T::Usage::GEN_MIPMAPPABLE;
+        const auto color=[&]{return T::Builder().width(descriptor.Width).height(descriptor.Height).levels(descriptor.GetMipLevelCount()).sampler(T::Sampler::SAMPLER_2D).format(format).usage(usage).build(Engine);};
+        surface.Targets.Color=color();surface.Targets.History=color();
+        if(descriptor.DepthFormat!=TextureDepthFormat::None){static constexpr T::InternalFormat depths[]={T::InternalFormat::DEPTH16,T::InternalFormat::DEPTH16,T::InternalFormat::DEPTH24,T::InternalFormat::DEPTH32F};surface.Targets.Depth=T::Builder().width(descriptor.Width).height(descriptor.Height).levels(1).format(depths[unsigned(descriptor.DepthFormat)]).usage(T::Usage::DEPTH_ATTACHMENT).build(Engine);}
+        const auto target=[&](T* attachment){auto builder=filament::RenderTarget::Builder().samples(descriptor.Samples).texture(filament::RenderTarget::AttachmentPoint::COLOR,attachment);if(surface.Targets.Depth)builder.texture(filament::RenderTarget::AttachmentPoint::DEPTH,surface.Targets.Depth);return builder.build(Engine);};
+        surface.Targets.Target=target(surface.Targets.Color);surface.Targets.HistoryTarget=target(surface.Targets.History);ClearSurface(surface);
+        auto& result=TextureSurfaces.emplace(id,std::move(surface)).first->second;allocationGuard.Complete=true;return result;
+    }
     filament::Texture* LoadTexture(UUID id, bool srgb) {
+        if(auto descriptor=GetTextureDescriptor(id)){
+            try{auto& surface=EnsureSurface(id,*descriptor);if(auto producer=TextureProducers.find(id);producer!=TextureProducers.end()&&ResolveCamera)if(auto* output=ResolveCamera(producer->second))return output;return surface.Front;}
+            catch(const std::invalid_argument&){return BlackTexture;}
+        }
         if (!id || !StandaloneTextures) return nullptr;
         if (const auto found = Textures.find(id); found != Textures.end()) return found->second;
         const auto asset = AssetManager::GetAsset(id);
@@ -294,7 +358,8 @@ struct RenderAssets::Impl {
         renderables.setCastShadows(instance, component.CastShadows);
         renderables.setReceiveShadows(instance, component.ReceiveShadows);
     }
-    void ApplyMaterialValues(filament::MaterialInstance* instance,UUID asset) {
+    bool ApplyMaterialValues(filament::MaterialInstance* instance,UUID asset) {
+        bool cameraFeed=false;
         auto* services=GetMaterialServices();auto material=Bazzalt::Material::Load(asset);
         const auto state=material.GetRenderState();
         if(state.Override){
@@ -312,7 +377,15 @@ struct RenderAssets::Impl {
             if(found==actual.end()||found->count>1||found->isSubpass)continue;
             Detail::MaterialValue v;if(!services->Get(asset,p.Name.c_str(),&v))continue;
             const auto* name=p.Name.c_str();using U=filament::Material::ParameterType;
-            if(p.Type==ShaderParameterType::Texture2D){if(found->isSampler&&found->samplerType==filament::Material::SamplerType::SAMPLER_2D)instance->setParameter(name,LoadTexture(v.Texture,false),filament::TextureSampler(filament::TextureSampler::MagFilter::LINEAR,filament::TextureSampler::WrapMode::REPEAT));continue;}
+            if(p.Type==ShaderParameterType::Texture2D){
+                if(found->isSampler&&found->samplerType==filament::Material::SamplerType::SAMPLER_2D){
+                    const UUID camera=GetMaterialCameraTexture(asset,p.Name);
+                    cameraFeed=cameraFeed||bool(camera)||TextureProducers.contains(v.Texture);
+                    auto* texture=camera?(CameraTextures.contains(camera)?CameraTextures.at(camera):BlackTexture):LoadTexture(v.Texture,p.Name=="baseColorTexture");
+                    if(!texture)texture=(camera||v.Texture)?BlackTexture:WhiteTexture;
+                    instance->setParameter(name,texture,Sampler(texture));
+                }continue;
+            }
             if(found->isSampler)continue;
             switch(p.Type){
                 case ShaderParameterType::Float:if(found->type==U::FLOAT)instance->setParameter(name,v.Numbers[0]);break;
@@ -326,6 +399,7 @@ struct RenderAssets::Impl {
                 default:break;
             }
         }
+        return cameraFeed;
     }
     void UpdateMaterials(Instance& value) {
         for(auto& override:value.Overrides){
@@ -340,9 +414,17 @@ struct RenderAssets::Impl {
                 Engine.getRenderableManager().setMaterialInstanceAt(ri,override.Primitive,override.Value);
                 if(old)Engine.destroy(old);ApplyDebug(value);
             }else if(!shader&&override.Value){Restore(value);const auto ri=Engine.getRenderableManager().getInstance(override.Entity);Engine.getRenderableManager().setMaterialInstanceAt(ri,override.Primitive,override.Base);Engine.destroy(override.Value);override.Value=nullptr;ApplyDebug(value);}
-            if(override.Value&&material.IsValid())ApplyMaterialValues(override.Value,override.Asset);
+            override.CameraFeed=override.Value&&material.IsValid()&&ApplyMaterialValues(override.Value,override.Asset);
             override.StateOverride=stateOverride;
         }
+    }
+    filament::TextureSampler Sampler(filament::Texture* texture) const{
+        using S=filament::TextureSampler;
+        for(const auto& [id,surface]:TextureSurfaces){(void)id;if(texture!=surface.Targets.Color&&texture!=surface.Targets.History)continue;
+            const auto& d=surface.Descriptor;const auto mag=d.Filter==TextureFilter::Point?S::MagFilter::NEAREST:S::MagFilter::LINEAR;
+            const auto min=d.Filter==TextureFilter::Point?(d.Mipmaps?S::MinFilter::NEAREST_MIPMAP_NEAREST:S::MinFilter::NEAREST):!d.Mipmaps?S::MinFilter::LINEAR:d.Filter==TextureFilter::Trilinear?S::MinFilter::LINEAR_MIPMAP_LINEAR:S::MinFilter::LINEAR_MIPMAP_NEAREST;
+            static constexpr S::WrapMode wrap[]={S::WrapMode::CLAMP_TO_EDGE,S::WrapMode::REPEAT,S::WrapMode::MIRRORED_REPEAT};return S(min,mag,wrap[unsigned(d.Wrap)]);
+        }return S(S::MinFilter::LINEAR,S::MagFilter::LINEAR,S::WrapMode::CLAMP_TO_EDGE);
     }
     void RegisterOverrides(Instance& value,const Mesh& component) {
         const auto apply=[&](utils::Entity entity){auto& manager=Engine.getRenderableManager();const auto ri=manager.getInstance(entity);if(!ri)return;
@@ -621,10 +703,47 @@ void RenderAssets::EndEditorView(){if(!m_impl)return;for(auto entity:m_impl->Edi
 
 bool RenderAssets::SetDebugMode(const std::string& mode){if(!m_impl||mode!="lit"&&mode!="unlit"&&mode!="wireframe"&&mode!="lighting_only"&&mode!="overdraw")return false;m_impl->DebugMode=mode;for(auto& [_,instance]:m_impl->Instances)m_impl->ApplyDebug(instance);return true;}
 filament::Texture* RenderAssets::GetGuiTexture(UUID id){return m_impl?m_impl->LoadTexture(id,true):nullptr;}
+void RenderAssets::SetCameraTexture(UUID camera,filament::Texture* texture){
+    if(!m_impl)return;
+    auto previous=m_impl->CameraTextures.find(camera);
+    if((previous==m_impl->CameraTextures.end()&&!texture)||(previous!=m_impl->CameraTextures.end()&&previous->second==texture))return;
+    if(texture)m_impl->CameraTextures[camera]=texture;else m_impl->CameraTextures.erase(camera);
+    // Rebind every borrower before CameraSystem destroys an old attachment.
+    for(auto& [id,value]:m_impl->Instances){(void)id;m_impl->UpdateMaterials(value);}
+}
+std::vector<UUID> RenderAssets::GetCameraDependencies() const{
+    std::vector<UUID> sources;if(!m_impl)return sources;
+    for(const auto& [id,value]:m_impl->Instances){(void)id;for(const auto& material:value.Overrides)if(material.CameraFeed&&m_impl->Scene.hasEntity(material.Entity))
+        for(const auto& parameter:Bazzalt::Material::Load(material.Asset).GetParameters())if(parameter.Type==ShaderParameterType::Texture2D){auto camera=GetMaterialCameraTexture(material.Asset,parameter.Name);if(!camera)camera=GetTextureProducer(Bazzalt::Material::Load(material.Asset).GetTexture(parameter.Name));if(camera&&std::find(sources.begin(),sources.end(),camera)==sources.end())sources.push_back(camera);}
+    }std::sort(sources.begin(),sources.end());return sources;
+}
+RenderAssets::TextureTargets RenderAssets::GetTextureTargets(UUID texture){auto descriptor=GetTextureDescriptor(texture);if(!descriptor)throw std::invalid_argument("Invalid writable texture");return m_impl->EnsureSurface(texture,*descriptor).Targets;}
+void RenderAssets::SetTextureCallbacks(std::function<void()> invalidate,std::function<filament::Texture*(UUID)> resolveCamera){m_impl->InvalidateTextures=std::move(invalidate);m_impl->ResolveCamera=std::move(resolveCamera);}
+void RenderAssets::SetTextureProducer(UUID texture,UUID camera){
+    if(!texture||!m_impl)return;
+    auto old=m_impl->TextureProducers.find(texture);if((old==m_impl->TextureProducers.end()&&!camera)||(old!=m_impl->TextureProducers.end()&&old->second==camera))return;
+    if(camera){if(old!=m_impl->TextureProducers.end())if(auto surface=m_impl->TextureSurfaces.find(texture);surface!=m_impl->TextureSurfaces.end())m_impl->ClearSurface(surface->second);m_impl->TextureProducers[texture]=camera;}else {m_impl->TextureProducers.erase(texture);if(auto surface=m_impl->TextureSurfaces.find(texture);surface!=m_impl->TextureSurfaces.end())m_impl->ClearSurface(surface->second);}
+    if(m_impl->InvalidateTextures)m_impl->InvalidateTextures();
+    for(auto& [id,value]:m_impl->Instances){(void)id;m_impl->UpdateMaterials(value);}
+}
+UUID RenderAssets::GetTextureProducer(UUID texture) const{if(!m_impl)return {};auto producer=m_impl->TextureProducers.find(texture);return producer==m_impl->TextureProducers.end()?UUID{}:producer->second;}
+void RenderAssets::PublishTexture(UUID texture,filament::Texture* output){
+    if(!m_impl||!texture)return;auto surface=m_impl->TextureSurfaces.find(texture);if(surface==m_impl->TextureSurfaces.end())return;
+    surface->second.Front=output;
+    for(auto& [id,value]:m_impl->Instances){(void)id;m_impl->UpdateMaterials(value);}
+}
+void RenderAssets::GenerateTextureMipmaps(UUID texture,filament::Texture* output){if(!m_impl||!texture)return;auto surface=m_impl->TextureSurfaces.find(texture);if(surface!=m_impl->TextureSurfaces.end()&&surface->second.Descriptor.Mipmaps)output->generateMipmaps(m_impl->Engine);}
+void RenderAssets::SynchronizeTextures(){
+    if(!m_impl)return;std::vector<UUID> dead;for(const auto& [id,value]:m_impl->TextureSurfaces){(void)value;if(!GetTextureDescriptor(id))dead.push_back(id);}
+    for(auto id:dead){m_impl->TextureProducers.erase(id);m_impl->RetireSurface(id);}
+}
+filament::TextureSampler RenderAssets::GetTextureSampler(filament::Texture* texture) const{return m_impl->Sampler(texture);}
 
 void RenderAssets::Shutdown() {
     if (!m_impl) return;
     while (!m_impl->Instances.empty()) DestroyMesh(m_impl->Instances.begin()->first);
+    while(!m_impl->TextureSurfaces.empty())m_impl->RetireSurface(m_impl->TextureSurfaces.begin()->first);
+    m_impl->Engine.destroy(m_impl->WhiteTexture);m_impl->Engine.destroy(m_impl->BlackTexture);
     m_impl->Models.clear();
     m_impl->GeometryCache.clear();
     for (const auto& [id, texture] : m_impl->Textures) m_impl->Engine.destroy(texture);

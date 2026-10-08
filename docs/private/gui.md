@@ -84,15 +84,73 @@ material instances, instances before materials, and views before scenes/cameras.
 
 ## Camera targets and split screens
 
+Writable resources are independent `.btexture` YAML assets or transient
+`Texture.Create` descriptors. TextureLibrary is CPU state/validation; RenderAssets
+owns their color/history/depth/target allocations. CameraSystem borrows those
+attachments and owns only its camera/view. The old CameraRenderTarget path still
+owns transient camera attachments for backward compatibility; explicit Texture
+destinations take precedence. Asset UUIDs pass through the same LoadTexture path
+used by GUI/materials. The callback resolver returns planned producer attachments
+for acyclic capture edges and history for cycles; mip generation is queued after
+each producer pass before downstream sampling. No CPU readback occurs per frame.
+
+Sampler filter/wrap, HDR color formats, mip allocation and resolved MSAA settings
+come from TextureDescriptor. ClearSurface initializes both images and resets them
+on producer loss. Conflicting active writers are suppressed, never last-writer
+races. Consumers detach before allocation retirement; camera views are detached
+before borrowed targets change. Allocation failure guards release partial
+resources. Camera synchronization after scripts handles live destination edits.
+
+Editor authoring is Asset Browser > Create > Texture, asset-only Properties,
+Camera Render Target picker, and ordinary Image Texture picker. The private
+writer validates project containment and atomically replaces YAML using Unicode
+paths; it reimports that source only, not the entire database. Public setters are
+runtime overrides and never edit files. Preserve the optional Camera serialized
+RenderTarget key to load pre-feature scenes. Rebuild scripts against the new SDK
+because Camera's public component layout gained a UUID field.
+
+The public `RenderTexture` handle identifies a producer by entity UUID and resolves
+against an explicit Scene. GUI setters and Material/MaterialBuilder bindings have
+Lua parity. Bindings live in MaterialLibrary's definition, outside MaterialValue,
+so the existing script service ABI is unchanged. They are transient overrides;
+hot reload retains compatible bindings, and SetTexture/reset clears them.
+
+RenderBackend now owns a dimension-only capture SwapChain and renders all active
+offscreen cameras once before viewport consumers, even when no Game panel exists.
+GUI capture resources are prepared before beginFrame. CaptureGraph uses Tarjan
+SCCs in producer-first order. An acyclic consumer sees this tick's completed
+producer; all members of a cycle see the previous completed SCC outputs and
+publish atomically. Every camera owns two color/target pairs and shared depth;
+the next write attachment is never the sampled attachment. New/retired histories
+resolve to no GUI image / black material. All destination samplers are prepared
+before one capture begin/endFrame, using planned producer-write attachments for
+acyclic edges and old read attachments for SCC-internal edges. A skipped frame
+does not publish any output; no flush/wait or CPU pixel copies occur in production.
+Shared world materials/spatial GUI freeze all captures as a conservative SCC;
+camera-bound GUI edges retain precise dependency ordering. GUI edges are
+assigned by Frame destinations. This follows Filament's render-target ownership
+model: https://github.com/google/filament/blob/main/samples/rendertarget.cpp
+
+RenderAssets borrows camera color attachments through a private UUID table.
+CameraSystem detaches material samplers and clears GUI batches before resizing,
+removing or destroying those attachments. Missing material feeds sample a 1x1
+opaque-black fallback; asset-less ordinary samplers use white. Fallback textures
+outlive material instances. Built-in Unlit/UnlitTransparent expose baseColorTexture
+with UV0; custom samplers work without native GPU handles crossing public headers.
+
+Verification: BazzaltGuiTests covers target lifecycle and material binding copies,
+resets and resizing. BAZZALT_GUI_GPU_TEST=1 additionally reads actual captured
+camera GUI through an unlit primitive material with no Game panel present.
+
 CameraRenderTarget creates sampleable RGBA8 color and DEPTH32F attachments, with
 dimensions clamped to 1–4096. CameraSystem owns the target and recreates it only
 when changed. RenderBackend registers UUID-to-View mappings privately. Resizing
 or destroying a target first clears GUI batches referencing its texture.
 Camera-bound frames composite to their camera's Game viewport or offscreen
-target after the world pass. A target skips images sampling itself. Captures exclude spatial GUI to
-prevent same-pass read/write feedback, while GuiImage consumes feeds in every
-Frame mode. Targets render before presentation cameras. A future render graph
-can support recursive captures with dependencies/double buffering.
+target after the world pass. Spatial GUI and camera-feed material renderables
+participate in captures safely via current producer output or frozen cycle history.
+Temporal recursion is bounded to one render per camera per tick; it is not a
+stack of arbitrarily deep nested renders. Double buffering increases color memory.
 Offscreen frame controls are display-only until texture-space input forwarding
 is available; do not let their logical rectangles capture Game-surface clicks.
 Before presenting a differently sized Game surface, synchronize camera viewport

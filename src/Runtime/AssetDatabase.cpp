@@ -1,5 +1,6 @@
 #include "Runtime/AssetDatabase.h"
 #include "Runtime/LuaRuntime.h"
+#include "Runtime/TextureLibrary.h"
 
 #include <algorithm>
 #include <array>
@@ -251,6 +252,15 @@ public:
         return CopyAsset(context, error);
     }
 };
+class RenderTextureImporter final : public AssetImporter {
+public:
+    std::string GetName() const override{return "Bazzalt.RenderTexture";}
+    std::uint32_t GetVersion() const override{return 1;}
+    bool Supports(const std::filesystem::path& source) const override{return LowerExtension(source)==".btexture";}
+    bool Import(const AssetImportContext& context,std::string& error) override{
+        TextureDescriptor descriptor;return ReadTextureDescriptor(context.SourcePath,descriptor,error)&&CopyAsset(context,error);
+    }
+};
 
 class EnvironmentImporter final : public AssetImporter {
 public:
@@ -385,6 +395,7 @@ AssetDatabase::AssetDatabase() {
     RegisterImporter(std::make_unique<LuaImporter>());
     RegisterImporter(std::make_unique<GltfImporter>());
     RegisterImporter(std::make_unique<TextureImporter>());
+    RegisterImporter(std::make_unique<RenderTextureImporter>());
     RegisterImporter(std::make_unique<EnvironmentImporter>());
     RegisterImporter(std::make_unique<MaterialImporter>());
     RegisterImporter(std::make_unique<FilameshImporter>());

@@ -66,7 +66,7 @@ struct Health : Bazzalt::Component {
 
 // Inside gameplay code:
 // entity.AddComponent&lt;Health&gt;();</code></pre>
-<p>Custom component types derive from Component. A System can process them, while an attachable COMPONENT behavior can access them through its entity. The compiler knowing a C++ struct does not automatically register its fields with the editor, scene serializer, or Lua binding layer. For Inspector-editable script fields, use PROPERTY in an attachable behavior. For an engine extension, register the corresponding serialization and Lua support explicitly.</p>
+<p>Custom component types derive from Component. A System can process them, while an attachable COMPONENT behavior can access them through its entity. The compiler knowing a C++ struct does not automatically register its fields with the editor, scene serializer, or Lua binding layer. For Properties-editable script fields, use PROPERTY in an attachable behavior. For an engine extension, register the corresponding serialization and Lua support explicitly.</p>
 <h2 id="queries-and-lifetime">Queries and lifetime</h2>
 <p>Scene provides Pick, PickAll, Raycast, RaycastAll, and overlap queries against scene geometry. These are scene queries, not a physics simulation or a promise of rigid-body collision behavior. Imported model hierarchy and primitive geometry can be queried without creating a physics world.</p>
 <p>DestroyEntity destroys descendants as well. Do not continue using their handles after destruction. Modifying scene structure during a component iteration requires care; never assume a raw registry view stays valid across arbitrary removals.</p></article>

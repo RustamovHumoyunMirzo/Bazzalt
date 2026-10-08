@@ -1,5 +1,27 @@
 # Editor toolbar and 3D gizmos
 
+## Shared transform policy and diagnostics
+
+Preferences > Transform Units stores translation (world units), rotation (degrees)
+and scale-factor increments, plus drag sensitivity multipliers and snap-on/off.
+`transform_units.py` validates finite positive settings and supplies Object snapping
+and viewport dragging. Ctrl temporarily enables drag snapping. Quantize cumulative
+drag state before differencing it; never round individual movement events.
+
+Object placement uses the last valid Scene pointer, not the cursor over a menu.
+Ctrl+Shift+P places at that position; Ctrl+Shift+G snaps pivots; Ctrl+Alt+R/S
+snap rotation/scale. These shortcuts defer to text editors, active modal dialogs,
+gameplay input and fly navigation. Top-level selection uses the theme's toplvlsel.svg.
+
+Preferences > Scene Statistics chooses individual counters. The statistics chip
+controls a small native Filament GUI overlay at the Scene top right, with space
+reserved for orientation. No Qt overlay window is created and no Game camera sees
+the text. Metrics are real sampled editor frame rate/interval, native CPU tick time,
+scene counts, native renderables/primitive slots, capture allocations and GUI batches.
+Primitive slots are not GPU draw-call or overdraw measurements. GPU timings and
+VRAM usage are not claimed when the backend does not supply them. Statistics and
+component/field labels are localized; underlying IDs and clipboard field keys stay stable.
+
 The fixed `Editor.Toolbar` sits directly below the menu bar and spans the editor window. It is
 not dockable or floatable. The compact toolbar uses Qt standard icons, so controls follow the
 host platform and do not add another icon asset set. Their alpha masks are tinted with the

@@ -3,6 +3,7 @@ from math import sqrt
 from PySide6.QtCore import QEvent, QObject, Qt
 from PySide6.QtWidgets import QApplication, QAbstractSpinBox, QLineEdit, QPlainTextEdit, QTextEdit
 from .gizmos import Vec3
+from .transform_units import TransformUnits,SnapValue,SnapRotation
 
 ROOT="00000000-0000-0000-0000-000000000000"
 
@@ -35,14 +36,21 @@ class ObjectTools(QObject):
         super().__init__(window);self.Window=window;self.Controller=window.Controller;self.Runtime=window.Runtime
         for action in window.Toolbar.ModeActions.values():window.MenuBar.ObjectModeMenu.addAction(action);window.addAction(action)
         window.MenuBar.ObjectCommandRequested.connect(self.Execute)
+        for action in window.MenuBar.ObjectActions.values():window.addAction(action)
         window.MenuBar.ObjectMenu.aboutToShow.connect(self.RefreshActions)
         QApplication.instance().installEventFilter(self)
+        if hasattr(window,"Hierarchy"):window.Hierarchy.Tree.itemSelectionChanged.connect(self.RefreshActions)
+        for name in ("EntityPicked","EntitiesBoxSelected"):
+            if hasattr(window.Scene.Surface,name):getattr(window.Scene.Surface,name).connect(lambda *_:self.RefreshActions())
 
     def Close(self):QApplication.instance().removeEventFilter(self)
 
     def eventFilter(self,watched,event):
-        if event.type()!=QEvent.Type.ShortcutOverride or not Qt.Key.Key_1<=event.key()<=Qt.Key.Key_4:return False
-        if event.modifiers()&~Qt.KeyboardModifier.KeypadModifier:return False
+        if event.type()!=QEvent.Type.ShortcutOverride:return False
+        numeric=Qt.Key.Key_1<=event.key()<=Qt.Key.Key_4 and not event.modifiers()&~Qt.KeyboardModifier.KeypadModifier
+        tool=event.key() in {Qt.Key.Key_P,Qt.Key.Key_V,Qt.Key.Key_A,Qt.Key.Key_G,Qt.Key.Key_J} and event.modifiers()==(Qt.KeyboardModifier.ControlModifier|Qt.KeyboardModifier.ShiftModifier)
+        tool=tool or (event.key() in {Qt.Key.Key_R,Qt.Key.Key_S} and event.modifiers()==(Qt.KeyboardModifier.ControlModifier|Qt.KeyboardModifier.AltModifier))
+        if not (numeric or tool):return False
         window=self.Window;focus=QApplication.focusWidget();surface=window.Scene.Surface
         editing=False;current=focus
         while current is not None:
@@ -64,6 +72,8 @@ class ObjectTools(QObject):
         self.Window.MenuBar.ObjectActions["place_cursor"].setEnabled(selected and surface._has_scene_pointer)
 
     def Execute(self,command):
+        window=getattr(self,"Window",None);scene=getattr(window,"Scene",None);surface=getattr(scene,"Surface",None)
+        if getattr(surface,"_navigating",False) is True or QApplication.activeModalWidget():return
         controller=self.Controller;runtime=self.Runtime;selected=list(controller.SelectedEntities);parents=runtime.EditorParents
         if command in {"select_all","invert"}:
             self._Select(entity["uuid"] for entity in runtime.Entities() if command=="select_all" or entity["uuid"] not in selected);return
@@ -99,7 +109,9 @@ class ObjectTools(QObject):
             for value,item in details.items():
                 position=item["position"];orientation=item["rotation"];scale=item["scale"]
                 if target is not None:position=tuple(position[i]+target[i]-center[i] for i in range(3))
-                if command=="snap_grid":position=tuple(round(component/.5)*.5 for component in position)
+                if command=="snap_grid":position=tuple(SnapValue(component,TransformUnits(self.Window.GetPreferences().get("transform"))["translation_step"]) for component in position)
+                elif command=="snap_rotation":orientation=SnapRotation(orientation,TransformUnits(self.Window.GetPreferences().get("transform"))["rotation_step"])
+                elif command=="snap_scale":scale=tuple(SnapValue(component,TransformUnits(self.Window.GetPreferences().get("transform"))["scale_step"]) for component in scale)
                 elif command=="reset_rotation":orientation=(0,0,0,1)
                 elif command=="reset_scale":scale=(1,1,1)
                 elif rotation is not None:orientation=rotation

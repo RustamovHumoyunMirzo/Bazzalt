@@ -58,7 +58,7 @@ light.Intensity = 1200
 self.Entity:SetComponent("Light", light)</code></pre>
 <p>The first line gets a copy of an existing Light component. The second changes that copy. The final line commits it into scene storage. Without the final line, this is not a reliable way to edit the actual component. Add the Light first or test HasComponent before retrieving it.</p>
 <h2 id="rates-and-errors">Movement rates and errors</h2>
-<p>Moving four units every frame makes speed depend on frame rate. Moving <code>4 * deltaTime</code> units per update describes four units per second. Input is read from Game output's focus, not from typed letters in Inspector.</p>
+<p>Moving four units every frame makes speed depend on frame rate. Moving <code>4 * deltaTime</code> units per update describes four units per second. Input is read from Game output's focus, not from typed letters in Properties.</p>
 <p>An unknown method, misspelled component name, nil value, or incompatible argument can raise an error. Read Console and compare the exact names with the <a href="../reference/en.html">Lua reference</a>. Start with the <a href="../en.html">complete Walk example</a> rather than mixing unverified snippets.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../0.5.0/lua/en.html"><small>Previous</small>Write a Lua behavior</a>
 <a class="next" href="../../../0.5.0/lua/api/en.html"><small>Next</small>Lua API conventions</a></nav>

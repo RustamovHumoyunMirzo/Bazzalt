@@ -62,6 +62,7 @@ void BindLuaComponents(sol::table api){
      type["Priority"]=&Camera::Priority;
      type["Active"]=&Camera::Active;
      type["ClearColor"]=&Camera::ClearColor;
+     type["RenderTarget"]=&Camera::RenderTarget;type["SetRenderTarget"]=&Camera::SetRenderTarget;type["GetRenderTarget"]=&Camera::GetRenderTarget;
      type["PostProcessing"]=&Camera::PostProcessing;
     }
     ComponentOperations<Camera>(operations,"Camera");

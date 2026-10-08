@@ -52,18 +52,18 @@ public:
     }
 };</code></pre>
 <h2 id="understand-the-code">What the code does</h2>
-<p><code>COMPONENT(Walk)</code> declares an attachable behavior named Walk. <code>PROPERTY(float, Speed, 4.0f)</code> exposes a floating-point value in the Inspector. The default is 4 world units per second. The Inspector can supply another value before OnCreate runs.</p>
+<p><code>COMPONENT(Walk)</code> declares an attachable behavior named Walk. <code>PROPERTY(float, Speed, 4.0f)</code> exposes a floating-point value in the Properties. The default is 4 world units per second. The Properties can supply another value before OnCreate runs.</p>
 <p>OnUpdate receives the frame's scaled time step in seconds. Multiplying movement by deltaTime keeps speed from depending directly on frame rate. Normalizing the direction prevents diagonal movement from being faster. The zero-length test avoids normalizing a vector that has no direction.</p>
 <p>GetWorldTransform returns a value, not a live component reference. After changing that value, SetWorldTransform commits it to the entity, accounting for its parent. The negative vertical axis makes W move along world negative Z. This is world-axis movement, not camera-relative movement or a physics controller.</p>
 <h2 id="attach-and-play">Attach and run</h2>
 <ol>
 <li>Create a cube and make sure an enabled game camera can see it.</li>
 <li>Select the cube and choose Walk under Add Component's script entries, or drag the script onto the entity.</li>
-<li>Set Speed in the Inspector if needed.</li>
+<li>Set Speed in the Properties if needed.</li>
 <li>Press Play. If compilation fails, read the Compiler messages in Console.</li>
 <li>Click Game output to give gameplay input focus, then press WASD.</li>
 </ol>
-<p>Scene view's right-click flying controls move the editor camera, not this cube. Input is inactive when gameplay does not have focus. Typing W into an Inspector field should not move the object.</p>
+<p>Scene view's right-click flying controls move the editor camera, not this cube. Input is inactive when gameplay does not have focus. Typing W into an Properties field should not move the object.</p>
 <h2 id="lifecycle">Other lifecycle callbacks</h2>
 <p>Use <code>OnCreate()</code> to acquire runtime state and <code>OnDestroy()</code> to release resources you own, such as a transient material. <code>OnFixedUpdate(float fixedDeltaTime)</code> is available for fixed-step work. Do not initialize the engine, poll the operating system, or present frames from these methods.</p>
 <h2 id="names-and-properties">Names and properties</h2>

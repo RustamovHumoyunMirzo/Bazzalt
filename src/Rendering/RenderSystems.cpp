@@ -1,4 +1,6 @@
 #include "Rendering/RenderSystems.h"
+#include "Runtime/TextureLibrary.h"
+#include <iostream>
 
 #include <algorithm>
 #include <cmath>
@@ -87,11 +89,18 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
     std::vector<Submission> submissions;
 
     auto view = GetView(scene.GetRegistry());
+    std::unordered_map<UUID,unsigned> writers;
+    for(auto handle:view){const auto& camera=view.get<Camera>(handle);if(camera.Enabled&&camera.Active&&camera.RenderTarget)++writers[camera.RenderTarget];}
+    const bool conflict=std::any_of(writers.begin(),writers.end(),[](const auto& item){return item.second>1;});
+    const std::string warning=conflict?"Multiple active cameras target the same Texture. Use a separate texture per producer; conflicting captures are disabled.":"";
+    if(warning!=m_captureWarning){m_captureWarning=warning;if(!warning.empty())std::cerr<<"[Rendering] "<<warning<<'\n';}
     for (const auto handle : view) {
         Entity entity = scene.GetEntity(static_cast<Entity::Id>(handle));
         const UUID id = entity.GetUUID();
         const auto& camera = view.get<Camera>(handle);
         if (!camera.IsEnabled()) continue;
+        const auto descriptor=camera.RenderTarget?GetTextureDescriptor(camera.RenderTarget):std::optional<TextureDescriptor>{};
+        if(camera.RenderTarget&&(!descriptor||writers[camera.RenderTarget]>1))continue;
         alive.insert(id);
         auto found = m_resources.find(id);
         if (found == m_resources.end()) {
@@ -109,21 +118,40 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
 
         auto& resource = found->second;
         const auto* target=entity.TryGetComponent<CameraRenderTarget>();
-        const bool offscreen=target&&target->Enabled;
-        resource.View->setVisibleLayers(0xff,offscreen?0x3f:0x7f); // Never sample a camera feed inside its own capture.
-        const auto textureWidth=offscreen?std::clamp(target->Width,1u,4096u):0u,textureHeight=offscreen?std::clamp(target->Height,1u,4096u):0u;
-        if((resource.Target&&!offscreen)||(offscreen&&(!resource.Color||resource.Color->getWidth()!=textureWidth||resource.Color->getHeight()!=textureHeight))){
+        const bool offscreen=camera.RenderTarget||(target&&target->Enabled);
+        resource.View->setVisibleLayers(0xff,0x7f); // History buffers make spatial GUI sampling safe.
+        const auto textureWidth=descriptor?descriptor->Width:offscreen?std::clamp(target->Width,1u,4096u):0u,textureHeight=descriptor?descriptor->Height:offscreen?std::clamp(target->Height,1u,4096u):0u;
+        const auto& old=resource.TextureSettings;
+        const bool allocation=descriptor&&(old.Width!=descriptor->Width||old.Height!=descriptor->Height||old.Samples!=descriptor->Samples||old.GetMipLevelCount()!=descriptor->GetMipLevelCount()||old.ColorFormat!=descriptor->ColorFormat||old.DepthFormat!=descriptor->DepthFormat);
+        if(resource.OutputAsset!=camera.RenderTarget||allocation||(resource.Target&&!offscreen)||(offscreen&&(!resource.Color||resource.Color->getWidth()!=textureWidth||resource.Color->getHeight()!=textureHeight))){
             m_backend.ClearGuiResources();resource.View->setRenderTarget(nullptr);
-            if(resource.Target)engine.destroy(resource.Target);if(resource.Color)engine.destroy(resource.Color);if(resource.Depth)engine.destroy(resource.Depth);
+            m_backend.GetAssets().SetCameraTexture(id,nullptr);
+            m_backend.RegisterCameraOutput(id,nullptr,nullptr,nullptr,nullptr);
+            if(resource.OutputAsset&&m_backend.GetAssets().GetTextureProducer(resource.OutputAsset)==id)m_backend.GetAssets().SetTextureProducer(resource.OutputAsset,{});
+            if(resource.Owned){if(resource.Target)engine.destroy(resource.Target);if(resource.HistoryTarget)engine.destroy(resource.HistoryTarget);
+            if(resource.Color)engine.destroy(resource.Color);if(resource.History)engine.destroy(resource.History);if(resource.Depth)engine.destroy(resource.Depth);}
             resource.Target=nullptr;resource.Color=resource.Depth=nullptr;
-            if(offscreen){using T=filament::Texture;
+            resource.History=nullptr;resource.HistoryTarget=nullptr;
+            resource.OutputAsset=camera.RenderTarget;resource.Owned=!camera.RenderTarget;
+            if(offscreen&&!camera.RenderTarget){using T=filament::Texture;
                 resource.Color=T::Builder().width(textureWidth).height(textureHeight).levels(1).sampler(T::Sampler::SAMPLER_2D).format(T::InternalFormat::RGBA8).usage(T::Usage::COLOR_ATTACHMENT|T::Usage::SAMPLEABLE|T::Usage::BLIT_SRC).build(engine);
+                resource.History=T::Builder().width(textureWidth).height(textureHeight).levels(1).sampler(T::Sampler::SAMPLER_2D).format(T::InternalFormat::RGBA8).usage(T::Usage::COLOR_ATTACHMENT|T::Usage::SAMPLEABLE|T::Usage::BLIT_SRC).build(engine);
                 resource.Depth=T::Builder().width(textureWidth).height(textureHeight).levels(1).sampler(T::Sampler::SAMPLER_2D).format(T::InternalFormat::DEPTH32F).usage(T::Usage::DEPTH_ATTACHMENT).build(engine);
                 resource.Target=filament::RenderTarget::Builder().texture(filament::RenderTarget::AttachmentPoint::COLOR,resource.Color).texture(filament::RenderTarget::AttachmentPoint::DEPTH,resource.Depth).build(engine);
+                resource.HistoryTarget=filament::RenderTarget::Builder().texture(filament::RenderTarget::AttachmentPoint::COLOR,resource.History).texture(filament::RenderTarget::AttachmentPoint::DEPTH,resource.Depth).build(engine);
                 resource.View->setRenderTarget(resource.Target);
             }
         }
+        if(descriptor){
+            resource.View->setRenderTarget(nullptr);
+            RenderAssets::TextureTargets surface;
+            try{surface=m_backend.GetAssets().GetTextureTargets(camera.RenderTarget);m_textureWarnings.erase(camera.RenderTarget);}catch(const std::invalid_argument& error){if(m_textureWarnings[camera.RenderTarget]!=error.what()){m_textureWarnings[camera.RenderTarget]=error.what();std::cerr<<"[Rendering] "<<error.what()<<'\n';}alive.erase(id);continue;}
+            resource.Color=surface.Color;resource.History=surface.History;resource.Depth=surface.Depth;resource.Target=surface.Target;resource.HistoryTarget=surface.HistoryTarget;resource.TextureSettings=*descriptor;
+        }
         m_backend.RegisterCameraView(id,resource.View);
+        m_backend.RegisterCameraOutput(id,resource.Color,resource.History,resource.Target,resource.HistoryTarget);
+        if(camera.RenderTarget){if(camera.Active)m_backend.GetAssets().SetTextureProducer(camera.RenderTarget,id);else if(m_backend.GetAssets().GetTextureProducer(camera.RenderTarget)==id)m_backend.GetAssets().SetTextureProducer(camera.RenderTarget,{});}
+        if(!camera.Active)m_backend.GetAssets().SetCameraTexture(id,nullptr);
         const Mat4 world = entity.GetWorldMatrix();
         const Vec3 position = SafeVector(world.TransformPoint({}));
         const Vec3 forward = SafeDirection(world.TransformDirection({0.0f, 0.0f, -1.0f}), {0,0,-1});
@@ -273,10 +301,16 @@ void CameraSystem::Destroy(UUID id) {
     auto found = m_resources.find(id); if (found == m_resources.end()) return;
     auto& engine = m_backend.GetEngine();
     m_backend.ClearGuiResources();m_backend.UnregisterCameraView(id);
+    m_backend.GetAssets().SetCameraTexture(id,nullptr);
+    if(found->second.OutputAsset&&m_backend.GetAssets().GetTextureProducer(found->second.OutputAsset)==id)m_backend.GetAssets().SetTextureProducer(found->second.OutputAsset,{});
     if (found->second.View) engine.destroy(found->second.View);
+    if(found->second.Owned){
     if(found->second.Target)engine.destroy(found->second.Target);
+    if(found->second.HistoryTarget)engine.destroy(found->second.HistoryTarget);
+    if(found->second.History)engine.destroy(found->second.History);
     if(found->second.Color)engine.destroy(found->second.Color);
     if(found->second.Depth)engine.destroy(found->second.Depth);
+    }
     engine.destroyCameraComponent(found->second.Entity);
     engine.getEntityManager().destroy(found->second.Entity);
     m_resources.erase(found);

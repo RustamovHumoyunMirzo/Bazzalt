@@ -33,18 +33,18 @@
 <p>The panel displays the active scene. If you select an entity in an inactive loaded scene, activate that scene to view it here. Hidden/locked objects and hidden overlays can explain a missing icon or handle.</p>
 <h2 id="navigate">Navigate step by step</h2>
 <ol><li>Click Scene view so its controls are active.</li><li>Select an object and press F to frame it. This centers the editor camera on the selection; it does not teleport the object.</li><li>Hold right mouse and drag to look around with focus-point navigation.</li><li>Hold right mouse and use W/A/S/D/Q/E to fly: forward, left, back, right, down, up. Looking around during flight rotates around the camera position.</li><li>Release the right button to leave navigation. Shift with right-drag pans/moves the camera.</li></ol>
-<p>Do not use a letter shortcut while typing in an Inspector field and expect camera movement. Menu shortcuts and flight movement are gated to the appropriate interaction.</p>
+<p>Do not use a letter shortcut while typing in an Properties field and expect camera movement. Menu shortcuts and flight movement are gated to the appropriate interaction.</p>
 <h2 id="tools">Choose a manipulation tool</h2>
 <p>1 selects; 2 translates; 3 rotates; 4 scales. You can also use the toolbar. Click/drag a gizmo axis, not arbitrary nearby geometry, to manipulate a selected object. A selection rectangle selects multiple objects and updates selection while dragging.</p>
 <p>Translate changes position. Rotate changes orientation around the chosen pivot. Scale changes size. Local aligns the axes to the active object's orientation; when off, the axes align with the world. These modes do not change the stored component type.</p>
 <h2 id="pivot-and-center">Pivot versus Center</h2>
 <p>With one selected object the gizmo is at its origin. With a group, Pivot rotates/scales objects around their own origins, whereas Center rotates/scales around a shared center. Translation moves the group in either mode. Choose the mode before a group operation so objects do not unexpectedly orbit a point.</p>
 <h2 id="visibility">Visibility and guides</h2>
-<p>Grid, Gizmos, and Statistics are independent toolbar toggles. High-level selection chooses the highest model object instead of each internal part. Camera and light guide lines belong to selected objects; they help inspect frusta, ranges, and cones and are not game geometry.</p>
+<p>Grid, Gizmos, and Statistics are independent toolbar toggles. Top-level selection chooses the highest model object instead of each internal part. Camera and light guide lines belong to selected objects; they help inspect frusta, ranges, and cones and are not game geometry.</p>
 <p>The orientation widget in the top corner indicates world axis directions relative to the editor camera. Clicking a direction changes the view. Preferences can hide it. View also contains preset angles, focus/frame actions, and debug shading modes.</p>
 <h2 id="game-difference">Why this is not Game output</h2>
 <p>Game output uses enabled scene Camera components, their viewports and post-processing. Scene view has editor overlays, its own camera, and editor grid fog. Do not diagnose game camera depth of field by looking only at the editor camera. Read <a href="../game/en.html">Game output</a> next.</p></article>
-      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../../0.5.0/manual/panels/inspector/en.html"><small>Previous</small>Inspector</a>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../../0.5.0/manual/panels/properties/en.html"><small>Previous</small>Properties</a>
 <a class="next" href="../../../../0.5.0/manual/panels/game/en.html"><small>Next</small>Game output</a></nav>
     </main>
     <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#camera-and-objects">What movement changes</a><a class="toc-link" href="#navigate">Navigate step by step</a><a class="toc-link" href="#tools">Choose a manipulation tool</a><a class="toc-link" href="#pivot-and-center">Pivot versus Center</a><a class="toc-link" href="#visibility">Visibility and guides</a><a class="toc-link" href="#game-difference">Why this is not Game output</a></nav></aside>

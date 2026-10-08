@@ -80,9 +80,11 @@ local target = feedCamera:AddComponent("CameraRenderTarget")
 target.Width = 512; target.Height = 512
 feedCamera:SetComponent("CameraRenderTarget", target)
 local image = imageEntity:AddComponent("GuiImage")
-image.Camera = feedCamera:GetUUID()
+local feed = Bazzalt.RenderTexture.FromCamera(feedCamera)
+image:SetRenderTexture(feed)
 imageEntity:SetComponent("GuiImage", image)</code></pre>
-<p>CameraBound follows the active camera's viewport, including split-screen rectangles. CameraRenderTarget makes a camera render offscreen for a GuiImage feed. No low-level texture handle or render API enters Lua. Read the shared reference's foundation boundaries before using spatial picking or expecting complete text-editing/stylesheet support.</p></article>
+<p>CameraBound follows the active camera's viewport, including split-screen rectangles. CameraRenderTarget makes a camera render offscreen for a GuiImage feed. No low-level texture handle or render API enters Lua. Read the shared reference's foundation boundaries before using spatial picking or expecting complete text-editing/stylesheet support.</p>
+<p><a href="../reference/RenderTexture/en.html">RenderTexture reference</a> covers resizing, live material samplers, and GuiImage source setters. Feeds render independently of Game panel visibility. A dependency graph orders chained feeds; cycles sample completed history.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../0.5.0/lua/api/en.html"><small>Previous</small>Lua API conventions</a>
 <a class="next" href="../../../0.5.0/lua/reference/en.html"><small>Next</small>Lua API reference</a></nav>
     </main>

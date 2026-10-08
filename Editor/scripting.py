@@ -166,7 +166,7 @@ class ScriptCompiler:
                 body=f'{{Bazzalt::UUID id;if(std::strcmp(value,"0")!=0&&std::strcmp(value,"")!=0&&!Bazzalt::UUID::TryParse(value,id))return false;self->{prop.name}=Bazzalt::EntityReference(id);return true;}}'
             elif kind in ("Entity","Bazzalt::Entity"):
                 body=f'{{Bazzalt::UUID id;if(std::strcmp(value,"0")!=0&&std::strcmp(value,"")!=0&&!Bazzalt::UUID::TryParse(value,id))return false;auto* scene=Bazzalt::SceneManager::GetActiveScene();self->{prop.name}=id&&scene?scene->GetEntity(id):Bazzalt::Entity{{}};return true;}}'
-            elif kind in ("Material","Bazzalt::Material","Shader","Bazzalt::Shader"):
+            elif kind in ("Material","Bazzalt::Material","Shader","Bazzalt::Shader","Texture","Bazzalt::Texture"):
                 type_name=kind.split("::")[-1];body=f'{{Bazzalt::UUID id;if(std::strcmp(value,"0")!=0&&!Bazzalt::UUID::TryParse(value,id))return false;self->{prop.name}=Bazzalt::{type_name}::Load(id);return !id||self->{prop.name}.IsValid();}}'
             elif kind in ("Vec2","Bazzalt::Vec2"):body=f'return std::sscanf(value,"%f,%f",&self->{prop.name}.X,&self->{prop.name}.Y)==2;'
             elif kind in ("Vec3","Bazzalt::Vec3"):body=f'return std::sscanf(value,"%f,%f,%f",&self->{prop.name}.X,&self->{prop.name}.Y,&self->{prop.name}.Z)==3;'
@@ -207,7 +207,7 @@ class ScriptAttachments:
         if any(v.get("type")==descriptor.name or Path(v["source"]).resolve()==descriptor.path.resolve() for v in entries):return False
         names=[p.name for p in descriptor.properties]
         if len(names)!=len(set(names)):raise ScriptValidationError(f"Duplicate properties in component {descriptor.name}")
-        entries.append({"source":str(descriptor.path),"type":descriptor.name,"enabled":True,"properties":{p.name:"00000000-0000-0000-0000-000000000000" if p.type.replace("Bazzalt::","").strip() in ("Material","Shader","EntityReference","Entity") else _Literal(p.default) for p in descriptor.properties}});self.Save();return True
+        entries.append({"source":str(descriptor.path),"type":descriptor.name,"enabled":True,"properties":{p.name:"00000000-0000-0000-0000-000000000000" if p.type.replace("Bazzalt::","").strip() in ("Material","Shader","Texture","EntityReference","Entity") else _Literal(p.default) for p in descriptor.properties}});self.Save();return True
     def Remove(self,entity: str,type_name: str)->bool:
         entries=self.values.setdefault("entities",{}).setdefault(entity,[]);remaining=[v for v in entries if v.get("type")!=type_name]
         if len(remaining)==len(entries):return False

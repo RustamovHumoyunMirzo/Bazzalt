@@ -130,6 +130,7 @@
 </tbody></table>
 <h2 id="SetTexture">SetTexture</h2>
 <pre><code>MaterialBuilder &amp; SetTexture(std::string name, UUID value)</code></pre>
+<p>The overload <code>SetTexture(std::string name, Texture value)</code> accepts a typed texture handle, including a writable camera destination. It returns the builder for chaining.</p>
 <p>Queues a named Texture value and returns this builder; Build validates it against the selected shader.</p>
 <p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
 <table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
@@ -143,11 +144,13 @@
 <h2 id="Clear">Clear</h2>
 <pre><code>void Clear()</code></pre>
 <p>Clears queued parameter/state overrides but retains the selected shader.</p>
-<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p></article>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
+<h2 id="SetRenderTexture">SetRenderTexture</h2>
+<p><code>MaterialBuilder&amp; SetRenderTexture(std::string name, RenderTexture value)</code> records a camera-feed sampler assignment and returns this builder for chaining. Build validates the Texture2D parameter and destroys partial materials on failure. See <a href="../RenderTexture/en.html">RenderTexture</a>.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../../0.5.0/native/reference/Material/en.html"><small>Previous</small>Material</a>
 <a class="next" href="../../../../0.5.0/native/reference/MaterialCulling/en.html"><small>Next</small>MaterialCulling</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#MaterialBuilder">MaterialBuilder</a><a class="toc-link" href="#SetShader">SetShader</a><a class="toc-link" href="#SetRenderState">SetRenderState</a><a class="toc-link" href="#SetFloat">SetFloat</a><a class="toc-link" href="#SetVec2">SetVec2</a><a class="toc-link" href="#SetVec3">SetVec3</a><a class="toc-link" href="#SetVec4">SetVec4</a><a class="toc-link" href="#SetColor">SetColor</a><a class="toc-link" href="#SetMatrix3">SetMatrix3</a><a class="toc-link" href="#SetMatrix4">SetMatrix4</a><a class="toc-link" href="#SetInteger">SetInteger</a><a class="toc-link" href="#SetBoolean">SetBoolean</a><a class="toc-link" href="#SetTexture">SetTexture</a><a class="toc-link" href="#Build">Build</a><a class="toc-link" href="#Clear">Clear</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#MaterialBuilder">MaterialBuilder</a><a class="toc-link" href="#SetShader">SetShader</a><a class="toc-link" href="#SetRenderState">SetRenderState</a><a class="toc-link" href="#SetFloat">SetFloat</a><a class="toc-link" href="#SetVec2">SetVec2</a><a class="toc-link" href="#SetVec3">SetVec3</a><a class="toc-link" href="#SetVec4">SetVec4</a><a class="toc-link" href="#SetColor">SetColor</a><a class="toc-link" href="#SetMatrix3">SetMatrix3</a><a class="toc-link" href="#SetMatrix4">SetMatrix4</a><a class="toc-link" href="#SetInteger">SetInteger</a><a class="toc-link" href="#SetBoolean">SetBoolean</a><a class="toc-link" href="#SetTexture">SetTexture</a><a class="toc-link" href="#Build">Build</a><a class="toc-link" href="#Clear">Clear</a><a class="toc-link" href="#SetRenderTexture">SetRenderTexture</a></nav></aside>
   </div>
   <footer>BAZZALT 0.5.0 documentation · English</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

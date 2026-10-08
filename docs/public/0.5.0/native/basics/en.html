@@ -56,7 +56,7 @@ public:
         (void)deltaTime;
     }
 };</code></pre>
-<p>COMPONENT declares an attachable behavior class. public makes its declared members accessible. PROPERTY declares an Inspector-editable value with a default. void means OnUpdate returns no value; its float argument is seconds. override says this implements a lifecycle method from Behavior.</p>
+<p>COMPONENT declares an attachable behavior class. public makes its declared members accessible. PROPERTY declares an Properties-editable value with a default. void means OnUpdate returns no value; its float argument is seconds. override says this implements a lifecycle method from Behavior.</p>
 <p>The engine calls this callback while playing. You do not write main(), create the private Engine, or call its frame loop. The empty example deliberately does nothing; continue with <a href="../behaviors/en.html">Walk movement</a> for a visible result.</p>
 <h2 id="failures">Build and runtime failures</h2>
 <p>A compile error means the compiler could not build the source: check includes, spelling, types, and Console's source location. A runtime error occurs after code is built, for example using an absent component. A false/null/optional-empty result can instead represent normal absence. Read the operation-specific contract in the <a href="../reference/en.html">reference</a>.</p></article>

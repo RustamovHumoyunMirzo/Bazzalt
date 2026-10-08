@@ -3,6 +3,7 @@
 #include <string>
 #include "Bazzalt/Component.h"
 #include "Bazzalt/Entity.h"
+#include "Bazzalt/RenderTexture.h"
 
 namespace Bazzalt {
 enum class FrameMode { Viewport, CameraBound, Spatial };
@@ -46,7 +47,13 @@ struct GuiStyle {
     float Opacity=1;
 };
 struct Rectangle : Component { GuiStyle Style{}; bool RaycastTarget=true; };
-struct GuiImage : Component { UUID Texture{},Camera{}; Vec4 Color{1,1,1,1}; bool RaycastTarget=false; };
+struct GuiImage : Component {
+    UUID Texture{},Camera{}; Vec4 Color{1,1,1,1}; bool RaycastTarget=false;
+    void SetTexture(UUID asset) { Texture=asset;Camera={}; }
+    void SetTexture(Bazzalt::Texture asset) { SetTexture(asset.GetAssetUUID()); }
+    void SetRenderTexture(RenderTexture value) { Camera=value.GetCameraUUID();Texture={}; }
+    [[nodiscard]] RenderTexture GetRenderTexture() const { return RenderTexture::FromCameraUUID(Camera); }
+};
 struct GuiText : Component { std::string Value; Vec4 Color{1,1,1,1}; float FontSize=16; bool Wrap=true; };
 struct GuiButton : Component { bool Interactable=true; int TabIndex=0; };
 struct GuiTextInput : Component {

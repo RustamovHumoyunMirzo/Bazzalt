@@ -6,13 +6,15 @@ material {
     depthWrite : false,
     parameters : [
         { type : float4, name : baseColor },
-        { type : float3, name : emissive }
-    ]
+        { type : float3, name : emissive },
+        { type : sampler2d, name : baseColorTexture }
+    ],
+    requires : [ uv0 ]
 }
 fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
-        material.baseColor = materialParams.baseColor;
+        material.baseColor = materialParams.baseColor * texture(materialParams_baseColorTexture, getUV0());
         material.emissive = vec4(materialParams.emissive, 0.0);
         
     }

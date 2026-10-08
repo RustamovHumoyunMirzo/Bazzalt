@@ -35,7 +35,7 @@
 <p>Right-click the current folder/item area for the creation menu. A Scene creates a .bscene asset. Native/Lua behaviors create editable script source. Material creates material instance data. For models/images, add a supported source file beneath the project's asset directory.</p>
 <p>The importer produces cached runtime data. A failed import appears in Console; the visible source file does not mean its cache is usable. Avoid renaming a random file extension to .bscene/.lua/.glb and expecting valid conversion.</p>
 <h2 id="use-an-asset">Use an asset</h2>
-<ol><li>Select an entity and find its relevant asset field in Inspector.</li><li>Drag a compatible Asset Browser item onto that field, or use the field's project picker.</li><li>For a model, drag/place it into the Hierarchy to instantiate its node tree.</li></ol>
+<ol><li>Select an entity and find its relevant asset field in Properties.</li><li>Drag a compatible Asset Browser item onto that field, or use the field's project picker.</li><li>For a model, drag/place it into the Hierarchy to instantiate its node tree.</li></ol>
 <p>A field rejects wrong asset types. A shader goes into a material's Shader field, not a mesh's Material Asset field. A model file may contain many nodes that become separate child entities when instantiated.</p>
 <h2 id="open-and-rename">Open and rename</h2>
 <p>Double-click a scene or choose Load scene to add it to Hierarchy; already loaded scenes are not offered for duplicate loading. Right-click supports rename, copy/paste and reveal-in-explorer actions where applicable. Reveal selects the actual disk file, while Open follows the asset's supported open behavior.</p>
@@ -43,7 +43,7 @@
 <h2 id="metadata">Keep metadata with assets</h2>
 <p>A matching .meta sidecar holds an asset's stable UUID. Keep it with the source when moving files outside the editor or committing project assets. Renaming in the browser preserves tracked identity; deleting metadata can break identity-based references on reimport.</p>
 <h2 id="selection-versus-editing">Selecting is not editing an instance</h2>
-<p>Clicking an asset opens its asset Inspector. Clicking its placed entity in the Hierarchy opens that entity's components. Editing one instance's Transform does not rewrite the model file; editing a shared material asset can affect every instance using it.</p></article>
+<p>Clicking an asset opens its asset Properties. Clicking its placed entity in the Hierarchy opens that entity's components. Editing one instance's Transform does not rewrite the model file; editing a shared material asset can affect every instance using it.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../../0.5.0/manual/panels/game/en.html"><small>Previous</small>Game output</a>
 <a class="next" href="../../../../0.5.0/manual/panels/console/en.html"><small>Next</small>Console</a></nav>
     </main>
