@@ -67,11 +67,17 @@ public:
 <h2 id="lifecycle">Other lifecycle callbacks</h2>
 <p>Use <code>OnCreate()</code> to acquire runtime state and <code>OnDestroy()</code> to release resources you own, such as a transient material. <code>OnFixedUpdate(float fixedDeltaTime)</code> is available for fixed-step work. Do not initialize the engine, poll the operating system, or present frames from these methods.</p>
 <h2 id="names-and-properties">Names and properties</h2>
-<p>Each source declares one COMPONENT, and its type name must be unique across C++ and Lua behaviors in the project. Two files both declaring COMPONENT(Walk) are a conflict even if their filenames differ. Property names must also be unique within the behavior. Resolve duplicate declarations instead of attaching them and expecting their fields to merge.</p></article>
+<p>Each source declares one COMPONENT, and its type name must be unique across C++ and Lua behaviors in the project. Two files both declaring COMPONENT(Walk) are a conflict even if their filenames differ. Property names must also be unique within the behavior. Resolve duplicate declarations instead of attaching them and expecting their fields to merge.</p>
+<h2 id="inspector-rules">Inspector-only property rules</h2>
+<pre><code class="language-cpp">PROPERTY(bool, UseLimit, true)
+PROPERTY(float, Speed, 4.0f, Min=0, Max=20, Step=0.5,
+         EnabledIf="self.UseLimit", Validate="value &lt;= 10",
+         Message="Speed must not exceed 10")</code></pre>
+<p>Variadic PROPERTY options are editor metadata; the C++ macro does not enforce them on gameplay writes. Use literal option values. Min, Max and Step configure numeric fields. ReadOnly, VisibleIf and EnabledIf control editability or visibility; Validate checks a proposed edit. Expressions use self.Field, value, boolean operators and comparisons. String filters and the complete option list are described in <a href="../../lua/en.html#inspector-rules">inspector field rules</a>, which uses the same inspector evaluator. Existing invalid values are not silently changed.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../0.5.0/native/basics/en.html"><small>Previous</small>Read your first C++ example</a>
 <a class="next" href="../../../0.5.0/native/entities/en.html"><small>Next</small>Entities and components</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#create-the-file">Create the file</a><a class="toc-link" href="#understand-the-code">What the code does</a><a class="toc-link" href="#attach-and-play">Attach and run</a><a class="toc-link" href="#lifecycle">Other lifecycle callbacks</a><a class="toc-link" href="#names-and-properties">Names and properties</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#create-the-file">Create the file</a><a class="toc-link" href="#understand-the-code">What the code does</a><a class="toc-link" href="#attach-and-play">Attach and run</a><a class="toc-link" href="#lifecycle">Other lifecycle callbacks</a><a class="toc-link" href="#names-and-properties">Names and properties</a><a class="toc-link" href="#inspector-rules">Inspector-only property rules</a></nav></aside>
   </div>
   <footer>BAZZALT 0.5.0 documentation · English</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

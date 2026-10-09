@@ -1,7 +1,7 @@
 """Editor-owned C++ behavior discovery and compilation."""
 from __future__ import annotations
 from dataclasses import dataclass, field
-import hashlib, json, os, re, subprocess
+import ast, hashlib, json, os, re, subprocess
 from pathlib import Path
 
 _COMPONENT=re.compile(r"\bCOMPONENT\s*\(\s*([A-Za-z_]\w*)\s*\)")
@@ -16,6 +16,7 @@ def _CodeMask(text, strings=True):
 @dataclass(frozen=True)
 class ScriptProperty:
     type: str; name: str; default: str; attributes: tuple[str,...]=()
+    rules: dict=field(default_factory=dict)
 @dataclass(frozen=True)
 class ScriptDescriptor:
     path: Path; name: str; properties: tuple[ScriptProperty,...]=field(default_factory=tuple)
@@ -40,6 +41,14 @@ class ScriptCompiler:
         try:text=path.read_text(encoding="utf-8")
         except (OSError,UnicodeError):return None
         if path.suffix.lower()==".lua":
+            from Editor.lua_declarations import ReadDeclarations,DeclarationError
+            try:declaration=ReadDeclarations(text)
+            except DeclarationError as error:raise ScriptValidationError(f"{path}: {error}") from error
+            if declaration:
+                name,fields=declaration
+                properties=tuple(ScriptProperty(*field) for field in fields)
+                if len({p.name for p in properties})!=len(properties):raise ScriptValidationError(f"{path}: duplicate Lua properties")
+                return ScriptDescriptor(path.resolve(),name,properties)
             # Metadata is declarative comments; never execute scripts to inspect them.
             declarations=re.findall(r"^\s*--\s*COMPONENT\s*\(\s*([A-Za-z_]\w*)\s*\)\s*$",text,re.M)
             if len(declarations)>1:raise ScriptValidationError(f"{path}: declare at most one Lua COMPONENT")
@@ -63,7 +72,19 @@ class ScriptCompiler:
         properties=tuple(ScriptProperty(m.group(1).strip(),m.group(2),m.group(3).strip(),tuple(a.strip() for a in (m.group(4) or "").split(",") if a.strip())) for m in _PROPERTY.finditer(body) if body_mask[m.start():].startswith("PROPERTY"))
         names=[p.name for p in properties]
         if len(names)!=len(set(names)):raise ScriptValidationError(f"{path}: component {match.group(1)} has duplicate PROPERTY names")
-        return ScriptDescriptor(path.resolve(),match.group(1),properties)
+        from Editor.property_rules import CheckTypeRules,RuleError
+        decorated=[]
+        for prop in properties:
+            rules={}
+            for attribute in prop.attributes:
+                if '=' not in attribute:continue
+                key,raw=attribute.split('=',1)
+                try:rules[key.strip()]={'true':True,'false':False}[raw.strip()] if raw.strip() in ('true','false') else ast.literal_eval(raw.strip())
+                except (ValueError,SyntaxError):raise ScriptValidationError(f"{path}: property options must be literals")
+            try:CheckTypeRules(prop.type,rules)
+            except RuleError as error:raise ScriptValidationError(f"{path}: {error}") from error
+            decorated.append(ScriptProperty(prop.type,prop.name,prop.default,prop.attributes,rules))
+        return ScriptDescriptor(path.resolve(),match.group(1),tuple(decorated))
     def Discover(self)->list[ScriptDescriptor]:
         assets=self.project/"Assets"
         paths=sorted((path for path in assets.rglob("*") if path.is_file() and path.suffix.lower() in {".cpp",".lua"}),key=str) if assets.is_dir() else []
@@ -207,7 +228,7 @@ class ScriptAttachments:
         if any(v.get("type")==descriptor.name or Path(v["source"]).resolve()==descriptor.path.resolve() for v in entries):return False
         names=[p.name for p in descriptor.properties]
         if len(names)!=len(set(names)):raise ScriptValidationError(f"Duplicate properties in component {descriptor.name}")
-        entries.append({"source":str(descriptor.path),"type":descriptor.name,"enabled":True,"properties":{p.name:"00000000-0000-0000-0000-000000000000" if p.type.replace("Bazzalt::","").strip() in ("Material","Shader","Texture","EntityReference","Entity") else _Literal(p.default) for p in descriptor.properties}});self.Save();return True
+        entries.append({"source":str(descriptor.path),"type":descriptor.name,"enabled":True,"properties":{p.name:_PropertyDefault(p) for p in descriptor.properties}});self.Save();return True
     def Remove(self,entity: str,type_name: str)->bool:
         entries=self.values.setdefault("entities",{}).setdefault(entity,[]);remaining=[v for v in entries if v.get("type")!=type_name]
         if len(remaining)==len(entries):return False
@@ -238,6 +259,19 @@ class ScriptAttachments:
             if any(value.get("type")==binding["type"] for value in entries):continue
             entries.append({key:binding[key] for key in ("source","type","enabled","properties")});changed=True
         if changed:self.Save()
+
+def _PropertyDefault(prop):
+    kind=prop.type.replace("Bazzalt::","").strip()
+    if kind in ("float","double"):
+        value=_Literal(prop.default)
+        if isinstance(value,(int,float)):return float(value)
+    if kind in ("Material","Shader","Texture","EntityReference","Entity"):return "00000000-0000-0000-0000-000000000000"
+    if kind in ("Vec2","Vec3","Vec4","Quaternion"):
+        values=prop.default.split(',')
+        if len(values)=={"Vec2":2,"Vec3":3,"Vec4":4,"Quaternion":4}[kind]:
+            try:return [float(v) for v in values]
+            except ValueError:pass
+    return _Literal(prop.default)
 
 def _Literal(value: str):
     value=value.strip()

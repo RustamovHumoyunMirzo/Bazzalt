@@ -2,6 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
+from time import monotonic
 from PySide6.QtCore import QSize,Qt,Signal
 from PySide6.QtGui import QAction,QBrush,QColor,QIcon,QKeySequence
 from PySide6.QtWidgets import (QAbstractItemView,QApplication,QComboBox,QHBoxLayout,QLineEdit,QListWidget,QListWidgetItem,QMenu,QPushButton,QVBoxLayout,QWidget)
@@ -17,6 +18,8 @@ class ConsoleMessage:
     Level:ConsoleLevel=ConsoleLevel.Info
     ShowIcon:bool=True
     Source:str="Editor"
+    Id:int=0
+    Timestamp:float=0
 
 class ConsoleList(QListWidget):
     def toPlainText(self)->str:return "\n".join(self.item(index).text() for index in range(self.count()))
@@ -38,16 +41,49 @@ class ConsolePanel(QWidget):
         self._SyncSources();self._Retranslate();self.RemoveButton.setEnabled(False)
     def AddMessage(self,text:str,level:ConsoleLevel=ConsoleLevel.Info,show_icon:bool=True,source:str="Editor")->None:
         if not isinstance(level,ConsoleLevel):raise TypeError("level must be a ConsoleLevel")
+        if getattr(self,"_runtime",None) is not None:
+            self._runtime.ConsoleAdd(str(text),{ConsoleLevel.Info:1,ConsoleLevel.Warning:2,ConsoleLevel.Error:4}[level],str(source).strip() or "Editor",show_icon);self.RefreshNative();return
         source=str(source).strip() or "Editor";message=ConsoleMessage(str(text),level,bool(show_icon),source);self._messages.append(message);self._SyncSources()
         if self._Matches(message):self._AddItem(message,len(self._messages)-1);self.View.scrollToBottom()
-    def Clear(self)->None:self._messages.clear();self.View.clear();self._SyncSources()
+    def BindRuntime(self,runtime)->None:
+        if getattr(self,"_runtime",None) is runtime:return
+        snapshot=runtime.ConsoleSnapshot(0)
+        if not isinstance(snapshot,dict):return
+        self._runtime=runtime;self._console_revision=0
+        for m in self._messages:runtime.ConsoleAdd(m.Text,{ConsoleLevel.Info:1,ConsoleLevel.Warning:2,ConsoleLevel.Error:4}[m.Level],m.Source,m.ShowIcon)
+        self.RefreshNative()
+    def RefreshNative(self,force:bool=True)->None:
+        runtime=getattr(self,"_runtime",None)
+        if runtime is None:return
+        now=monotonic()
+        if not force and now-getattr(self,"_console_last_poll",0)<.1:return
+        self._console_last_poll=now
+        snapshot=runtime.ConsoleSnapshot(self._console_revision)
+        if not isinstance(snapshot,dict):return
+        levels={1:ConsoleLevel.Info,2:ConsoleLevel.Warning,4:ConsoleLevel.Error}
+        messages=[ConsoleMessage(m["text"],levels[m["level"]],m["icon"],m["source"],m["id"],m["timestamp"]) for m in snapshot["messages"]]
+        count=len(self._messages);append=len(messages)>=count and all(a.Id==b.Id for a,b in zip(self._messages,messages))
+        self._console_revision=snapshot["revision"];self._messages=messages;self._SyncSources()
+        if append:
+            for index in range(count,len(messages)):
+                if self._Matches(messages[index]):self._AddItem(messages[index],index)
+            if len(messages)>count:self.View.scrollToBottom()
+        else:self._Refresh()
+    def Clear(self)->None:
+        if getattr(self,"_runtime",None) is not None:self._runtime.ConsoleClear();self.RefreshNative();return
+        self._messages.clear();self.View.clear();self._SyncSources()
     def ClearFiltered(self)->None:
+        if getattr(self,"_runtime",None) is not None:
+            self.RefreshNative()
+            self._runtime.ConsoleRemove([m.Id for m in self._messages if self._Matches(m)]);self.RefreshNative();return
         self._messages=[message for message in self._messages if not self._Matches(message)];self._SyncSources();self._Refresh()
     def RemoveSelected(self)->None:
         indices={int(item.data(Qt.ItemDataRole.UserRole)) for item in self.View.selectedItems()}
         if not indices:return
+        if getattr(self,"_runtime",None) is not None:
+            self._runtime.ConsoleRemove([m.Id for index,m in enumerate(self._messages) if index in indices]);self.RefreshNative();return
         self._messages=[message for index,message in enumerate(self._messages) if index not in indices];self._SyncSources();self._Refresh()
-    def GetMessages(self)->tuple[ConsoleMessage,...]:return tuple(self._messages)
+    def GetMessages(self)->tuple[ConsoleMessage,...]:self.RefreshNative();return tuple(self._messages)
     def SetLevelVisible(self,level:ConsoleLevel,visible:bool)->None:
         if visible:self._visible_levels.add(level)
         else:self._visible_levels.discard(level)
@@ -76,14 +112,14 @@ class ConsolePanel(QWidget):
         filename={ConsoleLevel.Info:f"info_{self._ThemeName()}.svg",ConsoleLevel.Warning:"warn.svg",ConsoleLevel.Error:"error.svg"}[message.Level]
         return self._resources.Icon(f"icons/console/{filename}")
     def _AddItem(self,message:ConsoleMessage,index:int)->None:
-        text=f"{message.Text}  —  {message.Source}";item=QListWidgetItem(self._Icon(message),text);item.setData(Qt.ItemDataRole.UserRole,index);item.setToolTip(f"{message.Text}\nSource: {message.Source}");item.setFlags(Qt.ItemFlag.ItemIsEnabled|Qt.ItemFlag.ItemIsSelectable)
+        text=f"{message.Text}  —  {message.Source}";item=QListWidgetItem(self._Icon(message),text);item.setData(Qt.ItemDataRole.UserRole,index);item.setData(Qt.ItemDataRole.UserRole+1,message.Id or id(message));item.setToolTip(f"{message.Text}\nSource: {message.Source}");item.setFlags(Qt.ItemFlag.ItemIsEnabled|Qt.ItemFlag.ItemIsSelectable)
         if message.Level is ConsoleLevel.Warning:item.setForeground(QBrush(QColor("#e8b85c")))
         elif message.Level is ConsoleLevel.Error:item.setForeground(QBrush(QColor("#ee6a6a")))
         self.View.addItem(item)
     def _Refresh(self,*_args)->None:
-        selected={item.data(Qt.ItemDataRole.UserRole) for item in self.View.selectedItems()};self.View.clear()
+        selected={item.data(Qt.ItemDataRole.UserRole+1) for item in self.View.selectedItems()};self.View.clear()
         for index,message in enumerate(self._messages):
-            if self._Matches(message):self._AddItem(message,index);self.View.item(self.View.count()-1).setSelected(index in selected)
+            if self._Matches(message):self._AddItem(message,index);self.View.item(self.View.count()-1).setSelected((message.Id or id(message)) in selected)
     def _CopySelected(self)->None:
         items=self.View.selectedItems()
         if items:QApplication.clipboard().setText("\n".join(item.text() for item in items))

@@ -1,6 +1,7 @@
 #include <Bazzalt/Asset.h>
 #include <Bazzalt/AssetManager.h>
 #include <Bazzalt/Component.h>
+#include <Bazzalt/Console.h>
 #include <Bazzalt/Entity.h>
 #include <Bazzalt/EntityReference.h>
 #include <Bazzalt/Input.h>
@@ -39,6 +40,7 @@ public:
     PROPERTY(Bazzalt::Entity, Cube, {})
     Bazzalt::Material Surface;
     void OnCreate() override {
+        Bazzalt::Console::Info("C++ module connected", "Native Script");
         auto* scene = Bazzalt::SceneManager::GetActiveScene();
         if (!scene || Cube != GetEntity()) throw std::runtime_error("Not the host scene/entity");
         scene->AddSystem<ScriptSystem>();

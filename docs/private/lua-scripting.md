@@ -54,13 +54,12 @@ UUIDs survive renaming and do not encode a developer's absolute path.
 
 Create a Lua Behavior in Asset Browser, or add a `.lua` file in Assets. Use the
 provided `icons/abrowser/lua.svg`. Add it from Add Component or drag it onto an
-entity. Source inspection only reads declaration comments, never runs code:
+entity. Source inspection tokenizes declarations, never runs project code:
 
 ```lua
--- COMPONENT(Walk)
--- PROPERTY(float, Speed, 4.0)
 local B = Bazzalt
-local Walk = { Speed = 4.0 }
+local Walk = COMPONENT("Walk")
+Walk.Speed = PROPERTY("float", 4.0)
 function Walk:OnUpdate(deltaTime)
     local transform = self.Entity:GetWorldTransform()
     transform.Position = transform.Position + B.Vec3.new(self.Speed * deltaTime, 0, 0)
@@ -69,8 +68,17 @@ end
 return Walk
 ```
 
-Each behavior returns a table. `COMPONENT` is optional and defaults to the file
-stem; an explicit name must be unique across Lua and C++ behaviors. Duplicate
+Each behavior returns its COMPONENT table. The runtime provides global COMPONENT
+and PROPERTY during initialization, validates types/defaults, and applies
+serialized overrides before OnCreate. Supported declarative types: float, double,
+int, bool, string/std::string, Vec2/3/4 and Quaternion. Discovery accepts literal
+scalars and B.Type.new/Bazzalt.Type.new constructors with literal coordinates;
+it rejects dynamic defaults. Declarations belong at top level, not in callbacks.
+`Editor/lua_declarations.py` handles strings, line/long comments and balanced
+arguments without executing Lua. Runtime helpers live in LuaRuntime.cpp; update
+both contracts and tests when adding a type. Legacy comment metadata and plain
+tables remain supported (filename fallback); functions take precedence.
+An explicit name must be unique across Lua and C++ behaviors. Duplicate
 properties and duplicate attachments are rejected. The runtime supplies
 `self.Entity` and applies inspector overrides before OnCreate. Optional methods
 are OnCreate, OnUpdate(deltaTime), OnFixedUpdate(fixedDeltaTime), OnDestroy.
@@ -79,6 +87,27 @@ do not update. Stop destroys runtime state, leaving authoring values unchanged.
 See `examples/Walk.lua` for actual WASD movement through Input and world transforms.
 
 ## Gameplay API and value semantics
+
+### Inspector property policies
+
+`PROPERTY(type, default, { Min=0, Max=10, EnabledIf="self.Enabled" })`
+accepts an optional editor-only literal table. LuaRuntime accepts and ignores the
+options at runtime; they must not change gameplay assignments or serialized values.
+`Editor/property_rules.py` implements bounded AST evaluation without eval or Lua
+execution. `Editor/lua_declarations.py` parses literal options; ScriptProperty.rules
+carries them to the controller. C++ variadic metadata also accepts simple literals,
+for example `PROPERTY(float, Speed, 4.0f, Min=0, Max=10, Step=0.5)`.
+
+Supported options: Min/Max/Step; string MinLength/MaxLength/Trim/Filter/Pattern;
+ReadOnly/VisibleIf/EnabledIf/Validate; Message/Tooltip/Label. Pattern uses glob
+matching, not regex. Conditions use self.Field, proposed value, boolean/arithmetic
+operators and a small whitelist of pure helpers. No user callbacks are executed.
+Missing dependencies or expression errors disable the affected field with a tooltip.
+Validate failures restore the saved value; existing invalid values remain visible.
+Control signals are blocked while restoring/configuring values to prevent saves on
+selection or recursion. Rules refresh in place after commits, including both labels
+and grid row height when hidden. Runtime/Lua and real Qt inspector regression tests
+cover rejected edits, live conditions, defaults and unrestricted gameplay writes.
 
 `Bazzalt` contains Vec2/Vec3/Vec4, Mat3/Mat4, Quaternion, UUID, Time, Input,
 KeyCode/MouseButton/InputAxis and rendering/query enums. Constructors use

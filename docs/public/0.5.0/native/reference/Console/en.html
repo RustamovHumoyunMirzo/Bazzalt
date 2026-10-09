@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Include Bazzalt/Console.h. All methods are static and thread-safe. The editor host enables this service; standalone games never enable it.">
+  <title>Console | BAZZALT Docs 0.5.0</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../" data-version="0.5.0" data-page="native/reference/Console">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"><option value="0.5.0" selected>0.5.0</option></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"><option value="en" selected>English</option></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for the navigation tree. Page content and links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / C++ / C++ API reference / Console</nav>
+      <article class="doc"><h1>Console</h1><p class="lead">Include Bazzalt/Console.h. All methods are static and thread-safe. The editor host enables this service; standalone games never enable it.</p>
+<h2 id="availability">Runtime contract</h2><p><code>bool IsAvailable() noexcept</code> reports whether an editor host exists. Outside the editor, writes and clearing do nothing, produce no stdout/stderr output, and reads return std::nullopt. Inside the editor an empty console returns an engaged optional containing zero or an empty vector. Invalid message indices/IDs return nullopt. Methods suppress service failures rather than throwing.</p><p>Do not use console contents as gameplay state. Dereferencing a missing optional remains a caller error: the engine deliberately does not fabricate a value in exported games.</p>
+<h2 id="messages">Write messages</h2><pre><code class="language-cpp">Console::Info("Movement started", "Movement");
+Console::Warning("Missing optional target", "AI", false);
+Console::Error("Cannot find player", "AI");
+Console::Log("Details", ConsoleLevel::Info, "Gameplay", false);</code></pre><p>Log(text, level=Info, source="Script", showIcon=true) adds a message. Info, Warning and Error take text, source="Script" and showIcon=true. Invalid levels are ignored. Empty source becomes Script. The message store retains up to 10,000 entries and 16 MiB of text/source payloads; text over 65,536 UTF-8 bytes or source over 256 bytes is discarded. Scripts can log from worker threads; Qt updates occur on editor ticks.</p>
+<h2 id="filter">ConsoleFilter and ConsoleLevel</h2><p>ConsoleLevel values are Info=1, Warning=2 and Error=4. ConsoleFilter is a value type with Levels (uint8 bitmask, default 7), Source (string, empty means all), and Contains (string, empty means all). Source matches exactly; Contains searches message text. Both are case-sensitive UTF-8 byte matches; filters do not change the Console panel's visible filter settings.</p><pre><code class="language-cpp">ConsoleFilter filter;
+filter.Levels = 2 | 4;
+filter.Source = "Physics";
+filter.Contains = "collision";
+Console::Clear(filter);</code></pre>
+<h2 id="read">Read snapshots</h2><p><code>GetCount(filter={})</code> returns optional&lt;size_t&gt;. <code>GetMessages(filter={})</code> returns optional&lt;vector&lt;ConsoleMessage&gt;&gt;. <code>GetMessageAt(size_t index)</code> reads a zero-based index in the unfiltered store; <code>FindMessage(uint64_t id)</code> reads a stable ID. The latter two return optional&lt;ConsoleMessage&gt;. All results are copies, not live references; modifying them does not edit the Console.</p><p>ConsoleMessage fields: Id (uint64 stable until removed), Text (string), Level (ConsoleLevel), Source (string), ShowIcon (bool), Timestamp (double Unix seconds). Indices shift after clearing or eviction; retain Id instead.</p><pre><code class="language-cpp">if (auto messages = Console::GetMessages()) {
+    for (const auto&amp; message : *messages) {
+        if (message.Source == "AI") Console::ClearMessage(message.Id);
+    }
+}</code></pre>
+<h2 id="clear">Clear operations</h2><p><code>Clear(filter={})</code> removes matching entries; default removes all. <code>ClearAt(size_t index)</code> removes a zero-based unfiltered entry. <code>ClearMessage(uint64_t id)</code> removes one ID. <code>ClearMessages(const vector&lt;uint64_t&gt;&amp; ids)</code> removes IDs in one batch. Missing indices/IDs are harmless no-ops. These operations affect the same store displayed in the editor, not only script-originated messages.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../../0.5.0/native/reference/ComponentSystem/en.html"><small>Previous</small>ComponentSystem</a>
+<a class="next" href="../../../../0.5.0/native/reference/CustomPostProcessEffect/en.html"><small>Next</small>CustomPostProcessEffect</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#availability">Runtime contract</a><a class="toc-link" href="#messages">Write messages</a><a class="toc-link" href="#filter">ConsoleFilter and ConsoleLevel</a><a class="toc-link" href="#read">Read snapshots</a><a class="toc-link" href="#clear">Clear operations</a></nav></aside>
+  </div>
+  <footer>BAZZALT 0.5.0 documentation · English</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

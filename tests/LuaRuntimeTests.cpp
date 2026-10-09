@@ -1,4 +1,5 @@
 #include "Runtime/LuaRuntime.h"
+#include "Runtime/ConsoleStore.h"
 #include "Runtime/Engine.h"
 #include "Runtime/AssetDatabase.h"
 #include "Bazzalt/Components/Light.h"
@@ -17,6 +18,10 @@ int main(){
 local B = Bazzalt
 local Behavior = { Speed = 1.0 }
 function Behavior:OnCreate()
+    assert(not B.Console.IsAvailable())
+    B.Console.Info("standalone no-op")
+    B.Console.Clear()
+    assert(B.Console.GetMessages()==nil and B.Console.GetCount()==nil and B.Console.GetMessageAt(0)==nil)
     assert(os == nil and io == nil and package == nil and debug == nil and loadfile == nil)
     assert(B.Time.GetTimeScale() == 1)
     assert(B.ToDegrees(B.ToRadians(90)) > 89)
@@ -151,6 +156,34 @@ return {OnCreate=function(self)
 end})");
     assert(Runtime::LuaRuntime::Import(source,output,error));assert(runtime.Configure({binding},error));assert(runtime.Start(error));runtime.Stop();
     write("return {OnCreate=function(self) while true do end end}");assert(Runtime::LuaRuntime::Import(source,output,error));assert(runtime.Configure({binding},error));assert(!runtime.Start(error));assert(error.find("instruction budget")!=std::string::npos);
+    write(R"(local B=Bazzalt
+local Walk=COMPONENT("Walk")
+Walk.Speed=PROPERTY("float",4.0,{Min=0,Max=10,Validate="value <= 10"})
+Walk.Direction=PROPERTY("Vec3",B.Vec3.new(1,0,0))
+function Walk:OnCreate()
+ assert(self.Speed==4 and self.Direction.X==1)
+ self.Speed=100;assert(self.Speed==100);self.Speed=4 -- Inspector rules never gate gameplay.
+end
+function Walk:OnUpdate(dt)
+ local t=self.Entity:GetWorldTransform();t.Position=t.Position+self.Direction*self.Speed*dt;self.Entity:SetWorldTransform(t)
+end
+return Walk)");
+    assert(Runtime::LuaRuntime::Import(source,output,error));assert(runtime.Configure({binding},error));assert(runtime.Start(error));
+    const float startX=entity.GetWorldTransform().Position.X;runtime.Update(.5f);assert(std::fabs(entity.GetWorldTransform().Position.X-startX-2)<.001f);runtime.Stop();
+    write("local W=COMPONENT('Wrong');return W");assert(Runtime::LuaRuntime::Import(source,output,error));assert(runtime.Configure({binding},error));assert(!runtime.Start(error));
+    write("local W=COMPONENT('Walk');W.Speed=PROPERTY('float','bad');return W");assert(Runtime::LuaRuntime::Import(source,output,error));assert(runtime.Configure({binding},error));assert(!runtime.Start(error));
+    Runtime::ConsoleAccess::Acquire();
+    write(R"(local B=Bazzalt;local W=COMPONENT('Walk')
+function W:OnCreate()
+ B.Console.Clear();B.Console.Info('hello','Lua',false);B.Console.Warning('warn','Lua')
+ assert(B.Console.GetCount()==2)
+ local messages=B.Console.GetMessages();assert(#messages==2 and messages[1].Text=='hello' and not messages[1].ShowIcon)
+ local filter=B.ConsoleFilter.new();filter.Levels=2;B.Console.Clear(filter);assert(B.Console.GetCount()==1)
+ local first=B.Console.GetMessageAt(1);assert(first.Text=='hello' and B.Console.FindMessage(first.Id).Text=='hello')
+ B.Console.ClearMessage(first.Id);assert(B.Console.GetCount()==0)
+end
+return W)");
+    assert(Runtime::LuaRuntime::Import(source,output,error));assert(runtime.Configure({binding},error));assert(runtime.Start(error));runtime.Stop();Runtime::ConsoleAccess::Release();
     write("this is invalid Lua");assert(!Runtime::LuaRuntime::Import(source,output,error));assert(database.Refresh());
     const auto failedAsset=database.Find(source);assert(failedAsset&&failedAsset->State==AssetState::Failed&&!failedAsset->LastError.empty());
     write("return {} ");assert(runtime.Configure({binding},error));binding.Module=source;assert(runtime.Configure({binding},error));assert(!runtime.Start(error)); // Source must not execute as runtime bytecode.

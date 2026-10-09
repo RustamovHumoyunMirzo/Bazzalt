@@ -347,6 +347,15 @@ class RuntimeService(QObject):
         return result
 
     def IsPlaying(self)->bool:return bool(self._host and self._host.is_playing())
+
+    def ConsoleSnapshot(self,revision=0):
+        return self._host.console_snapshot(revision) if self._host and hasattr(self._host,"console_snapshot") else None
+    def ConsoleAdd(self,text,level,source,icon=True):
+        if self._host and hasattr(self._host,"console_add"):self._host.console_add(text,level,source,icon)
+    def ConsoleClear(self):
+        if self._host and hasattr(self._host,"console_clear"):self._host.console_clear()
+    def ConsoleRemove(self,ids):
+        if self._host and hasattr(self._host,"console_remove"):self._host.console_remove(ids)
     def RenameAssetDirectory(self,source,target)->bool:
         if not self._host or not hasattr(self._host,"rename_asset_directory"):return False
         result=bool(self._host.rename_asset_directory(str(Path(source).resolve()),str(Path(target).resolve())))

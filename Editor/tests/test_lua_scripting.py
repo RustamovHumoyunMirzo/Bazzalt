@@ -7,6 +7,31 @@ from unittest.mock import patch
 from Editor.scripting import ScriptCompiler,ScriptAttachments,ScriptValidationError
 
 class LuaScriptingTests(unittest.TestCase):
+    def test_function_declarations_are_inspected_without_execution(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source=Path(folder)/"DifferentFilename.lua"
+            source.write_text('''-- COMPONENT(Ignored)
+--[=[ local Bad = COMPONENT("IgnoredToo") ]=]
+local example = "PROPERTY('float', 999)"
+local B = Bazzalt
+local Walk = COMPONENT("Walk")
+Walk.Speed = PROPERTY("float", 4.0)
+Walk.Enabled = PROPERTY("bool", true)
+Walk.Direction = PROPERTY("Vec3", B.Vec3.new(1, 0, -1))
+function Walk:OnUpdate(dt) error("must never execute while inspecting") end
+return Walk
+''',encoding="utf-8")
+            descriptor=ScriptCompiler.Inspect(source)
+            self.assertEqual(descriptor.name,"Walk")
+            attachments=ScriptAttachments(folder);self.assertTrue(attachments.Attach("entity",descriptor))
+            self.assertEqual(attachments.For("entity")[0]["properties"]["Direction"],[1.0,0.0,-1.0])
+            self.assertEqual([(p.type,p.name,p.default) for p in descriptor.properties],[("float","Speed","4.0"),("bool","Enabled","true"),("Vec3","Direction","1,0,-1")])
+            for body in ('local W=COMPONENT("Walk")\nW.Speed=PROPERTY("float", os.execute("bad"))',
+                         'local W=COMPONENT("Walk")\nW.Speed=PROPERTY("float",1)\nW.Speed=PROPERTY("float",2)',
+                         'local W=COMPONENT("Walk")\nOther.Speed=PROPERTY("float",1)',
+                         'local W=COMPONENT("Walk")\nW.Speed=PROPERTY("int",1.5)'):
+                source.write_text(body,encoding="utf-8")
+                with self.assertRaises(ScriptValidationError):ScriptCompiler.Inspect(source)
     @classmethod
     def setUpClass(cls):
         from PySide6.QtWidgets import QApplication

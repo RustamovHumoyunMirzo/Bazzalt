@@ -1,5 +1,6 @@
 #include "Runtime/Engine.h"
 #include "Runtime/NativeScriptRuntime.h"
+#include "Runtime/ConsoleStore.h"
 #include "Bazzalt/SceneManager.h"
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Components/Light.h"
@@ -32,7 +33,10 @@ int main(int argc,char** argv) {
         binding.Properties["Cube"]=binding.Entity;
         std::string error;
         assert(scripts.Configure({binding},error));
+        Bazzalt::Runtime::ConsoleAccess::Acquire();Bazzalt::Console::Clear();
         assert(scripts.Start(error));
+        assert(Bazzalt::Console::GetCount().value()==1);
+        assert(Bazzalt::Console::GetMessageAt(0)->Text=="C++ module connected");
         assert(scene.FindEntityByName("Module HUD").HasComponent<Bazzalt::Frame>());
         assert(scene.FindEntityByName("Module Button").HasComponent<Bazzalt::GuiButton>());
         assert(cube.GetComponent<Bazzalt::Transform>().Position.X==3.0f);
@@ -41,6 +45,7 @@ int main(int argc,char** argv) {
         scripts.Update(2.0f);
         assert(std::abs(cube.GetWorldTransform().Position.X-15.0f)<0.001f);
         scripts.Stop();
+        Bazzalt::Runtime::ConsoleAccess::Release();
         // Storage and systems still own DLL code; Stop must not unload it yet.
 #ifdef _WIN32
         assert(GetModuleHandleW(module.filename().c_str())!=nullptr);

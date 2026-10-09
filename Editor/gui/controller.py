@@ -13,6 +13,8 @@ from ..runtime import RuntimeService
 from ..history import SceneHistory
 from ..scripting import ScriptAttachments, ScriptCompiler, ScriptValidationError, BuildResult
 from ..lua_assets import LuaAssetWatcher
+from ..property_rules import State as PropertyState,Validate as ValidateProperty,RuleError
+from .widgets.fields import FieldState
 from ..materials import MaterialCompiler, MaterialError, ZERO, COUNTS
 from ..environments import InspectEnvironment
 from ..game_input import GameInputRouter
@@ -31,6 +33,7 @@ class EditorController(QObject):
         super().__init__(window)
         self.Window = window
         self.Runtime = runtime
+        self.Window.Console.BindRuntime(runtime)
         self.GameInput=GameInputRouter(window,runtime)
         self.SelectedEntity = ""
         self._inspected_asset=None
@@ -136,6 +139,7 @@ class EditorController(QObject):
         if path and self.Runtime.LoadScene(path): self.ScenePath = path
 
     def _Tick(self) -> None:
+        self.Window.Console.RefreshNative(False)
         self.GameInput.SyncFocus()
         surface=self.Window.Scene.Surface
         if monotonic()-self._material_check>2.0 and not surface._navigating and surface._gizmo_drag is None:
@@ -238,6 +242,8 @@ class EditorController(QObject):
         if not force and next_entity and next_entity==self.SelectedEntity and self.Window.Properties._sections:
             self._RefreshInspectorValues();self._UpdateGizmo();return
         self._updating_inspector = True
+        self._script_rule_rows=[]
+        self._script_descriptor_cache={}
         try:self.Window.Properties.Clear()
         finally:self._updating_inspector = False
         self.SelectedEntity = next_entity
@@ -287,7 +293,11 @@ class EditorController(QObject):
                 section.EnabledChanged.connect(lambda enabled,s=script:self._SetScriptEnabled(s,enabled))
                 for property_name,value in script.get("properties",{}).items():
                     editor=self._ScriptEditor(script,property_name,value)
-                    if editor is not None:section.AddField(property_name,editor)
+                    if editor is not None:
+                        section.AddField(property_name,editor)
+                        if getattr(editor,"_inspector_rules",{}).get("Label"):section.SetFieldTitle(property_name,editor._inspector_rules["Label"])
+                        self._script_rule_rows.append((script,property_name,section,editor,getattr(editor,"_inspector_rules",{})))
+        self._RefreshScriptRules()
 
         self._UpdateGizmo()
 
@@ -296,6 +306,7 @@ class EditorController(QObject):
         if len(unique)<=1:self.SelectEntity(unique[0] if unique else None);return
         details=[self.Runtime.EntityDetails(value) for value in unique];details=[value for value in details if value]
         if len(details)<=1:self.SelectEntity(unique[0] if details else None);return
+        self._script_rule_rows=[];self._script_descriptor_cache={}
         self.SelectedEntities=unique;self.SelectedEntity=unique[0];self.Window.Properties.Clear();self.Window.Properties.AddComponentButton.setVisible(True)
         summary=self.Window.Properties.AddComponentSection("selection",self.Window.Localization.Translate("properties.multiple_entities",count=len(details)),removable=False)
         summary.AddField("Selection",QLabel(", ".join(str(value.get("name","")) for value in details)))
@@ -364,6 +375,7 @@ class EditorController(QObject):
             else:self._RefreshInspectorValues();self._UpdateGizmo()
 
     def SelectAsset(self,path)->None:
+        self._script_rule_rows=[];self._script_descriptor_cache={}
         self._inspected_asset=Path(path)
         path=Path(path);self.SelectedEntity="";self.SelectedEntities=[];self.Window.Scene.Surface.SetSelection(None);self.Runtime.SetGizmo("",0);self.Window.Properties.Clear();self.Window.Properties.AddComponentButton.setVisible(False)
         self.InspectedScene="";self._UpdateGizmo()
@@ -384,6 +396,7 @@ class EditorController(QObject):
         if message!=self._material_error:self.Window.Console.AddMessage(message,ConsoleLevel.Error,True,self.Window.Localization.Translate("materials.source"));self._material_error=message
 
     def _InspectScene(self,scene_id):
+        self._script_rule_rows=[];self._script_descriptor_cache={}
         tr=self.Window.Localization.Translate;self.Window.Properties.AddComponentButton.hide()
         data=self.Runtime.SceneEnvironment(scene_id)
         if not data:return
@@ -675,9 +688,39 @@ class EditorController(QObject):
         return None
 
     def _ScriptEditor(self,script:dict,name:str,value):
+        editor=self._RawScriptEditor(script,name,value)
+        descriptor=self._ScriptDescriptor(script)
+        prop=next((p for p in descriptor.properties if p.name==name),None) if descriptor else None
+        rules=prop.rules if prop else {}
+        editor._inspector_rules=rules
+        blocker=QSignalBlocker(editor)
+        try:
+            if isinstance(editor,(IntInput,FloatInput)):
+                minimum=rules.get("Min",editor.minimum());maximum=rules.get("Max",editor.maximum())
+                # Preserve invalid legacy values visibly; never clamp the saved model on display.
+                editor.setRange(min(minimum,value),max(maximum,value))
+                if "Step" in rules:editor.setSingleStep(int(rules["Step"]) if isinstance(editor,IntInput) else rules["Step"])
+            elif hasattr(editor,"Inputs"):
+                for control,current in zip(editor.Inputs,value):
+                    control.setRange(min(rules.get("Min",control.minimum()),current),max(rules.get("Max",control.maximum()),current))
+                    if "Step" in rules:control.setSingleStep(rules["Step"])
+            elif isinstance(editor,StringInput) and "MaxLength" in rules:editor.setMaxLength(max(int(rules["MaxLength"]),len(str(value))))
+            if isinstance(editor,(IntInput,FloatInput)) or hasattr(editor,"Inputs"):editor.SetValue(value)
+            editor.setToolTip(rules.get("Tooltip",""))
+        finally:del blocker
+        return editor
+
+    def _ScriptDescriptor(self,script):
+        if not hasattr(self,"_script_descriptor_cache"):self._script_descriptor_cache={}
+        source=script.get("source","")
+        if source not in self._script_descriptor_cache:
+            try:self._script_descriptor_cache[source]=ScriptCompiler.Inspect(source)
+            except ScriptValidationError:self._script_descriptor_cache[source]=None
+        return self._script_descriptor_cache[source]
+
+    def _RawScriptEditor(self,script:dict,name:str,value):
         commit=lambda v:self._SetScriptProperty(script,name,v)
-        try:descriptor=ScriptCompiler.Inspect(script.get("source",""))
-        except ScriptValidationError:descriptor=None
+        descriptor=self._ScriptDescriptor(script)
         prop=next((p for p in descriptor.properties if p.name==name),None) if descriptor else None
         if prop and prop.type.replace("Bazzalt::","").strip() in ("EntityReference","Entity"):
             entities={str(item["uuid"]):item for item in self.Runtime.Entities()}
@@ -702,7 +745,7 @@ class EditorController(QObject):
         if isinstance(value,bool):editor=BoolInput(value);editor.ValueChanged.connect(commit);return editor
         if isinstance(value,int):editor=IntInput(value=value);editor.valueChanged.connect(commit);return editor
         if isinstance(value,float):editor=FloatInput(value=value);editor.valueChanged.connect(commit);return editor
-        if isinstance(value,(tuple,list)) and len(value) in (3,4):editor=Vec3Input(value) if len(value)==3 else Vec4Input(value);editor.ValueChanged.connect(commit);return editor
+        if isinstance(value,(tuple,list)) and len(value) in (2,3,4):editor={2:Vec2Input,3:Vec3Input,4:Vec4Input}[len(value)](value);editor.ValueChanged.connect(commit);return editor
         editor=StringInput(str(value));editor.editingFinished.connect(lambda:commit(editor.GetValue()));return editor
 
     def _AssetExtensions(self,field_name:str)->set[str]:
@@ -1090,9 +1133,45 @@ class EditorController(QObject):
         script["enabled"]=enabled
         if self.ScriptAttachments:self.ScriptAttachments.Save();self._SyncLuaScripts();self.SetDirty(True)
 
-    def _SetScriptProperty(self,script:dict,name:str,value)->None:
+    def _RefreshScriptRules(self)->None:
+        for script,name,section,editor,rules in getattr(self,"_script_rule_rows",()):
+            try:
+                visible,enabled=PropertyState(rules,script.get("properties",{}))
+                section.SetFieldVisible(name,visible);editor.setEnabled(enabled)
+                try:
+                    ValidateProperty(rules,script.get("properties",{}),script.get("properties",{}).get(name))
+                    editor.SetFieldState(FieldState.Default);editor.setToolTip(rules.get("Tooltip",""))
+                except RuleError as error:
+                    editor.SetFieldState(FieldState.Warning);editor.setToolTip(rules.get("Message",str(error)))
+            except RuleError as error:
+                section.SetFieldVisible(name,True)
+                editor.setEnabled(False);editor.SetFieldState(FieldState.Error);editor.setToolTip(str(error))
+
+    def _SetScriptProperty(self,script:dict,name:str,value)->bool:
+        rows=[row for row in getattr(self,"_script_rule_rows",()) if row[0] is script and row[1]==name]
+        rules=rows[0][4] if rows else {}
+        try:
+            visible,enabled=PropertyState(rules,script.get("properties",{}))
+            if not visible or not enabled:raise RuleError("This inspector field is not editable")
+            if isinstance(value,str) and rules.get("Trim"):value=value.strip()
+            candidate=dict(script.get("properties",{}));candidate[name]=value
+            value=ValidateProperty(rules,candidate,value)
+        except RuleError as error:
+            for _,_,_,editor,_ in rows:
+                blocker=QSignalBlocker(editor)
+                try:editor.SetValue(script.get("properties",{}).get(name))
+                finally:del blocker
+                editor.SetFieldState(FieldState.Error);editor.setToolTip(rules.get("Message",str(error)))
+            return False
         script.setdefault("properties",{})[name]=value
         if self.ScriptAttachments:self.ScriptAttachments.Save();self._SyncLuaScripts();self.SetDirty(True)
+        for _,_,_,editor,_ in rows:
+            blocker=QSignalBlocker(editor)
+            try:editor.SetValue(value)
+            finally:del blocker
+            editor.SetFieldState(FieldState.Default);editor.setToolTip(rules.get("Tooltip",""))
+        self._RefreshScriptRules()
+        return True
 
     def _SyncLuaScripts(self)->bool:
         if not self.ScriptAttachments:return True

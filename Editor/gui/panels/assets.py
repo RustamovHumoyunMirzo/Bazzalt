@@ -190,7 +190,7 @@ class AssetBrowserPanel(QWidget):
             self.Refresh(path);self.Browser.editItem(self.Browser.currentItem());return
         if kind=="lua":
             name=path.stem.replace(" ","_")
-            path.write_text(f'-- COMPONENT({name})\n-- PROPERTY(float, Speed, 1.0)\nlocal Behavior = {{ Speed = 1.0 }}\nfunction Behavior:OnUpdate(deltaTime)\n    -- self.Entity is the attached entity.\nend\nreturn Behavior\n',encoding="utf-8")
+            path.write_text(f'local B = Bazzalt\nlocal Behavior = COMPONENT("{name}")\nBehavior.Speed = PROPERTY("float", 1.0)\n\nfunction Behavior:OnUpdate(deltaTime)\n    -- self.Entity is the attached entity.\nend\nreturn Behavior\n',encoding="utf-8")
         elif kind=="folder":path.mkdir()
         else:path.write_text(f'FormatVersion: 1\nSceneUUID: "{uuid.uuid4()}"\nEntities:\n' if kind=="scene" else '#include <Bazzalt/Script.h>\n\nCOMPONENT(NewComponent) {\npublic:\n    PROPERTY(float, Speed, 1.0f)\n\n    void OnUpdate(float deltaTime) override { (void)deltaTime; }\n};\n' if kind=="cpp" else "shader NewShader {\n    properties { roughness: float = 0.5; }\n    material { color = vec4(1.0); roughness = roughness; }\n}\n" if kind=="shader" else 'material { name: "NewShader", shadingModel: lit }\nfragment { void material(inout MaterialInputs material) { prepareMaterial(material); material.baseColor = vec4(1.0); } }\n' if kind=="filament_shader" else '{\n  "version": 1,\n  "shader": null,\n  "properties": {}\n}\n',encoding="utf-8")
         self.Refresh(path);self.Browser.editItem(self.Browser.currentItem())

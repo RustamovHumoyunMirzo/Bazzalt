@@ -1,7 +1,6 @@
--- COMPONENT(Walk)
--- PROPERTY(float, Speed, 4.0)
 local B = Bazzalt
-local Walk = { Speed = 4.0 }
+local Walk = COMPONENT("Walk")
+Walk.Speed = PROPERTY("float", 4.0)
 
 function Walk:OnUpdate(deltaTime)
     local direction = B.Vec3.new(B.Input.GetAxis(B.InputAxis.Horizontal), 0,

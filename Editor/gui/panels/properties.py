@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 
 from ...localization import LocalizationManager
 from ..widgets.options_button import OptionsButton
+from ..widgets.fields import StringInput
 from ..display_names import DisplayName
 
 
@@ -76,7 +77,20 @@ class ComponentSection(QFrame):
     def _RetranslateLabels(self,*_):
         self.Toggle.setText(DisplayName(self._localization,self._title))
         self.Enabled.setToolTip(self._Text("properties.enable_component","Enable component"))
-        for key,caption in self._captions.items():caption.setText(DisplayName(self._localization,key,"field"));caption.setToolTip(caption.text())
+        for key,caption in self._captions.items():caption.setText(getattr(self,"_custom_titles",{}).get(key,DisplayName(self._localization,key,"field")));caption.setToolTip(caption.text())
+
+    def SetFieldVisible(self,label:str,visible:bool)->None:
+        editor=self._fields.get(label);caption=self._captions.get(label)
+        if editor is not None:
+            editor.setVisible(visible)
+            position=self.Form.getItemPosition(self.Form.indexOf(editor))
+            if position:self.Form.setRowMinimumHeight(position[0],24 if visible else 0)
+        if caption is not None:caption.setVisible(visible)
+
+    def SetFieldTitle(self,label:str,title:str)->None:
+        if not hasattr(self,"_custom_titles"):self._custom_titles={}
+        self._custom_titles[label]=title
+        if label in self._captions:self._captions[label].setText(title)
 
     def _Text(self,key:str,fallback:str)->str:
         return self._localization.Translate(key) if self._localization else fallback
@@ -107,8 +121,11 @@ class ComponentSection(QFrame):
         if not isinstance(values,dict):return
         for name,value in values.items():
             editor=self._fields.get(name);setter=getattr(editor,"SetValue",None) if editor else None
+            if editor is not None and (not editor.isEnabled() or editor.isHidden()):continue
             if callable(setter):
-                try:setter(value)
+                try:
+                    setter(value)
+                    if isinstance(editor,StringInput):editor.editingFinished.emit()
                 except (TypeError,ValueError):pass
 
 

@@ -41,6 +41,7 @@ void SetProperty(sol::table object,const std::string& name,const std::string& va
     else if(current.is<EntityReference>())object[name]=EntityReference(assetId());
     else if(current.is<Material>())object[name]=Material::Load(assetId());
     else if(current.is<Shader>())object[name]=Shader::Load(assetId());
+    else if(current.is<Texture>())object[name]=Texture::Load(assetId());
     else if(current.get_type()==sol::type::boolean){if(value!="true"&&value!="false")throw std::invalid_argument("Invalid Lua boolean property");object[name]=(value=="true");}
     else if(current.get_type()==sol::type::number){std::size_t used=0;double number=std::stod(value,&used);if(used!=value.size()||!std::isfinite(number))throw std::invalid_argument("Invalid Lua number property");object[name]=number;}
     else if(current.is<Vec2>()){auto n=numbers(2);object[name]=Vec2{n[0],n[1]};}
@@ -103,6 +104,27 @@ bool LuaRuntime::Start(std::string& error){
         lua.open_libraries(sol::lib::base,sol::lib::math,sol::lib::string,sol::lib::table,sol::lib::utf8);
         for(const char* key:{"dofile","loadfile","load","collectgarbage"})lua[key]=sol::nil;
         auto api=lua.create_named_table("Bazzalt");BindLuaMath(api);BindLuaComponents(api);BindLuaGUI(api);BindLuaServices(api);
+        auto declared=std::make_shared<sol::table>();
+        lua.set_function("COMPONENT",[declared,lua,typeName=binding.TypeName](const std::string& name) mutable {
+            if(declared->valid()||name!=typeName)throw std::invalid_argument("COMPONENT must declare the attached type exactly once");
+            *declared=lua.create_table();return *declared;
+        });
+        lua.set_function("PROPERTY",[](const std::string& type,sol::object value,sol::optional<sol::table> inspectorOptions){
+            // Options belong to editor authoring only; gameplay values are unrestricted.
+            (void)inspectorOptions;
+            bool valid=false;
+            if(type=="float"||type=="double"||type=="int"){
+                valid=value.get_type()==sol::type::number;
+                if(valid){double number=value.as<double>();valid=std::isfinite(number)&&(type!="int"||(std::trunc(number)==number&&number>=-2147483648.0&&number<=2147483647.0));}
+            }else if(type=="bool")valid=value.get_type()==sol::type::boolean;
+            else if(type=="string"||type=="std::string")valid=value.get_type()==sol::type::string;
+            else if(type=="Vec2")valid=value.is<Vec2>();
+            else if(type=="Vec3")valid=value.is<Vec3>();
+            else if(type=="Vec4")valid=value.is<Vec4>();
+            else if(type=="Quaternion")valid=value.is<Quaternion>();
+            if(!valid)throw std::invalid_argument("Invalid PROPERTY type/default: "+type);
+            return value;
+        });
         m_impl->Instances.push_back(std::move(instance));auto& active=*m_impl->Instances.back();
         const auto bytes=Read(binding.Module);
         lua_sethook(lua.lua_state(),Budget,LUA_MASKCOUNT,1000000);
@@ -111,6 +133,9 @@ bool LuaRuntime::Start(std::string& error){
         if(!result.valid()){sol::error failure=result;throw std::runtime_error(failure.what());}
         if(result.get_type()!=sol::type::table)throw std::runtime_error("Lua behavior must return a table");
         active.Object=result.get<sol::table>();active.Object["Entity"]=owner;
+        if(declared->valid()&&active.Object!=*declared)throw std::invalid_argument("Return the table created by COMPONENT");
+        // Declaration functions are source-initialization helpers, not lifecycle APIs.
+        lua["COMPONENT"]=sol::nil;lua["PROPERTY"]=sol::nil;
         for(const auto& [key,value]:binding.Properties)SetProperty(active.Object,key,value);
         active.Call("OnCreate");
     }}catch(const std::exception& failure){error=failure.what();Stop();return false;}

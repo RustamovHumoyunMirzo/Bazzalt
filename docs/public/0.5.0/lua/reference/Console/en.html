@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Bazzalt.Console is available to scripts but active only in the editor. Use dots for all Console calls.">
+  <title>Console | BAZZALT Docs 0.5.0</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../" data-version="0.5.0" data-page="lua/reference/Console">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"><option value="0.5.0" selected>0.5.0</option></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"><option value="en" selected>English</option></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for the navigation tree. Page content and links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / Lua API reference / Console</nav>
+      <article class="doc"><h1>Console</h1><p class="lead">Bazzalt.Console is available to scripts but active only in the editor. Use dots for all Console calls.</p>
+<h2 id="runtime">Standalone behavior</h2><p>IsAvailable() returns false in exported games. Logging and clearing silently do nothing. GetCount, GetMessages, GetMessageAt and FindMessage return nil. In the editor, GetMessages returns an ordinary 1-based table of copied ConsoleMessage records, including an empty table for an empty console; GetCount returns a number. Invalid indices/IDs return nil. Using a nil result without checking it can still fail in your own code: the API deliberately does not invent game-runtime data.</p>
+<h2 id="write">Write</h2><pre><code class="language-lua">local B = Bazzalt
+B.Console.Info("Player ready", "Movement")
+B.Console.Warning("Optional target missing", "AI", false)
+B.Console.Error("Required asset missing", "Assets")
+B.Console.Log("Details", B.ConsoleLevel.Info, "Gameplay", false)</code></pre><p>Info/Warning/Error(text, source="Script", showIcon=true) and Log(text, level=Info, source="Script", showIcon=true) append to the same Console as editor messages. ShowIcon=false is supported. The store retains up to 10,000 entries and 16 MiB of text/source payloads and limits text to 65,536 UTF-8 bytes and sources to 256 bytes; oversized entries are discarded. Logging does not write to stdout/stderr in games.</p>
+<h2 id="filters">Filters and read operations</h2><pre><code class="language-lua">local filter = B.ConsoleFilter.new()
+filter.Levels = 2 | 4 -- Warning and Error
+filter.Source = "Physics"
+filter.Contains = "collision"
+local messages = B.Console.GetMessages(filter)
+if messages then
+    for _, message in ipairs(messages) do
+        B.Console.ClearMessage(message.Id)
+    end
+end</code></pre><p>ConsoleFilter fields: Levels (bitmask, default 7: Info=1, Warning=2, Error=4), Source and Contains (default empty). Matching is case-sensitive; Source is exact, Contains is a UTF-8 substring of Text. GetMessages(filter=nil) and GetCount(filter=nil) read matching entries. These filters are independent of the panel's visible filter settings.</p><p>GetMessageAt(index) uses a <strong>1-based index</strong> in the unfiltered store, matching Lua table conventions. FindMessage(id) uses a stable ID. ConsoleMessage fields are Id, Text, Level, Source, ShowIcon and Timestamp (Unix seconds). Results are detached copies; editing them does not change the Console.</p>
+<h2 id="clear">Clearing</h2><p>Clear(filter=nil) removes matches or all messages if omitted. ClearAt(index) removes a 1-based unfiltered entry; nonpositive/out-of-range indices do nothing. ClearMessage(id) removes a stable ID. ClearMessages({id1, id2}) removes a batch. Missing IDs are harmless. Indices shift after removals or retention eviction, so use IDs when retaining references.</p>
+<h2 id="gameplay">Keep console reads out of gameplay decisions</h2><pre><code class="language-lua">local count = B.Console.GetCount()
+if count ~= nil then
+    -- Editor-only diagnostic behavior.
+end</code></pre><p>The console is a diagnostic/editor facility, not persistent storage or a gameplay event channel. No project console data is saved or shipped with a game.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../../0.5.0/lua/reference/Component/en.html"><small>Previous</small>Component</a>
+<a class="next" href="../../../../0.5.0/lua/reference/CustomPostProcessEffect/en.html"><small>Next</small>CustomPostProcessEffect</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#runtime">Standalone behavior</a><a class="toc-link" href="#write">Write</a><a class="toc-link" href="#filters">Filters and read operations</a><a class="toc-link" href="#clear">Clearing</a><a class="toc-link" href="#gameplay">Keep console reads out of gameplay decisions</a></nav></aside>
+  </div>
+  <footer>BAZZALT 0.5.0 documentation · English</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

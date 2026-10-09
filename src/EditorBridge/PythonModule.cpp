@@ -24,6 +24,7 @@
 
 #include "Runtime/Engine.h"
 #include "Runtime/TextureLibrary.h"
+#include "Runtime/ConsoleStore.h"
 #include "Bazzalt/Material.h"
 #include "Runtime/NativeScriptRuntime.h"
 #include "Bazzalt/Components/ScriptComponent.h"
@@ -124,8 +125,18 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
 
 class EditorHost final {
 public:
-    EditorHost() : m_engine(std::make_unique<Runtime::Engine>()) { m_loadedScenes.push_back({{},nullptr}); }
-    ~EditorHost() { Stop(); ClearLoadedScenes(); m_engine->Shutdown(); CleanupSnapshot(); }
+    EditorHost() : m_engine(std::make_unique<Runtime::Engine>()) { m_loadedScenes.push_back({{},nullptr});Runtime::ConsoleAccess::Acquire(); }
+    ~EditorHost() { Stop(); ClearLoadedScenes(); m_engine->Shutdown(); CleanupSnapshot();Runtime::ConsoleAccess::Release(); }
+    py::object ConsoleSnapshot(std::uint64_t revision){
+        auto snapshot=Runtime::ConsoleAccess::Snapshot(revision);if(!snapshot)return py::none();
+        py::dict result;result["revision"]=snapshot->Revision;py::list messages;
+        const auto displayText=[](const std::string& text){return py::reinterpret_steal<py::str>(PyUnicode_DecodeUTF8(text.data(),static_cast<Py_ssize_t>(text.size()),"replace"));};
+        for(const auto& m:snapshot->Messages){py::dict value;value["id"]=m.Id;value["text"]=displayText(m.Text);value["level"]=static_cast<unsigned>(m.Level);value["source"]=displayText(m.Source);value["icon"]=m.ShowIcon;value["timestamp"]=m.Timestamp;messages.append(value);}
+        result["messages"]=messages;return result;
+    }
+    void ConsoleAdd(const std::string& text,unsigned level,const std::string& source,bool icon){Console::Log(text,static_cast<ConsoleLevel>(level),source,icon);}
+    void ConsoleClear(){Console::Clear();}
+    void ConsoleRemove(const std::vector<std::uint64_t>& ids){Console::ClearMessages(ids);}
 
     bool LoadProject(const std::string& path) {
         Stop();m_bridgeError.clear();bool result=false;
@@ -713,6 +724,10 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("set_component_enabled", &Bazzalt::EditorBridge::EditorHost::SetComponentEnabled)
         .def("component_types", &Bazzalt::EditorBridge::EditorHost::ComponentTypes)
         .def("scene_info", &Bazzalt::EditorBridge::EditorHost::SceneInfo)
+        .def("console_snapshot", &Bazzalt::EditorBridge::EditorHost::ConsoleSnapshot)
+        .def("console_add", &Bazzalt::EditorBridge::EditorHost::ConsoleAdd)
+        .def("console_clear", &Bazzalt::EditorBridge::EditorHost::ConsoleClear)
+        .def("console_remove", &Bazzalt::EditorBridge::EditorHost::ConsoleRemove)
         .def("scene_environment", &Bazzalt::EditorBridge::EditorHost::SceneEnvironmentInfo)
         .def("set_scene_environment", &Bazzalt::EditorBridge::EditorHost::SetSceneEnvironment)
         .def("set_environment_import_settings", &Bazzalt::EditorBridge::EditorHost::SetEnvironmentImportSettings)

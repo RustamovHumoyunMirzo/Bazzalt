@@ -372,6 +372,11 @@ if(BUILD_TESTING)
     target_link_libraries(BazzaltEcsTests PRIVATE Bazzalt)
     bazzalt_enable_test_assertions(BazzaltEcsTests)
     add_test(NAME BazzaltEcsTests COMMAND BazzaltEcsTests)
+    add_executable(BazzaltConsoleTests tests/ConsoleTests.cpp)
+    target_link_libraries(BazzaltConsoleTests PRIVATE Bazzalt)
+    target_include_directories(BazzaltConsoleTests PRIVATE src)
+    bazzalt_enable_test_assertions(BazzaltConsoleTests)
+    add_test(NAME BazzaltConsoleTests COMMAND BazzaltConsoleTests)
 
     add_executable(BazzaltSerializationTests
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/SerializationTests.cpp"

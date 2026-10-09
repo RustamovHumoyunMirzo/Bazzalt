@@ -31,10 +31,9 @@
 <h2 id="create-the-script">Create the script</h2>
 <p>If variables, tables, self, or the difference between dots and colons are new, read <a href="basics/en.html">Lua terms and first calls</a> first. It explains each part of the notation used below.</p>
 <p>Create a Lua Behavior in the Asset Browser, or add <code>Assets/Scripts/Walk.lua</code>. Use this complete example:</p>
-<pre><code class="language-lua">-- COMPONENT(Walk)
--- PROPERTY(float, Speed, 4.0)
-local B = Bazzalt
-local Walk = { Speed = 4.0 }
+<pre><code class="language-lua">local B = Bazzalt
+local Walk = COMPONENT("Walk")
+Walk.Speed = PROPERTY("float", 4.0)
 
 function Walk:OnUpdate(deltaTime)
     local direction = B.Vec3.new(B.Input.GetAxis(B.InputAxis.Horizontal), 0,
@@ -47,7 +46,29 @@ function Walk:OnUpdate(deltaTime)
 end
 
 return Walk</code></pre>
-<p>The script returns a behavior table. The editor reads COMPONENT and PROPERTY declaration comments to discover its name and Properties fields; those comments are not Lua functions. The runtime supplies self.Entity and applies Properties property values before calling OnCreate.</p>
+<p><code>COMPONENT("Walk")</code> creates the behavior table. <code>PROPERTY("float", 4.0)</code> returns its default value and declares Speed for Properties. These are real global Lua functions supplied during source initialization. Return the same table. The editor reads declarations without executing your code; the runtime supplies self.Entity and applies inspector overrides before OnCreate.</p>
+<h2 id="declarations">Component and property declarations</h2>
+<p>Use one <code>local Name = COMPONENT("UniqueTypeName")</code> declaration, followed by <code>Name.Field = PROPERTY("type", default)</code>. Component names must be unique across C++ and Lua; field names cannot repeat. Keep declarations unconditional and at top level. The filename may differ from the declared component name.</p>
+<p>Supported types are float, double, int, bool, string (or std::string), Vec2, Vec3, Vec4, and Quaternion. Scalars require literal defaults. Vectors and quaternions require explicit literal coordinates, for example <code>Walk.Direction = PROPERTY("Vec3", B.Vec3.new(1, 0, 0))</code>. Use B or Bazzalt as the constructor prefix. Dynamic expressions are not inspector declarations. Declaration helpers are not gameplay APIs and should not be called from lifecycle methods.</p>
+<p>Existing comment-based COMPONENT/PROPERTY metadata and plain returned tables remain supported for older scripts. New templates use functions; when functions are present, comment metadata is ignored. Lua source is still imported into bytecode; there is no C++ compilation step.</p>
+<h2 id="inspector-rules">Inspector-only field rules</h2>
+<p>Pass a third literal options table to PROPERTY. These rules control authoring in Properties only: they do not constrain Lua assignments, runtime overrides, or gameplay. Changing a controlling field updates other fields immediately without changing selection. A rejected edit restores the saved value and shows a validation tooltip; invalid older values are shown with a warning rather than silently rewritten.</p>
+<pre><code class="language-lua">Walk.UseLimit = PROPERTY("bool", true)
+Walk.Limit = PROPERTY("float", 10.0, { Min = 0, Max = 100 })
+Walk.Speed = PROPERTY("float", 4.0, {
+    Min = 0, Max = 100, Step = 0.5,
+    EnabledIf = "self.UseLimit",
+    Validate = "not self.UseLimit or value &lt;= self.Limit",
+    Message = "Speed must not exceed Limit",
+    Tooltip = "Movement speed in units per second"
+})
+Walk.Label = PROPERTY("string", "Player", {
+    MinLength = 1, MaxLength = 24, Trim = true, Filter = "Identifier",
+    VisibleIf = "self.UseLimit"
+})</code></pre>
+<p>Numeric and vector fields accept Min, Max and Step (applied per vector coordinate). Integer bounds and steps must be integers. String fields accept MinLength, MaxLength (0–4096), Trim, Filter, and Pattern. Filter may be Digits, Letters, Alphanumeric or Identifier. Pattern is a case-sensitive glob, such as <code>player_*</code>, not a regular expression. Use MinLength = 1 when empty text must be rejected.</p>
+<p>Any field may use ReadOnly, VisibleIf, EnabledIf, Validate, Message, Tooltip and Label. Label changes its display caption, not its serialized field name. VisibleIf hides both the label and input; EnabledIf and ReadOnly keep the value visible but non-editable. Conditions must reference existing inspector properties.</p>
+<p>Custom logic uses bounded expression strings, not Lua callbacks. Read another property with <code>self.Field</code> and the proposed edited value with <code>value</code>. Supported operators: and/or/not, ==, ~= (or !=), comparisons, +, -, *, / and %. Supported helpers: Len, Contains, StartsWith, EndsWith, Matches (glob), Abs, Min and Max. Example: <code>Validate = "StartsWith(value, 'player_') and Len(value) &gt; 7"</code>. Boolean literals true and false work. Imports, arbitrary function calls, indexing and unrestricted code execution are forbidden. Rules never run project Lua during inspection.</p>
 <p>Direction is normalized so diagonal movement is not faster. Multiplying by deltaTime gives movement per second rather than per frame. The example moves in world X/Z directions, not relative to the game camera, and does not implement collision or gravity.</p>
 <h2 id="attach-and-test">Attach and test</h2>
 <ol><li>Select an entity with a Primitive Object or model so movement is visible.</li><li>Attach Walk through Add Component or drag the Lua script onto the entity.</li><li>Set Speed if needed, then press Play.</li><li>Click Game output for input focus and use WASD.</li></ol>
@@ -64,7 +85,7 @@ return Walk</code></pre>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../0.5.0/native/reference/Vignette/en.html"><small>Previous</small>Vignette</a>
 <a class="next" href="../../0.5.0/lua/basics/en.html"><small>Next</small>Lua terms and first calls</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#create-the-script">Create the script</a><a class="toc-link" href="#attach-and-test">Attach and test</a><a class="toc-link" href="#import-and-play">What happens before Play</a><a class="toc-link" href="#callbacks">Lifecycle callbacks</a><a class="toc-link" href="#sandbox">Available libraries and limits</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#create-the-script">Create the script</a><a class="toc-link" href="#declarations">Component and property declarations</a><a class="toc-link" href="#inspector-rules">Inspector-only field rules</a><a class="toc-link" href="#attach-and-test">Attach and test</a><a class="toc-link" href="#import-and-play">What happens before Play</a><a class="toc-link" href="#callbacks">Lifecycle callbacks</a><a class="toc-link" href="#sandbox">Available libraries and limits</a></nav></aside>
   </div>
   <footer>BAZZALT 0.5.0 documentation · English</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">
