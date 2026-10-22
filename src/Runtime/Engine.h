@@ -22,6 +22,7 @@ class AssetDatabase;
 class RenderBackend;
 class NativeScriptRuntime;
 class LuaRuntime;
+class AudioRuntime;
 struct ScriptBinding;
 
 // Runtime-owned orchestration. Kept outside the public include tree so only
@@ -96,6 +97,7 @@ public:
     bool ConfigureScripts(std::vector<ScriptBinding> bindings);
     bool StartScripts(bool resetTime = true);
     void StopScripts();
+    AudioRuntime& GetAudioRuntime() { return *m_audioRuntime; }
 
 private:
     void UpdateEditorOverlays();
@@ -129,6 +131,8 @@ private:
     std::unique_ptr<RenderBackend> m_renderBackend;
     std::unique_ptr<NativeScriptRuntime> m_scriptRuntime;
     std::unique_ptr<LuaRuntime> m_luaRuntime;
+    std::unique_ptr<AudioRuntime> m_audioRuntime;
+    bool m_headlessAudio=false;
     bool m_luaConfigured=false;
     bool m_editorIconsVisible=true;
     UUID m_hoveredObject{};

@@ -26,6 +26,17 @@ function Behavior:OnCreate()
     assert(B.Console.GetMessages()==nil and B.Console.GetCount()==nil and B.Console.GetMessageAt(0)==nil)
     assert(os == nil and io == nil and package == nil and debug == nil and loadfile == nil)
     assert(B.Time.GetTimeScale() == 1)
+    local audioSource=self.Entity:HasComponent("AudioSource") and self.Entity:GetComponent("AudioSource") or self.Entity:AddComponent("AudioSource")
+    audioSource.Volume=.5;audioSource.RolloffCurve=B.AudioRolloff.Custom
+    audioSource.CustomRolloff={B.Vec2.new(0,1),B.Vec2.new(.5,.6),B.Vec2.new(1,0)}
+    assert(audioSource:IsValid());self.Entity:SetComponent("AudioSource",audioSource)
+    assert(self.Entity:GetComponent("AudioSource").Volume==.5)
+    assert(not B.Audio.Play(self.Entity):IsValid()) -- No assigned clip.
+    local listener=self.Entity:HasComponent("AudioListener") and self.Entity:GetComponent("AudioListener") or self.Entity:AddComponent("AudioListener");listener.MasterVolume=.7
+    self.Entity:SetComponent("AudioListener",listener)
+    assert(self.Entity:GetComponent("AudioListener").MasterVolume>.69)
+    assert(B.AudioMixer.GetMasterBus():GetUUID()==B.UUID.Root())
+    assert(not B.AudioVoice.new():IsValid())
     assert(B.ToDegrees(B.ToRadians(90)) > 89)
     assert(B.Vec3.new(1,2,3):LengthSquared() == 14)
     local hud = self.Entity:GetScene():CreateEntity("Lua HUD")

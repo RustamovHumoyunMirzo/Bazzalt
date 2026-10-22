@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 set -eu
-VERSION="${1:-0.5.0}"
+VERSION="${1:-0.6.0}"
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 BUILD="$ROOT/build"
 OUTPUT="$ROOT/dist/production"
@@ -27,6 +27,9 @@ TARGET="$OUTPUT/bazzalt_editor.dist"
 mkdir -p "$TARGET/Editor"
 cp "$NATIVE" "$TARGET/Editor/"
 cp -R "$BUILD/ScriptSDK" "$TARGET/"
+mkdir -p "$TARGET/licenses"
+cp "$ROOT/deps/miniaudio/LICENSE" "$TARGET/licenses/miniaudio.txt"
+cp "$ROOT/deps/miniaudio/extras/stb_vorbis.c" "$TARGET/licenses/stb_vorbis-source.txt"
 for LIBRARY in "$BUILD/Editor/libBazzalt.so" "$BUILD/Editor/libBazzalt.dylib"; do
   if [ -f "$LIBRARY" ]; then cp "$LIBRARY" "$TARGET/Editor/"; fi
 done

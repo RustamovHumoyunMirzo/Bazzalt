@@ -30,6 +30,7 @@ Windows PowerShell:
 ```powershell
 ./scripts/get_entt.ps1
 ./scripts/get_sdl3.ps1
+./scripts/get_miniaudio.ps1
 ./scripts/get_rapidyaml.ps1
 ./scripts/get_filament.ps1
 ```
@@ -39,6 +40,7 @@ Linux or macOS:
 ```bash
 ./scripts/get_entt.sh
 ./scripts/get_sdl3.sh
+./scripts/get_miniaudio.sh
 ./scripts/get_rapidyaml.sh
 ./scripts/get_filament.sh
 ```

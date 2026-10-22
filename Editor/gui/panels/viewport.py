@@ -219,7 +219,7 @@ class NativeRenderSurface(QWidget):
         for entity in entities:
             if hasattr(self.Runtime,"IsEditorSelectable") and not self.Runtime.IsEditorSelectable(str(entity.get("uuid",""))):continue
             components=entity.get("components",())
-            if "Camera" not in components and "Light" not in components:continue
+            if not any(c in components and entity.get("component_enabled",{}).get(c,True) for c in ("Camera","Light","Audio Source","Audio Listener")):continue
             projected=self._Project(entity.get("world_position",entity.get("position",(0,0,0))))
             if projected is None:continue
             x,y,depth=projected;distance=(x-point.x())**2+(y-point.y())**2

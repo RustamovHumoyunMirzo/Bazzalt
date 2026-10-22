@@ -9,7 +9,7 @@ from pathlib import Path
 from bazzalt.settings import DataPaths, ReadProjectMetadata, SettingsStore, Version
 
 HUB_SCHEMA_VERSION = 2
-CURRENT_EDITOR_VERSION = "0.5.0"
+CURRENT_EDITOR_VERSION = "0.6.0"
 HUB_VERSION = "1.0.0"
 # Existing source-development projects used the unreleased 1.0.0 placeholder.
 # Keep that development registration compatible; shipped versions come from editor.json.

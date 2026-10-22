@@ -11,6 +11,17 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 include(cmake/Lua.cmake)
+set(BAZZALT_MINIAUDIO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/miniaudio" CACHE PATH "miniaudio source tree")
+if(NOT EXISTS "${BAZZALT_MINIAUDIO_DIR}/miniaudio.h")
+    message(FATAL_ERROR "miniaudio is missing. Run scripts/get_miniaudio.ps1 or scripts/get_miniaudio.sh.")
+endif()
+add_library(BazzaltMiniaudio STATIC src/Audio/Miniaudio.c)
+set_target_properties(BazzaltMiniaudio PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(BazzaltMiniaudio PRIVATE "${BAZZALT_MINIAUDIO_DIR}")
+if(UNIX)
+    find_package(Threads REQUIRED)
+    target_link_libraries(BazzaltMiniaudio PUBLIC Threads::Threads ${CMAKE_DL_LIBS} m)
+endif()
 
 set(BAZZALT_ENTT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/entt" CACHE PATH
     "Path to an EnTT source tree")
@@ -142,6 +153,8 @@ function(bazzalt_embed_svg_icon name symbol)
 endfunction()
 bazzalt_embed_svg_icon(scene_cam SceneCameraIconRgba)
 bazzalt_embed_svg_icon(scene_light SceneLightIconRgba)
+bazzalt_embed_svg_icon(scene_asource SceneAudioSourceIconRgba)
+bazzalt_embed_svg_icon(scene_alisten SceneAudioListenerIconRgba)
 
 # Environments are project assets, imported on demand; no hidden default lighting.
 
@@ -183,6 +196,9 @@ if(APPLE)
 endif()
 # SDK staged beside the editor: public headers only, with the EnTT dependency.
 add_custom_command(TARGET Bazzalt POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/ScriptSDK/licenses"
+    COMMAND ${CMAKE_COMMAND} -E copy "${BAZZALT_MINIAUDIO_DIR}/LICENSE" "${CMAKE_BINARY_DIR}/ScriptSDK/licenses/miniaudio.txt"
+    COMMAND ${CMAKE_COMMAND} -E copy "${BAZZALT_MINIAUDIO_DIR}/extras/stb_vorbis.c" "${CMAKE_BINARY_DIR}/ScriptSDK/licenses/stb_vorbis-source.txt"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/include/Bazzalt" "${CMAKE_BINARY_DIR}/ScriptSDK/include/Bazzalt"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${BAZZALT_ENTT_DIR}/src/entt" "${CMAKE_BINARY_DIR}/ScriptSDK/include/entt"
     COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:Bazzalt>" "${CMAKE_BINARY_DIR}/ScriptSDK/lib/$<TARGET_FILE_NAME:Bazzalt>"
@@ -204,9 +220,10 @@ target_include_directories(Bazzalt
     PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${_bazzalt_generated_dir}"
+    "${BAZZALT_MINIAUDIO_DIR}"
 )
 
-target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE BazzaltLuaBindings BazzaltLua SDL3::SDL3-static ryml::ryml Filament::Filament ${CMAKE_DL_LIBS})
+target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE BazzaltMiniaudio BazzaltLuaBindings BazzaltLua SDL3::SDL3-static ryml::ryml Filament::Filament ${CMAKE_DL_LIBS})
 
 # One-way link: GUI imports core; core loads the sibling module through a private
 # versioned table. This avoids circular DLL dependencies/import libraries.
@@ -337,6 +354,12 @@ if(BUILD_TESTING)
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/MathTests.cpp"
     )
     add_executable(BazzaltTimeTests tests/TimeTests.cpp)
+    add_executable(BazzaltAudioTests tests/AudioTests.cpp)
+    target_include_directories(BazzaltAudioTests PRIVATE src)
+    target_compile_definitions(BazzaltAudioTests PRIVATE BAZZALT_TEST_AUDIO_DIR="${BAZZALT_MINIAUDIO_DIR}/data")
+    target_link_libraries(BazzaltAudioTests PRIVATE Bazzalt)
+    bazzalt_enable_test_assertions(BazzaltAudioTests)
+    add_test(NAME BazzaltAudioTests COMMAND BazzaltAudioTests)
     target_link_libraries(BazzaltTimeTests PRIVATE Bazzalt)
     add_executable(BazzaltInputTests tests/InputTests.cpp)
     target_link_libraries(BazzaltInputTests PRIVATE Bazzalt)

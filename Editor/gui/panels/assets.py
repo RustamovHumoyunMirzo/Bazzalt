@@ -16,6 +16,7 @@ IMAGE_EXTENSIONS={".png",".jpg",".jpeg",".bmp",".gif",".webp"}
 MODEL_EXTENSIONS={".gltf",".glb",".obj",".fbx",".dae",".filamesh"}
 SHADER_EXTENSIONS={".mat",".shad",".bshader",".vert",".frag",".glsl"}
 ENVIRONMENT_EXTENSIONS={".hdr",".exr",".ktx",".ktx2"}
+AUDIO_EXTENSIONS={".wav",".mp3",".flac",".ogg",".oga"}
 
 class AssetList(QListWidget):
     EmptyClicked=Signal()
@@ -74,6 +75,7 @@ class AssetBrowserPanel(QWidget):
     def _Icon(self,path):
         path=Path(path);ext=path.suffix.lower()
         if ext==".lua" and self._resources:return self._resources.Icon("icons/abrowser/lua.svg")
+        if ext in AUDIO_EXTENSIONS|{".bmixer"} and self._resources:return self._resources.Icon("icons/abrowser/audio.svg")
         if ext in MODEL_EXTENSIONS:
             image=self._thumbnails.Request(path)
             if image is not None and not image.isNull():return QIcon(QPixmap.fromImage(image))
@@ -184,7 +186,10 @@ class AssetBrowserPanel(QWidget):
         while candidate.exists():candidate=candidate.with_name(f"{stem} {number}{suffix}");number+=1
         return candidate
     def _Create(self,kind)->None:
-        names={"folder":"New Folder","scene":"New Scene.bscene","texture":"New Texture.btexture","cpp":"NewComponent.cpp","lua":"NewBehavior.lua","shader":"NewShader.shad","filament_shader":"NewShader.mat","material":"NewMaterial.matinst"};path=self._Unique(names[kind])
+        names={"folder":"New Folder","scene":"New Scene.bscene","texture":"New Texture.btexture","audio_mixer":"New Audio Mixer.bmixer","cpp":"NewComponent.cpp","lua":"NewBehavior.lua","shader":"NewShader.shad","filament_shader":"NewShader.mat","material":"NewMaterial.matinst"};path=self._Unique(names[kind])
+        if kind=="audio_mixer":
+            path.write_text('Version: 1\nBuses:\n  - Id: "00000000-0000-0000-0000-000000000000"\n    Parent: "00000000-0000-0000-0000-000000000000"\n    Name: "Master"\n    Volume: 1\n  - Id: "42415a5a-414c-5400-0000-000000000001"\n    Parent: "00000000-0000-0000-0000-000000000000"\n    Name: "SFX"\n    Volume: 1\n  - Id: "42415a5a-414c-5400-0000-000000000002"\n    Parent: "00000000-0000-0000-0000-000000000000"\n    Name: "Music"\n    Volume: 1\n',encoding="utf-8")
+            self.Refresh(path);self.Browser.editItem(self.Browser.currentItem());return
         if kind=="texture":
             path.write_text("FormatVersion: 1\nWidth: 512\nHeight: 512\nSamples: 1\nMipmaps: false\nMipLevels: 0\nColorFormat: RGBA8\nDepthFormat: Depth32F\nFilter: Linear\nWrap: Clamp\nClearColor: [0, 0, 0, 1]\n",encoding="utf-8")
             self.Refresh(path);self.Browser.editItem(self.Browser.currentItem());return
@@ -266,13 +271,15 @@ class AssetBrowserPanel(QWidget):
         if target is not None and widget is self.Browser and not target.isSelected():self.Browser.setCurrentItem(target)
         reveal_paths=[Path(target.data(0,Qt.ItemDataRole.UserRole))] if widget is self.Tree and target is not None else [Path(item.data(Qt.ItemDataRole.UserRole)) for item in self.Browser.selectedItems()]
         tr=self._localization.Translate;menu=QMenu(self);create=menu.addMenu(tr("assets.create"))
-        for key,label in (("folder","assets.folder"),("scene","assets.scene"),("texture","assets.texture"),("cpp","assets.native_cpp"),("lua","assets.lua"),("shader","assets.shader"),("material","assets.material")):
+        for key,label in (("folder","assets.folder"),("scene","assets.scene"),("texture","assets.texture"),("audio_mixer","audio.mixer"),("cpp","assets.native_cpp"),("lua","assets.lua"),("shader","assets.shader"),("material","assets.material")):
             action=create.addAction(tr(label));action.triggered.connect(lambda _=False,k=key:self._Create(k))
         menu.addAction(tr("assets.import"),self._Import);menu.addSeparator();selected=bool(self.Browser.selectedItems()) if widget is self.Browser else False
         current=Path(self.Browser.currentItem().data(Qt.ItemDataRole.UserRole)) if widget is self.Browser and self.Browser.currentItem() else None
         external=bool(self.ExternalOpener and reveal_paths and all(path.is_file() and self.ExternalOpener.Supports(path) for path in reveal_paths))
         open_action=menu.addAction(tr("assets.open"));open_action.setVisible(external);open_action.triggered.connect(lambda _=False:self._OpenExternal(reveal_paths))
         open_with=menu.addAction(tr("assets.open_with"));open_with.setVisible(external);open_with.triggered.connect(lambda _=False:self._OpenExternal(reveal_paths,True))
+        audio=bool(current and current.suffix.lower() in AUDIO_EXTENSIONS)
+        preview=menu.addAction(tr("audio.preview"));preview.setVisible(audio);preview.triggered.connect(lambda:self.AssetActivated.emit(current) if current else None)
         load=menu.addAction(tr("assets.load_scene"));is_scene=bool(current and current.suffix.lower()==".bscene");load.setVisible(is_scene);load.setEnabled(bool(is_scene and not (callable(self.SceneLoadedChecker) and self.SceneLoadedChecker(current))));load.triggered.connect(lambda:self.LoadSceneRequested.emit(current) if current else None)
         rename=menu.addAction(tr("assets.rename"));rename.setEnabled(bool(target is not None and Path(target.data(0,Qt.ItemDataRole.UserRole))!=self._root) if widget is self.Tree else len(self.Browser.selectedItems())==1);rename.triggered.connect(lambda:self.Tree.editItem(target,0) if widget is self.Tree else self.Browser.editItem(self.Browser.currentItem()));copy=menu.addAction(tr("assets.copy"));copy.setEnabled(selected);copy.triggered.connect(self._Copy);paste=menu.addAction(tr("assets.paste"));paste.setEnabled(bool(self._clipboard));paste.triggered.connect(self._Paste);delete=menu.addAction(tr("assets.delete"));delete.setEnabled(selected);delete.triggered.connect(self._Delete);menu.addSeparator();menu.addAction(tr("assets.refresh"),self.Refresh)
         reveal_key="assets.reveal" if sys.platform=="win32" else "assets.reveal_finder" if sys.platform=="darwin" else "assets.reveal_manager"

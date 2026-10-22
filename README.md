@@ -13,6 +13,11 @@ support for generating games; the Win32 CI badge covers that runtime only.
 > **Alpha status:** core workflows are functional, but APIs and file formats may
 > still change. BAZZALT is not yet recommended for production projects.
 
+Version 0.6 adds native audio: Audio Clips with editor preview, positional
+sources/listeners, distance curves, streaming, playback controls, and mixer
+buses. C++ and Lua share the same audio API. See the
+[audio guide](docs/public/0.6.0/manual/audio/en.html).
+
 ## Documentation
 
 Read the [public guides](docs/public/index.html) for scene editing, C++ and Lua

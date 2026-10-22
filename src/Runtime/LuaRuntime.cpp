@@ -1,4 +1,5 @@
 #include "Runtime/LuaRuntime.h"
+#include "Bazzalt/Audio.h"
 #include "Script/LuaBindings.h"
 #include "Script/LuaSystems.h"
 #include "Bazzalt/EntityReference.h"
@@ -42,6 +43,7 @@ void SetProperty(sol::table object,const std::string& name,const std::string& va
     else if(current.is<Material>())object[name]=Material::Load(assetId());
     else if(current.is<Shader>())object[name]=Shader::Load(assetId());
     else if(current.is<Texture>())object[name]=Texture::Load(assetId());
+    else if(current.is<AudioClip>())object[name]=AudioClip::Load(assetId());
     else if(current.get_type()==sol::type::boolean){if(value!="true"&&value!="false")throw std::invalid_argument("Invalid Lua boolean property");object[name]=(value=="true");}
     else if(current.get_type()==sol::type::number){std::size_t used=0;double number=std::stod(value,&used);if(used!=value.size()||!std::isfinite(number))throw std::invalid_argument("Invalid Lua number property");object[name]=number;}
     else if(current.is<Vec2>()){auto n=numbers(2);object[name]=Vec2{n[0],n[1]};}
@@ -122,6 +124,7 @@ bool LuaRuntime::Start(std::string& error){
             else if(type=="Vec3")valid=value.is<Vec3>();
             else if(type=="Vec4")valid=value.is<Vec4>();
             else if(type=="Quaternion")valid=value.is<Quaternion>();
+            else if(type=="AudioClip")valid=value.is<AudioClip>();
             if(!valid)throw std::invalid_argument("Invalid PROPERTY type/default: "+type);
             return value;
         });

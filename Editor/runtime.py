@@ -149,6 +149,20 @@ class RuntimeService(QObject):
         return len(self.Entities())
     def Statistics(self)->dict:
         return dict(self._host.statistics()) if self._host and hasattr(self._host,"statistics") else {}
+    def AudioClipInfo(self,path)->dict:
+        return dict(self._host.audio_clip_info(str(path))) if self._host and hasattr(self._host,"audio_clip_info") else {}
+    def PreviewAudio(self,clip:str)->int:
+        return int(self._host.audio_preview(clip)) if self._host and hasattr(self._host,"audio_preview") else 0
+    def StopAudioPreview(self)->None:
+        if self._host and hasattr(self._host,"audio_stop_preview"):self._host.audio_stop_preview()
+    def AudioStatus(self,voice:int)->dict:
+        return dict(self._host.audio_status(voice)) if self._host and hasattr(self._host,"audio_status") else {}
+    def AudioControl(self,voice:int,action:str,value:float=0)->bool:
+        return bool(self._host and hasattr(self._host,"audio_control") and self._host.audio_control(voice,action,value))
+    def AudioBuses(self,mixer:str="")->list:
+        return [dict(bus) for bus in self._host.audio_buses(mixer)] if self._host and hasattr(self._host,"audio_buses") else []
+    def SaveAudioMixer(self,identity:str,buses:list)->bool:
+        return bool(self._host and hasattr(self._host,"save_audio_mixer") and self._host.save_audio_mixer(identity,buses))
     def SetEditorStatisticsText(self,text:str,visible:bool)->None:
         if self._host and hasattr(self._host,"set_statistics_text"):self._host.set_statistics_text(text,visible)
 

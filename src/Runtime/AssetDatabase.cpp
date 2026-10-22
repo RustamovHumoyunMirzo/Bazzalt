@@ -1,4 +1,5 @@
 #include "Runtime/AssetDatabase.h"
+#include "Audio/AudioRuntime.h"
 #include "Runtime/LuaRuntime.h"
 #include "Runtime/TextureLibrary.h"
 
@@ -240,6 +241,26 @@ public:
     }
 };
 
+class AudioClipImporter final : public AssetImporter {
+public:
+    std::string GetName() const override { return "Bazzalt.AudioClip"; }
+    std::uint32_t GetVersion() const override { return 1; }
+    bool Supports(const std::filesystem::path& source) const override {
+        const auto e=LowerExtension(source);return e==".wav"||e==".mp3"||e==".flac"||e==".ogg"||e==".oga";
+    }
+    bool Import(const AssetImportContext& context,std::string& error) override {
+        AudioClipInfo info;return InspectAudioFile(context.SourcePath,info,error)&&CopyAsset(context,error);
+    }
+};
+class AudioMixerImporter final : public AssetImporter {
+public:
+    std::string GetName() const override { return "Bazzalt.AudioMixer"; }
+    std::uint32_t GetVersion() const override { return 1; }
+    bool Supports(const std::filesystem::path& source) const override { return LowerExtension(source)==".bmixer"; }
+    bool Import(const AssetImportContext& context,std::string& error) override {
+        std::vector<AudioBusSettings> buses;return ReadAudioMixer(context.SourcePath,buses,error)&&CopyAsset(context,error);
+    }
+};
 class TextureImporter final : public AssetImporter {
 public:
     std::string GetName() const override { return "Bazzalt.Texture"; }
@@ -395,6 +416,8 @@ AssetDatabase::AssetDatabase() {
     RegisterImporter(std::make_unique<LuaImporter>());
     RegisterImporter(std::make_unique<GltfImporter>());
     RegisterImporter(std::make_unique<TextureImporter>());
+    RegisterImporter(std::make_unique<AudioClipImporter>());
+    RegisterImporter(std::make_unique<AudioMixerImporter>());
     RegisterImporter(std::make_unique<RenderTextureImporter>());
     RegisterImporter(std::make_unique<EnvironmentImporter>());
     RegisterImporter(std::make_unique<MaterialImporter>());

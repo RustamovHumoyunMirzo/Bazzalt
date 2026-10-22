@@ -1,4 +1,5 @@
 #include "Runtime/Engine.h"
+#include "Audio/AudioRuntime.h"
 #include "Runtime/TextureLibrary.h"
 #include "GUI/GuiSystem.h"
 #include "Runtime/AssetDatabase.h"
@@ -33,7 +34,7 @@ namespace Bazzalt::Runtime {
 
 Engine::Engine()
     : m_scene(std::make_unique<Scene>()), m_assetDatabase(std::make_unique<AssetDatabase>()),
-      m_renderBackend(std::make_unique<RenderBackend>()),m_scriptRuntime(std::make_unique<NativeScriptRuntime>()),m_luaRuntime(std::make_unique<LuaRuntime>())
+      m_renderBackend(std::make_unique<RenderBackend>()),m_scriptRuntime(std::make_unique<NativeScriptRuntime>()),m_luaRuntime(std::make_unique<LuaRuntime>()),m_audioRuntime(std::make_unique<AudioRuntime>())
 {
     SceneManager::Bind(this);
     AssetManager::Bind(this);
@@ -54,6 +55,7 @@ bool Engine::Init() { return Init(false); }
 
 bool Engine::Init(bool headless, bool startScripts)
 {
+    m_headlessAudio=headless;
     if (m_isInitialized)
     {
         std::cout << "[Engine] Already initialized.\n";
@@ -119,6 +121,8 @@ void Engine::Update()
     m_scene->Update(m_deltaTime);
     m_scriptRuntime->Update(m_deltaTime);
     m_luaRuntime->Update(m_deltaTime);
+    m_audioRuntime->SetHostPaused(false);
+    m_audioRuntime->Update(Time::GetUnscaledDeltaTime());
     UpdateEditorOverlays();
     m_renderBackend->SetEnvironment(m_scene->GetEnvironment());
     m_renderBackend->Render();
@@ -133,6 +137,8 @@ bool Engine::ConfigureRenderingBackend(const std::string& backend){
 void Engine::RenderEditorFrame()
 {
     if (!m_isInitialized) return;
+    m_audioRuntime->SetHostPaused(true);
+    m_audioRuntime->Update(0);
     // Editor and paused frames must not accumulate a giant gameplay delta.
     m_lastFrameTime = std::chrono::steady_clock::now();
     ProcessPendingSceneLoad();
@@ -176,6 +182,22 @@ for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id
         if(std::find(m_selectedObjects.begin(),m_selectedObjects.end(),entity.GetUUID())==m_selectedObjects.end())continue;
         const auto lightGuides=BuildLightGuides(light,world);guides.insert(guides.end(),lightGuides.begin(),lightGuides.end());
     }
+    for(auto handle:m_scene->GetRegistry().view<AudioSource>()){
+        auto entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));const auto& source=entity.GetComponent<AudioSource>();
+        if(!source.IsEnabled()||m_editorHidden.contains(entity.GetUUID()))continue;
+        const auto world=entity.GetWorldMatrix();const auto p=world.TransformPoint({});icons.push_back({p.X,p.Y,p.Z,false,1});
+        if(source.SpatialBlend<=0||!source.IsValid()||std::find(m_selectedObjects.begin(),m_selectedObjects.end(),entity.GetUUID())==m_selectedObjects.end())continue;
+        for(float radius:{source.MinDistance,source.MaxDistance})for(int plane=0;plane<3;++plane)for(int i=0;i<64;++i){
+            const float a=2*Pi*float(i)/64,b=2*Pi*float(i+1)/64;const auto point=[&](float t){Vec3 v;const float x=std::cos(t)*radius,y=std::sin(t)*radius;if(plane==0)v={x,y,0};else if(plane==1)v={x,0,y};else v={0,x,y};return p+v;};
+            line(point(a),point(b),radius==source.MinDistance?Vec4{.25f,.9f,.65f,.8f}:Vec4{.25f,.7f,.9f,.6f});
+        }
+        const auto forward=world.TransformDirection({0,0,-1}).Normalized(),right=world.TransformDirection({1,0,0}).Normalized(),up=world.TransformDirection({0,1,0}).Normalized();
+        for(float fullAngle:{source.ConeInnerAngle,source.ConeOuterAngle})if(fullAngle<360){
+            const float length=std::min(source.MaxDistance,10.0f),angle=ToRadians(fullAngle*.5f),radius=std::sin(angle)*length;
+            for(int i=0;i<32;++i){auto point=[&](int n){float a=2*Pi*float(n)/32;return p+forward*(std::cos(angle)*length)+(right*std::cos(a)+up*std::sin(a))*radius;};line(point(i),point(i+1),{.3f,.9f,.65f,.7f});if(i%8==0)line(p,point(i),{.3f,.9f,.65f,.7f});}
+        }
+    }
+    for(auto h:m_scene->GetRegistry().view<AudioListener>()){auto e=m_scene->GetEntity(static_cast<Entity::Id>(h));if(!e.GetComponent<AudioListener>().IsEnabled()||m_editorHidden.contains(e.GetUUID()))continue;auto p=e.GetWorldTransform().Position;icons.push_back({p.X,p.Y,p.Z,false,2});}
     m_renderBackend->SetEditorIcons(m_editorIconsVisible?icons:std::vector<RenderBackend::EditorIcon>{});
     if(!m_editorIconsVisible)guides.clear();
     std::unordered_set<UUID> selectedOwners,hoveredOwners;
@@ -285,6 +307,7 @@ void Engine::Shutdown()
     std::cout << "[Engine] Shutting down core subsystems...\n";
 
     InputAccess::SetActive(false);
+    m_audioRuntime->Stop();
     m_scriptRuntime->Stop();
     m_luaRuntime->Stop();
     DetachRenderSystems();
@@ -349,14 +372,16 @@ bool Engine::StartScripts(bool resetTime){
         if(!m_luaRuntime->Configure(std::move(bindings),m_lastError))return false;
     }
     if(resetTime)TimeAccess::Reset();m_fixedAccumulator=0.0;m_lastFrameTime=std::chrono::steady_clock::now();
-    if(!m_scriptRuntime->Start(m_lastError))return false;
-    if(!m_luaRuntime->Start(m_lastError)){m_scriptRuntime->Stop();return false;}return true;
+    m_audioRuntime->Start(*m_scene,m_headlessAudio);
+    if(!m_scriptRuntime->Start(m_lastError)){m_audioRuntime->Stop();return false;}
+    if(!m_luaRuntime->Start(m_lastError)){m_scriptRuntime->Stop();m_audioRuntime->Stop();return false;}return true;
 }
-void Engine::StopScripts(){m_luaRuntime->Stop();m_scriptRuntime->Stop();ResetRuntimeMaterials();ResetRuntimeTextures();}
+void Engine::StopScripts(){m_audioRuntime->Stop();m_luaRuntime->Stop();m_scriptRuntime->Stop();ResetRuntimeMaterials();ResetRuntimeTextures();}
 bool Engine::RefreshTextureAsset(const std::filesystem::path& source){if(!m_assetDatabase)return false;const bool result=m_assetDatabase->RefreshSource(source);if(!result)m_lastError=m_assetDatabase->GetLastError();return result;}
 
 Scene& Engine::CreateScene()
 {
+    m_audioRuntime->Stop();
     m_luaRuntime->Stop();m_luaConfigured=false;
     m_scene = std::make_unique<Scene>();
     AttachRenderSystems();
@@ -366,6 +391,7 @@ Scene& Engine::CreateScene()
 void Engine::SetScene(std::unique_ptr<Scene> scene)
 {
     if (!scene) throw std::invalid_argument("Engine scene cannot be null");
+    m_audioRuntime->Stop();
     m_luaRuntime->Stop();m_luaConfigured=false;
     DetachRenderSystems();
     m_scene = std::move(scene);
@@ -374,6 +400,7 @@ void Engine::SetScene(std::unique_ptr<Scene> scene)
 
 std::unique_ptr<Scene> Engine::TakeScene()
 {
+    m_audioRuntime->Stop();
     m_luaRuntime->Stop();m_luaConfigured=false;
     DetachRenderSystems();
     return std::move(m_scene);
@@ -396,7 +423,7 @@ bool Engine::LoadScene(const std::filesystem::path& path)
         m_lastError = m_sceneSerializer.GetLastError();
         return false;
     }
-    m_luaRuntime->Stop();m_luaConfigured=false;
+    m_audioRuntime->Stop();m_luaRuntime->Stop();m_luaConfigured=false;
     m_scene = std::move(scene);
     AttachRenderSystems();
     return true;
@@ -545,6 +572,7 @@ bool Engine::LoadProject(const std::filesystem::path& path, bool loadStartupScen
         CreateScene();
         Entity camera = m_scene->CreateEntity("Main Camera");
         camera.AddComponent<Camera>();
+        camera.AddComponent<AudioListener>();
         auto& cameraTransform = camera.GetComponent<Transform>();
         cameraTransform.Position = {0.0f, 2.0f, 6.0f};
         cameraTransform.Rotation = Quaternion::FromEuler({ToRadians(-12.0f), 0.0f, 0.0f});

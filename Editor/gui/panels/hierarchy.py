@@ -288,6 +288,9 @@ class HierarchyPanel(QWidget):
         for index,key in enumerate(("cube","sphere","cylinder","capsule","plane","cone","torus")):
             action=primitives.addAction(self._localization.Translate(f"primitive.{key}"));action.triggered.connect(lambda _=False,i=index:self.CreateTypedRequested.emit(f"Primitive Object:{i}",parent))
         gui_menu=create_menu.addMenu(self._localization.Translate("hierarchy.gui"))
+        audio_menu=create_menu.addMenu(self._localization.Translate("audio.menu"))
+        for kind in ("Audio Source","Audio Listener"):
+            action=audio_menu.addAction(self._localization.Translate("component."+kind));action.triggered.connect(lambda _=False,k=kind:self.CreateTypedRequested.emit(k,parent))
         for kind in ("viewport", "camera_bound", "spatial", "container", "rectangle", "text", "image", "button", "text_input"):
             action=gui_menu.addAction(self._localization.Translate(f"hierarchy.gui.{kind}"))
             action.triggered.connect(lambda _=False,k=kind:self.CreateTypedRequested.emit(f"GUI:{k}",parent))

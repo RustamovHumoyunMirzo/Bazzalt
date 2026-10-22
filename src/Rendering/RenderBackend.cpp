@@ -54,6 +54,8 @@
 #include "editor_icon_filamat.h"
 #include "scene_cam_rgba.h"
 #include "scene_light_rgba.h"
+#include "scene_asource_rgba.h"
+#include "scene_alisten_rgba.h"
 #include "editor_translate_gizmo_glb.h"
 #include "editor_scale_gizmo_glb.h"
 #include "editor_rotate_gizmo_glb.h"
@@ -121,6 +123,8 @@ struct RenderBackend::GizmoResource {
     filament::Material* IconMaterial=nullptr;
     filament::Texture* CameraIconTexture=nullptr;
     filament::Texture* LightIconTexture=nullptr;
+    filament::Texture* AudioSourceIconTexture=nullptr;
+    filament::Texture* AudioListenerIconTexture=nullptr;
     filament::VertexBuffer* IconVertices=nullptr;
     filament::IndexBuffer* IconIndices=nullptr;
 };
@@ -305,6 +309,7 @@ bool RenderBackend::Initialize(bool headless) {
     m_gizmo->IconMaterial=filament::Material::Builder().package(Embedded::EditorIconFilamat,Embedded::EditorIconFilamatSize).build(*m_engine);
     auto makeTexture=[this](const std::uint8_t* pixels,std::size_t size){auto* texture=filament::Texture::Builder().width(64).height(64).levels(1).sampler(filament::Texture::Sampler::SAMPLER_2D).format(filament::Texture::InternalFormat::RGBA8).build(*m_engine);texture->setImage(*m_engine,0,filament::backend::PixelBufferDescriptor(pixels,size,filament::backend::PixelDataFormat::RGBA,filament::backend::PixelDataType::UBYTE));return texture;};
     m_gizmo->CameraIconTexture=makeTexture(Embedded::SceneCameraIconRgba,Embedded::SceneCameraIconRgbaSize);m_gizmo->LightIconTexture=makeTexture(Embedded::SceneLightIconRgba,Embedded::SceneLightIconRgbaSize);
+    m_gizmo->AudioSourceIconTexture=makeTexture(Embedded::SceneAudioSourceIconRgba,Embedded::SceneAudioSourceIconRgbaSize);m_gizmo->AudioListenerIconTexture=makeTexture(Embedded::SceneAudioListenerIconRgba,Embedded::SceneAudioListenerIconRgbaSize);
     static constexpr float iconVertices[]={-.5f,-.5f,0, 0,0, .5f,-.5f,0, 1,0, .5f,.5f,0, 1,1, -.5f,.5f,0, 0,1};static constexpr std::uint16_t iconIndices[]={0,1,2,0,2,3};
     m_gizmo->IconVertices=filament::VertexBuffer::Builder().vertexCount(4).bufferCount(1).attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3,0,20).attribute(filament::VertexAttribute::UV0,0,filament::VertexBuffer::AttributeType::FLOAT2,12,20).build(*m_engine);m_gizmo->IconVertices->setBufferAt(*m_engine,0,{iconVertices,sizeof(iconVertices)});m_gizmo->IconIndices=filament::IndexBuffer::Builder().indexCount(6).bufferType(filament::IndexBuffer::IndexType::USHORT).build(*m_engine);m_gizmo->IconIndices->setBuffer(*m_engine,{iconIndices,sizeof(iconIndices)});
     m_assets = std::make_unique<RenderAssets>(*m_engine, *m_scene);
@@ -494,7 +499,7 @@ void RenderBackend::SetEditorIcons(const std::vector<EditorIcon>& icons) {
     filament::math::float3 eye{6,4,8};for(const auto& [id,viewport]:m_viewports){(void)id;if(viewport->Kind==ViewportKind::Scene){eye=viewport->Eye;break;}}
     auto& transforms=m_engine->getTransformManager();
     const filament::TextureSampler sampler(filament::TextureSampler::MinFilter::LINEAR,filament::TextureSampler::MagFilter::LINEAR);
-    for(std::size_t i=0;i<icons.size();++i){const auto& data=icons[i];auto& icon=m_gizmo->Icons[i];icon.Instance->setParameter("iconTexture",data.Camera?m_gizmo->CameraIconTexture:m_gizmo->LightIconTexture,sampler);const filament::math::float3 position{data.X,data.Y,data.Z};auto forward=normalize(eye-position);auto right=cross(filament::math::float3{0,1,0},forward);if(length(right)<.001f)right={1,0,0};else right=normalize(right);auto up=normalize(cross(forward,right));constexpr float scale=.42f;filament::math::mat4f transform{filament::math::float4{right*scale,0},filament::math::float4{up*scale,0},filament::math::float4{forward,0},filament::math::float4{position,1}};transforms.setTransform(transforms.getInstance(icon.Entity),transform);}
+    for(std::size_t i=0;i<icons.size();++i){const auto& data=icons[i];auto& icon=m_gizmo->Icons[i];icon.Instance->setParameter("iconTexture",data.Audio==1?m_gizmo->AudioSourceIconTexture:data.Audio==2?m_gizmo->AudioListenerIconTexture:data.Camera?m_gizmo->CameraIconTexture:m_gizmo->LightIconTexture,sampler);const filament::math::float3 position{data.X,data.Y,data.Z};auto forward=normalize(eye-position);auto right=cross(filament::math::float3{0,1,0},forward);if(length(right)<.001f)right={1,0,0};else right=normalize(right);auto up=normalize(cross(forward,right));constexpr float scale=.42f;filament::math::mat4f transform{filament::math::float4{right*scale,0},filament::math::float4{up*scale,0},filament::math::float4{forward,0},filament::math::float4{position,1}};transforms.setTransform(transforms.getInstance(icon.Entity),transform);}
 }
 
 void RenderBackend::SetEditorGuides(const std::vector<EditorGuide>& guides){
@@ -783,7 +788,7 @@ void RenderBackend::Shutdown() {
         for(int i=0;i<3;++i){if(m_gizmo->HelperScene)m_gizmo->HelperScene->remove(m_gizmo->HelperEntities[i]);m_engine->destroy(m_gizmo->HelperEntities[i]);m_engine->getEntityManager().destroy(m_gizmo->HelperEntities[i]);if(m_gizmo->HelperInstances[i])m_engine->destroy(m_gizmo->HelperInstances[i]);}
         for(auto& icon:m_gizmo->Icons){m_scene->remove(icon.Entity);m_engine->destroy(icon.Entity);m_engine->getEntityManager().destroy(icon.Entity);if(icon.Instance)m_engine->destroy(icon.Instance);}m_gizmo->Icons.clear();
         for(auto& guide:m_gizmo->Guides){m_scene->remove(guide.Entity);m_engine->destroy(guide.Entity);m_engine->getEntityManager().destroy(guide.Entity);if(guide.Instance)m_engine->destroy(guide.Instance);if(guide.Vertices)m_engine->destroy(guide.Vertices);if(guide.Indices)m_engine->destroy(guide.Indices);}m_gizmo->Guides.clear();
-        if(m_gizmo->IconVertices)m_engine->destroy(m_gizmo->IconVertices);if(m_gizmo->IconIndices)m_engine->destroy(m_gizmo->IconIndices);if(m_gizmo->CameraIconTexture)m_engine->destroy(m_gizmo->CameraIconTexture);if(m_gizmo->LightIconTexture)m_engine->destroy(m_gizmo->LightIconTexture);if(m_gizmo->IconMaterial)m_engine->destroy(m_gizmo->IconMaterial);
+        if(m_gizmo->IconVertices)m_engine->destroy(m_gizmo->IconVertices);if(m_gizmo->IconIndices)m_engine->destroy(m_gizmo->IconIndices);if(m_gizmo->CameraIconTexture)m_engine->destroy(m_gizmo->CameraIconTexture);if(m_gizmo->LightIconTexture)m_engine->destroy(m_gizmo->LightIconTexture);if(m_gizmo->AudioSourceIconTexture)m_engine->destroy(m_gizmo->AudioSourceIconTexture);if(m_gizmo->AudioListenerIconTexture)m_engine->destroy(m_gizmo->AudioListenerIconTexture);if(m_gizmo->IconMaterial)m_engine->destroy(m_gizmo->IconMaterial);
         if(m_gizmo->HelperVertices)m_engine->destroy(m_gizmo->HelperVertices);if(m_gizmo->HelperIndices)m_engine->destroy(m_gizmo->HelperIndices);if(m_gizmo->HelperScene)m_engine->destroy(m_gizmo->HelperScene);
         for(auto* value:m_gizmo->Vertices)if(value)m_engine->destroy(value);
         for(auto* value:m_gizmo->Indices)if(value)m_engine->destroy(value);

@@ -76,7 +76,7 @@ class PublicDocsWebTests(unittest.TestCase):
         self.load("index.html")
         self.assertEqual(self.js("document.querySelectorAll('#version').length"), 0)
         self.assertEqual(self.js("document.getElementById('language').value"), "en")
-        self.assertEqual(self.js("document.querySelector('[data-doc-link=manual]').getAttribute('href').endsWith('/0.5.0/manual/en.html')"), True)
+        self.assertEqual(self.js("document.querySelector('[data-doc-link=manual]').getAttribute('href').endsWith('/'+window.BazzaltDocs.defaultVersion+'/manual/en.html')"), True)
         original = self.js("document.documentElement.classList.contains('dark')")
         self.js("document.querySelector('.theme-btn').click()")
         self.assertNotEqual(self.js("document.documentElement.classList.contains('dark')"), original)

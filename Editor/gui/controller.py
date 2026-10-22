@@ -7,7 +7,7 @@ from math import cos, sin
 from time import monotonic
 
 from PySide6.QtCore import QObject, QSignalBlocker, QTimer, Qt
-from PySide6.QtWidgets import QApplication, QFileDialog, QLabel, QMenu, QProgressDialog, QLineEdit, QWidgetAction, QDialog, QVBoxLayout, QListWidget, QListWidgetItem
+from PySide6.QtWidgets import QApplication, QFileDialog, QLabel, QMenu, QProgressDialog, QLineEdit, QWidgetAction, QDialog, QVBoxLayout, QListWidget, QListWidgetItem, QPushButton
 
 from ..runtime import RuntimeService
 from ..history import SceneHistory
@@ -19,9 +19,10 @@ from ..materials import MaterialCompiler, MaterialError, ZERO, COUNTS
 from ..environments import InspectEnvironment
 from ..game_input import GameInputRouter
 from .widgets.inspector_viewport import InspectorViewport
+from .widgets.audio import AudioPreview,AudioCurveInput
 from .panels import ConsoleLevel
 from .panels.assets import (ENVIRONMENT_EXTENSIONS, IMAGE_EXTENSIONS,
-                            MODEL_EXTENSIONS, SHADER_EXTENSIONS)
+                            MODEL_EXTENSIONS, SHADER_EXTENSIONS, AUDIO_EXTENSIONS)
 from .gizmos import GizmoMode, Vec3
 from .display_names import DisplayName
 from .preferences import STATISTIC_FIELDS
@@ -233,6 +234,7 @@ class EditorController(QObject):
         if self.SelectedEntity and self.SelectedEntity not in items:self.SelectEntity(None)
 
     def SelectEntity(self, entity_id, force: bool = False) -> None:  # type: ignore[no-untyped-def]
+        self.Runtime.StopAudioPreview()
         self._inspected_asset=None
         if isinstance(entity_id,(list,tuple)):
             self.SelectEntities([str(value) for value in entity_id]);return
@@ -375,6 +377,7 @@ class EditorController(QObject):
             else:self._RefreshInspectorValues();self._UpdateGizmo()
 
     def SelectAsset(self,path)->None:
+        self.Runtime.StopAudioPreview()
         self._script_rule_rows=[];self._script_descriptor_cache={}
         self._inspected_asset=Path(path)
         path=Path(path);self.SelectedEntity="";self.SelectedEntities=[];self.Window.Scene.Surface.SetSelection(None);self.Runtime.SetGizmo("",0);self.Window.Properties.Clear();self.Window.Properties.AddComponentButton.setVisible(False)
@@ -383,6 +386,8 @@ class EditorController(QObject):
         for label,value in (("Name",path.name),("Type",path.suffix.lower() or "Folder"),("Path",str(path)),("Size",self._FormatAssetSize(self._AssetSize(path)))):section.AddField(self.Window.Localization.Translate(f"properties.asset_{label.lower()}") if label!="Name" else self.Window.Localization.Translate("properties.asset_name"),QLabel(value))
         if path.suffix.lower()==".matinst":self._InspectMaterial(path)
         elif path.suffix.lower()==".btexture":self._InspectTexture(path)
+        elif path.suffix.lower() in AUDIO_EXTENSIONS:self._InspectAudioClip(path)
+        elif path.suffix.lower()==".bmixer":self._InspectAudioMixer(path)
         elif path.suffix.lower() in {".hdr",".exr",".ktx"}:self._InspectEnvironment(path)
         elif path.suffix.lower() in {".mat",".shad",".bshader"}:
             try:
@@ -394,6 +399,59 @@ class EditorController(QObject):
     def _MaterialError(self,error)->None:
         message=self.Window.Localization.Translate("materials.failed",error=str(error))
         if message!=self._material_error:self.Window.Console.AddMessage(message,ConsoleLevel.Error,True,self.Window.Localization.Translate("materials.source"));self._material_error=message
+
+    def _InspectAudioClip(self,path):
+        info=self.Runtime.AudioClipInfo(path)
+        if not info:return
+        tr=self.Window.Localization.Translate;section=self.Window.Properties.AddComponentSection("audio_clip",tr("audio.clip"),removable=False)
+        for key in ("duration","channels","sample_rate","frames"):
+            section.AddField(tr("audio."+key),QLabel(f'{info[key]:.2f}' if key=="duration" else str(info[key])))
+        self._audio_preview=AudioPreview(self.Runtime,info["uuid"],self.Window.Localization,info["duration"])
+        section.AddField(tr("audio.preview"),self._audio_preview)
+
+    def _InspectAudioMixer(self,path):
+        info=self.Runtime.AssetInfo(str(path))
+        if not info:return
+        tr=self.Window.Localization.Translate;identity=info["uuid"];buses=self.Runtime.AudioBuses(identity)
+        def save(refresh=False):
+            if self.Runtime.SaveAudioMixer(identity,buses):
+                if refresh:QTimer.singleShot(0,self,lambda:self.SelectAsset(path) if self._inspected_asset==path else None)
+            else:self.Window.Console.AddMessage(self.Runtime.LastError(),ConsoleLevel.Error,True,tr("audio.menu"))
+        for bus in buses:
+            section=self.Window.Properties.AddComponentSection("bus_"+bus["id"],bus["name"],removable=False)
+            def commit(key,value,b=bus):b[key]=value;save()
+            name=StringInput(bus["name"]);name.editingFinished.connect(lambda b=bus,f=name:(b.update(name=f.text()),save(True)));section.AddField(tr("audio.bus_name"),name)
+            if bus["id"]!=ZERO:
+                # Exclude this bus and its descendants to prevent cycles in the picker.
+                excluded={bus["id"]}
+                for _ in buses:
+                    excluded.update(b["id"] for b in buses if b["parent"] in excluded and b["id"]!=ZERO)
+                parent=EnumInput();parent.SetOptions(tuple((b["name"],b["id"]) for b in buses if b["id"] not in excluded));parent.SetValue(bus["parent"]);parent.currentIndexChanged.connect(lambda _,b=bus,f=parent:(b.update(parent=f.GetValue()),save()));section.AddField(tr("audio.bus_parent"),parent)
+            for key,bounds in (("volume",(0,4)),("pitch",(.25,4))):
+                field=FloatInput(minimum=bounds[0],maximum=bounds[1],value=bus[key]);field.valueChanged.connect(lambda v,k=key,b=bus:(b.update({k:v}),save()));section.AddField(tr("audio.bus_"+key),field)
+            for key in ("muted","solo","paused"):
+                field=BoolInput(bus[key]);field.ValueChanged.connect(lambda v,k=key,b=bus:(b.update({k:v}),save()));section.AddField(tr("audio.bus_"+key),field)
+            if bus["id"]!=ZERO:
+                remove=QPushButton(tr("audio.remove_bus"));remove.clicked.connect(lambda _,b=bus:self._RemoveAudioBus(b,buses,save));section.AddField("",remove)
+        section=self.Window.Properties.AddComponentSection("mixer_controls",tr("audio.mixer"),removable=False)
+        add=QPushButton(tr("audio.add_bus"));add.setEnabled(len(buses)<256)
+        def create():
+            import uuid
+            buses.append(dict(id=str(uuid.uuid4()),parent=ZERO,name=tr("audio.new_bus"),volume=1.0,pitch=1.0,muted=False,solo=False,paused=False));save(True)
+        add.clicked.connect(create);section.AddField("",add)
+
+    @staticmethod
+    def _RemoveAudioBus(bus,buses,save):
+        for b in buses:
+            if b["parent"]==bus["id"]:b["parent"]=bus["parent"]
+        buses.remove(bus);save(True)
+
+    def _AudioMixerForEntity(self,entity_id):
+        scene_id=self.Runtime.EntityDetails(entity_id).get("scene_uuid")
+        scene=next((s for s in self.Runtime.LoadedScenes() if s["uuid"]==scene_id),{})
+        listeners=[e for e in scene.get("entities",[]) if "Audio Listener" in e.get("components",[]) and e.get("component_enabled",{}).get("Audio Listener",True)]
+        listeners.sort(key=lambda e:(-e.get("component_data",{}).get("Audio Listener",{}).get("Priority",0),e["uuid"]))
+        return listeners[0].get("component_data",{}).get("Audio Listener",{}).get("Mixer Asset","") if listeners else ""
 
     def _InspectScene(self,scene_id):
         self._script_rule_rows=[];self._script_descriptor_cache={}
@@ -621,12 +679,26 @@ class EditorController(QObject):
         else:self.SelectEntity(entity_id);self.Window.Hierarchy.SetSelectedData([entity_id])
 
     def _ComponentIcon(self, component: str):
+        if component in ("Audio Source","Audio Listener"):return self.Window.Resources.Icon("icons/scene_asource.svg" if component=="Audio Source" else "icons/scene_alisten.svg")
         names={"Camera":"comp_cam.svg","Light":"comp_light.svg","Mesh":"comp_mesh.svg","Primitive Object":"comp_mesh.svg",
                "Scene Query Bounds":"comp_sqb.svg","Gaussian Blur":"comp_gblur.svg","Vignette":"comp_vign.svg"}
         filename=names.get(component)
         return self.Window.Resources.Icon(f"icons/{filename}") if filename else None
 
     def _ComponentEditor(self, entity_id: str, component: str, name: str, value):  # type: ignore[no-untyped-def]
+        if component=="Audio Source" and name=="Clip":return self._AssetPicker(value,AUDIO_EXTENSIONS,lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
+        if component=="Audio Listener" and name=="Mixer Asset":return self._AssetPicker(value,{".bmixer"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
+        if component=="Audio Source" and name=="Output Bus":
+            buses=self.Runtime.AudioBuses(self._AudioMixerForEntity(entity_id));editor=EnumInput();editor.SetOptions(tuple((bus["name"],bus["id"]) for bus in buses));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
+        if component=="Audio Source" and name=="Rolloff Curve":
+            tr=self.Window.Localization.Translate;editor=EnumInput();editor.SetOptions(tuple((tr("audio.rolloff."+key),i) for i,key in enumerate(("linear","logarithmic","custom"))));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _:self._CommitAudioRolloff(entity_id,editor.GetValue()));return editor
+        if component=="Audio Source" and name=="Custom Rolloff":
+            editor=AudioCurveInput(value,self.Window.Localization);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
+        if component in ("Audio Source","Audio Listener") and isinstance(value,float):
+            bounds={"Volume":(0,1),"Master Volume":(0,1),"Pitch":(.5,2),"Spatial Blend":(0,1),"Min Distance":(.001,1e8),"Max Distance":(.002,1e9),"Pan":(-1,1),"Doppler Level":(0,5),"Doppler Factor":(0,5),"Speed Of Sound":(1,10000),"Cone Inner Angle":(0,360),"Cone Outer Angle":(0,360),"Cone Outer Gain":(0,1)}
+            minimum,maximum=bounds.get(name,(-1e9,1e9));editor=FloatInput(minimum=minimum,maximum=maximum,value=value);editor.valueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
+        if component=="Audio Source" and name=="Priority":
+            editor=IntInput(minimum=0,maximum=256,value=value);editor.valueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
         if name=="Material Slots":return None  # Slot UUIDs are not numeric vector fields.
         if component=="Camera" and name=="Render Target":return self._AssetPicker(value,{".btexture"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
         if isinstance(value, bool):
@@ -742,6 +814,7 @@ class EditorController(QObject):
         if prop and prop.type.replace("Bazzalt::","").strip() in ("Material","Shader"):
             return self._AssetPicker(value,{".matinst"} if "Material" in prop.type else {".mat",".shad",".bshader"},commit)
         if prop and prop.type.replace("Bazzalt::","").strip()=="Texture":return self._AssetPicker(value,set(IMAGE_EXTENSIONS)|{".btexture"},commit)
+        if prop and prop.type.replace("Bazzalt::","").strip()=="AudioClip":return self._AssetPicker(value,AUDIO_EXTENSIONS,commit)
         if isinstance(value,bool):editor=BoolInput(value);editor.ValueChanged.connect(commit);return editor
         if isinstance(value,int):editor=IntInput(value=value);editor.valueChanged.connect(commit);return editor
         if isinstance(value,float):editor=FloatInput(value=value);editor.valueChanged.connect(commit);return editor
@@ -786,6 +859,9 @@ class EditorController(QObject):
 
     def _CommitLightType(self,entity_id:str,value:int)->None:
         self._CommitComponent(entity_id,"Light","Type",value)
+        if entity_id==self.SelectedEntity:self.SelectEntity(entity_id,force=True)
+    def _CommitAudioRolloff(self,entity_id,value):
+        self._CommitComponent(entity_id,"Audio Source","Rolloff Curve",value)
         if entity_id==self.SelectedEntity:self.SelectEntity(entity_id,force=True)
 
     def _CommitPrimitiveShape(self,entity_id:str,value:int)->None:
@@ -871,6 +947,9 @@ class EditorController(QObject):
     def ActivateAsset(self,path)->None:
         path=Path(path)
         if path.suffix.lower()==".bscene":self.LoadSceneAdditive(path)
+        elif path.suffix.lower() in AUDIO_EXTENSIONS:
+            self.SelectAsset(path)
+            if hasattr(self,"_audio_preview"):self._audio_preview.Play()
 
     def LoadSceneAdditive(self,path)->None:
         self.Runtime.LoadSceneAdditive(path)

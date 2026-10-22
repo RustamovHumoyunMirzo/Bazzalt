@@ -33,7 +33,7 @@ class GuiRenderer;
 class RenderBackend final {
 public:
     enum class ViewportKind { Scene, Game };
-    struct EditorIcon { float X, Y, Z; bool Camera; };
+    struct EditorIcon { float X, Y, Z; bool Camera; int Audio=0; };
     struct EditorGuide { float AX,AY,AZ,BX,BY,BZ,R,G,B,A; bool Outline=false; };
     RenderBackend();
     ~RenderBackend();

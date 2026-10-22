@@ -31,6 +31,8 @@ function Copy-ReleaseSDK([string]$Destination) {
     New-Item -ItemType Directory -Force -Path (Join-Path $Destination 'licenses') | Out-Null
     Copy-Item -LiteralPath (Join-Path $Root 'deps/lua/README') -Destination (Join-Path $Destination 'licenses/Lua.txt')
     Copy-Item -LiteralPath (Join-Path $Root 'deps/sol2/LICENSE.txt') -Destination (Join-Path $Destination 'licenses/Sol2.txt')
+    Copy-Item -LiteralPath (Join-Path $Root 'deps/miniaudio/LICENSE') -Destination (Join-Path $Destination 'licenses/miniaudio.txt')
+    Copy-Item -LiteralPath (Join-Path $Root 'deps/miniaudio/extras/stb_vorbis.c') -Destination (Join-Path $Destination 'licenses/stb_vorbis-source.txt')
     Copy-Item -LiteralPath (Join-Path $Build 'ScriptSDK/include') -Destination $Destination -Recurse
     Copy-Item -LiteralPath (Join-Path $Build 'Editor/Release/Bazzalt.dll') -Destination (Join-Path $Destination 'lib/Bazzalt.dll')
     Copy-Item -LiteralPath (Join-Path $Build 'Editor/Release/bazzalt_lua.dll') -Destination (Join-Path $Destination 'lib/bazzalt_lua.dll')

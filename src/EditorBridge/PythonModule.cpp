@@ -30,6 +30,7 @@
 #include "Bazzalt/Components/ScriptComponent.h"
 #include "Runtime/InputAccess.h"
 #include "EditorBridge/GuiBridge.h"
+#include "EditorBridge/AudioBridge.h"
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Components/Light.h"
 #include "Rendering/LightParameters.h"
@@ -118,6 +119,7 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
     if (const auto* vignette=entity.TryGetComponent<Vignette>()) { py::dict v;v["Color"]=py::make_tuple(vignette->Color.X,vignette->Color.Y,vignette->Color.Z,vignette->Color.W);v["Intensity"]=vignette->Intensity;v["Smoothness"]=vignette->Smoothness;v["Roundness"]=vignette->Roundness;data["Vignette"]=v; }
     if (const auto* bounds=entity.TryGetComponent<SceneQueryBounds>()) { py::dict v;v["Shape"]=static_cast<int>(bounds->Shape);v["Center"]=py::make_tuple(bounds->Center.X,bounds->Center.Y,bounds->Center.Z);v["Extents"]=py::make_tuple(bounds->Extents.X,bounds->Extents.Y,bounds->Extents.Z);v["Radius"]=bounds->Radius;v["Layer Mask"]=bounds->LayerMask;data["Scene Query Bounds"]=v; }
     InspectGUI(entity,components,enabled,data);
+    InspectAudio(entity,components,enabled,data);
     result["components"]=components;result["component_enabled"]=enabled;
     result["component_data"] = data;
     return result;
@@ -137,6 +139,30 @@ public:
     void ConsoleAdd(const std::string& text,unsigned level,const std::string& source,bool icon){Console::Log(text,static_cast<ConsoleLevel>(level),source,icon);}
     void ConsoleClear(){Console::Clear();}
     void ConsoleRemove(const std::vector<std::uint64_t>& ids){Console::ClearMessages(ids);}
+    py::dict AudioClipDetails(const std::string& path){
+        auto asset=AssetManager::GetAsset(std::filesystem::u8path(path));py::dict result;
+        if(!asset||asset->Importer!="Bazzalt.AudioClip"||asset->State!=AssetState::Ready)return result;
+        auto info=AudioClip::Load(asset->Id).GetInfo();if(!info.FrameCount)return result;
+        result["uuid"]=asset->Id.ToString();result["duration"]=info.Duration;result["channels"]=info.Channels;result["sample_rate"]=info.SampleRate;result["frames"]=info.FrameCount;return result;
+    }
+    std::uint64_t PreviewAudio(const std::string& clip){return m_engine->GetAudioRuntime().Preview(ParseUuid(clip)).GetId();}
+    void StopAudioPreview(){m_engine->GetAudioRuntime().StopPreview();}
+    py::dict AudioStatus(std::uint64_t id){AudioVoice voice(id);py::dict r;r["valid"]=voice.IsValid();r["state"]=int(voice.GetState());r["time"]=voice.GetTime();r["duration"]=voice.GetDuration();r["error"]=Audio::GetLastError();return r;}
+    bool AudioControl(std::uint64_t id,const std::string& action,double value){AudioVoice v(id);if(action=="pause")return v.Pause();if(action=="resume")return v.Resume();if(action=="stop")return v.Stop();if(action=="seek")return v.Seek(value);if(action=="volume")return v.SetVolume(float(value));return false;}
+    py::list AudioBuses(const std::string& mixer){
+        auto buses=AudioMixer::GetBuses();
+        if(!mixer.empty()){auto asset=AssetManager::GetAsset(ParseUuid(mixer));std::string error;if(asset&&asset->Importer=="Bazzalt.AudioMixer")Runtime::ReadAudioMixer(asset->CachePath,buses,error);}
+        py::list result;for(auto b:buses){py::dict v;v["id"]=b.Id.ToString();v["parent"]=b.Parent.ToString();v["name"]=b.Name;v["volume"]=b.Volume;v["pitch"]=b.Pitch;v["muted"]=b.Muted;v["solo"]=b.Solo;v["paused"]=b.Paused;result.append(v);}return result;
+    }
+    bool SaveMixer(const std::string& id,const py::list& values){
+        auto asset=AssetManager::GetAsset(ParseUuid(id));if(!asset||asset->Importer!="Bazzalt.AudioMixer")return false;
+        std::vector<AudioBusSettings> buses;
+        try{for(auto item:values){auto v=py::reinterpret_borrow<py::dict>(item);AudioBusSettings b;b.Id=ParseUuid(v["id"].cast<std::string>());b.Parent=ParseUuid(v["parent"].cast<std::string>());b.Name=v["name"].cast<std::string>();b.Volume=v["volume"].cast<float>();b.Pitch=v["pitch"].cast<float>();b.Muted=v["muted"].cast<bool>();b.Solo=v["solo"].cast<bool>();b.Paused=v["paused"].cast<bool>();buses.push_back(b);}}
+        catch(const std::exception& error){m_bridgeError=error.what();return false;}
+        if(!Runtime::SaveAudioMixer(asset->SourcePath,buses,m_bridgeError))return false;
+        if(!m_engine->RefreshTextureAsset(asset->SourcePath)){m_bridgeError=m_engine->GetLastError();return false;}
+        if(m_playing)AudioMixer::Load(asset->Id);return true;
+    }
 
     bool LoadProject(const std::string& path) {
         Stop();m_bridgeError.clear();bool result=false;
@@ -368,6 +394,7 @@ public:
 
     bool AddComponent(const std::string& id, const std::string& type) {
         Entity entity = RequireEntity(id);
+        if(AudioDispatch(entity,type,[]<class T>(Entity e){if(!e.HasComponent<T>())e.AddComponent<T>();}))return true;
         if (type == "Camera") { if (!entity.HasComponent<Camera>()) entity.AddComponent<Camera>(); }
         else if (type == "Light") { if (!entity.HasComponent<Light>()) entity.AddComponent<Light>(); }
         else if (type == "Mesh") { if (!entity.HasComponent<Mesh>()) entity.AddComponent<Mesh>(); }
@@ -380,6 +407,7 @@ public:
     }
     bool RemoveComponent(const std::string& id, const std::string& type) {
         Entity entity = RequireEntity(id);
+        if(AudioDispatch(entity,type,[]<class T>(Entity e){if(e.HasComponent<T>())e.RemoveComponent<T>();}))return true;
         if (type == "Camera" && entity.HasComponent<Camera>()) entity.RemoveComponent<Camera>();
         else if (type == "Light" && entity.HasComponent<Light>()) entity.RemoveComponent<Light>();
         else if (type == "Mesh" && entity.HasComponent<Mesh>()) entity.RemoveComponent<Mesh>();
@@ -392,6 +420,7 @@ public:
     }
     bool SetComponentEnabled(const std::string& id, const std::string& type, bool enabled) {
         Entity entity = RequireEntity(id);
+        if(AudioDispatch(entity,type,[enabled]<class T>(Entity e){if(e.HasComponent<T>())e.SetComponentEnabled<T>(enabled);}))return true;
         if (type == "Camera" && entity.HasComponent<Camera>()) entity.SetComponentEnabled<Camera>(enabled);
         else if (type == "Light" && entity.HasComponent<Light>()) entity.SetComponentEnabled<Light>(enabled);
         else if (type == "Mesh" && entity.HasComponent<Mesh>()) entity.SetComponentEnabled<Mesh>(enabled);
@@ -406,6 +435,7 @@ public:
     }
     py::list ComponentTypes() const {
         py::list result;
+        result.append("Audio Source");result.append("Audio Listener");
         for (const char* name : {"Camera", "Light", "Mesh", "Primitive Object", "Scene Query Bounds", "Gaussian Blur", "Vignette"})
             result.append(name);
         for(auto name:GuiNames)result.append(name);
@@ -462,6 +492,7 @@ public:
             const auto mode=value.cast<int>();if(mode<0||mode>7)return false;
         }
         Entity entity=RequireEntity(id);
+        if(type=="Audio Source"||type=="Audio Listener")return SetAudioProperty(entity,type,property,value);
         if(GuiRegistry().Find("Bazzalt."+type))return SetGUIProperty(entity,type,property,value);
         if(type=="Camera"&&entity.HasComponent<Camera>()){auto&v=entity.GetComponent<Camera>();if(property=="Render Target"){UUID id;if(!UUID::TryParse(value.cast<std::string>(),id))return false;if(id&&!Texture::Load(id).IsRenderTarget())return false;v.RenderTarget=id;}else if(property=="Projection")v.Projection=static_cast<CameraProjection>(value.cast<int>());else if(property=="Field of View")v.VerticalFieldOfView=ToRadians(value.cast<float>());else if(property=="Orthographic Size")v.OrthographicSize=value.cast<float>();else if(property=="Near")v.NearPlane=value.cast<float>();else if(property=="Far")v.FarPlane=value.cast<float>();else if(property=="Aspect Ratio")v.AspectRatio=value.cast<float>();else if(property=="Aspect Mode")v.AspectMode=static_cast<CameraAspectMode>(value.cast<int>());else if(property=="Viewport"){auto a=value.cast<std::array<float,4>>();v.Viewport={a[0],a[1],a[2],a[3]};}else if(property=="Priority")v.Priority=value.cast<int>();else if(property=="Active")v.Active=value.cast<bool>();else if(property=="Clear Color"){auto a=value.cast<std::array<float,4>>();v.ClearColor={a[0],a[1],a[2],a[3]};}else if(property=="Post Processing")v.PostProcessing.Enabled=value.cast<bool>();else if(property=="Bloom")v.PostProcessing.Bloom=value.cast<bool>();else if(property=="Ambient Occlusion")v.PostProcessing.AmbientOcclusion=value.cast<bool>();else if(property=="Anti Aliasing")v.PostProcessing.AntiAliasingMode=static_cast<AntiAliasing>(value.cast<int>());else if(property=="Tone Mapping")v.PostProcessing.ToneMappingMode=static_cast<ToneMapping>(value.cast<int>());else if(property=="Exposure")v.PostProcessing.Exposure=value.cast<float>();else if(property=="Depth of Field")v.PostProcessing.DepthOfField.Enabled=value.cast<bool>();else if(property=="Focus Distance")v.PostProcessing.DepthOfField.FocusDistance=value.cast<float>();else if(property=="Aperture")v.PostProcessing.DepthOfField.Aperture=value.cast<float>();else if(property=="Shutter Speed")v.PostProcessing.DepthOfField.ShutterSpeed=value.cast<float>();else if(property=="Sensitivity")v.PostProcessing.DepthOfField.Sensitivity=value.cast<float>();else return false;return true;}
         if(type=="Light"&&entity.HasComponent<Light>()){
@@ -561,6 +592,7 @@ public:
         else m_engine->RenderEditorFrame();
     }
     void Stop() {
+        m_engine->GetAudioRuntime().StopPreview();
         if (!m_playing) return;
         m_playing = false; m_paused = false;
         Runtime::InputAccess::SetActive(false);
@@ -741,6 +773,13 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("resize_viewport", &Bazzalt::EditorBridge::EditorHost::ResizeViewport)
         .def("destroy_viewport", &Bazzalt::EditorBridge::EditorHost::DestroyViewport)
         .def("set_scene_camera", &Bazzalt::EditorBridge::EditorHost::SetSceneCamera)
+        .def("audio_clip_info", &Bazzalt::EditorBridge::EditorHost::AudioClipDetails)
+        .def("audio_preview", &Bazzalt::EditorBridge::EditorHost::PreviewAudio)
+        .def("audio_stop_preview", &Bazzalt::EditorBridge::EditorHost::StopAudioPreview)
+        .def("audio_status", &Bazzalt::EditorBridge::EditorHost::AudioStatus)
+        .def("audio_control", &Bazzalt::EditorBridge::EditorHost::AudioControl)
+        .def("audio_buses", &Bazzalt::EditorBridge::EditorHost::AudioBuses, py::arg("mixer")="")
+        .def("save_audio_mixer", &Bazzalt::EditorBridge::EditorHost::SaveMixer)
         .def("set_component_property", &Bazzalt::EditorBridge::EditorHost::SetComponentProperty)
         .def("set_gizmo", &Bazzalt::EditorBridge::EditorHost::SetGizmo)
         .def("set_gizmo_position", &Bazzalt::EditorBridge::EditorHost::SetGizmoPosition)
