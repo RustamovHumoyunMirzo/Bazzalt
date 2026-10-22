@@ -40,11 +40,25 @@
 <p>Fast approximate spatial anti-aliasing.</p>
 <h2 id="TAA">TAA</h2>
 <pre><code>TAA</code></pre>
-<p>Temporal anti-aliasing using frame history.</p></article>
+<p>Temporal anti-aliasing using frame history. Reduces temporal shimmer but can soften detail or leave ghosting on motion.</p>
+<h2 id="MSAA2x">MSAA2x</h2><pre><code>MSAA2x = 3</code></pre><p>Two-sample geometry coverage anti-aliasing, without temporal history.</p>
+<h2 id="MSAA4x">MSAA4x</h2><pre><code>MSAA4x = 4</code></pre><p>Four-sample geometry coverage anti-aliasing. Higher bandwidth and memory cost than 2×; a useful starting point when temporal filtering is unwanted.</p>
+<h2 id="TAAFXAA">TAAFXAA</h2><pre><code>TAAFXAA = 5</code></pre><p>Temporal anti-aliasing followed by FXAA. Can smooth remaining spatial edges at the cost of another pass and additional softness.</p>
+<h2 id="MSAA2xFXAA">MSAA2xFXAA</h2><pre><code>MSAA2xFXAA = 6</code></pre><p>Two-sample MSAA followed by FXAA.</p>
+<h2 id="MSAA4xFXAA">MSAA4xFXAA</h2><pre><code>MSAA4xFXAA = 7</code></pre><p>Four-sample MSAA followed by FXAA.</p>
+<h2 id="usage">Applying a mode</h2><pre><code class="language-cpp">auto&amp; camera = entity.GetComponent&lt;Bazzalt::Camera&gt;();
+camera.PostProcessing.Enabled = true;
+camera.PostProcessing.AntiAliasingMode = Bazzalt::AntiAliasing::MSAA4xFXAA;</code></pre>
+<p>Settings apply live to each enabled camera, including split-screen views and camera-to-Texture captures. CameraPostProcessing.Enabled=false disables the camera AA stages; re-enabling restores the chosen mode. Switching modes resets unused stages instead of leaving old MSAA/TAA enabled. Invalid C++ enum casts fall back to no camera AA; serialized and editor values outside 0–7 are rejected.</p>
+<p>MSAA treats geometry coverage, not every shader/texture shimmer. FXAA is inexpensive but can blur detail. TAA uses previous frames. Combined modes trade more work and softness for coverage of different artifacts. There is no SMAA, SSAA, DLSS or FSR anti-aliasing mode behind these names.</p>
+<p>Sample counts are requests; Filament adapts to backend/device capabilities. TextureDescriptor.Samples is a separate destination attachment setting, not another name for CameraPostProcessing.AntiAliasingMode. For ordinary camera captures, a single-sample destination may be used with camera MSAA. Explicitly multisampled destination assets remain independent. The editor Scene navigation camera is separate from game Camera components.</p>
+<p>When both a camera MSAA mode and a multisampled Texture asset are used, the internal render stage requests the larger sample count up to the supported view limit of 4×, then resolves into a single-sample output texture. Counts are not multiplied. Prefer TextureDescriptor.Samples=1 when the camera alone should choose the MSAA level.</p>
+<p>Camera MSAA presets currently stop at 4×. An 8× preset is not exposed: the integrated Vulkan view path failed real-GPU tests despite the device advertising 8× support. Low-level Texture sample requests do not raise the camera's internal MSAA stage beyond 4×.</p>
+<p>Existing scene values remain stable: None=0, FXAA=1 and TAA=2. The default remains TAA.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../../0.5.0/native/reference/en.html"><small>Previous</small>C++ API reference</a>
 <a class="next" href="../../../../0.5.0/native/reference/AssetInfo/en.html"><small>Next</small>AssetInfo</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#None">None</a><a class="toc-link" href="#FXAA">FXAA</a><a class="toc-link" href="#TAA">TAA</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#None">None</a><a class="toc-link" href="#FXAA">FXAA</a><a class="toc-link" href="#TAA">TAA</a><a class="toc-link" href="#MSAA2x">MSAA2x</a><a class="toc-link" href="#MSAA4x">MSAA4x</a><a class="toc-link" href="#TAAFXAA">TAAFXAA</a><a class="toc-link" href="#MSAA2xFXAA">MSAA2xFXAA</a><a class="toc-link" href="#MSAA4xFXAA">MSAA4xFXAA</a><a class="toc-link" href="#usage">Applying a mode</a></nav></aside>
   </div>
   <footer>BAZZALT 0.5.0 documentation · English</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

@@ -624,6 +624,8 @@ void RenderBackend::RegisterCameraOutput(UUID id,filament::Texture* color,filame
     if(!color){m_cameraOutputs.erase(id);return;}
     auto& output=m_cameraOutputs[id];
     if(output.Color!=color||output.History!=history){ClearGuiResources();output={color,history,target,historyTarget,false,false};}
+    if(output.Target!=target||output.HistoryTarget!=historyTarget)ClearGuiResources();
+    output.Target=target;output.HistoryTarget=historyTarget;
     if(auto view=m_cameraViews.find(id);view!=m_cameraViews.end())view->second->setRenderTarget(output.Ready&&!output.HistoryFront?historyTarget:target);
     const auto entity=m_guiScene?m_guiScene->GetEntity(id):Entity{};const auto* camera=entity.TryGetComponent<Camera>();
     m_assets->SetCameraTexture(id,camera&&camera->Active&&output.Ready?(output.HistoryFront?history:color):nullptr);

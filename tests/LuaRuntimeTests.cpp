@@ -17,6 +17,8 @@ int main(){
     write(R"lua(
 local B = Bazzalt
 local Behavior = { Speed = 1.0 }
+assert(B.AntiAliasing.MSAA2x==3 and B.AntiAliasing.MSAA4x==4)
+assert(B.AntiAliasing.TAAFXAA==5 and B.AntiAliasing.MSAA2xFXAA==6 and B.AntiAliasing.MSAA4xFXAA==7)
 function Behavior:OnCreate()
     assert(not B.Console.IsAvailable())
     B.Console.Info("standalone no-op")

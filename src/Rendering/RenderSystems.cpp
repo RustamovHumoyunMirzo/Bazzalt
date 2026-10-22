@@ -1,4 +1,5 @@
 #include "Rendering/RenderSystems.h"
+#include "Rendering/AntiAliasingSettings.h"
 #include "Runtime/TextureLibrary.h"
 #include <iostream>
 
@@ -146,7 +147,10 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
             resource.View->setRenderTarget(nullptr);
             RenderAssets::TextureTargets surface;
             try{surface=m_backend.GetAssets().GetTextureTargets(camera.RenderTarget);m_textureWarnings.erase(camera.RenderTarget);}catch(const std::invalid_argument& error){if(m_textureWarnings[camera.RenderTarget]!=error.what()){m_textureWarnings[camera.RenderTarget]=error.what();std::cerr<<"[Rendering] "<<error.what()<<'\n';}alive.erase(id);continue;}
-            resource.Color=surface.Color;resource.History=surface.History;resource.Depth=surface.Depth;resource.Target=surface.Target;resource.HistoryTarget=surface.HistoryTarget;resource.TextureSettings=*descriptor;
+            const bool resolveMsaa=camera.PostProcessing.Enabled&&ResolveAntiAliasing(camera.PostProcessing.AntiAliasingMode).Samples>1;
+            resource.Color=surface.Color;resource.History=surface.History;resource.Depth=surface.Depth;
+            resource.Target=resolveMsaa&&surface.ResolvedTarget?surface.ResolvedTarget:surface.Target;
+            resource.HistoryTarget=resolveMsaa&&surface.ResolvedHistoryTarget?surface.ResolvedHistoryTarget:surface.HistoryTarget;resource.TextureSettings=*descriptor;
         }
         m_backend.RegisterCameraView(id,resource.View);
         m_backend.RegisterCameraOutput(id,resource.Color,resource.History,resource.Target,resource.HistoryTarget);
@@ -194,13 +198,7 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
                 -halfWidth, halfWidth, -halfHeight, halfHeight, nearPlane, farPlane);
         }
         resource.View->setPostProcessingEnabled(camera.PostProcessing.Enabled);
-        resource.View->setAntiAliasing(camera.PostProcessing.AntiAliasingMode == AntiAliasing::None
-            || camera.PostProcessing.AntiAliasingMode == AntiAliasing::TAA
-            ? filament::View::AntiAliasing::NONE : filament::View::AntiAliasing::FXAA);
-        resource.View->setTemporalAntiAliasingOptions({
-            .enabled = camera.PostProcessing.Enabled &&
-                       camera.PostProcessing.AntiAliasingMode == AntiAliasing::TAA
-        });
+        ApplyAntiAliasing(*resource.View,camera.PostProcessing.AntiAliasingMode,camera.PostProcessing.Enabled,descriptor?descriptor->Samples:1);
         resource.View->setAmbientOcclusionOptions({
             .enabled = camera.PostProcessing.Enabled && camera.PostProcessing.AmbientOcclusion
         });

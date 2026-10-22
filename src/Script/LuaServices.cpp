@@ -189,6 +189,11 @@ void BindLuaServices(sol::table api){
      enumeration["None"]=AntiAliasing::None;
      enumeration["FXAA"]=AntiAliasing::FXAA;
      enumeration["TAA"]=AntiAliasing::TAA;
+     enumeration["MSAA2x"]=AntiAliasing::MSAA2x;
+     enumeration["MSAA4x"]=AntiAliasing::MSAA4x;
+     enumeration["TAAFXAA"]=AntiAliasing::TAAFXAA;
+     enumeration["MSAA2xFXAA"]=AntiAliasing::MSAA2xFXAA;
+     enumeration["MSAA4xFXAA"]=AntiAliasing::MSAA4xFXAA;
     }
     {auto enumeration=api.create_named("ToneMapping");
      enumeration["Linear"]=ToneMapping::Linear;

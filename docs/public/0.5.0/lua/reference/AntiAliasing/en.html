@@ -44,11 +44,24 @@
 <h2 id="TAA">TAA</h2>
 <pre><code>Bazzalt.AntiAliasing.TAA</code></pre>
 <p>Temporal anti-aliasing using frame history.</p>
-<details><summary>Underlying C++ declaration / default values</summary><pre><code>TAA</code></pre></details></article>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>TAA</code></pre></details>
+<h2 id="MSAA2x">MSAA2x</h2><pre><code>Bazzalt.AntiAliasing.MSAA2x -- 3</code></pre><p>Two-sample geometry coverage anti-aliasing without temporal history.</p>
+<h2 id="MSAA4x">MSAA4x</h2><pre><code>Bazzalt.AntiAliasing.MSAA4x -- 4</code></pre><p>Four requested MSAA samples. More geometry edge coverage, bandwidth and memory cost than 2×.</p>
+<h2 id="TAAFXAA">TAAFXAA</h2><pre><code>Bazzalt.AntiAliasing.TAAFXAA -- 5</code></pre><p>TAA followed by FXAA; more filtering and cost, potentially softer detail.</p>
+<h2 id="MSAA2xFXAA">MSAA2xFXAA</h2><pre><code>Bazzalt.AntiAliasing.MSAA2xFXAA -- 6</code></pre><p>Two-sample MSAA followed by FXAA.</p>
+<h2 id="MSAA4xFXAA">MSAA4xFXAA</h2><pre><code>Bazzalt.AntiAliasing.MSAA4xFXAA -- 7</code></pre><p>Four-sample MSAA followed by FXAA.</p>
+<h2 id="usage">Applying a mode</h2><pre><code class="language-lua">local B = Bazzalt
+local camera = self.Entity:GetComponent("Camera")
+camera.PostProcessing.Enabled = true
+camera.PostProcessing.AntiAliasingMode = B.AntiAliasing.MSAA4xFXAA
+self.Entity:SetComponent("Camera", camera)</code></pre>
+<p>The exposed MSAA presets stop at 4×. An 8× camera preset is not available because the current Vulkan path failed GPU validation at that level.</p>
+<p>Write the modified component back to the entity. Settings apply to game cameras, split-screen views and camera texture captures, not the separate editor navigation camera. Turning PostProcessing.Enabled off disables the camera AA stages; turning it back on restores the mode. None=0, FXAA=1 and TAA=2 remain unchanged; TAA remains the default.</p>
+<p>MSAA smooths geometry coverage; it does not eliminate all shader or texture shimmer. TAA uses frame history and may ghost or soften moving detail. FXAA and combined modes may also soften detail. TextureDescriptor.Samples controls destination attachments independently. With camera MSAA and a multisampled Texture, the internal stage requests the larger count (up to 4× for the view stage) and resolves to a single-sample output. Counts are not multiplied; use TextureDescriptor.Samples=1 when only the camera should choose the level. See the <a href="../../../native/reference/AntiAliasing/en.html">C++ reference</a> for mode and resource behavior.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../../0.5.0/lua/reference/en.html"><small>Previous</small>Lua API reference</a>
 <a class="next" href="../../../../0.5.0/lua/reference/AssetInfo/en.html"><small>Next</small>AssetInfo</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#FXAA">FXAA</a><a class="toc-link" href="#None">None</a><a class="toc-link" href="#TAA">TAA</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#FXAA">FXAA</a><a class="toc-link" href="#None">None</a><a class="toc-link" href="#TAA">TAA</a><a class="toc-link" href="#MSAA2x">MSAA2x</a><a class="toc-link" href="#MSAA4x">MSAA4x</a><a class="toc-link" href="#TAAFXAA">TAAFXAA</a><a class="toc-link" href="#MSAA2xFXAA">MSAA2xFXAA</a><a class="toc-link" href="#MSAA4xFXAA">MSAA4xFXAA</a><a class="toc-link" href="#usage">Applying a mode</a></nav></aside>
   </div>
   <footer>BAZZALT 0.5.0 documentation · English</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

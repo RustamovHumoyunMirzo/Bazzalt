@@ -643,7 +643,7 @@ class EditorController(QObject):
             if component=="Camera" and name=="Aspect Mode":
                 editor=EnumInput();editor.SetOptions((("Automatic",0),("Fixed",1)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
             if component=="Camera" and name=="Anti Aliasing":
-                editor=EnumInput();editor.SetOptions((("None",0),("FXAA",1),("TAA",2)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
+                tr=self.Window.Localization.Translate;editor=EnumInput();editor.SetOptions(tuple((tr(f"rendering.aa.{key}"),index) for index,key in enumerate(("none","fxaa","taa","msaa2","msaa4","taa_fxaa","msaa2_fxaa","msaa4_fxaa"))));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
             if component=="Camera" and name=="Tone Mapping":
                 editor=EnumInput();editor.SetOptions((("Linear",0),("Filmic",1),("ACES",2)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
             if component=="Scene Query Bounds" and name=="Shape":

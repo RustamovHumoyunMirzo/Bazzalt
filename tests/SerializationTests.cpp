@@ -56,6 +56,7 @@ int main() {
     child.AddComponent<Health>().Value = 42.5f;
     auto& sourceCamera = child.AddComponent<Camera>();
     sourceCamera.PostProcessing.Bloom = false;
+    sourceCamera.PostProcessing.AntiAliasingMode = AntiAliasing::MSAA4xFXAA;
     sourceCamera.Viewport = CameraViewport::RightHalf();
     sourceCamera.AspectMode = CameraAspectMode::Automatic;
     sourceCamera.PostProcessing.DepthOfField.Enabled = true;
@@ -101,6 +102,7 @@ int main() {
     assert(restoredChild.GetComponent<ModelNode>().StablePath == "0/3");
     assert(restoredChild.GetComponent<ModelNode>().SourceIndex == 3);
     assert(!restoredChild.GetComponent<Camera>().PostProcessing.Bloom);
+    assert(restoredChild.GetComponent<Camera>().PostProcessing.AntiAliasingMode==AntiAliasing::MSAA4xFXAA);
     assert(restoredChild.GetComponent<Camera>().Viewport.X == 0.5f);
     assert(restoredChild.GetComponent<Camera>().Viewport.Width == 0.5f);
     assert(restoredChild.GetComponent<Camera>().PostProcessing.DepthOfField.Enabled);

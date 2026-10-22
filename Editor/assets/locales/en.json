@@ -461,5 +461,13 @@
   "texture.field.Depth Format": "Depth Format",
   "texture.field.Filter": "Filter",
   "texture.field.Wrap": "Wrap",
-  "texture.field.Clear Color": "Clear Color"
+  "texture.field.Clear Color": "Clear Color",
+  "rendering.aa.none": "None",
+  "rendering.aa.fxaa": "FXAA",
+  "rendering.aa.taa": "TAA",
+  "rendering.aa.msaa2": "MSAA 2×",
+  "rendering.aa.msaa4": "MSAA 4×",
+  "rendering.aa.taa_fxaa": "TAA + FXAA",
+  "rendering.aa.msaa2_fxaa": "MSAA 2× + FXAA",
+  "rendering.aa.msaa4_fxaa": "MSAA 4× + FXAA"
 }

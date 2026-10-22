@@ -20,6 +20,7 @@ struct EditorOutlineTestAccess {
 }
 #include "Rendering/LightParameters.h"
 #include "Rendering/RenderSystems.h"
+#include "Rendering/AntiAliasingSettings.h"
 #include "Rendering/RenderBackend.h"
 #include "Rendering/RenderAssets.h"
 #include <filament/Scene.h>
@@ -70,6 +71,10 @@ int CheckDofPixels(){
             engine.flushAndWait();engine.pumpMessageQueues();assert(done);return pixels;
         };
         const auto sharp=capture(false),blurred=capture(true),sharpAgain=capture(false);
+        camera.PostProcessing.AntiAliasingMode=AntiAliasing::MSAA4x;const auto multisampled=capture(false);
+        std::size_t aaChanged=0;for(std::size_t i=0;i<sharp.size();i+=4){int delta=0;for(int c=0;c<3;++c)delta=std::max(delta,std::abs(int(sharp[i+c])-int(multisampled[i+c])));if(delta>3)++aaChanged;}
+        std::cout<<"MSAA4x changed geometry edge pixels="<<aaChanged<<std::endl;assert(aaChanged>50);
+        camera.PostProcessing.AntiAliasingMode=AntiAliasing::None;
         std::size_t changed=0,restored=0;int maximum=0;
         for(std::size_t i=0;i<sharp.size();i+=4){int delta=0,restoreDelta=0;for(int channel=0;channel<3;++channel){delta=std::max(delta,std::abs(int(sharp[i+channel])-int(blurred[i+channel])));restoreDelta=std::max(restoreDelta,std::abs(int(sharp[i+channel])-int(sharpAgain[i+channel])));}if(restoreDelta>3)++restored;if(delta>3)++changed;maximum=std::max(maximum,delta);}
         std::cout<<"DoF changed pixels="<<changed<<" max difference="<<maximum<<" restored differences="<<restored<<std::endl;
@@ -196,6 +201,17 @@ int main(int argc,char** argv) {
         assert(backend.GetActiveViews().size()==1);
         auto* view=backend.GetActiveViews().front();const auto getExposure=[&](){return filament::Exposure::exposure(view->getCamera());};const float exposure=getExposure();
         assert(view->getDepthOfFieldOptions().enabled);
+        for(int i=0;i<=7;++i){
+            camera.PostProcessing.AntiAliasingMode=static_cast<Bazzalt::AntiAliasing>(i);SystemTestAccess::Tick(system,cameras);
+            const auto expected=Bazzalt::Runtime::ResolveAntiAliasing(camera.PostProcessing.AntiAliasingMode);
+            assert((view->getAntiAliasing()==filament::View::AntiAliasing::FXAA)==expected.Fxaa);
+            assert(view->getTemporalAntiAliasingOptions().enabled==expected.Temporal);
+            assert(view->getMultiSampleAntiAliasingOptions().enabled==(expected.Samples>1));
+            assert(view->getMultiSampleAntiAliasingOptions().sampleCount==expected.Samples);
+        }
+        camera.PostProcessing.Enabled=false;SystemTestAccess::Tick(system,cameras);
+        assert(!view->getMultiSampleAntiAliasingOptions().enabled&&!view->getTemporalAntiAliasingOptions().enabled&&view->getAntiAliasing()==filament::View::AntiAliasing::NONE);
+        camera.PostProcessing.Enabled=true;camera.PostProcessing.AntiAliasingMode=Bazzalt::AntiAliasing::TAA;SystemTestAccess::Tick(system,cameras);
         camera.PostProcessing.DepthOfField.Aperture=2.8f;SystemTestAccess::Tick(system,cameras);
         assert(std::abs(getExposure()-exposure)<exposure*1e-5f);
         assert(std::abs(view->getDepthOfFieldOptions().cocScale-16.f/2.8f)<1e-5f);

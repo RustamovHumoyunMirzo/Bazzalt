@@ -287,7 +287,7 @@ struct RenderAssets::Impl {
                 material.Value->setParameter(parameter.Name.c_str(),BlackTexture,filament::TextureSampler{});
         }}
         auto targets=found->second.Targets;TextureSurfaces.erase(found);
-        Engine.destroy(targets.Target);Engine.destroy(targets.HistoryTarget);Engine.destroy(targets.Color);Engine.destroy(targets.History);if(targets.Depth)Engine.destroy(targets.Depth);
+        Engine.destroy(targets.Target);Engine.destroy(targets.HistoryTarget);if(targets.ResolvedTarget)Engine.destroy(targets.ResolvedTarget);if(targets.ResolvedHistoryTarget)Engine.destroy(targets.ResolvedHistoryTarget);Engine.destroy(targets.Color);Engine.destroy(targets.History);if(targets.Depth)Engine.destroy(targets.Depth);
     }
     TextureSurface& EnsureSurface(UUID id,const TextureDescriptor& descriptor){
         if(auto old=TextureSurfaces.find(id);old!=TextureSurfaces.end()){
@@ -300,14 +300,18 @@ struct RenderAssets::Impl {
         const auto format=colors[unsigned(descriptor.ColorFormat)];
         if(!T::isTextureFormatSupported(Engine,format)||(descriptor.Mipmaps&&!T::isTextureFormatMipmappable(Engine,format)))throw std::invalid_argument("Texture format/mipmaps are not supported by this renderer");
         TextureSurface surface;surface.Descriptor=descriptor;
-        struct AllocationGuard {filament::Engine& Engine;TextureSurface& Surface;bool Complete=false;~AllocationGuard(){if(Complete)return;auto& t=Surface.Targets;if(t.Target)Engine.destroy(t.Target);if(t.HistoryTarget)Engine.destroy(t.HistoryTarget);if(t.Color)Engine.destroy(t.Color);if(t.History)Engine.destroy(t.History);if(t.Depth)Engine.destroy(t.Depth);}} allocationGuard{Engine,surface};
+        struct AllocationGuard {filament::Engine& Engine;TextureSurface& Surface;bool Complete=false;~AllocationGuard(){if(Complete)return;auto& t=Surface.Targets;if(t.Target)Engine.destroy(t.Target);if(t.HistoryTarget)Engine.destroy(t.HistoryTarget);if(t.ResolvedTarget)Engine.destroy(t.ResolvedTarget);if(t.ResolvedHistoryTarget)Engine.destroy(t.ResolvedHistoryTarget);if(t.Color)Engine.destroy(t.Color);if(t.History)Engine.destroy(t.History);if(t.Depth)Engine.destroy(t.Depth);}} allocationGuard{Engine,surface};
         auto usage=T::Usage::COLOR_ATTACHMENT|T::Usage::SAMPLEABLE|T::Usage::UPLOADABLE|T::Usage::BLIT_SRC|T::Usage::BLIT_DST;
         if(descriptor.Mipmaps)usage|=T::Usage::GEN_MIPMAPPABLE;
         const auto color=[&]{return T::Builder().width(descriptor.Width).height(descriptor.Height).levels(descriptor.GetMipLevelCount()).sampler(T::Sampler::SAMPLER_2D).format(format).usage(usage).build(Engine);};
         surface.Targets.Color=color();surface.Targets.History=color();
         if(descriptor.DepthFormat!=TextureDepthFormat::None){static constexpr T::InternalFormat depths[]={T::InternalFormat::DEPTH16,T::InternalFormat::DEPTH16,T::InternalFormat::DEPTH24,T::InternalFormat::DEPTH32F};surface.Targets.Depth=T::Builder().width(descriptor.Width).height(descriptor.Height).levels(1).format(depths[unsigned(descriptor.DepthFormat)]).usage(T::Usage::DEPTH_ATTACHMENT).build(Engine);}
-        const auto target=[&](T* attachment){auto builder=filament::RenderTarget::Builder().samples(descriptor.Samples).texture(filament::RenderTarget::AttachmentPoint::COLOR,attachment);if(surface.Targets.Depth)builder.texture(filament::RenderTarget::AttachmentPoint::DEPTH,surface.Targets.Depth);return builder.build(Engine);};
-        surface.Targets.Target=target(surface.Targets.Color);surface.Targets.HistoryTarget=target(surface.Targets.History);ClearSurface(surface);
+        const auto target=[&](T* attachment,std::uint8_t samples,bool depth=true){auto builder=filament::RenderTarget::Builder().samples(samples).texture(filament::RenderTarget::AttachmentPoint::COLOR,attachment);if(depth&&surface.Targets.Depth)builder.texture(filament::RenderTarget::AttachmentPoint::DEPTH,surface.Targets.Depth);return builder.build(Engine);};
+        surface.Targets.Target=target(surface.Targets.Color,descriptor.Samples);surface.Targets.HistoryTarget=target(surface.Targets.History,descriptor.Samples);
+        // View MSAA resolves into a single-sample final target. Reusing an
+        // equally multisampled destination can create an invalid resolve pass.
+        if(descriptor.Samples>1){surface.Targets.ResolvedTarget=target(surface.Targets.Color,1,false);surface.Targets.ResolvedHistoryTarget=target(surface.Targets.History,1,false);}
+        ClearSurface(surface);
         auto& result=TextureSurfaces.emplace(id,std::move(surface)).first->second;allocationGuard.Complete=true;return result;
     }
     filament::Texture* LoadTexture(UUID id, bool srgb) {

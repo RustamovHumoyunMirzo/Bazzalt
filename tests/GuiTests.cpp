@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstdlib>
 #include <cstdio>
+#include <iostream>
 #include <thread>
 #include <chrono>
 #include "Bazzalt/GUI.h"
@@ -105,6 +106,12 @@ int main(){
             backend.Render();engine.flushAndWait();assert(backend.GetCameraTexture(feed.GetUUID())->getFormat()==filament::Texture::InternalFormat::RGBA16F);
             const auto read=[&]{engine.flushAndWait();filament::View* display=nullptr;for(auto* view:backend.GetActiveViews())if(!view->getRenderTarget())display=view;assert(display);display->setViewport({0,0,64,64});std::vector<std::uint8_t> pixels(64*64*4);std::atomic<bool> ready=false;assert(renderer.beginFrame(swap));renderer.render(display);renderer.readPixels(0,0,64,64,filament::Texture::PixelBufferDescriptor(pixels.data(),pixels.size(),filament::Texture::Format::RGBA,filament::Texture::Type::UBYTE,[](void*,std::size_t,void* user){static_cast<std::atomic<bool>*>(user)->store(true);},&ready));renderer.endFrame();engine.flushAndWait();assert(ready);return pixels;};
             auto pixels=read();const auto center=(32*64+32)*4;assert(pixels[center]>200&&pixels[center+1]<20); // Ordinary Texture field on a spatial image and a material.
+            for(const auto samples:{4,1}){
+                description.Samples=static_cast<std::uint8_t>(samples);texture.SetDescriptor(description);
+                for(int aa=0;aa<=7;++aa){std::cout<<"Capture samples="<<samples<<" AA mode="<<aa<<std::endl;camera.PostProcessing.AntiAliasingMode=static_cast<AntiAliasing>(aa);camera.PostProcessing.Enabled=true;backend.Render();engine.flushAndWait();pixels=read();assert(pixels[center]>200&&pixels[center+1]<20);}
+                camera.PostProcessing.Enabled=false;backend.Render();engine.flushAndWait();pixels=read();assert(pixels[center]>200&&pixels[center+1]<20);
+                camera.PostProcessing.Enabled=true;backend.Render();engine.flushAndWait();pixels=read();assert(pixels[center]>200&&pixels[center+1]<20);
+            }
             camera.Enabled=false;backend.Render();engine.flushAndWait();pixels=read();assert(pixels[center]<20&&pixels[center+1]<20); // No stale last frame.
             camera.Enabled=true;texture.Resize(128,128);backend.Render();engine.flushAndWait();assert(backend.GetAssets().GetGuiTexture(texture.GetAssetUUID())->getWidth()==128);
             auto duplicate=scene.CreateEntity("Conflicting writer");duplicate.AddComponent<Camera>().SetRenderTarget(texture);backend.Render();engine.flushAndWait();assert(!backend.GetCameraTexture(feed.GetUUID())&&!backend.GetCameraTexture(duplicate.GetUUID()));

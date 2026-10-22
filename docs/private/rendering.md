@@ -40,10 +40,36 @@ camera.NearPlane = 0.1f;
 camera.FarPlane = 2000.0f;
 camera.Priority = 10;
 camera.PostProcessing.Bloom = true;
+camera.PostProcessing.AntiAliasingMode = Bazzalt::AntiAliasing::MSAA4xFXAA;
 ```
 
 Every active camera with a non-empty viewport is submitted. Lower priorities
 render first and UUID provides deterministic ordering when priorities match.
+
+AA decoding lives in `Rendering/AntiAliasingSettings.h`. None/FXAA/TAA retain
+serialized values 0/1/2. Values 3–7 select MSAA 2/4, TAA+FXAA and MSAA+FXAA.
+Every synchronization sets FXAA, temporal and multisample options, including
+disabled states, so toggling modes cannot leave an older stage enabled.
+Camera post-processing off suppresses all camera AA stages. Destination texture
+sample allocation remains independent. Filament adapts requested samples to
+backend capabilities; do not claim hardware-exact sample counts. Game camera,
+split-screen and capture views share this path; editor navigation views do not.
+
+View-level MSAA captures resolve into single-sample final targets, even when the
+Texture descriptor requests MSAA. The pool retains single-sample target wrappers
+alongside its multisampled targets over the same color/history textures. The
+camera uses the larger of its requested samples and the texture sample request
+for the internal AA stage, capped at the verified view-MSAA limit of 4x. The
+current Vulkan path loses the device at 8x, including a plain single-sample output
+test, despite advertised hardware support; no 8x camera preset is exposed.
+Final post-process resolve targets are color-only, without the destination's
+multisampled depth attachment. RegisterCameraOutput updates target pointers even
+when texture pointers remain unchanged, retaining front/history state while
+invalidating GUI views. This avoids an invalid multisampled resolve attachment
+and handles switching AA/post-processing live without stale capture targets.
+Shader-based SMAA, vendor upscalers and SSAA are not implemented by these presets.
+GPU regressions render every mode into an HDR/mipmapped multisampled capture;
+`BazzaltRenderingTests --gpu-dof` also verifies MSAA changes geometry edge pixels.
 Cameras support perspective or orthographic projection, clear color, and
 renderer-neutral post-processing settings. Current synchronization applies
 projection, FXAA/TAA, bloom, ambient occlusion, and enablement. Clear color,

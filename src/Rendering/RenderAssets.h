@@ -52,7 +52,7 @@ public:
     filament::Texture* GetGuiTexture(UUID id);
     void SetCameraTexture(UUID camera,filament::Texture* texture);
     std::vector<UUID> GetCameraDependencies() const;
-    struct TextureTargets {filament::Texture* Color=nullptr;filament::Texture* History=nullptr;filament::Texture* Depth=nullptr;filament::RenderTarget* Target=nullptr;filament::RenderTarget* HistoryTarget=nullptr;};
+    struct TextureTargets {filament::Texture* Color=nullptr;filament::Texture* History=nullptr;filament::Texture* Depth=nullptr;filament::RenderTarget* Target=nullptr;filament::RenderTarget* HistoryTarget=nullptr;filament::RenderTarget* ResolvedTarget=nullptr;filament::RenderTarget* ResolvedHistoryTarget=nullptr;};
     TextureTargets GetTextureTargets(UUID texture);
     void SetTextureProducer(UUID texture,UUID camera);
     UUID GetTextureProducer(UUID texture) const;

@@ -12,7 +12,12 @@ namespace Bazzalt {
 
 enum class CameraProjection { Perspective, Orthographic };
 enum class CameraAspectMode { Automatic, Fixed };
-enum class AntiAliasing { None, FXAA, TAA };
+// Keep values stable: scene files serialize the numeric value.
+enum class AntiAliasing {
+    None=0, FXAA=1, TAA=2,
+    MSAA2x=3, MSAA4x=4,
+    TAAFXAA=5, MSAA2xFXAA=6, MSAA4xFXAA=7
+};
 enum class ToneMapping { Linear, Filmic, ACES };
 enum class DepthOfFieldQuality { Low, Medium, High };
 
