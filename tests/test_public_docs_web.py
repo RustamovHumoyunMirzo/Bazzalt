@@ -107,6 +107,17 @@ class PublicDocsWebTests(unittest.TestCase):
         self.assertEqual(self.js("document.querySelectorAll('#search-results a').length"), 0)
         self.assertIn("No matching", self.js("document.getElementById('search-status').textContent"))
 
+    def test_identity_and_selectors_come_from_url_and_shared_catalog(self):
+        self.load("0.6.0/native/audio/en.html")
+        self.assertEqual(self.js("document.body.hasAttribute('data-version')"),False)
+        self.assertEqual(self.js("document.body.hasAttribute('data-page')"),False)
+        self.assertEqual(self.js("document.documentElement.lang"),'en')
+        self.assertEqual(self.js("document.getElementById('version').value"),'0.6.0')
+        self.assertEqual(self.js("document.querySelectorAll('#version option').length"),2)
+        self.assertIn('0.6.0',self.js("document.querySelector('[data-doc-footer]').textContent"))
+        self.assertEqual(self.js("document.querySelector('.nav-link[aria-current=page]').textContent"),'C++ audio')
+        self.assertTrue(self.js("document.querySelector('.pager a').getAttribute('href').indexOf('0.6.0')===-1"))
+
     def settle(self):
         self.await_callback(lambda done: QTimer.singleShot(120, lambda: done(True)))
 

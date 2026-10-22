@@ -9,9 +9,13 @@
   const body = document.body;
   const root = new URL(body.dataset.root || './', location.href);
   const landing = body.dataset.landing === 'true';
-  const version = body.dataset.version || catalog.defaultVersion;
-  const page = body.dataset.page || 'manual';
-  let language = document.documentElement.lang;
+  // Directory = version, filename = language. No release/language lists or
+  // duplicated identity attributes live in individual HTML documents.
+  const parts = decodeURIComponent(location.pathname.slice(root.pathname.length)).split('/');
+  const version = landing ? catalog.defaultVersion : parts.shift();
+  let language = landing ? catalog.defaultLanguage : parts.pop().replace(/\.html$/, '');
+  const page = landing ? 'manual' : parts.join('/');
+  document.documentElement.lang = language;
   const read = key => { try { return localStorage.getItem(key); } catch (_) { return null; } };
   const save = (key, value) => { try { localStorage.setItem(key, value); } catch (_) {} };
   const entries = (v, l) => catalog.pages.filter(p => p.version === v && p.language === l);
@@ -52,7 +56,14 @@
   const languageName = code => {
     try {return new Intl.DisplayNames([code], {type:'language'}).of(code) || code;} catch (_) {return catalog.languages[code] || code;}
   };
-  languageSelect?.querySelectorAll('option').forEach(option => {option.textContent = languageName(option.value);});
+  if (!landing) {
+    versionSelect?.replaceChildren(...(catalog.versions || Object.keys(catalog.navigation)).map(v => new Option(v, v, false, v === version)));
+    const languages = [...new Set(catalog.pages.filter(p => p.version === version && p.id === page).map(p => p.language))];
+    languageSelect?.replaceChildren(...languages.map(l => new Option(languageName(l), l, false, l === language)));
+    const footer = document.querySelector('[data-doc-footer]');
+    if (footer) footer.textContent = `BAZZALT ${version} documentation · ${languageName(language)}`;
+    document.title += ` ${version}`;
+  }
   function destination(v, l, id) {
     // Never invent a translation or a versioned URL that has not been built.
     const pages = entries(v, l);

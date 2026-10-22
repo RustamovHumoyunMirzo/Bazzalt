@@ -1,29 +1,29 @@
 <!doctype html>
-<html lang="en">
+<html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Lua behaviors let you add gameplay without compiling a native C++ module. Their source files are project assets.">
-  <title>Write a Lua behavior | BAZZALT Docs 0.5.0</title>
+  <title>Write a Lua behavior | BAZZALT Docs</title>
   <link rel="stylesheet" href="../../assets/docs.css">
   <script src="../../assets/theme.js"></script>
   <script defer src="../../assets/catalog.js"></script>
   <script defer src="../../assets/docs.js"></script>
 </head>
-<body data-root="../../" data-version="0.5.0" data-page="lua">
+<body data-root="../../">
   <a class="skip-link" href="#content">Skip to content</a>
   <header class="topbar">
     <a class="brand" href="../../index.html">BAZZALT Docs</a>
     <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
     <div class="header-tools">
-      <label>Version <select id="version" aria-label="Documentation version"><option value="0.6.0">0.6.0</option><option value="0.5.0" selected>0.5.0</option></select></label>
-      <label>Language <select id="language" aria-label="Documentation language"><option value="en" selected>English</option></select></label>
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
       <button data-search-open>Search <kbd>Ctrl K</kbd></button>
       <button class="theme-btn" aria-label="Switch color theme">Theme</button>
     </div>
   </header>
   <div class="docs-layout">
-    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for the navigation tree. Page content and links remain available.</noscript></aside>
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
     <main id="content" tabindex="-1">
       <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../index.html">Docs</a> / Write a Lua behavior</nav>
       <article class="doc"><h1>Write a Lua behavior</h1>
@@ -82,12 +82,12 @@ Walk.Label = PROPERTY("string", "Player", {
 <h2 id="sandbox">Available libraries and limits</h2>
 <p>Gameplay uses the Bazzalt API, not direct engine initialization or operating-system access. The runtime intentionally omits facilities such as os, io, package, debug, and loadfile. It also bounds script memory and execution so a runaway loop is reported instead of deliberately holding the editor forever. Do not treat these limits as permission to run arbitrary untrusted bytecode.</p>
 <p>Continue with <a href="api/en.html">Lua API conventions</a> before editing components directly. Lua's copied-component model differs from a C++ component reference.</p></article>
-      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../0.5.0/native/reference/Vignette/en.html"><small>Previous</small>Vignette</a>
-<a class="next" href="../../0.5.0/lua/basics/en.html"><small>Next</small>Lua terms and first calls</a></nav>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../native/reference/Vignette/en.html"><small>Previous</small>Vignette</a>
+<a class="next" href="basics/en.html"><small>Next</small>Lua terms and first calls</a></nav>
     </main>
     <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#create-the-script">Create the script</a><a class="toc-link" href="#declarations">Component and property declarations</a><a class="toc-link" href="#inspector-rules">Inspector-only field rules</a><a class="toc-link" href="#attach-and-test">Attach and test</a><a class="toc-link" href="#import-and-play">What happens before Play</a><a class="toc-link" href="#callbacks">Lifecycle callbacks</a><a class="toc-link" href="#sandbox">Available libraries and limits</a></nav></aside>
   </div>
-  <footer>BAZZALT 0.5.0 documentation · English</footer>
+  <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">
     <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
     <label for="search-input">Search pages and topics</label>

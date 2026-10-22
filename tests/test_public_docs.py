@@ -7,7 +7,7 @@ import shutil
 import tempfile
 import unittest
 from urllib.parse import unquote, urlsplit
-from scripts.build_public_docs import DEFAULT_ROOT, Content, discover, outputs, read_article, flatten_pages, render_tree, tree
+from scripts.build_public_docs import DEFAULT_ROOT, Content, discover, outputs, read_article, flatten_pages, render_tree, tree, create_version
 
 
 class Page(HTMLParser):
@@ -59,7 +59,7 @@ class PublicDocsTests(unittest.TestCase):
     def test_all_links_and_anchors_resolve(self):
         pages={path:Page(source) for path,source in self.generated.items() if path.suffix=='.html'}
         for path,page in pages.items():
-            if path.name!='index.html': self.assertEqual(page.language,path.stem)
+            if path.name!='index.html': self.assertIsNone(page.language) # Set from the filename by shared JS.
             for reference in page.references+page.resources:
                 with self.subTest(page=path,link=reference):
                     parsed=urlsplit(reference);self.assertFalse(parsed.scheme);self.assertFalse(parsed.netloc)
@@ -85,12 +85,32 @@ class PublicDocsTests(unittest.TestCase):
             self.assertEqual(options,{})
             self.assertEqual(versions,['0.6.0','0.5.0']);self.assertEqual(languages,['en','ru'])
             built=outputs(root);translated=built[root/'0.5.0/manual/new-guide/ru.html']
-            self.assertIn('lang="ru"',translated);self.assertIn('value="ru" selected',translated)
-            self.assertIn('value="0.6.0"',translated)
+            self.assertNotIn('lang="ru"',translated);self.assertNotIn('<option',translated)
+            self.assertNotIn('data-version=',translated);self.assertNotIn('data-page=',translated)
             self.assertNotIn(root/'0.6.0/manual/ru.html',built)
-            self.assertIn('href="0.6.0/manual/en.html"',built[root/'index.html'])
+            self.assertNotIn('0.6.0',built[root/'index.html'])
             self.assertNotIn('class="nav-link"',built[root/'0.5.0/manual/en.html'])
             self.assertIn('New guide',built[root/'assets/catalog.js'])
+
+    def test_new_versions_and_languages_do_not_rewrite_existing_pages(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);self.fixture(root)
+            self.add_page(root,'0.5.0/manual/en.html','Manual')
+            self.add_page(root,'0.5.0/manual/topic/en.html','Topic')
+            before=outputs(root)
+            # Start from refreshed source pages, just like a real release copy.
+            for path,content in before.items():path.parent.mkdir(parents=True,exist_ok=True);path.write_text(content,encoding='utf-8')
+            create_version(root,'0.6.0')
+            self.add_page(root,'0.6.0/manual/uz.html','Qo‘llanma')
+            after=outputs(root)
+            for path,content in before.items():
+                if path.name!='catalog.js':self.assertEqual(after[path],content,str(path))
+            self.assertNotEqual(before[root/'assets/catalog.js'],after[root/'assets/catalog.js'])
+            copied=after[root/'0.6.0/manual/en.html']
+            self.assertNotIn('0.5.0',copied);self.assertNotIn('0.6.0',copied)
+            self.assertIn('href="topic/en.html"',copied)
+            with self.assertRaises(ValueError):create_version(root,'0.6.0')
+            with self.assertRaises(ValueError):create_version(root,'../outside')
 
     def test_language_translation_is_one_optional_file(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -53,6 +53,10 @@ in the same folder, translate its article, and refresh. **The filename is the
 language declaration.** No language list needs updating. The document's `lang`
 attribute, links, selector, and search entries are derived from it.
 
+Version and language selectors are populated from the shared catalog, not
+written into each HTML page. A guide's version comes from its directory and
+its language from its filename at runtime. No `data-version`, `data-page`,
+versioned title/footer, or copied lists of languages need maintaining.
 Only existing translations appear in a guide's language selector. Untranslated
 home-page destinations fall back to the default-language guide for that subject,
 not an unrelated translated page. Native language names come from browser Intl.
@@ -65,11 +69,26 @@ remain independent language HTML files.
 
 ## Add a version
 
-Copy `0.5.0` to `0.6.0`, edit that version's pages, and refresh. **The folder name
-is the version declaration.** No version list needs updating. Use semantic names
-such as `0.6.0` or `0.6.0-beta.1`. The highest version is the home-page default;
-each guide's selector includes discovered version folders. Old versions remain
-ordinary editable files, not a duplicate generated/source tree.
+Run one command, then edit only the new release's content:
+
+```sh
+python scripts/build_public_docs.py --new-version 0.7.0
+# Or copy a particular release:
+python scripts/build_public_docs.py --new-version 0.7.0 --from-version 0.6.0
+```
+
+The command copies an editable snapshot and refreshes the catalog. It refuses
+to overwrite an existing version. You can also copy a version folder manually
+and run the ordinary refresh command. **The folder name is the version
+declaration.** No version list needs updating. The highest version is the
+home-page default. Historical articles remain independent: do not share mutable
+article files between releases, or a new API edit would rewrite older docs.
+
+Adding a version or translation updates `assets/catalog.js` and the new files,
+not the selectors/footer/title of every existing page. Previous/next links are
+relative within a release, so copying it does not leave links to the old one.
+Articles with deliberately written release-specific examples or links remain
+your authored content; review those when preparing a new release.
 
 ## Refresh and check
 
@@ -81,9 +100,10 @@ python scripts/build_public_docs.py --check
 python -m unittest discover -s tests -p test_public_docs.py -v
 ```
 
-The first command refreshes the shared layout, relative URLs, selectors,
+The first command refreshes the shared layout, relative URLs,
 table of contents, previous/next links, and `assets/catalog.js` navigation/search
-index. The sidebar is rendered once from that shared local index, not copied
+index. The sidebar, version/language selectors, footer identity and home-page
+destinations are rendered from that shared local index, not copied
 into every page. Adding a guide updates the shared index and adjacent pager
 links; unrelated pages no longer change merely because the tree changed.
 Commit refreshed files. The article text remains unchanged. No
@@ -119,7 +139,10 @@ Preserve the distinction between actual Lua bindings and C++ declarations.
 
 Open `index.html` directly, or serve this folder as a static site. All resources
 are local; navigation and search work offline with file URLs. Copy the entire
-public folder for an offline edition. To preview over local HTTP:
+public folder for an offline edition. JavaScript is required for selectors,
+navigation/search and home-page destinations, but never requires a server or
+network fetch; article text and ordinary relative links remain readable without
+JavaScript. To preview over local HTTP:
 
 ```sh
 python -m http.server 8765 --bind 127.0.0.1 --directory docs/public

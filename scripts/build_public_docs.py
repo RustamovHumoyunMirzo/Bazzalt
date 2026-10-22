@@ -6,6 +6,8 @@ from html.parser import HTMLParser
 import json
 from pathlib import Path
 import re
+import posixpath
+import shutil
 
 DEFAULT_ROOT = Path(__file__).resolve().parents[1] / 'docs/public'
 VERSION = re.compile(r'^(\d+)\.(\d+)\.(\d+)(?:-([A-Za-z0-9.-]+))?$')
@@ -157,26 +159,17 @@ def outputs(root):
                 for offset,label in ((-1,'Previous'),(1,'Next')):
                     if 0<=position+offset<len(ordered):
                         p=ordered[position+offset]
-                        pager.append(f'<a class="{label.lower()}" href="{prefix}{p["url"]}"><small>{label}</small>{html.escape(p["title"])}</a>')
-                version_options=''.join(f'<option value="{v}"{" selected" if v==version else ""}>{v}</option>' for v in versions)
-                page_languages=[l for l in languages if any(p['version']==version and p['id']==record['id'] and p['language']==l for p in records)]
-                language_options=''.join(f'<option value="{l}"{" selected" if l==language else ""}>{labels[l]}</option>' for l in page_languages)
+                        relative=posixpath.relpath(p['url'],posixpath.dirname(record['url']))
+                        pager.append(f'<a class="{label.lower()}" href="{relative}"><small>{label}</small>{html.escape(p["title"])}</a>')
                 toc=''.join(f'<a class="toc-link{" sub" if h["level"]=="h3" else ""}" href="#{html.escape(h["id"],quote=True)}">{html.escape(h["text"])}</a>' for h in record['headings'])
-                variables=dict(LANG=language,ROOT=prefix,TITLE=html.escape(record['title'],quote=True),DESCRIPTION=html.escape(record['description'],quote=True),
-                    VERSION=version,PAGE=record['id'],LANGUAGE_NAME=labels[language],GROUP=html.escape(flattened[position]['group']),BODY=record['body'],
-                    NAV='<noscript>Enable JavaScript for the navigation tree. Page content and links remain available.</noscript>',PAGER='\n'.join(pager),TOC=toc,VERSIONS=version_options,LANGUAGES=language_options,
+                variables=dict(ROOT=prefix,TITLE=html.escape(record['title'],quote=True),DESCRIPTION=html.escape(record['description'],quote=True),BODY=record['body'],
+                    NAV='<noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript>',PAGER='\n'.join(pager),TOC=toc,
                     BREADCRUMB=' / '.join(html.escape(part) for part in (flattened[position]['group'],record['title']) if part))
                 result[root/record['url']]=re.sub(r'\{\{([A-Z_]+)\}\}',lambda m:variables[m[1]],template)
     index=(root/'index.html').read_text(encoding='utf-8')
-    # Update real static links as well as the JS index; offline/no-JS readers also get the newest version.
+    # The landing page and all selectors resolve destinations from the shared
+    # catalog at runtime. Adding a version/language must not rewrite old pages.
     default=versions[0];default_language='en' if any(p['version']==default and p['language']=='en' for p in records) else next(p['language'] for p in records if p['version']==default)
-    def landing_link(match):
-        attrs=match[1];identifier=match[2]
-        page=next((p for p in records if p['version']==default and p['language']==default_language and p['id']==identifier),None)
-        return '<a'+re.sub(r'href="[^"]*"','href="'+page['url']+'"',attrs)+'data-doc-link="'+identifier+'"' if page else match[0]
-    index=re.sub(r'<a([^>]*?)data-doc-link="([^"]+)"',landing_link,index)
-    choices=''.join(f'<option value="{l}">{labels[l]}</option>' for l in languages)
-    index=re.sub(r'(<select\b[^>]*id="language"[^>]*>)[\s\S]*?(</select>)',lambda m:m[1]+choices+m[2],index)
     result[root/'index.html']=index
     english=LandingTexts(index).values;landing={}
     for language in languages:
@@ -184,13 +177,34 @@ def outputs(root):
         translated=json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
         if set(translated)-set(english): raise ValueError(f'Unknown landing translation keys: {path}')
         landing[language]=dict(english,**translated)
-    public=dict(defaultVersion=default,defaultLanguage=default_language,languages=labels,landing=landing,navigation=navigation,pages=[{k:v for k,v in p.items() if k!='body'} for p in records])
+    public=dict(defaultVersion=default,defaultLanguage=default_language,versions=versions,languages=labels,landing=landing,navigation=navigation,pages=[{k:v for k,v in p.items() if k!='body'} for p in records])
     result[root/'assets/catalog.js']='// Generated navigation/search data. Edit HTML pages, not this file.\nwindow.BazzaltDocs = '+json.dumps(public,ensure_ascii=False,separators=(',',':')).replace('<','\\u003c')+';\n'
     return result
 
 
+def create_version(root, version, source=None):
+    """One command for a release snapshot; never edits historical content."""
+    if not VERSION.fullmatch(version):raise ValueError('Use a semantic version such as 0.7.0')
+    source=source or discover(root)[1][0]
+    if not VERSION.fullmatch(source):raise ValueError('Invalid source version')
+    origin=root/source;destination=root/version
+    if destination.exists():raise ValueError(f'Version already exists: {version}')
+    if not origin.is_dir() or origin.is_symlink():raise ValueError('Source version must be a local docs directory')
+    if any(p.is_symlink() for p in origin.rglob('*')):raise ValueError('Version snapshots cannot contain symlinks')
+    shutil.copytree(origin,destination)
+    return destination
+
+
 def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--check',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--check',action='store_true')
+    parser.add_argument('--new-version',help='Create an editable version snapshot without editing older releases')
+    parser.add_argument('--from-version',help='Version to copy (default: latest discovered release)')
+    args=parser.parse_args()
+    if args.from_version and not args.new_version:parser.error('--from-version requires --new-version')
+    if args.new_version:
+        if args.check:parser.error('--check cannot create a version')
+        try:create_version(DEFAULT_ROOT,args.new_version,args.from_version)
+        except ValueError as error:parser.error(str(error))
     generated=outputs(DEFAULT_ROOT);stale=[]
     for path,content in generated.items():
         if not path.exists() or path.read_text(encoding='utf-8')!=content:

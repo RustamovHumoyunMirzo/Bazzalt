@@ -1,29 +1,29 @@
 <!doctype html>
-<html lang="en">
+<html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Build gameplay interfaces from ordinary scene entities. A Frame owns rendering; child entities supply layout and widgets. The engine updates and draws them automatically.">
-  <title>GUI in C++ | BAZZALT Docs 0.6.0</title>
+  <title>GUI in C++ | BAZZALT Docs</title>
   <link rel="stylesheet" href="../../../assets/docs.css">
   <script src="../../../assets/theme.js"></script>
   <script defer src="../../../assets/catalog.js"></script>
   <script defer src="../../../assets/docs.js"></script>
 </head>
-<body data-root="../../../" data-version="0.6.0" data-page="native/gui">
+<body data-root="../../../">
   <a class="skip-link" href="#content">Skip to content</a>
   <header class="topbar">
     <a class="brand" href="../../../index.html">BAZZALT Docs</a>
     <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
     <div class="header-tools">
-      <label>Version <select id="version" aria-label="Documentation version"><option value="0.6.0" selected>0.6.0</option><option value="0.5.0">0.5.0</option></select></label>
-      <label>Language <select id="language" aria-label="Documentation language"><option value="en" selected>English</option></select></label>
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
       <button data-search-open>Search <kbd>Ctrl K</kbd></button>
       <button class="theme-btn" aria-label="Switch color theme">Theme</button>
     </div>
   </header>
   <div class="docs-layout">
-    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for the navigation tree. Page content and links remain available.</noscript></aside>
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
     <main id="content" tabindex="-1">
       <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / C++ / GUI in C++</nav>
       <article class="doc"><h1>GUI in C++</h1>
@@ -93,12 +93,12 @@ imageEntity.AddComponent&lt;Bazzalt::GuiImage&gt;().SetRenderTexture(feed);</cod
 <h2 id="limits">Foundation boundaries</h2>
 <p><a href="../reference/RenderTexture/en.html">RenderTexture reference</a> covers explicit resizing, live material samplers, and GuiImage.SetTexture/SetRenderTexture/GetRenderTexture. Offscreen cameras render once per tick even when the Game panel is closed. A dependency graph orders chained feeds; cycles sample the previous completed tick safely.</p>
 <p>This is a retained GUI foundation, not a complete desktop UI toolkit. The built-in font is a small ASCII-oriented bitmap font (lowercase currently shares uppercase glyph shapes); unsupported Unicode glyphs show a box while input values preserve UTF-8. There is no font asset/shaping, IME preedit display, caret/selection editing, clipboard editing, scrolling container, accessibility tree, stylesheet, animation system, or drag/drop widget yet. Spatial input ray-tests the GUI plane, not occluding 3D geometry. Offscreen GUI frames are display-only: interacting through a camera feed requires texture-space input forwarding, not yet implemented. A camera sampling itself uses its previous completed output. One game input surface owns scene GUI focus at a time. Hierarchy/layout traversal is bounded to 128 levels. These boundaries are explicit rather than silently simulated.</p></article>
-      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../../../0.6.0/native/audio/en.html"><small>Previous</small>C++ audio</a>
-<a class="next" href="../../../0.6.0/native/reference/en.html"><small>Next</small>C++ API reference</a></nav>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../audio/en.html"><small>Previous</small>C++ audio</a>
+<a class="next" href="../reference/en.html"><small>Next</small>C++ API reference</a></nav>
     </main>
     <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#ownership">A Frame and its children</a><a class="toc-link" href="#modes">Frame modes</a><a class="toc-link" href="#frame-reference">Frame reference</a><a class="toc-link" href="#layout">RectTransform and responsiveness</a><a class="toc-link" href="#widgets">Widget components</a><a class="toc-link" href="#style">GuiStyle reference</a><a class="toc-link" href="#interaction">GUI methods and interaction</a><a class="toc-link" href="#camera-textures">Camera render textures</a><a class="toc-link" href="#limits">Foundation boundaries</a></nav></aside>
   </div>
-  <footer>BAZZALT 0.6.0 documentation · English</footer>
+  <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">
     <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
     <label for="search-input">Search pages and topics</label>
