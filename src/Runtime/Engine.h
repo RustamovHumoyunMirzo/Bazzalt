@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -85,6 +86,7 @@ public:
                          float targetX, float targetY, float targetZ);
     void SetEditorGizmo(bool visible, float x, float y, float z, int mode);
     void SetEditorGizmoHover(int axis);
+    void SetEditorTransformTrail(std::vector<std::array<float,10>> lines);
     UUID PickEditorPrimitive(Vec3 origin, Vec3 direction,Vec3* hitPosition=nullptr,const std::unordered_set<UUID>& excluded={});
     std::unordered_map<UUID,std::pair<Vec3,Vec3>> GetEditorMeshBounds() const;
     void SetEditorEntityState(std::vector<UUID> hidden,std::vector<UUID> unselectable);
@@ -139,6 +141,7 @@ private:
     std::unordered_set<UUID> m_editorHidden,m_editorUnselectable;
     std::vector<UUID> m_selectedObjects;
     Vec3 m_hoverEye{};
+    std::vector<std::array<float,10>> m_editorTransformTrail;
 };
 
 } // namespace Bazzalt::Runtime

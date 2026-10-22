@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="The Audio Mixer edits a .bmixer asset as a routing tree and channel strips. Open it from Window &gt; Audio Mixer, double-click a mixer in the Asset Browser, or choose Edit in Audio Mixer from the asset&#x27;s context menu. This panel edits an asset, not an entity or an Audio Source component.">
+  <title>Audio Mixer panel | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Editor manual / Panels / Audio Mixer panel</nav>
+      <article class="doc"><h1>Audio Mixer panel</h1>
+<p>The Audio Mixer edits a .bmixer asset as a routing tree and channel strips. Open it from Window &gt; Audio Mixer, double-click a mixer in the Asset Browser, or choose Edit in Audio Mixer from the asset's context menu. This panel edits an asset, not an entity or an Audio Source component.</p>
+<h2 id="choose">Choose a mixer</h2>
+<p>Use the asset picker at the top, or drag a .bmixer asset from the Asset Browser into it. Other asset types are rejected. Create a mixer with Asset Browser &gt; Create &gt; Audio Mixer. The selected mixer's name is displayed rather than its UUID.</p>
+<h2 id="channels">Channel strips</h2>
+<p>Each bus has a compact channel strip. Rename it at the top. The custom vertical fader shows a decibel scale and a precise dB readout; double-click it to reset to unity gain (0 dB). It controls gain, not a live signal meter. The numeric Volume field is the exact linear gain, from 0 to 4. Pitch ranges from 0.25 to 4. M mutes the bus, S solos it, and P pauses its voices while keeping playback positions. These settings compose with the bus's parents.</p>
+<p>In narrow docks the routing tree moves above the channel strips. Scroll horizontally for more buses, or vertically when the dock is too short to show all controls. Faders, channel switches and selection colors follow the editor theme. Wheel adjustment requires field focus.</p>
+<p>Select a bus in the routing tree, then use Add Bus to create a child or Remove Bus to remove the selected bus. Removing a bus reparents its children; Audio Source references to the removed UUID should be reassigned. Master cannot be removed.</p>
+<h2 id="routing">Routing</h2>
+<p>The tree shows how buses feed into Master. Drag a bus onto another bus to change its output, or use the output selector on its strip. Routing a bus into itself or its descendants is rejected, preventing feedback cycles. Master is always the root.</p>
+<h2 id="saving">Saving and live playback</h2>
+<p>Edits are saved automatically after a short pause. Save flushes pending changes immediately; switching mixer assets and closing the editor also flush pending edits. Reload discards pending local edits and reloads the asset. If the file changes externally while there are pending edits, the panel refuses to overwrite it and asks you to reload.</p>
+<p>To use the mixer in gameplay, assign it to the active Audio Listener's Audio Mixer field and route sources to its buses. Editing the mixer currently used during Play updates its routing and gain without restarting voices. Editing a different mixer does not switch the active gameplay mixer. Outside Play, the panel authors settings but does not start any audio by itself.</p>
+<p>See <a href="../../audio/en.html">Audio</a> for clips, previews, sources, listeners and distance settings.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../console/en.html"><small>Previous</small>Console</a>
+<a class="next" href="../../menus/en.html"><small>Next</small>Menus and play controls</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#choose">Choose a mixer</a><a class="toc-link" href="#channels">Channel strips</a><a class="toc-link" href="#routing">Routing</a><a class="toc-link" href="#saving">Saving and live playback</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

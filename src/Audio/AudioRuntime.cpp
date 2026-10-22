@@ -254,6 +254,7 @@ void AudioRuntime::SetPaused(bool paused){Data->Paused=paused;for(auto& [id,v]:D
 void AudioRuntime::SetHostPaused(bool paused){if(Data->HostPaused==paused)return;Data->HostPaused=paused;for(auto& [id,v]:Data->Voices)Data->Apply(*v,0);}
 bool AudioRuntime::ReadFrames(float* stereo,std::uint32_t frames){return stereo&&Data->Ready&&Data->NoDevice&&ma_engine_read_pcm_frames(&Data->Engine,stereo,frames,nullptr)==MA_SUCCESS;}
 void AudioRuntime::StopPreview(){std::erase_if(Data->Voices,[](const auto& e){return e.second->Preview;});}
+UUID AudioRuntime::GetMixerAsset() const{return Data->Mixer;}
 AudioVoice AudioRuntime::Preview(UUID id){StopPreview();AudioSource s;s.Clip=AudioClip::Load(id);s.SpatialBlend=0;s.OutputBus={};return Data->Play(s,{}, {},true);}
 void AudioRuntime::Update(float dt){
     auto& d=*Data;

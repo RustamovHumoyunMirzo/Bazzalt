@@ -155,6 +155,14 @@ def BuildStyleSheet(theme: Theme) -> str:
     QWidget[fieldState="modified"] {{ border-color: {t.modified}; }}
     QWidget[fieldState="warning"] {{ border-color: {t.warning}; }}
     QWidget[fieldState="error"] {{ border-color: {t.error}; }}
+    QGroupBox#AudioMixerChannel {{ background: {t.surface_alt}; border: 1px solid {t.border}; border-radius: {t.radius}px; }}
+    QGroupBox#AudioMixerChannel[fieldState="modified"] {{ border-color: {t.accent}; }}
+    QToolButton#MixerChannelSwitch {{ min-width: 23px; padding: 3px; background: {t.surface}; border: 1px solid {t.border}; border-radius: 3px; }}
+    QToolButton#MixerChannelSwitch:checked {{ background: {t.accent}; color: {t.background}; border-color: {t.accent}; }}
+    QSlider::groove:vertical {{ width: 3px; background: {t.border}; border-radius: 1px; }}
+    QSlider::sub-page:vertical {{ background: {t.accent}; }}
+    QSlider::handle:vertical {{ height: 12px; margin: 0 -5px; background: {t.text_muted}; border: 1px solid {t.background}; border-radius: 3px; }}
+    QSlider::handle:vertical:hover {{ background: {t.text}; }}
     QLabel {{ color: {t.text}; }}
     QCheckBox {{ spacing: 7px; min-height: {t.control_height}px; }}
     QCheckBox::indicator {{ width: 14px; height: 14px; background: {t.input_background};

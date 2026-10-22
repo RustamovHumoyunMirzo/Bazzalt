@@ -1,6 +1,7 @@
 #include "Runtime/TextureLibrary.h"
 #include "Bazzalt/AssetManager.h"
 #include <ryml.hpp>
+#include <c4/std/string.hpp>
 #include <fstream>
 #include <sstream>
 #include <unordered_map>

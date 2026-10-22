@@ -220,7 +220,12 @@ for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id
         if(selected)selectedOwners.insert(owner);else if(hovered)hoveredOwners.insert(owner);
     }
     m_renderBackend->SetEditorOutline(std::move(selectedOwners),std::move(hoveredOwners));
+    for(const auto& p:m_editorTransformTrail)guides.push_back({p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9]});
     m_renderBackend->SetEditorGuides(guides);
+}
+void Engine::SetEditorTransformTrail(std::vector<std::array<float,10>> lines){
+    if(lines.size()>2048||std::any_of(lines.begin(),lines.end(),[](const auto& line){return std::any_of(line.begin(),line.end(),[](float value){return !std::isfinite(value);});}))lines.clear();
+    m_editorTransformTrail=std::move(lines);
 }
 
 UUID Engine::PickEditorPrimitive(Vec3 origin,Vec3 direction,Vec3* hitPosition,const std::unordered_set<UUID>& excluded){
@@ -381,6 +386,7 @@ bool Engine::RefreshTextureAsset(const std::filesystem::path& source){if(!m_asse
 
 Scene& Engine::CreateScene()
 {
+    m_editorTransformTrail.clear();
     m_audioRuntime->Stop();
     m_luaRuntime->Stop();m_luaConfigured=false;
     m_scene = std::make_unique<Scene>();
@@ -390,6 +396,7 @@ Scene& Engine::CreateScene()
 
 void Engine::SetScene(std::unique_ptr<Scene> scene)
 {
+    m_editorTransformTrail.clear();
     if (!scene) throw std::invalid_argument("Engine scene cannot be null");
     m_audioRuntime->Stop();
     m_luaRuntime->Stop();m_luaConfigured=false;
@@ -400,6 +407,7 @@ void Engine::SetScene(std::unique_ptr<Scene> scene)
 
 std::unique_ptr<Scene> Engine::TakeScene()
 {
+    m_editorTransformTrail.clear();
     m_audioRuntime->Stop();
     m_luaRuntime->Stop();m_luaConfigured=false;
     DetachRenderSystems();
@@ -416,6 +424,7 @@ bool Engine::SaveScene(const std::filesystem::path& path)
 
 bool Engine::LoadScene(const std::filesystem::path& path)
 {
+    m_editorTransformTrail.clear();
     m_lastError.clear();
     auto scene = std::make_unique<Scene>();
     if (!m_sceneSerializer.Load(*scene, path))

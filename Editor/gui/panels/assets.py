@@ -75,7 +75,8 @@ class AssetBrowserPanel(QWidget):
     def _Icon(self,path):
         path=Path(path);ext=path.suffix.lower()
         if ext==".lua" and self._resources:return self._resources.Icon("icons/abrowser/lua.svg")
-        if ext in AUDIO_EXTENSIONS|{".bmixer"} and self._resources:return self._resources.Icon("icons/abrowser/audio.svg")
+        if ext==".bmixer" and self._resources:return self._resources.Icon("icons/abrowser/audiomixer.svg")
+        if ext in AUDIO_EXTENSIONS and self._resources:return self._resources.Icon("icons/abrowser/audio.svg")
         if ext in MODEL_EXTENSIONS:
             image=self._thumbnails.Request(path)
             if image is not None and not image.isNull():return QIcon(QPixmap.fromImage(image))
@@ -280,6 +281,7 @@ class AssetBrowserPanel(QWidget):
         open_with=menu.addAction(tr("assets.open_with"));open_with.setVisible(external);open_with.triggered.connect(lambda _=False:self._OpenExternal(reveal_paths,True))
         audio=bool(current and current.suffix.lower() in AUDIO_EXTENSIONS)
         preview=menu.addAction(tr("audio.preview"));preview.setVisible(audio);preview.triggered.connect(lambda:self.AssetActivated.emit(current) if current else None)
+        mixer=menu.addAction(tr("audio.edit_mixer"));mixer.setVisible(bool(current and current.suffix.lower()==".bmixer"));mixer.triggered.connect(lambda:self.AssetActivated.emit(current) if current else None)
         load=menu.addAction(tr("assets.load_scene"));is_scene=bool(current and current.suffix.lower()==".bscene");load.setVisible(is_scene);load.setEnabled(bool(is_scene and not (callable(self.SceneLoadedChecker) and self.SceneLoadedChecker(current))));load.triggered.connect(lambda:self.LoadSceneRequested.emit(current) if current else None)
         rename=menu.addAction(tr("assets.rename"));rename.setEnabled(bool(target is not None and Path(target.data(0,Qt.ItemDataRole.UserRole))!=self._root) if widget is self.Tree else len(self.Browser.selectedItems())==1);rename.triggered.connect(lambda:self.Tree.editItem(target,0) if widget is self.Tree else self.Browser.editItem(self.Browser.currentItem()));copy=menu.addAction(tr("assets.copy"));copy.setEnabled(selected);copy.triggered.connect(self._Copy);paste=menu.addAction(tr("assets.paste"));paste.setEnabled(bool(self._clipboard));paste.triggered.connect(self._Paste);delete=menu.addAction(tr("assets.delete"));delete.setEnabled(selected);delete.triggered.connect(self._Delete);menu.addSeparator();menu.addAction(tr("assets.refresh"),self.Refresh)
         reveal_key="assets.reveal" if sys.platform=="win32" else "assets.reveal_finder" if sys.platform=="darwin" else "assets.reveal_manager"

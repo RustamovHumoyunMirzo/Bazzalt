@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel
                                QStackedLayout, QToolButton,QVBoxLayout, QWidget)
 from ..gizmos import GizmoDrag, GizmoDelta, GizmoHandle, GizmoMode, PickAxis, PickRotationAxis, Ray, Vec3
 from ..transform_units import TransformUnits
+from ..transform_trails import TransformTrail
 
 
 class SelectionMarquee(QWidget):
@@ -50,6 +51,9 @@ class NativeRenderSurface(QWidget):
         self._distance = 12.0; self._target = [0.0, 0.0, 0.0]
         self._eye = (6.0,4.0,8.0); self._selection = None; self._mode = GizmoMode.Select
         self._gizmo_drag = None; self._hover_handle = None; self._last_delta = Vec3(); self._last_angle=0.0;self._last_scale=Vec3(1,1,1)
+        self._free_move_pending=None
+        self._trail=None;self._trail_options={"trail_translate":True,"trail_rotate":True,"trail_scale":True,"trail_duration":1.5}
+        self._trail_timer=QTimer(self);self._trail_timer.setSingleShot(True);self._trail_timer.timeout.connect(self.ClearTransformTrail)
         self._orientation_animation=None
         self._orientation_visible=True
         self._has_scene_pointer=False
@@ -103,6 +107,7 @@ class NativeRenderSurface(QWidget):
             width, height = self._PixelSize(); self.Runtime.ResizeViewport(self.ViewportId, width, height,self.devicePixelRatioF())
 
     def Detach(self) -> None:
+        self._EndTransformDrag();self.ClearTransformTrail()
         self._DestroySelectionBand()
         if self._attached: self.Runtime.DestroyViewport(self.ViewportId); self._attached = False
 
@@ -134,9 +139,31 @@ class NativeRenderSurface(QWidget):
 
     def SetSelection(self, position) -> None:
         self._selection = Vec3(*position) if position is not None else None
-        if position is None:self._SetHover(None)
+        if position is None:self._SetHover(None);self.ClearTransformTrail()
     def SetGizmoMode(self, mode: GizmoMode) -> None:
         self._mode = mode; self._SetHover(None)
+    def SetTrailPreferences(self,options):
+        self._trail_options.update({key:options[key] for key in self._trail_options if key in options});self.ClearTransformTrail()
+    def ClearTransformTrail(self):
+        self._trail_timer.stop();self._trail=None
+        if hasattr(self.Runtime,"SetTransformTrail"):self.Runtime.SetTransformTrail([])
+    def _StartTransformDrag(self,drag):
+        self._gizmo_drag=drag;self._last_delta=Vec3();self._last_angle=0.;self._last_scale=Vec3(1,1,1)
+        self.ClearTransformTrail()
+        radius=max(.01,(drag.Origin-Vec3(*self._eye)).Length())*2*tan(radians(30))*96/max(1,self.height())
+        self._trail=TransformTrail(drag.Origin,radius)
+        self.GizmoDragStarted.emit()
+    def _UpdateTransformTrail(self,result):
+        mode=self._gizmo_drag.Mode
+        if self._trail is not None and self._trail_options.get("trail_"+mode.value,True) and hasattr(self.Runtime,"SetTransformTrail"):
+            self.Runtime.SetTransformTrail(self._trail.Build(mode,result))
+    def _EndTransformDrag(self):
+        dragged=self._gizmo_drag is not None;self._gizmo_drag=None;self._free_move_pending=None
+        if dragged:
+            self.GizmoDragFinished.emit()
+            duration=max(0.,min(10.,float(self._trail_options["trail_duration"])))
+            if duration>0:self._trail_timer.start(round(duration*1000))
+            else:self.ClearTransformTrail()
     def SetMoveSpeed(self,speed:float)->None:self._move_speed=max(.1,float(speed))
     def SetCameraPreset(self,preset:str)->None:
         values={"perspective":(36.,20.),"top":(0.,89.),"bottom":(0.,-89.),"left":(-90.,0.),"right":(90.,0.),"front":(0.,0.),"back":(180.,0.)}
@@ -243,7 +270,7 @@ class NativeRenderSurface(QWidget):
         return tuple(origin[i]+direction[i]*distance for i in range(3))
 
     def _PickGizmo(self, point: QPoint):
-        if self._selection is None or self._mode is GizmoMode.Select:return None
+        if self._selection is None or self._mode is GizmoMode.Select or not getattr(self,'_gizmos_visible',True):return None
         ray=self._Ray(point);depth=(Vec3(*self._eye)-self._selection).Length();world_per_pixel=depth*2.*tan(radians(30.))/max(1,self.height());length=world_per_pixel*96.;tolerance=world_per_pixel*11.
         if self._mode is GizmoMode.Rotate:return PickRotationAxis(ray,self._selection,length/.9,tolerance)
         # Match the visible arrow shafts in screen space; a ray near the common
@@ -313,10 +340,12 @@ class NativeRenderSurface(QWidget):
                 self._selection_box_start=None;self._selection_box_dragging=False;self._selection_box_preview=();self._pending_pick=""
                 self._DestroySelectionBand()
                 self._SetHover(handle)
-                self.GizmoDragStarted.emit()
-                self._gizmo_drag=GizmoDrag(self._mode,handle,ray,self._selection,(Vec3(*self._target)-Vec3(*self._eye)).Normalized());self._last_delta=Vec3();self._last_angle=0.0;self._last_scale=Vec3(1,1,1);event.accept();return
+                self._StartTransformDrag(GizmoDrag(self._mode,handle,ray,self._selection,(Vec3(*self._target)-Vec3(*self._eye)).Normalized()));event.accept();return
         if self.IsScene and event.button()==Qt.MouseButton.LeftButton:
             entity_id=self._PickSceneObject(self._last) or self._PickSceneIcon(self._last)
+            if self._mode is not GizmoMode.Select and self._selection is not None and entity_id in self._selected_entity_ids and not event.modifiers()&Qt.KeyboardModifier.ControlModifier:
+                self._free_move_pending=(QPoint(self._last),self._Ray(self._last),self._selection,entity_id)
+                self._selection_box_start=None;event.accept();return
             self._selection_box_start=self._last;self._selection_box_additive=bool(event.modifiers()&Qt.KeyboardModifier.ControlModifier)
             self._selection_box_preview=();self._selection_box_dragging=False;self._pending_pick=entity_id
             event.accept();return
@@ -326,6 +355,10 @@ class NativeRenderSurface(QWidget):
         if not self.IsScene: return
         current = event.position().toPoint(); delta = current - self._last; self._last = current
         self._scene_pointer=QPoint(current)
+        if self._free_move_pending is not None and self._gizmo_drag is None and event.buttons()&Qt.MouseButton.LeftButton:
+            point,ray,origin,_=self._free_move_pending
+            if (current-point).manhattanLength()<=4:return
+            self._StartTransformDrag(GizmoDrag(GizmoMode.Translate,GizmoHandle.Screen,ray,origin,(Vec3(*self._target)-Vec3(*self._eye)).Normalized()))
         if self._selection_box_start is not None and event.buttons()&Qt.MouseButton.LeftButton:
             distance=(current-self._selection_box_start).manhattanLength()
             if distance<=4 and not self._selection_box_dragging:return
@@ -350,12 +383,13 @@ class NativeRenderSurface(QWidget):
                 angle=Snap(angle,radians(units["rotation_step"]))
                 scale=Vec3(*(max(.0001,1+Snap(value-1,units["scale_step"])) for value in (scale.X,scale.Y,scale.Z)))
             result=GizmoDelta(Translation=translation,RotationRadians=angle,RotationAxis=result.RotationAxis,Scale=scale)
-            if self._mode is GizmoMode.Translate:
+            if self._gizmo_drag.Mode is GizmoMode.Translate:
                 step=result.Translation-self._last_delta;self._last_delta=result.Translation;self.TranslationDragged.emit(step)
-            elif self._mode is GizmoMode.Rotate:
+            elif self._gizmo_drag.Mode is GizmoMode.Rotate:
                 step=result.RotationRadians-self._last_angle;self._last_angle=result.RotationRadians;self.RotationDragged.emit(result.RotationAxis,step)
             else:
                 prior=self._last_scale;value=result.Scale;step=Vec3(value.X/prior.X,value.Y/prior.Y,value.Z/prior.Z);self._last_scale=value;self.ScaleDragged.emit(step)
+            self._UpdateTransformTrail(result)
             return
         if event.buttons() & Qt.MouseButton.RightButton:
             movement_keys={Qt.Key.Key_W,Qt.Key.Key_A,Qt.Key.Key_S,Qt.Key.Key_D,Qt.Key.Key_Q,Qt.Key.Key_E}
@@ -381,6 +415,8 @@ class NativeRenderSurface(QWidget):
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if event.button()==Qt.MouseButton.LeftButton:
+            if self._free_move_pending is not None and self._gizmo_drag is None:
+                self.EntityPicked.emit(self._free_move_pending[3],False);self._free_move_pending=None;event.accept();return
             if self._selection_box_start is not None:
                 start=self._selection_box_start;self._selection_box_start=None;end=event.position().toPoint();dragging=self._selection_box_dragging;pending=self._pending_pick
                 self._selection_box_dragging=False;self._pending_pick=""
@@ -392,8 +428,7 @@ class NativeRenderSurface(QWidget):
                     self.EntityPicked.emit(pending,self._selection_box_additive)
                 else:self.SelectionBoxStarted.emit(False)
                 self._selection_box_preview=();self.SelectionBoxFinished.emit();event.accept();return
-            dragged=self._gizmo_drag is not None;self._gizmo_drag=None
-            if dragged:self.GizmoDragFinished.emit()
+            self._EndTransformDrag()
             self._hover_handle=None;self._SetHover(self._PickGizmo(event.position().toPoint()))
         if event.button()==Qt.MouseButton.RightButton:self._navigating=False;self._fly_navigation=False;self._keys.clear();self.NavigationChanged.emit(False);event.accept()
 
@@ -411,6 +446,7 @@ class NativeRenderSurface(QWidget):
         event.accept()
 
     def focusOutEvent(self,event)->None:
+        self._EndTransformDrag()
         self.Runtime.SetObjectHover("",self._eye)
         was_navigating=self._navigating;self._keys.clear();self._navigating=False;self._fly_navigation=False
         if was_navigating:self.NavigationChanged.emit(False)

@@ -20,6 +20,7 @@ public:
     void Stop();
     AudioVoice Preview(UUID clip);
     void StopPreview();
+    UUID GetMixerAsset() const;
     static AudioRuntime* Current();
     struct Impl;
     std::unique_ptr<Impl> Data;

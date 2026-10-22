@@ -336,7 +336,7 @@ class EditorShellTests(unittest.TestCase):
     def test_primitive_drag_starts_marquee_and_gizmo_remains_pickable(self) -> None:
         if not self.Window.Runtime.IsAvailable():self.skipTest("native editor bridge is not built")
         entity_id=self.Window.Runtime.CreateEntity("Interactive Cube");self.Window.Runtime.AddComponent(entity_id,"Primitive Object")
-        surface=self.Window.Scene.Surface;surface.resize(640,480);surface.SetGizmoMode(GizmoMode.Translate);self.Window.Controller.SelectEntity(entity_id)
+        surface=self.Window.Scene.Surface;surface.resize(640,480);surface.SetGizmoMode(GizmoMode.Select);self.Window.Controller.SelectEntity(entity_id)
         projected=surface._Project((0,0,0));point=QPoint(round(projected[0]),round(projected[1]))
         object_point=next((QPoint(x,y) for y in range(point.y()-45,point.y()+46,3) for x in range(point.x()-45,point.x()+46,3) if surface._PickSceneObject(QPoint(x,y))==entity_id and surface._PickGizmo(QPoint(x,y)) is None),None);self.assertIsNotNone(object_point)
         surface.mousePressEvent(QMouseEvent(QMouseEvent.Type.MouseButtonPress,QPointF(object_point),Qt.MouseButton.LeftButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
@@ -536,7 +536,7 @@ class EditorShellTests(unittest.TestCase):
     def test_default_workspace_registers_all_builtin_panels(self) -> None:
         self.assertEqual(
             {panel.panel_id for panel in self.Window.Docking.panels()},
-            {"console", "output", "scene", "hierarchy", "properties", "asset_browser"},
+            {"console", "output", "scene", "hierarchy", "properties", "asset_browser", "audio_mixer"},
         )
         self.assertTrue(all(not panel.icon.isNull() for panel in self.Window.Docking.panels()))
 

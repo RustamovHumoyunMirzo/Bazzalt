@@ -163,6 +163,8 @@ class RuntimeService(QObject):
         return [dict(bus) for bus in self._host.audio_buses(mixer)] if self._host and hasattr(self._host,"audio_buses") else []
     def SaveAudioMixer(self,identity:str,buses:list)->bool:
         return bool(self._host and hasattr(self._host,"save_audio_mixer") and self._host.save_audio_mixer(identity,buses))
+    def RefreshAudioMixer(self,identity:str)->bool:
+        return bool(self._host and hasattr(self._host,"refresh_audio_mixer") and self._host.refresh_audio_mixer(identity))
     def SetEditorStatisticsText(self,text:str,visible:bool)->None:
         if self._host and hasattr(self._host,"set_statistics_text"):self._host.set_statistics_text(text,visible)
 
@@ -310,6 +312,8 @@ class RuntimeService(QObject):
     def SetGizmoHover(self, axis: int) -> None:
         if self._host is not None and hasattr(self._host, "set_gizmo_hover"):
             self._host.set_gizmo_hover(axis)
+    def SetTransformTrail(self,lines)->None:
+        if self._host is not None and hasattr(self._host,"set_transform_trail"):self._host.set_transform_trail(lines)
 
     def PickPrimitive(self,origin,direction)->str:
         return self._host.pick_primitive(origin,direction) if self._host is not None and hasattr(self._host,"pick_primitive") else ""

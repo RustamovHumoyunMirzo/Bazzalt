@@ -79,6 +79,16 @@ refreshes just that asset. Runtime bus setters never write project files.
 
 ## Editor and bindings
 
+`Editor/gui/panels/audio_mixer.py` is the dockable mixer asset editor. Its tree
+and channel strips operate on copied bus settings, with 250 ms debounced saves
+through the validated atomic native writer. Parent pickers exclude descendants;
+tree drops use the same cycle guards. Pending edits are flushed before switching
+assets or accepting editor close, and external mtime/size changes block pending
+writes instead of silently overwriting another editor's changes. Previewing and
+editing are independent. Saving a mixer only updates live routing when that
+asset is the mixer actually loaded in AudioRuntime, not every mixer edited while
+playing. The panel participates in the normal Window menu and workspace state.
+
 AudioClipImporter validates/caches audio with UUID metadata. AudioMixerImporter
 validates the graph before caching. Inspector fields and native setters use
 the same source validation, typed clip pickers reject unrelated assets, and
@@ -94,6 +104,13 @@ guides use the source direction and full cone angle. No audio icon/guide belongs
 to a Game view. Picking includes enabled audio icons.
 
 ## Verification and extension
+
+The mixer channel fader is a custom-painted QSlider with a logarithmic dB
+scale, unity double-click reset and keyboard support. It deliberately shows
+gain, not fabricated signal peaks. Palette roles drive all paint colors.
+Below 480 px the routing splitter switches to vertical; channel strips keep
+their compact width and remain accessible through both scroll axes. Mixer
+asset and panel icons use audiomixer.svg and theme-specific tab_amixer.svg.
 
 `BazzaltAudioTests` renders real float PCM with a no-device miniaudio engine,
 testing transport, output gain, disabled listeners, distance falloff, buses,

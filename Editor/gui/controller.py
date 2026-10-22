@@ -53,6 +53,8 @@ class EditorController(QObject):
         self._lua_play_pending=False;self.LuaAssets=LuaAssetWatcher(self.Runtime,self)
         self.LuaAssets.Finished.connect(self._LuaImportFinished);self.LuaAssets.Failed.connect(self._LuaImportFailed)
         self.MaterialCompiler=MaterialCompiler(runtime);self._material_check=0.0;self._material_error=""
+        window.AudioMixer.AssetProvider=self._ProjectAssets
+        window.AudioMixer.Saved.connect(self._MixerSaved)
         self._asset_database_dirty=True
         self._material_scenes=None
         self.History=SceneHistory(runtime,self)
@@ -897,7 +899,7 @@ class EditorController(QObject):
         self.Runtime.SetSelectionOutline(self.SelectedEntities)
         modes={GizmoMode.Select:0,GizmoMode.Translate:1,GizmoMode.Rotate:2,GizmoMode.Scale:3}
         if self.SelectedEntity and self.Runtime.IsEditorHidden(self.SelectedEntity):self.Window.Scene.Surface.SetSelection(None);self.Runtime.SetGizmo("",0);return
-        if not self._gizmos_visible:self.Runtime.SetGizmo("",0);return
+        if not self._gizmos_visible:modes={mode:0 for mode in modes}
         if len(self.SelectedEntities)>1:
             positions=[]
             for value in self.SelectedEntities:
@@ -914,6 +916,7 @@ class EditorController(QObject):
 
     def SetGizmosVisible(self,visible:bool)->None:
         self._gizmos_visible=bool(visible)
+        self.Window.Scene.Surface._gizmos_visible=bool(visible)
         blocker=QSignalBlocker(self.Window.Scene.GizmoToggle);self.Window.Scene.GizmoToggle.setChecked(bool(visible));del blocker
         self.Window.MenuBar.GizmosAction.setChecked(bool(visible));self._UpdateGizmo()
     def FocusSelected(self)->None:
@@ -947,9 +950,18 @@ class EditorController(QObject):
     def ActivateAsset(self,path)->None:
         path=Path(path)
         if path.suffix.lower()==".bscene":self.LoadSceneAdditive(path)
+        elif path.suffix.lower()==".bmixer":self.OpenAudioMixer(path)
         elif path.suffix.lower() in AUDIO_EXTENSIONS:
             self.SelectAsset(path)
             if hasattr(self,"_audio_preview"):self._audio_preview.Play()
+    def OpenAudioMixer(self,path):
+        info=self.Runtime.AssetInfo(str(path))
+        if not info:return
+        if self.Window.AudioMixer.Open(info["uuid"]):
+            if not self.Window.Docking.is_panel_open("audio_mixer"):self.Window.Docking.dock("audio_mixer","center",relative_to="asset_browser")
+            self.Window.Docking.activate_panel("audio_mixer")
+    def _MixerSaved(self,path):
+        if getattr(self,"_inspected_asset",None)==Path(path):QTimer.singleShot(0,self,lambda:self.SelectAsset(path) if self._inspected_asset==Path(path) else None)
 
     def LoadSceneAdditive(self,path)->None:
         self.Runtime.LoadSceneAdditive(path)
@@ -1292,7 +1304,14 @@ class EditorController(QObject):
 
     def ApplyGizmoTranslation(self, delta) -> bool:  # type: ignore[no-untyped-def]
         targets=self.SelectedEntities or ([self.SelectedEntity] if self.SelectedEntity else [])
-        results=[self.Runtime.Translate(entity,(delta.X,delta.Y,delta.Z)) for entity in targets];changed=any(results)
+        selected=set(targets);roots=[]
+        for entity in targets:
+            parent=self.Runtime.EntityDetails(entity).get("parent","");visited=set();inherited=False
+            while parent and parent not in visited:
+                if parent in selected:inherited=True;break
+                visited.add(parent);parent=self.Runtime.EntityDetails(parent).get("parent","")
+            if not inherited:roots.append(entity)
+        results=[self.Runtime.Translate(entity,(delta.X,delta.Y,delta.Z)) for entity in roots];changed=any(results)
         if changed:self.SetDirty(True)
         self._UpdateGizmo();return changed
 

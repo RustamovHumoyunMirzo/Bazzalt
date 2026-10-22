@@ -44,7 +44,7 @@ class TodoEditorToolsTests(unittest.TestCase):
             self.assertIn("9",locale.Translate("statistics.value."+key,value=9))
     def test_drag_quantizes_total_not_each_mouse_event(self):
         surface=NativeRenderSurface(Mock(),True);surface.TransformUnits=TransformUnits({"translation_step":.5,"snapping_enabled":True});surface._mode=GizmoMode.Translate
-        surface._gizmo_drag=Mock();surface._gizmo_drag.Calculate.side_effect=[GizmoDelta(Translation=Vec3(.2,0,0)),GizmoDelta(Translation=Vec3(.4,0,0))]
+        surface._gizmo_drag=Mock();surface._gizmo_drag.Mode=GizmoMode.Translate;surface._gizmo_drag.Calculate.side_effect=[GizmoDelta(Translation=Vec3(.2,0,0)),GizmoDelta(Translation=Vec3(.4,0,0))]
         values=[];surface.TranslationDragged.connect(lambda value:values.append(value.X))
         for x in (20,21):surface.mouseMoveEvent(QMouseEvent(QEvent.Type.MouseMove,QPointF(x,30),QPointF(x,30),QPointF(x,30),Qt.MouseButton.NoButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
         self.assertEqual(values,[0,.5]);self.assertEqual(surface._scene_pointer.x(),21);surface.deleteLater()

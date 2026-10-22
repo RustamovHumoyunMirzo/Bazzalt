@@ -161,7 +161,11 @@ public:
         catch(const std::exception& error){m_bridgeError=error.what();return false;}
         if(!Runtime::SaveAudioMixer(asset->SourcePath,buses,m_bridgeError))return false;
         if(!m_engine->RefreshTextureAsset(asset->SourcePath)){m_bridgeError=m_engine->GetLastError();return false;}
-        if(m_playing)AudioMixer::Load(asset->Id);return true;
+        if(m_playing&&m_engine->GetAudioRuntime().GetMixerAsset()==asset->Id)AudioMixer::Load(asset->Id);return true;
+    }
+    bool RefreshMixer(const std::string& id){
+        auto asset=AssetManager::GetAsset(ParseUuid(id));if(!asset||asset->Importer!="Bazzalt.AudioMixer")return false;
+        if(!m_engine->RefreshTextureAsset(asset->SourcePath)){m_bridgeError=m_engine->GetLastError();return false;}return true;
     }
 
     bool LoadProject(const std::string& path) {
@@ -540,6 +544,7 @@ public:
         m_engine->SetEditorGizmo(mode!=0,position[0],position[1],position[2],mode);
     }
     void SetGizmoHover(int axis) { m_engine->SetEditorGizmoHover(axis); }
+    void SetTransformTrail(std::vector<std::array<float,10>> lines){m_engine->SetEditorTransformTrail(std::move(lines));}
     std::string PickPrimitive(const std::array<float,3>& origin,const std::array<float,3>& direction){auto id=m_engine->PickEditorPrimitive({origin[0],origin[1],origin[2]},{direction[0],direction[1],direction[2]});return id.IsRoot()?std::string{}:id.ToString();}
     py::object RaycastEditor(const std::array<float,3>& origin,const std::array<float,3>& direction,const std::vector<std::string>& excluded){std::unordered_set<UUID> ignored;for(const auto& value:excluded)if(!value.empty())ignored.insert(ParseUuid(value));Vec3 position;const auto id=m_engine->PickEditorPrimitive({origin[0],origin[1],origin[2]},{direction[0],direction[1],direction[2]},&position,ignored);if(id.IsRoot())return py::none();return py::make_tuple(position.X,position.Y,position.Z);}
     void SetObjectHover(const std::string& id,const std::array<float,3>& eye){m_engine->SetEditorObjectHover(id.empty()?UUID{}:ParseUuid(id),{eye[0],eye[1],eye[2]});}
@@ -780,10 +785,12 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("audio_control", &Bazzalt::EditorBridge::EditorHost::AudioControl)
         .def("audio_buses", &Bazzalt::EditorBridge::EditorHost::AudioBuses, py::arg("mixer")="")
         .def("save_audio_mixer", &Bazzalt::EditorBridge::EditorHost::SaveMixer)
+        .def("refresh_audio_mixer", &Bazzalt::EditorBridge::EditorHost::RefreshMixer)
         .def("set_component_property", &Bazzalt::EditorBridge::EditorHost::SetComponentProperty)
         .def("set_gizmo", &Bazzalt::EditorBridge::EditorHost::SetGizmo)
         .def("set_gizmo_position", &Bazzalt::EditorBridge::EditorHost::SetGizmoPosition)
         .def("set_gizmo_hover", &Bazzalt::EditorBridge::EditorHost::SetGizmoHover)
+        .def("set_transform_trail", &Bazzalt::EditorBridge::EditorHost::SetTransformTrail)
         .def("pick_primitive", &Bazzalt::EditorBridge::EditorHost::PickPrimitive)
         .def("raycast_editor", &Bazzalt::EditorBridge::EditorHost::RaycastEditor)
         .def("set_object_hover", &Bazzalt::EditorBridge::EditorHost::SetObjectHover)

@@ -25,7 +25,9 @@ from .panels import (
 from .widgets import EditorMenuBar, EditorToolbar
 from .controller import EditorController
 from .cursor_policy import EditorCursorPolicy
+from .wheel_policy import EditorWheelPolicy
 from .object_tools import ObjectTools
+from .panels.audio_mixer import AudioMixerPanel
 
 
 class Editor(QMainWindow):
@@ -50,6 +52,8 @@ class Editor(QMainWindow):
         # from a field into panels, menus, docking tabs, or toolbars.
         self.CursorPolicy = EditorCursorPolicy(self)
         application.installEventFilter(self.CursorPolicy)
+        self.WheelPolicy=EditorWheelPolicy(self)
+        application.installEventFilter(self.WheelPolicy)
         self.ThemeManager = theme_manager or ThemeManager(application)
         self.Resources = resources or ResourceManager()
         self.Localization = localization or LocalizationManager(self.Resources)
@@ -82,6 +86,7 @@ class Editor(QMainWindow):
         self.Hierarchy = HierarchyPanel(self.Localization, install_shortcuts=False)
         self.Properties = PropertiesPanel(self.Localization)
         self.AssetBrowser = AssetBrowserPanel(self.Localization, self.Resources)
+        self.AudioMixer=AudioMixerPanel(self.Runtime,self.Localization,self.Resources)
         from ..asset_opening import ExternalAssetOpener
         self.AssetBrowser.ExternalOpener = ExternalAssetOpener(self._settings, self._settings_saver)
         self._PanelWidgets = {
@@ -91,6 +96,7 @@ class Editor(QMainWindow):
             "hierarchy": self.Hierarchy,
             "properties": self.Properties,
             "asset_browser": self.AssetBrowser,
+            "audio_mixer":self.AudioMixer,
         }
         self._RegisterPanels()
         self._default_layout=self._LoadDefaultWorkspace()
@@ -239,6 +245,7 @@ class Editor(QMainWindow):
         scene=value["scene"];self.Runtime.SetGrid(scene["grid_visible"],scene["grid_plane"])
         self.Scene.GridToggle.setChecked(bool(scene["grid_visible"]));self.Scene.GridPlane.setCurrentIndex(int(scene["grid_plane"]))
         self.Scene.Surface.SetMoveSpeed(scene["navigation_speed"])
+        self.Scene.Surface.SetTrailPreferences(scene)
         self.Scene.Surface.TransformUnits=dict(value["transform"])
         self.Scene.HighLevelToggle.setChecked(bool(scene["high_level_selection"]));self.Scene.Surface.SetHighLevelSelection(bool(scene["high_level_selection"]))
         self.Scene.PivotMode.setCurrentIndex(1 if scene["pivot_center"] else 0);self.Scene.LocalToggle.setChecked(bool(scene["local_space"]))
@@ -274,7 +281,7 @@ class Editor(QMainWindow):
         theme_name = (
             "light" if self.ThemeManager.GetTheme().background == "#d4d4d4" else "dark"
         )
-        filename = "assetbrowser" if panel_id == "asset_browser" else panel_id
+        filename = {"asset_browser":"assetbrowser","audio_mixer":"amixer"}.get(panel_id,panel_id)
         return self.Resources.Icon(f"icons/{theme_name}/tab_{filename}.svg")
 
     def _RegisterPanels(self) -> None:
@@ -320,6 +327,7 @@ class Editor(QMainWindow):
             relative_to=assets,
             panel_id="console",
         )
+        self.Docking.add_panel(self.AudioMixer,tr("panel.audio_mixer"),self._PanelIcon("audio_mixer"),relative_to=assets,panel_id="audio_mixer")
 
     def _UpdatePanelPresentation(self) -> None:
         for panel_id in self._PanelWidgets:
@@ -366,6 +374,8 @@ class Editor(QMainWindow):
             except (OSError,ValueError):pass
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if not self.AudioMixer.Flush():
+            QMessageBox.warning(self,self.Localization.Translate("panel.audio_mixer"),self.AudioMixer.Error.text());event.ignore();return
         if self.Controller.IsDirty and self.isVisible() and self.PreferenceValue("general","confirm_unsaved",True):
             tr=self.Localization.Translate;dialog=QMessageBox(self)
             dialog.setWindowTitle(tr("dialog.unsaved_title"));dialog.setText(tr("dialog.unsaved_message"));dialog.setIcon(QMessageBox.Icon.Warning)
@@ -380,6 +390,7 @@ class Editor(QMainWindow):
         self.Controller.GameInput.Close()
         self.ObjectTools.Close()
         self.Scene.Surface._fly_timer.stop();self.Output.Surface._fly_timer.stop()
+        self.Scene.Surface.ClearTransformTrail();self.AudioMixer.SyncTimer.stop()
         self._layout_save_timer.stop();self._SaveWorkspace()
         self.Scene.Detach(); self.Output.Detach()
         self.Controller.Stop()
@@ -388,6 +399,7 @@ class Editor(QMainWindow):
         self.Runtime.Release()
         application=QApplication.instance()
         if application is not None:application.removeEventFilter(self.CursorPolicy)
+        if application is not None:application.removeEventFilter(self.WheelPolicy)
         if application is not None:
             try:application.focusChanged.disconnect(self.RefreshEditActions)
             except RuntimeError:pass
