@@ -383,6 +383,8 @@ class EditorController(QObject):
         self._script_rule_rows=[];self._script_descriptor_cache={}
         self._inspected_asset=Path(path)
         path=Path(path);self.SelectedEntity="";self.SelectedEntities=[];self.Window.Scene.Surface.SetSelection(None);self.Runtime.SetGizmo("",0);self.Window.Properties.Clear();self.Window.Properties.AddComponentButton.setVisible(False)
+        resolver=getattr(self.Runtime,'ResolveAssetRecord',None)
+        if path.suffix.lower() in AUDIO_EXTENSIONS|{'.bmixer'} and callable(resolver):resolver(path)
         self.InspectedScene="";self._UpdateGizmo()
         section=self.Window.Properties.AddComponentSection("asset",self.Window.Localization.Translate("properties.asset"),removable=False)
         for label,value in (("Name",path.name),("Type",path.suffix.lower() or "Folder"),("Path",str(path)),("Size",self._FormatAssetSize(self._AssetSize(path)))):section.AddField(self.Window.Localization.Translate(f"properties.asset_{label.lower()}") if label!="Name" else self.Window.Localization.Translate("properties.asset_name"),QLabel(value))
@@ -408,8 +410,8 @@ class EditorController(QObject):
         tr=self.Window.Localization.Translate;section=self.Window.Properties.AddComponentSection("audio_clip",tr("audio.clip"),removable=False)
         for key in ("duration","channels","sample_rate","frames"):
             section.AddField(tr("audio."+key),QLabel(f'{info[key]:.2f}' if key=="duration" else str(info[key])))
-        self._audio_preview=AudioPreview(self.Runtime,info["uuid"],self.Window.Localization,info["duration"])
-        section.AddField(tr("audio.preview"),self._audio_preview)
+        self._audio_preview=AudioPreview(self.Runtime,info["uuid"],self.Window.Localization,info["duration"],waveform_path=info.get('waveform_path'))
+        section.AddWideWidget(self._audio_preview)
 
     def _InspectAudioMixer(self,path):
         from .widgets.mixer_preview import MixerAssetPreview
@@ -423,7 +425,7 @@ class EditorController(QObject):
         provider=getattr(self,"_ProjectAssets",None)
         try:assets=provider() if provider else []
         except AttributeError:assets=[]
-        section.AddField(tr("audio.preview"),MixerAssetPreview(self.Runtime,info["uuid"],buses,self.Window.Localization,assets,getattr(self.Window,"ThemeManager",None)))
+        section.AddWideWidget(MixerAssetPreview(self.Runtime,info["uuid"],buses,self.Window.Localization,assets,getattr(self.Window,"ThemeManager",None)))
 
     def _AudioMixerForEntity(self,entity_id):
         scene_id=self.Runtime.EntityDetails(entity_id).get("scene_uuid")
@@ -500,7 +502,7 @@ class EditorController(QObject):
     def _AssetPicker(self,value,extensions,commit):
         tr=self.Window.Localization.Translate
         editor=AssetPickerInput(tr("properties.select_project_asset"),accepted_extensions=extensions,picker_title=tr("properties.select_project_asset"),search_placeholder=tr("properties.search_project_assets"),missing_label=tr("properties.missing_asset"))
-        editor.ConfigureAssets(self._ProjectAssets());editor.SetValue(value);editor.PickRequested.connect(editor.OpenProjectPicker);editor.ValueChanged.connect(lambda v:commit(v or ZERO));return editor
+        editor.AssetResolver=getattr(self.Runtime,'ResolveAssetRecord',None);editor.ConfigureAssets(self._ProjectAssets());editor.SetValue(value);editor.PickRequested.connect(editor.OpenProjectPicker);editor.ValueChanged.connect(lambda v:commit(v or ZERO));return editor
 
     def _InspectTexture(self,path:Path)->None:
         tr=self.Window.Localization.Translate;data=self.Runtime.TextureAssetInfo(path)
@@ -734,7 +736,7 @@ class EditorController(QObject):
             if component=="GuiImage" and name=="Texture":
                 return self._AssetPicker(value,set(IMAGE_EXTENSIONS)|{".btexture"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
             if "Asset" in name:
-                tr=self.Window.Localization.Translate;editor=AssetPickerInput(tr("properties.select_project_asset"),accepted_extensions=self._AssetExtensions(name),picker_title=tr("properties.select_project_asset"),search_placeholder=tr("properties.search_project_assets"),missing_label=tr("properties.missing_asset"));editor.ConfigureAssets(self._ProjectAssets());editor.SetValue(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v or "0"));editor.PickRequested.connect(editor.OpenProjectPicker);return editor
+                tr=self.Window.Localization.Translate;editor=AssetPickerInput(tr("properties.select_project_asset"),accepted_extensions=self._AssetExtensions(name),picker_title=tr("properties.select_project_asset"),search_placeholder=tr("properties.search_project_assets"),missing_label=tr("properties.missing_asset"));editor.AssetResolver=getattr(self.Runtime,'ResolveAssetRecord',None);editor.ConfigureAssets(self._ProjectAssets());editor.SetValue(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v or "0"));editor.PickRequested.connect(editor.OpenProjectPicker);return editor
             editor=StringInput(value);editor.editingFinished.connect(lambda:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
         return None
 

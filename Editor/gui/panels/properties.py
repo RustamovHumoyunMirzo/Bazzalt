@@ -74,6 +74,10 @@ class ComponentSection(QFrame):
         self.Form.addWidget(caption,row,0,Qt.AlignmentFlag.AlignVCenter);self.Form.addWidget(editor,row,1,Qt.AlignmentFlag.AlignVCenter)
         self._fields[label]=editor
 
+    def AddWideWidget(self,editor:QWidget)->None:
+        editor.setParent(self.Body);editor.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Fixed)
+        self.Form.addWidget(editor,self.Form.rowCount(),0,1,2)
+
     def _RetranslateLabels(self,*_):
         self.Toggle.setText(DisplayName(self._localization,self._title))
         self.Enabled.setToolTip(self._Text("properties.enable_component","Enable component"))

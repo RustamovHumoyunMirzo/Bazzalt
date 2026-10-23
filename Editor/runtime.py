@@ -62,6 +62,7 @@ class RuntimeService(QObject):
         self.EditorEntityState={};self.EditorParents={}
         self._tick_error = ""
         module = _LoadNativeModule()
+        self.WaveformBuilder=getattr(module,'audio_waveform',None)
         self._host = module.EditorHost() if module is not None else None
 
     def IsAvailable(self) -> bool:
@@ -151,6 +152,8 @@ class RuntimeService(QObject):
         return dict(self._host.statistics()) if self._host and hasattr(self._host,"statistics") else {}
     def AudioClipInfo(self,path)->dict:
         return dict(self._host.audio_clip_info(str(path))) if self._host and hasattr(self._host,"audio_clip_info") else {}
+    def AudioWaveform(self,path,bins=512):
+        return self.WaveformBuilder(str(path),bins) if self.WaveformBuilder else []
     def PreviewAudio(self,clip:str)->int:
         return int(self._host.audio_preview(clip)) if self._host and hasattr(self._host,"audio_preview") else 0
     def StopAudioPreview(self)->None:
@@ -214,6 +217,17 @@ class RuntimeService(QObject):
 
     def RefreshAssets(self) -> bool:
         return bool(self._host and self._host.refresh_assets())
+    def RefreshAsset(self,path)->bool:
+        return bool(self._host and hasattr(self._host,'refresh_asset') and self._host.refresh_asset(str(path)))
+    def ResolveAssetRecord(self,value):
+        info=self.AssetInfo(str(value))
+        if not info or info.get('importer')=='Bazzalt.Raw':
+            source=Path(str(value));root=self.AssetDirectory()
+            try:allowed=bool(root) and source.is_file() and source.resolve().is_relative_to(Path(root).resolve())
+            except (OSError,ValueError):allowed=False
+            if allowed and self.RefreshAsset(source):info=self.AssetInfo(str(source))
+        if not info or info.get('error'):return None
+        path=Path(info['path']);return dict(uuid=info['uuid'],name=path.name,path=str(path),extension=path.suffix.lower(),importer=info.get('importer',''))
     def TextureAssetInfo(self,path)->dict:
         return dict(self._host.texture_asset_info(str(path))) if self._host and hasattr(self._host,"texture_asset_info") else {}
     def SaveTextureAsset(self,path,values:dict)->bool:

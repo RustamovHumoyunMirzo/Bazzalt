@@ -21,6 +21,7 @@ int main(){
     const auto folder=std::filesystem::temp_directory_path()/std::filesystem::u8path("bazzalt-audio-"+UUID::Generate().ToString())/std::filesystem::u8path("Документы");std::filesystem::create_directories(folder/"Assets");
     struct Cleanup{std::filesystem::path Folder;~Cleanup(){std::error_code error;std::filesystem::remove_all(Folder.parent_path(),error);}} cleanup{folder};
     auto source=folder/"Assets"/std::filesystem::u8path("Музыка.wav");Wave(source);
+    auto waveform=Runtime::BuildAudioWaveform(source,512);assert(waveform.size()==512);for(const auto& bin:waveform)assert(bin[0]<-.1f&&bin[1]>.1f);assert(Runtime::BuildAudioWaveform(source,100000).empty());
     auto project=folder/"Test.bproject";{std::ofstream f(project);f<<"FormatVersion: 1\nProjectUUID: \""<<UUID::Generate().ToString()<<"\"\nName: Audio\nAssetDirectory: Assets\nStartupScene: \"\"\nProperties:\n";}
     Runtime::Engine engine;assert(engine.LoadProject(project,false));auto asset=AssetManager::GetAsset(source);assert(asset&&asset->Importer=="Bazzalt.AudioClip");auto clip=AudioClip::Load(asset->Id);assert(clip.IsValid());auto info=clip.GetInfo();assert(info.FrameCount==48000&&info.Channels==1&&info.SampleRate==48000&&info.Duration==1);
     auto& scene=engine.GetScene();auto listener=scene.CreateEntity("Listener");listener.AddComponent<AudioListener>();auto entity=scene.CreateEntity("Source");auto& settings=entity.AddComponent<AudioSource>();settings.Clip=clip;settings.Loop=true;settings.SpatialBlend=0;settings.CustomRolloff={{0,1},{.25f,.8f},{1,0}};
@@ -48,7 +49,7 @@ int main(){
     for(const auto name:{"16-44100-stereo.flac","48000-stereo.ogg"}){
         auto imported=folder/"Assets"/std::filesystem::u8path("Тест-");imported+=std::filesystem::path(name);
         std::filesystem::copy_file(std::filesystem::path(BAZZALT_TEST_AUDIO_DIR)/name,imported);
-        assert(engine.RefreshTextureAsset(imported));auto compressed=AssetManager::GetAsset(imported);assert(compressed);auto decoded=AudioClip::Load(compressed->Id).GetInfo();assert(decoded.Channels==2&&decoded.FrameCount>0);
+        assert(engine.RefreshTextureAsset(imported));auto compressed=AssetManager::GetAsset(imported);assert(compressed);auto decoded=AudioClip::Load(compressed->Id).GetInfo();assert(decoded.Channels==2&&decoded.FrameCount>0);assert(Runtime::BuildAudioWaveform(imported,64).size()==64);
         auto speaker=scene.CreateEntity(name);auto& stream=speaker.AddComponent<AudioSource>();stream.Clip=AudioClip::Load(compressed->Id);stream.Streaming=true;stream.SpatialBlend=0;stream.Loop=true;stream.PlayOnAwake=false;
         auto playback=Audio::Play(speaker);assert(playback.IsValid());float output=0;for(int i=0;i<200&&output<.001f;++i){std::this_thread::sleep_for(std::chrono::milliseconds(2));output=Render(runtime);}assert(output>.001f);assert(playback.GetDuration()>0);assert(playback.Seek(.5));playback.Stop();scene.DestroyEntity(speaker);
     }

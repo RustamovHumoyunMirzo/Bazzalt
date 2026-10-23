@@ -5,7 +5,7 @@ import os
 import sys
 import uuid
 from pathlib import Path
-from PySide6.QtCore import QFile,QFileSystemWatcher,QMimeData,QSize,Qt,Signal,QTimer,QItemSelectionModel
+from PySide6.QtCore import QFile,QFileSystemWatcher,QMimeData,QSize,Qt,Signal,QTimer,QItemSelectionModel,QUrl
 from PySide6.QtGui import QColor,QIcon,QLinearGradient,QPainter,QPixmap,QRadialGradient
 from PySide6.QtWidgets import (QAbstractItemView,QFileDialog,QLineEdit,QListWidget,QListWidgetItem,QMenu,QSplitter,QStyledItemDelegate,QTreeWidget,QTreeWidgetItem,QVBoxLayout,QWidget)
 from ...localization import LocalizationManager
@@ -18,14 +18,47 @@ SHADER_EXTENSIONS={".mat",".shad",".bshader",".vert",".frag",".glsl"}
 ENVIRONMENT_EXTENSIONS={".hdr",".exr",".ktx",".ktx2"}
 AUDIO_EXTENSIONS={".wav",".mp3",".flac",".ogg",".oga"}
 
-class AssetList(QListWidget):
+class ImportDropTarget:
+    @staticmethod
+    def _ExternalPaths(event):
+        mime=event.mimeData()
+        if mime.hasFormat('application/x-bazzalt-asset') or not mime.hasUrls():return []
+        return [Path(url.toLocalFile()) for url in mime.urls() if url.isLocalFile()]
+    def dragEnterEvent(self,event):
+        if self._ExternalPaths(event):event.setDropAction(Qt.DropAction.CopyAction);event.accept()
+        else:event.ignore()
+    def dragMoveEvent(self,event):self.dragEnterEvent(event)
+    def dropEvent(self,event):
+        paths=self._ExternalPaths(event)
+        if not paths:event.ignore();return
+        item=self.itemAt(event.position().toPoint());target=item.data(0,Qt.ItemDataRole.UserRole) if isinstance(self,QTreeWidget) and item else item.data(Qt.ItemDataRole.UserRole) if item else None
+        folder=Path(target) if target and Path(target).is_dir() else None
+        self.PathsDropped.emit(paths,folder);event.setDropAction(Qt.DropAction.CopyAction);event.accept()
+
+class AssetTree(ImportDropTarget,QTreeWidget):
+    PathsDropped=Signal(object,object)
+
+class AssetList(ImportDropTarget,QListWidget):
     EmptyClicked=Signal()
+    SelectionCommitted=Signal();PathsDropped=Signal(object,object)
+    Gesture=False
+    def startDrag(self,actions):
+        self._drag_started=True
+        try:super().startDrag(actions)
+        finally:self.Gesture=False
     def mousePressEvent(self,event)->None:
-        if event.button()==Qt.MouseButton.LeftButton and self.itemAt(event.position().toPoint()) is None:self.clearSelection();self.EmptyClicked.emit()
+        if event.button()==Qt.MouseButton.LeftButton:self.Gesture=True;self._drag_started=False
         super().mousePressEvent(event)
+    def mouseReleaseEvent(self,event):
+        super().mouseReleaseEvent(event)
+        if event.button()==Qt.MouseButton.LeftButton:
+            commit=self.Gesture and not self._drag_started;self.Gesture=False
+            if commit:
+                if self.selectedItems():self.SelectionCommitted.emit()
+                else:self.EmptyClicked.emit()
     def mimeData(self,items):
         mime=QMimeData();paths=[str(i.data(Qt.ItemDataRole.UserRole)) for i in items if i.data(Qt.ItemDataRole.UserRole)]
-        if paths:mime.setData("application/x-bazzalt-asset",paths[0].encode());mime.setData("application/x-bazzalt-assets","\n".join(paths).encode())
+        if paths:mime.setData("application/x-bazzalt-asset",paths[0].encode());mime.setData("application/x-bazzalt-assets","\n".join(paths).encode());mime.setUrls([QUrl.fromLocalFile(path) for path in paths])
         return mime
 
 class AssetNameDelegate(QStyledItemDelegate):
@@ -50,13 +83,16 @@ class AssetBrowserPanel(QWidget):
         self.Search.textChanged.connect(lambda _:self._search_timer.start())
         localization.LocaleChanged.connect(lambda _:self._RetranslateSearch());self._RetranslateSearch()
         splitter=QSplitter(Qt.Orientation.Horizontal);splitter.setChildrenCollapsible(False)
-        self.Tree=QTreeWidget();self.Tree.setHeaderHidden(True);self.Tree.currentItemChanged.connect(self._FolderSelected);self.Tree.itemChanged.connect(self._TreeItemRenamed)
+        self.Tree=AssetTree();self.Tree.setHeaderHidden(True);self.Tree.currentItemChanged.connect(self._FolderSelected);self.Tree.itemChanged.connect(self._TreeItemRenamed)
         self.Browser=AssetList();self.Browser.setItemDelegate(AssetNameDelegate(self.Browser));self.Browser.setViewMode(QListWidget.ViewMode.IconMode);self.Browser.setIconSize(QSize(48,48));self.Browser.setGridSize(QSize(104,86));self.Browser.setResizeMode(QListWidget.ResizeMode.Adjust);self.Browser.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.Browser.setUniformItemSizes(True);self.Browser.setWordWrap(False);self.Browser.setTextElideMode(Qt.TextElideMode.ElideMiddle);self.Browser.setSpacing(2);self.Browser.setMovement(QListWidget.Movement.Static)
         self.Browser.verticalScrollBar().valueChanged.connect(lambda _:self._thumbnail_timer.start(0))
         # QListView::setMovement resets drag/drop mode, so drag-source setup
         # must be applied after all icon-layout configuration.
-        self.Browser.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly);self.Browser.setDragEnabled(True);self.Browser.setDefaultDropAction(Qt.DropAction.CopyAction);self.Browser.setSupportedDragActions(Qt.DropAction.CopyAction)
+        self.Browser.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop);self.Browser.setDragEnabled(True);self.Browser.setDefaultDropAction(Qt.DropAction.CopyAction);self.Browser.setSupportedDragActions(Qt.DropAction.CopyAction)
+        for view in (self.Browser,self.Tree):view.setAcceptDrops(True);view.viewport().setAcceptDrops(True);view.PathsDropped.connect(self.ImportPaths)
+        self.Tree.setDragDropMode(QAbstractItemView.DragDropMode.DropOnly)
+        self.Browser.SelectionCommitted.connect(self._SelectionChanged)
         self.Browser.itemDoubleClicked.connect(self._Activate);self.Browser.itemSelectionChanged.connect(self._SelectionChanged);self.Browser.itemChanged.connect(self._ItemRenamed);self.Browser.EmptyClicked.connect(self.SelectionCleared);self.Tree.itemClicked.connect(self._TreeSelected)
         for widget in (self.Tree,self.Browser):widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);widget.customContextMenuRequested.connect(lambda pos,w=widget:self._ShowContextMenu(w,pos))
         self.Tree.setMinimumWidth(110);self.Browser.setMinimumWidth(140);splitter.addWidget(self.Tree);splitter.addWidget(self.Browser);splitter.setStretchFactor(0,1);splitter.setStretchFactor(1,3);splitter.setSizes([220,700]);layout.addWidget(splitter)
@@ -181,6 +217,7 @@ class AssetBrowserPanel(QWidget):
     def _TreeSelected(self,item,_column)->None:
         if item:self.AssetSelected.emit(Path(item.data(0,Qt.ItemDataRole.UserRole)))
     def _SelectionChanged(self)->None:
+        if self.Browser.Gesture:return
         items=self.Browser.selectedItems()
         if len(items)==1:self.AssetSelected.emit(items[0].data(Qt.ItemDataRole.UserRole))
         elif not items:self.SelectionCleared.emit()
@@ -193,8 +230,8 @@ class AssetBrowserPanel(QWidget):
         if self.ExternalOpener and self.ExternalOpener.Supports(path):self._OpenExternal([path]);return
         if path.suffix.lower()==".bscene" and callable(self.SceneLoadedChecker) and self.SceneLoadedChecker(path):return
         self.AssetActivated.emit(path)
-    def _Unique(self,name):
-        candidate=Path(self._folder or self._root)/name;stem,suffix=candidate.stem,candidate.suffix;number=1
+    def _Unique(self,name,folder=None):
+        candidate=Path(folder or self._folder or self._root)/name;stem,suffix=candidate.stem,candidate.suffix;number=1
         while candidate.exists():candidate=candidate.with_name(f"{stem} {number}{suffix}");number+=1
         return candidate
     def _Create(self,kind)->None:
@@ -215,11 +252,34 @@ class AssetBrowserPanel(QWidget):
         if self._folder is None:return
         dialog=QFileDialog(self,self._localization.Translate("assets.import"));dialog.setOption(QFileDialog.Option.DontUseNativeDialog);dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
         if not dialog.exec():return
-        created=None
-        for value in dialog.selectedFiles():
-            try:created=self._Unique(Path(value).name);shutil.copy2(Path(value),created)
-            except OSError:pass
-        self.Refresh(created)
+        self.ImportPaths([Path(value) for value in dialog.selectedFiles()])
+    def ImportPaths(self,paths,folder=None):
+        destination=Path(folder or self._folder or self._root).resolve() if (folder or self._folder or self._root) else None
+        if destination is None or not destination.is_dir() or not self._InsideRoot(destination):return []
+        created=[]
+        for value in paths:
+            source=Path(value)
+            try:
+                if source.is_symlink() or source.suffix.lower()=='.meta':raise OSError(self._localization.Translate('assets.import_unsupported'))
+                source=source.resolve(strict=True)
+                if source.parent==destination:continue
+                if source.is_dir() and destination.is_relative_to(source):raise OSError(self._localization.Translate('assets.import_recursive'))
+                target=self._Unique(source.name,destination)
+                if source.is_dir():
+                    def ignore(directory,names):return [name for name in names if name.lower().endswith('.meta') or (Path(directory)/name).is_symlink()]
+                    shutil.copytree(source,target,ignore=ignore)
+                elif source.is_file():
+                    with source.open('rb') as read,target.open('xb') as write:shutil.copyfileobj(read,write)
+                    shutil.copystat(source,target)
+                else:raise OSError(self._localization.Translate('assets.import_unsupported'))
+                created.append(target)
+            except (OSError,shutil.Error) as error:self.AssetOperationFailed.emit(self._localization.Translate('assets.import_failed',name=source.name,error=str(error)))
+        if created:
+            self.Refresh(created[-1]);blocked=self.Browser.blockSignals(True)
+            for index in range(self.Browser.count()):
+                item=self.Browser.item(index);item.setSelected(Path(item.data(Qt.ItemDataRole.UserRole)) in created)
+            self.Browser.blockSignals(blocked)
+        return created
     def _ItemRenamed(self,item)->None:
         old=Path(item.data(Qt.ItemDataRole.UserRole));name=item.text().strip()
         if not name or name==item.data(Qt.ItemDataRole.UserRole+1):

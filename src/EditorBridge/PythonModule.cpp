@@ -144,6 +144,7 @@ public:
         UUID id;auto asset=UUID::TryParse(path,id)?AssetManager::GetAsset(id):AssetManager::GetAsset(std::filesystem::u8path(path));py::dict result;
         if(!asset||asset->Importer!="Bazzalt.AudioClip"||asset->State!=AssetState::Ready)return result;
         auto info=AudioClip::Load(asset->Id).GetInfo();if(!info.FrameCount)return result;
+        const auto cache=asset->CachePath.u8string();result["waveform_path"]=std::string(reinterpret_cast<const char*>(cache.data()),cache.size());
         result["uuid"]=asset->Id.ToString();result["duration"]=info.Duration;result["channels"]=info.Channels;result["sample_rate"]=info.SampleRate;result["frames"]=info.FrameCount;return result;
     }
     std::uint64_t PreviewAudio(const std::string& clip){return m_engine->GetAudioRuntime().Preview(ParseUuid(clip)).GetId();}
@@ -264,6 +265,7 @@ public:
         return true;
     }
     bool RefreshAssets() { return m_engine && m_engine->RefreshAssets(); }
+    bool RefreshAsset(const std::string& path){return m_engine&&m_engine->RefreshTextureAsset(std::filesystem::u8path(path));}
     py::dict TextureAssetInfo(const std::string& source){
         TextureDescriptor d;std::string error;py::dict result;if(!Runtime::ReadTextureDescriptor(std::filesystem::u8path(source),d,error)){m_bridgeError=error;return result;}
         result["Width"]=d.Width;result["Height"]=d.Height;result["Samples"]=d.Samples;result["Mipmaps"]=d.Mipmaps;result["Mip Levels"]=d.MipLevels;
@@ -725,6 +727,7 @@ private:
 } // namespace Bazzalt::EditorBridge
 
 PYBIND11_MODULE(_bazzalt_runtime, module) {
+    module.def("audio_waveform",[](const std::string& path,unsigned bins){return Bazzalt::Runtime::BuildAudioWaveform(std::filesystem::u8path(path),bins);},py::call_guard<py::gil_scoped_release>());
     module.doc() = "Private BAZZALT editor-to-runtime bridge";
     py::class_<Bazzalt::EditorBridge::EditorHost>(module, "EditorHost")
         .def(py::init<>()).def("load_project", &Bazzalt::EditorBridge::EditorHost::LoadProject)
@@ -745,6 +748,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("asset_directory", &Bazzalt::EditorBridge::EditorHost::AssetDirectory)
         .def("asset_info", &Bazzalt::EditorBridge::EditorHost::AssetInfo)
         .def("refresh_assets", &Bazzalt::EditorBridge::EditorHost::RefreshAssets)
+        .def("refresh_asset", &Bazzalt::EditorBridge::EditorHost::RefreshAsset)
         .def("texture_asset_info", &Bazzalt::EditorBridge::EditorHost::TextureAssetInfo)
         .def("save_texture_asset", &Bazzalt::EditorBridge::EditorHost::SaveTextureAsset)
         .def("used_shader_assets", &Bazzalt::EditorBridge::EditorHost::UsedShaderAssets)

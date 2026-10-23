@@ -88,6 +88,22 @@ bool InspectAudioFile(const std::filesystem::path& path,AudioClipInfo& info,std:
     if(ma_decoder_read_pcm_frames(&decoder,probe.data(),256,&read)!=MA_SUCCESS&&read==0){error="Audio Clip cannot decode its first frames";return false;}
     info={double(frames)/rate,frames,channels,rate};error.clear();return true;
 }
+std::vector<std::array<float,2>> BuildAudioWaveform(const std::filesystem::path& path,unsigned bins){
+    if(bins<32||bins>2048)return {};InitializeCodecs();ma_decoder decoder{};auto config=ma_decoder_config_init(ma_format_f32,2,48000);
+#ifdef _WIN32
+    const auto opened=ma_decoder_init_file_w(path.c_str(),&config,&decoder);
+#else
+    const auto opened=ma_decoder_init_file(path.c_str(),&config,&decoder);
+#endif
+    if(opened!=MA_SUCCESS)return {};struct Cleanup{ma_decoder* Value;~Cleanup(){ma_decoder_uninit(Value);}} cleanup{&decoder};
+    ma_uint64 frames=0;if(ma_decoder_get_length_in_pcm_frames(&decoder,&frames)!=MA_SUCCESS||!frames||frames>48000ull*86400)return {};
+    std::vector<std::array<float,2>> result(bins);std::vector<float> pcm(32768*2);ma_uint64 cursor=0;
+    for(unsigned bin=0;bin<bins;++bin){const auto start=frames*bin/bins,end=frames*(bin+1)/bins;const auto count=std::min<ma_uint64>(pcm.size()/2,end-start);
+        if(!count)continue;if(cursor!=start&&ma_decoder_seek_to_pcm_frame(&decoder,start)!=MA_SUCCESS)return {};
+        ma_uint64 read=0;ma_decoder_read_pcm_frames(&decoder,pcm.data(),count,&read);if(!read)return {};cursor=start+read;
+        for(ma_uint64 i=0;i<read*2;++i)if(std::isfinite(pcm[i])){result[bin][0]=std::min(result[bin][0],pcm[i]);result[bin][1]=std::max(result[bin][1],pcm[i]);}
+    }return result;
+}
 bool ReadAudioMixer(const std::filesystem::path& path,std::vector<AudioBusSettings>& buses,std::string& error,std::string* editorState){
     std::error_code ec;if(std::filesystem::file_size(path,ec)>1024*1024||ec){error="Could not read Audio Mixer (1 MiB maximum)";return false;}
     std::ifstream stream(path,std::ios::binary);std::string text((std::istreambuf_iterator<char>(stream)),{});

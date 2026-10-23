@@ -31,6 +31,16 @@ class AudioTests(unittest.TestCase):
                 with wave.open(str(clip),'wb') as f:f.setnchannels(1);f.setsampwidth(2);f.setframerate(48000);f.writeframes(b'\x00\x00'*48000)
                 project=root/'Audio.bproject';project.write_text('FormatVersion: 1\nProjectUUID: "12345678-1234-4234-8234-123456789abc"\nName: Audio\nAssetDirectory: Assets\nStartupScene: ""\nProperties:\n',encoding='utf-8')
                 self.assertTrue(runtime.LoadProject(str(project)),runtime.LastError());info=runtime.AudioClipInfo(clip);self.assertEqual(info['frames'],48000);self.assertEqual(info['duration'],1)
+                peaks=runtime.AudioWaveform(info['waveform_path']);self.assertEqual(len(peaks),512);self.assertTrue(all(low==0 and high==0 for low,high in peaks))
+                from PySide6.QtTest import QTest
+                preview=AudioPreview(runtime,info['uuid'],LocalizationManager(ResourceManager()),info['duration'],waveform_path=info['waveform_path'])
+                for _ in range(200):
+                    if len(preview.Waveform.Peaks)==512:break
+                    QTest.qWait(10)
+                self.assertEqual(len(preview.Waveform.Peaks),512);preview.Timer.stop();preview.deleteLater()
+                late=root/'Assets'/'New.WAV'
+                with wave.open(str(late),'wb') as f:f.setnchannels(1);f.setsampwidth(2);f.setframerate(48000);f.writeframes(b'\x00\x00'*480)
+                record=runtime.ResolveAssetRecord(late);self.assertIsNotNone(record);self.assertEqual(record['importer'],'Bazzalt.AudioClip');self.assertEqual(record['extension'],'.wav')
                 entity=runtime.CreateEntity('Speaker');self.assertTrue(runtime.AddComponent(entity,'Audio Source'));self.assertTrue(runtime.AddComponent(entity,'Audio Listener'))
                 self.assertTrue(runtime.SetComponentProperty(entity,'Audio Source','Clip',info['uuid']))
                 for name,value in [('Volume',.7),('Pitch',1.2),('Spatial Blend',.5),('Rolloff Curve',2),('Custom Rolloff',[(0,1),(.5,.7),(1,0)])]:self.assertTrue(runtime.SetComponentProperty(entity,'Audio Source',name,value))
@@ -51,6 +61,17 @@ class AudioTests(unittest.TestCase):
         preview=AudioPreview(runtime,'clip',locale,1);preview.Play();runtime.PreviewAudio.assert_called_once_with('clip');preview.Pause();runtime.AudioControl.assert_called_with(4,'pause');preview.Stop();runtime.StopAudioPreview.assert_called_once()
         curve=AudioCurveInput([(0,1),(1,0)],locale);curve.Add();self.assertEqual(curve.GetValue(),[(0,1),(.5,.5),(1,0)]);curve.Edit(1,(.7,.8));self.assertEqual(curve.GetValue()[1],(.7,.8));curve.Edit(0,(.1,1));self.assertEqual(curve.GetValue()[0],(0,1));curve.Remove(1);self.assertEqual(len(curve.GetValue()),2)
         preview.deleteLater();curve.deleteLater()
+
+    def test_waveform_timeline_seeks_before_and_during_play(self):
+        from PySide6.QtCore import Qt,QEvent,QPointF
+        from PySide6.QtGui import QMouseEvent
+        from Editor.gui.widgets.audio_waveform import AudioWaveform
+        locale=LocalizationManager(ResourceManager());runtime=SimpleNamespace(PreviewAudio=Mock(return_value=6),AudioStatus=Mock(return_value={'valid':True,'state':1,'time':.5}),AudioControl=Mock(return_value=True),StopAudioPreview=Mock())
+        preview=AudioPreview(runtime,'clip',locale,10);preview.Seek(4);self.assertEqual(preview.Cursor,4);preview.Play();runtime.AudioControl.assert_called_with(6,'seek',4)
+        preview.Position.setValue(75000);runtime.AudioControl.assert_called_with(6,'seek',7.5);self.assertAlmostEqual(preview.Waveform.Fraction,.75)
+        graph=AudioWaveform();graph.resize(214,72);graph.SetPeaks([(-.8,.9),(-.1,.2)]);selected=[];graph.SeekRequested.connect(selected.append)
+        graph.mousePressEvent(QMouseEvent(QEvent.Type.MouseButtonPress,QPointF(107,36),QPointF(107,36),Qt.MouseButton.LeftButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier));self.assertAlmostEqual(selected[-1],.5);self.assertFalse(graph.grab().isNull())
+        preview.Timer.stop();preview.deleteLater();graph.deleteLater()
 
     def test_audio_browser_icons_and_lua_declarations(self):
         resources=ResourceManager();locale=LocalizationManager(resources);panel=AssetBrowserPanel(locale,resources)

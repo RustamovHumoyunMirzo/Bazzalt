@@ -6,6 +6,7 @@
 #include "Bazzalt/Serialization.h"
 namespace Bazzalt::Runtime {
 bool InspectAudioFile(const std::filesystem::path& path, AudioClipInfo& info, std::string& error);
+std::vector<std::array<float,2>> BuildAudioWaveform(const std::filesystem::path& path,unsigned bins);
 bool ReadAudioMixer(const std::filesystem::path& path, std::vector<AudioBusSettings>& buses, std::string& error, std::string* editorState=nullptr);
 bool SaveAudioMixer(const std::filesystem::path& path, const std::vector<AudioBusSettings>& buses, std::string& error, const std::string& editorState="");
 class AudioRuntime final {

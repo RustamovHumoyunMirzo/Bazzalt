@@ -40,6 +40,16 @@ SelectAsset again (which would stop playback and rebuild the inspector).
 AssetBrowser.Refresh blocks transient selection signals and restores all
 selected paths and scroll position, preventing file-watcher deselection.
 
+The inspector waveform is source PCM, not synthetic signal or post-effect
+metering. The private module-level audio_waveform function decodes independently
+of EditorHost/Engine, with the GIL released. The Qt-side bounded worker pool
+must capture only that function and a cache-file path: retaining an EditorHost
+in a worker could move Filament destruction onto the worker on shutdown.
+512 peak envelopes span the entire clip; each bin reads at most 32768 stereo
+frames, using seeks for longer bins. Stereo channels contribute independently
+to avoid cancellation of opposite-phase samples. Results are cached by file
+path, size and timestamp; QTimer delivers completions on the GUI thread.
+
 Extend an effect in all layers: AudioEffectType/Settings, native validation,
 AudioEffects.h, YAML reader/writer, Python bridge, mixer EFFECT_LIBRARY,
 LuaAudio bindings, PCM tests and both public API references. Never populate

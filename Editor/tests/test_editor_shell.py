@@ -601,7 +601,7 @@ class EditorShellTests(unittest.TestCase):
         self.assertIn("Textures", names)
         self.assertIn("player", names)
         self.assertNotIn("player.png.meta", names)
-        self.assertEqual(self.Window.AssetBrowser.Browser.dragDropMode(),QAbstractItemView.DragDropMode.DragOnly)
+        self.assertEqual(self.Window.AssetBrowser.Browser.dragDropMode(),QAbstractItemView.DragDropMode.DragDrop)
         self.assertEqual(self.Window.AssetBrowser.Browser.supportedDragActions(),Qt.DropAction.CopyAction)
         player=next(self.Window.AssetBrowser.Browser.item(index) for index in range(self.Window.AssetBrowser.Browser.count()) if self.Window.AssetBrowser.Browser.item(index).text()=="player")
         self.assertEqual(Path(player.data(Qt.ItemDataRole.UserRole)).name,"player.png")

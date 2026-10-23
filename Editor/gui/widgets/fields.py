@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from enum import Enum
+from pathlib import Path
 from .options_button import OptionsButton
 
 from PySide6.QtCore import QSize, Qt, Signal
@@ -376,7 +377,7 @@ class AssetPickerInput(PickerInput):
                  accepted_extensions:Iterable[str]=(),picker_title:str="Select Project Asset",
                  search_placeholder:str="Search project assets…",missing_label:str="Missing Asset") -> None:
         super().__init__(placeholder, parent, "application/x-bazzalt-asset", validator)
-        self._assets=[];self._accepted_extensions={str(value).lower() for value in accepted_extensions};self._picker_title=picker_title;self._search_placeholder=search_placeholder;self._missing_label=missing_label
+        self._assets=[];self.AssetResolver=None;self._accepted_extensions={str(value).lower() for value in accepted_extensions};self._picker_title=picker_title;self._search_placeholder=search_placeholder;self._missing_label=missing_label
 
     def ConfigureAssets(self,assets)->None:
         self._assets=[dict(asset) for asset in assets]
@@ -390,6 +391,9 @@ class AssetPickerInput(PickerInput):
         for asset in self._assets:
             if (text==str(asset.get("uuid","")) or
                     normalized==str(asset.get("path","")).replace("\\","/").lower()):return asset
+        if callable(self.AssetResolver):
+            record=self.AssetResolver(value)
+            if record is not None:self._assets.append(dict(record));return record
         return None
 
     def SetValue(self,value:object,display_name:str|None=None)->None:
@@ -419,12 +423,16 @@ class AssetPickerInput(PickerInput):
 
     def dragEnterEvent(self,event)->None:  # type: ignore[no-untyped-def]
         if event.mimeData().hasFormat("application/x-bazzalt-asset"):
-            path=bytes(event.mimeData().data("application/x-bazzalt-asset")).decode();asset=self._Record(path)
+            path=bytes(event.mimeData().data("application/x-bazzalt-asset")).decode()
+            if self._accepted_extensions and Path(path).suffix.lower() not in self._accepted_extensions:event.ignore();return
+            asset=self._Record(path)
             if asset is not None and self._Accepts(asset):event.acceptProposedAction();return
         event.ignore()
 
     def dropEvent(self,event)->None:  # type: ignore[no-untyped-def]
-        path=bytes(event.mimeData().data("application/x-bazzalt-asset")).decode();asset=self._Record(path)
+        path=bytes(event.mimeData().data("application/x-bazzalt-asset")).decode()
+        if self._accepted_extensions and Path(path).suffix.lower() not in self._accepted_extensions:event.ignore();return
+        asset=self._Record(path)
         if asset is not None and self._Accepts(asset):self.SetValue(asset["uuid"],asset["name"]);event.acceptProposedAction()
         else:event.ignore()
 
