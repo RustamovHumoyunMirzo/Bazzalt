@@ -155,6 +155,49 @@ def BuildStyleSheet(theme: Theme) -> str:
     QWidget[fieldState="modified"] {{ border-color: {t.modified}; }}
     QWidget[fieldState="warning"] {{ border-color: {t.warning}; }}
     QWidget[fieldState="error"] {{ border-color: {t.error}; }}
+QWidget#MixerSidebar {{ background: {t.surface}; }}
+    QFrame#MixerSection {{ background: transparent; border: 0; }}
+    QFrame#MixerSectionHeader {{ background: {t.surface_alt}; border: 0;
+        border-top: 1px solid {t.border}; border-bottom: 1px solid {t.border}; }}
+    QLabel#MixerSectionTitle {{ color: {t.text}; font-weight: 600; background: transparent; }}
+    QToolButton#MixerSectionArrow, QToolButton#MixerSectionAdd {{ background: transparent;
+        color: {t.text_muted}; border: 0; border-radius: 3px; padding: 0;
+        min-width: 18px; max-width: 18px; min-height: 18px; max-height: 18px; }}
+    QToolButton#MixerSectionAdd {{ font-size: 15px; }}
+    QToolButton#MixerSectionArrow:hover, QToolButton#MixerSectionAdd:hover {{
+        background: {t.surface_hover}; color: {t.text}; }}
+    QToolButton#MixerSectionAdd::menu-indicator {{ image: none; width: 0; }}
+    QListWidget#MixerList, QListWidget#MixerSnapshotList, QListWidget#MixerViewList,
+    QTreeWidget#MixerGroupTree {{ background: {t.surface}; border: 0; }}
+    #MixerStripViewport, #MixerStripHost {{ background: {t.background}; }}
+    QFrame#AudioMixerChannel {{ background: {t.surface_alt}; border: 1px solid {t.border};
+        border-radius: {t.radius}px; }}
+    QFrame#AudioMixerChannel[stripSelected="true"] {{ border-color: {t.border_focus}; }}
+    QFrame#MixerStripHeader {{ border: 0; border-radius: 3px; }}
+    QToolButton#MixerChannelSwitch {{ min-width: 23px; padding: 3px; background: {t.surface};
+        border: 1px solid {t.border}; border-radius: 3px; font-weight: 600; }}
+    QToolButton#MixerChannelSwitch:hover {{ background: {t.surface_hover}; }}
+    QToolButton#MixerChannelSwitch:disabled {{ color: {t.text_disabled}; }}
+    QToolButton#MixerChannelSwitch[switchKind="solo"]:checked {{ background: {t.warning};
+        color: #1b1b1b; border-color: {t.warning}; }}
+    QToolButton#MixerChannelSwitch[switchKind="mute"]:checked {{ background: {t.error};
+        color: #1b1b1b; border-color: {t.error}; }}
+    QToolButton#MixerChannelSwitch[switchKind="bypass"]:checked {{ background: {t.modified};
+        color: #1b1b1b; border-color: {t.modified}; }}
+    QToolButton#MixerAddEffect {{ background: {t.surface}; border: 1px solid {t.border};
+        border-radius: 3px; padding: 3px 16px 3px 8px; min-height: 16px; }}
+    QToolButton#MixerAddEffect:hover {{ background: {t.surface_hover}; }}
+    QToolButton#MixerAddEffect:disabled {{ color: {t.text_disabled}; }}
+    QToolButton#MixerAddEffect::menu-indicator {{ subcontrol-position: right center;
+        subcontrol-origin: padding; right: 4px; }}
+    QScrollArea#MixerEffectScroll, #MixerEffectViewport, #MixerEffectHost {{
+        background: {t.surface_alt}; border: 0; }}
+    QFrame#MixerEffectRow {{ background: {t.surface}; border: 1px solid {t.border};
+        border-radius: 2px; }}
+    QFrame#MixerEffectRow:hover {{ background: {t.surface_hover}; }}
+    QFrame#MixerEffectRow QLabel {{ background: transparent; }}
+    QFrame#MixerEffectInspector {{ background: {t.surface}; border: 1px solid {t.border_focus}; }}
+    QFrame#MixerEffectInspector QLabel {{ background: transparent; }}
     QGroupBox#AudioMixerChannel {{ background: {t.surface_alt}; border: 1px solid {t.border}; border-radius: {t.radius}px; }}
     QGroupBox#AudioMixerChannel[fieldState="modified"] {{ border-color: {t.accent}; }}
     QToolButton#MixerChannelSwitch {{ min-width: 23px; padding: 3px; background: {t.surface}; border: 1px solid {t.border}; border-radius: 3px; }}

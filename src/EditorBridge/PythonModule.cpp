@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 #include <charconv>
+#include <chrono>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -140,7 +141,7 @@ public:
     void ConsoleClear(){Console::Clear();}
     void ConsoleRemove(const std::vector<std::uint64_t>& ids){Console::ClearMessages(ids);}
     py::dict AudioClipDetails(const std::string& path){
-        auto asset=AssetManager::GetAsset(std::filesystem::u8path(path));py::dict result;
+        UUID id;auto asset=UUID::TryParse(path,id)?AssetManager::GetAsset(id):AssetManager::GetAsset(std::filesystem::u8path(path));py::dict result;
         if(!asset||asset->Importer!="Bazzalt.AudioClip"||asset->State!=AssetState::Ready)return result;
         auto info=AudioClip::Load(asset->Id).GetInfo();if(!info.FrameCount)return result;
         result["uuid"]=asset->Id.ToString();result["duration"]=info.Duration;result["channels"]=info.Channels;result["sample_rate"]=info.SampleRate;result["frames"]=info.FrameCount;return result;
@@ -151,17 +152,22 @@ public:
     bool AudioControl(std::uint64_t id,const std::string& action,double value){AudioVoice v(id);if(action=="pause")return v.Pause();if(action=="resume")return v.Resume();if(action=="stop")return v.Stop();if(action=="seek")return v.Seek(value);if(action=="volume")return v.SetVolume(float(value));return false;}
     py::list AudioBuses(const std::string& mixer){
         auto buses=AudioMixer::GetBuses();
-        if(!mixer.empty()){auto asset=AssetManager::GetAsset(ParseUuid(mixer));std::string error;if(asset&&asset->Importer=="Bazzalt.AudioMixer")Runtime::ReadAudioMixer(asset->CachePath,buses,error);}
-        py::list result;for(auto b:buses){py::dict v;v["id"]=b.Id.ToString();v["parent"]=b.Parent.ToString();v["name"]=b.Name;v["volume"]=b.Volume;v["pitch"]=b.Pitch;v["muted"]=b.Muted;v["solo"]=b.Solo;v["paused"]=b.Paused;result.append(v);}return result;
+        if(!mixer.empty()){auto asset=AssetManager::GetAsset(ParseUuid(mixer));if(!asset||asset->Importer!="Bazzalt.AudioMixer"||!Runtime::ReadAudioMixer(asset->CachePath,buses,m_bridgeError))return py::list();}
+        py::list result;const char* types[]={"Lowpass","Highpass","Echo","Distortion","Reverb","Equalizer"};for(auto b:buses){py::dict v;v["id"]=b.Id.ToString();v["parent"]=b.Parent.ToString();v["name"]=b.Name;v["volume"]=b.Volume;v["pitch"]=b.Pitch;v["muted"]=b.Muted;v["solo"]=b.Solo;v["paused"]=b.Paused;v["bypass"]=b.Bypass;py::list effects;for(const auto& e:b.Effects){py::dict fx;fx["id"]=e.Id.ToString();fx["type"]=types[int(e.Type)];fx["enabled"]=e.Enabled;fx["params"]=e.Parameters;effects.append(fx);}v["effects"]=effects;result.append(v);}return result;
     }
-    bool SaveMixer(const std::string& id,const py::list& values){
+    std::string MixerEditorState(const std::string& id){auto asset=AssetManager::GetAsset(ParseUuid(id));if(!asset||asset->Importer!="Bazzalt.AudioMixer")return "";std::vector<AudioBusSettings> buses;std::string state;Runtime::ReadAudioMixer(asset->CachePath,buses,m_bridgeError,&state);return state;}
+    py::dict MixerLevels(const std::string& id){py::dict result;if(m_engine->GetAudioRuntime().GetMixerAsset()!=ParseUuid(id))return result;
+        const auto now=std::chrono::steady_clock::now();if(now-m_meterTime>=std::chrono::milliseconds(33)||m_meterAsset!=id){m_meterTime=now;m_meterAsset=id;m_meterLevels.clear();for(auto b:AudioMixer::GetBuses())m_meterLevels[b.Id]=AudioBus::Load(b.Id).GetPeakLevels();}
+        for(const auto& [bus,levels]:m_meterLevels)result[py::str(bus.ToString())]=py::make_tuple(levels[0],levels[1]);return result;}
+    std::uint64_t PreviewMixer(const std::string& mixer,const std::string& clip,const std::string& bus){if(m_playing){m_bridgeError="Mixer preview is unavailable during Play";return 0;}if(!AudioMixer::Load(ParseUuid(mixer)))return 0;return m_engine->GetAudioRuntime().Preview(ParseUuid(clip),AudioBus::Load(ParseUuid(bus))).GetId();}
+    bool SaveMixer(const std::string& id,const py::list& values,const std::string& editorState){
         auto asset=AssetManager::GetAsset(ParseUuid(id));if(!asset||asset->Importer!="Bazzalt.AudioMixer")return false;
         std::vector<AudioBusSettings> buses;
-        try{for(auto item:values){auto v=py::reinterpret_borrow<py::dict>(item);AudioBusSettings b;b.Id=ParseUuid(v["id"].cast<std::string>());b.Parent=ParseUuid(v["parent"].cast<std::string>());b.Name=v["name"].cast<std::string>();b.Volume=v["volume"].cast<float>();b.Pitch=v["pitch"].cast<float>();b.Muted=v["muted"].cast<bool>();b.Solo=v["solo"].cast<bool>();b.Paused=v["paused"].cast<bool>();buses.push_back(b);}}
+        try{for(auto item:values){auto v=py::reinterpret_borrow<py::dict>(item);AudioBusSettings b;b.Id=ParseUuid(v["id"].cast<std::string>());b.Parent=ParseUuid(v["parent"].cast<std::string>());b.Name=v["name"].cast<std::string>();b.Volume=v["volume"].cast<float>();b.Pitch=v["pitch"].cast<float>();b.Muted=v["muted"].cast<bool>();b.Solo=v["solo"].cast<bool>();b.Paused=v["paused"].cast<bool>();if(v.contains("bypass"))b.Bypass=v["bypass"].cast<bool>();if(v.contains("effects"))for(auto item:v["effects"]){auto fx=py::reinterpret_borrow<py::dict>(item);AudioEffectSettings e;e.Id=ParseUuid(fx["id"].cast<std::string>());auto type=fx["type"].cast<std::string>();const char* types[]={"Lowpass","Highpass","Echo","Distortion","Reverb","Equalizer"};int index=0;for(;index<6&&type!=types[index];++index){}e.Type=AudioEffectType(index);e.Enabled=fx["enabled"].cast<bool>();e.Parameters=fx["params"].cast<std::map<std::string,float>>();b.Effects.push_back(std::move(e));}buses.push_back(b);}}
         catch(const std::exception& error){m_bridgeError=error.what();return false;}
-        if(!Runtime::SaveAudioMixer(asset->SourcePath,buses,m_bridgeError))return false;
+        if(!Runtime::SaveAudioMixer(asset->SourcePath,buses,m_bridgeError,editorState))return false;
         if(!m_engine->RefreshTextureAsset(asset->SourcePath)){m_bridgeError=m_engine->GetLastError();return false;}
-        if(m_playing&&m_engine->GetAudioRuntime().GetMixerAsset()==asset->Id)AudioMixer::Load(asset->Id);return true;
+        if(m_engine->GetAudioRuntime().GetMixerAsset()==asset->Id)AudioMixer::Load(asset->Id);return true;
     }
     bool RefreshMixer(const std::string& id){
         auto asset=AssetManager::GetAsset(ParseUuid(id));if(!asset||asset->Importer!="Bazzalt.AudioMixer")return false;
@@ -706,6 +712,9 @@ private:
     std::vector<std::pair<UUID,std::filesystem::path>> m_extraSnapshots;
     std::filesystem::path m_scenePath;
     std::string m_bridgeError;
+    std::chrono::steady_clock::time_point m_meterTime{};
+    std::string m_meterAsset;
+    std::map<UUID,std::array<float,2>> m_meterLevels;
     std::vector<LoadedScene> m_loadedScenes;
     std::size_t m_activeScene = 0;
     bool m_playing = false;
@@ -784,7 +793,10 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("audio_status", &Bazzalt::EditorBridge::EditorHost::AudioStatus)
         .def("audio_control", &Bazzalt::EditorBridge::EditorHost::AudioControl)
         .def("audio_buses", &Bazzalt::EditorBridge::EditorHost::AudioBuses, py::arg("mixer")="")
-        .def("save_audio_mixer", &Bazzalt::EditorBridge::EditorHost::SaveMixer)
+        .def("save_audio_mixer", &Bazzalt::EditorBridge::EditorHost::SaveMixer,py::arg("id"),py::arg("buses"),py::arg("editor_state")="")
+        .def("audio_mixer_editor_state", &Bazzalt::EditorBridge::EditorHost::MixerEditorState)
+        .def("audio_mixer_levels", &Bazzalt::EditorBridge::EditorHost::MixerLevels)
+        .def("audio_mixer_preview", &Bazzalt::EditorBridge::EditorHost::PreviewMixer)
         .def("refresh_audio_mixer", &Bazzalt::EditorBridge::EditorHost::RefreshMixer)
         .def("set_component_property", &Bazzalt::EditorBridge::EditorHost::SetComponentProperty)
         .def("set_gizmo", &Bazzalt::EditorBridge::EditorHost::SetGizmo)

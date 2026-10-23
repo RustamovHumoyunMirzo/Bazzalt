@@ -1,15 +1,28 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <map>
+#include <array>
 #include "Bazzalt/Export.h"
 #include "Bazzalt/UUID.h"
 namespace Bazzalt {
+enum class AudioEffectType { Lowpass, Highpass, Echo, Distortion, Reverb, Equalizer };
+struct AudioEffectSettings {
+    UUID Id=UUID::Generate();
+    AudioEffectType Type=AudioEffectType::Lowpass;
+    bool Enabled=true;
+    // Missing parameters use the documented effect defaults.
+    std::map<std::string,float> Parameters;
+    bool operator==(const AudioEffectSettings&) const=default;
+};
 struct AudioBusSettings {
     UUID Id{}, Parent{};
     std::string Name="Bus";
     float Volume=1, Pitch=1;
-    bool Muted=false, Solo=false, Paused=false;
+    bool Muted=false, Solo=false, Paused=false, Bypass=false;
+    std::vector<AudioEffectSettings> Effects;
 };
+struct AudioMixerSnapshot { std::vector<AudioBusSettings> Buses; };
 // UUID zero is the master bus, not a missing bus.
 class BAZZALT_API AudioBus final {
 public:
@@ -25,6 +38,9 @@ public:
     bool SetMuted(bool muted) const;
     bool SetSolo(bool solo) const;
     bool SetPaused(bool paused) const;
+    bool SetBypass(bool bypass) const;
+    bool SetEffects(const std::vector<AudioEffectSettings>& effects) const;
+    std::array<float,2> GetPeakLevels() const; // Linear post-effect stereo peaks since last poll.
 private:
     UUID m_id{};
 };
@@ -38,5 +54,7 @@ public:
     static bool RemoveBus(AudioBus bus); // Children and sources are rerouted to its parent.
     static bool Load(UUID mixerAsset); // .bmixer YAML; transactional replacement.
     static bool Validate(const std::vector<AudioBusSettings>& buses, std::string& error);
+    static AudioMixerSnapshot CaptureSnapshot();
+    static bool ApplySnapshot(const AudioMixerSnapshot& snapshot); // Mix state only; retains current routing.
 };
 }

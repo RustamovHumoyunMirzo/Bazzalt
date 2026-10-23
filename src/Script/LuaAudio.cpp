@@ -15,6 +15,10 @@ template<class T> void AudioOperations(sol::table api,const char* name){
 }
 }
 void BindLuaAudio(sol::table api){
+    api.new_enum("AudioEffectType","Lowpass",AudioEffectType::Lowpass,"Highpass",AudioEffectType::Highpass,"Echo",AudioEffectType::Echo,"Distortion",AudioEffectType::Distortion,"Reverb",AudioEffectType::Reverb,"Equalizer",AudioEffectType::Equalizer);
+    auto effect=api.new_usertype<AudioEffectSettings>("AudioEffectSettings",sol::constructors<AudioEffectSettings()>());
+    effect["Id"]=&AudioEffectSettings::Id;effect["Type"]=&AudioEffectSettings::Type;effect["Enabled"]=&AudioEffectSettings::Enabled;
+    effect["Parameters"]=sol::property([](const AudioEffectSettings& e){return sol::as_table(e.Parameters);},[](AudioEffectSettings& e,sol::as_table_t<std::map<std::string,float>> v){e.Parameters=v.value();});
     api.new_enum("AudioRolloff","Linear",AudioRolloff::Linear,"Logarithmic",AudioRolloff::Logarithmic,"Custom",AudioRolloff::Custom);
     api.new_enum("AudioPlaybackState","Stopped",AudioPlaybackState::Stopped,"Playing",AudioPlaybackState::Playing,"Paused",AudioPlaybackState::Paused);
     auto info=api.new_usertype<AudioClipInfo>("AudioClipInfo",sol::constructors<AudioClipInfo()>());
@@ -25,10 +29,17 @@ void BindLuaAudio(sol::table api){
 #define AUDIO_FIELD(T,F) settings[#F]=&T::F;
     AUDIO_FIELD(AudioBusSettings,Id) AUDIO_FIELD(AudioBusSettings,Parent) AUDIO_FIELD(AudioBusSettings,Name) AUDIO_FIELD(AudioBusSettings,Volume) AUDIO_FIELD(AudioBusSettings,Pitch) AUDIO_FIELD(AudioBusSettings,Muted) AUDIO_FIELD(AudioBusSettings,Solo) AUDIO_FIELD(AudioBusSettings,Paused)
 #undef AUDIO_FIELD
+    settings["Bypass"]=&AudioBusSettings::Bypass;
+    settings["Effects"]=sol::property([](const AudioBusSettings& s){return sol::as_table(s.Effects);},[](AudioBusSettings& s,sol::as_table_t<std::vector<AudioEffectSettings>> v){s.Effects=v.value();});
     auto bus=api.new_usertype<AudioBus>("AudioBus",sol::constructors<AudioBus()>());
     bus["Load"]=&AudioBus::Load;bus["GetUUID"]=&AudioBus::GetUUID;bus["IsValid"]=&AudioBus::IsValid;bus["GetSettings"]=&AudioBus::GetSettings;bus["SetSettings"]=&AudioBus::SetSettings;
     bus["SetVolume"]=&AudioBus::SetVolume;bus["SetVolumeDecibels"]=&AudioBus::SetVolumeDecibels;bus["SetPitch"]=&AudioBus::SetPitch;bus["SetMuted"]=&AudioBus::SetMuted;bus["SetSolo"]=&AudioBus::SetSolo;bus["SetPaused"]=&AudioBus::SetPaused;
+    bus["SetBypass"]=&AudioBus::SetBypass;bus["SetEffects"]=[](AudioBus b,sol::as_table_t<std::vector<AudioEffectSettings>> effects){return b.SetEffects(effects.value());};
+    bus["GetPeakLevels"]=[](AudioBus b){auto peak=b.GetPeakLevels();return sol::as_table(std::vector<float>{peak[0],peak[1]});};
     auto mixer=api.create_named("AudioMixer");
+    auto snapshot=api.new_usertype<AudioMixerSnapshot>("AudioMixerSnapshot",sol::constructors<AudioMixerSnapshot()>());
+    snapshot["Buses"]=sol::property([](const AudioMixerSnapshot& s){return sol::as_table(s.Buses);},[](AudioMixerSnapshot& s,sol::as_table_t<std::vector<AudioBusSettings>> v){s.Buses=v.value();});
+    mixer["CaptureSnapshot"]=&AudioMixer::CaptureSnapshot;mixer["ApplySnapshot"]=&AudioMixer::ApplySnapshot;
     mixer["GetMasterBus"]=&AudioMixer::GetMasterBus;mixer["GetMusicBus"]=&AudioMixer::GetMusicBus;mixer["GetSFXBus"]=&AudioMixer::GetSFXBus;
     mixer["GetBuses"]=[](){return sol::as_table(AudioMixer::GetBuses());};
     mixer["CreateBus"]=[](const std::string& name,sol::optional<AudioBus> parent,sol::optional<UUID> id){return AudioMixer::CreateBus(name,parent.value_or(AudioBus{}),id.value_or(UUID::Generate()));};

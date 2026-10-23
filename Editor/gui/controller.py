@@ -412,41 +412,18 @@ class EditorController(QObject):
         section.AddField(tr("audio.preview"),self._audio_preview)
 
     def _InspectAudioMixer(self,path):
+        from .widgets.mixer_preview import MixerAssetPreview
         info=self.Runtime.AssetInfo(str(path))
         if not info:return
-        tr=self.Window.Localization.Translate;identity=info["uuid"];buses=self.Runtime.AudioBuses(identity)
-        def save(refresh=False):
-            if self.Runtime.SaveAudioMixer(identity,buses):
-                if refresh:QTimer.singleShot(0,self,lambda:self.SelectAsset(path) if self._inspected_asset==path else None)
-            else:self.Window.Console.AddMessage(self.Runtime.LastError(),ConsoleLevel.Error,True,tr("audio.menu"))
-        for bus in buses:
-            section=self.Window.Properties.AddComponentSection("bus_"+bus["id"],bus["name"],removable=False)
-            def commit(key,value,b=bus):b[key]=value;save()
-            name=StringInput(bus["name"]);name.editingFinished.connect(lambda b=bus,f=name:(b.update(name=f.text()),save(True)));section.AddField(tr("audio.bus_name"),name)
-            if bus["id"]!=ZERO:
-                # Exclude this bus and its descendants to prevent cycles in the picker.
-                excluded={bus["id"]}
-                for _ in buses:
-                    excluded.update(b["id"] for b in buses if b["parent"] in excluded and b["id"]!=ZERO)
-                parent=EnumInput();parent.SetOptions(tuple((b["name"],b["id"]) for b in buses if b["id"] not in excluded));parent.SetValue(bus["parent"]);parent.currentIndexChanged.connect(lambda _,b=bus,f=parent:(b.update(parent=f.GetValue()),save()));section.AddField(tr("audio.bus_parent"),parent)
-            for key,bounds in (("volume",(0,4)),("pitch",(.25,4))):
-                field=FloatInput(minimum=bounds[0],maximum=bounds[1],value=bus[key]);field.valueChanged.connect(lambda v,k=key,b=bus:(b.update({k:v}),save()));section.AddField(tr("audio.bus_"+key),field)
-            for key in ("muted","solo","paused"):
-                field=BoolInput(bus[key]);field.ValueChanged.connect(lambda v,k=key,b=bus:(b.update({k:v}),save()));section.AddField(tr("audio.bus_"+key),field)
-            if bus["id"]!=ZERO:
-                remove=QPushButton(tr("audio.remove_bus"));remove.clicked.connect(lambda _,b=bus:self._RemoveAudioBus(b,buses,save));section.AddField("",remove)
-        section=self.Window.Properties.AddComponentSection("mixer_controls",tr("audio.mixer"),removable=False)
-        add=QPushButton(tr("audio.add_bus"));add.setEnabled(len(buses)<256)
-        def create():
-            import uuid
-            buses.append(dict(id=str(uuid.uuid4()),parent=ZERO,name=tr("audio.new_bus"),volume=1.0,pitch=1.0,muted=False,solo=False,paused=False));save(True)
-        add.clicked.connect(create);section.AddField("",add)
-
-    @staticmethod
-    def _RemoveAudioBus(bus,buses,save):
-        for b in buses:
-            if b["parent"]==bus["id"]:b["parent"]=bus["parent"]
-        buses.remove(bus);save(True)
+        tr=self.Window.Localization.Translate;buses=self.Runtime.AudioBuses(info["uuid"])
+        section=self.Window.Properties.AddComponentSection("mixer_preview",tr("audio.mixer"),removable=False)
+        self._mixer_stats={}
+        for key,value in (("bus_count",len(buses)),("effect_count",sum(len(b.get("effects",[])) for b in buses))):
+            label=QLabel(str(value));self._mixer_stats[key]=label;section.AddField(tr("audio."+key),label)
+        provider=getattr(self,"_ProjectAssets",None)
+        try:assets=provider() if provider else []
+        except AttributeError:assets=[]
+        section.AddField(tr("audio.preview"),MixerAssetPreview(self.Runtime,info["uuid"],buses,self.Window.Localization,assets,getattr(self.Window,"ThemeManager",None)))
 
     def _AudioMixerForEntity(self,entity_id):
         scene_id=self.Runtime.EntityDetails(entity_id).get("scene_uuid")
@@ -961,7 +938,10 @@ class EditorController(QObject):
             if not self.Window.Docking.is_panel_open("audio_mixer"):self.Window.Docking.dock("audio_mixer","center",relative_to="asset_browser")
             self.Window.Docking.activate_panel("audio_mixer")
     def _MixerSaved(self,path):
-        if getattr(self,"_inspected_asset",None)==Path(path):QTimer.singleShot(0,self,lambda:self.SelectAsset(path) if self._inspected_asset==Path(path) else None)
+        if getattr(self,"_inspected_asset",None)!=Path(path):return
+        info=self.Runtime.AssetInfo(str(path));buses=self.Runtime.AudioBuses(info['uuid']) if info else []
+        for key,value in (('bus_count',len(buses)),('effect_count',sum(len(b.get('effects',[])) for b in buses))):
+            if key in getattr(self,'_mixer_stats',{}):self._mixer_stats[key].setText(str(value))
 
     def LoadSceneAdditive(self,path)->None:
         self.Runtime.LoadSceneAdditive(path)

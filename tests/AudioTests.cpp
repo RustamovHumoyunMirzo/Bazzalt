@@ -29,6 +29,12 @@ int main(){
     float peak=0;for(int i=0;i<100&&peak<.01f;++i){std::this_thread::sleep_for(std::chrono::milliseconds(2));runtime.Update(.01f);peak=Render(runtime);}assert(peak>.1f);
     assert(voice.Pause());assert(voice.GetState()==AudioPlaybackState::Paused);Render(runtime);assert(Render(runtime)<.0001f);assert(voice.Resume());runtime.Update(.01f);assert(Render(runtime)>.1f);
     const auto sfx=AudioMixer::GetSFXBus();assert(sfx.IsValid());assert(sfx.SetMuted(true));Render(runtime);assert(Render(runtime)<.0001f);assert(sfx.SetMuted(false));assert(Render(runtime)>.1f);
+    AudioEffectSettings filter;filter.Type=AudioEffectType::Lowpass;filter.Parameters={{"Cutoff Freq",20},{"Resonance",1}};
+    assert(sfx.SetEffects({filter}));Render(runtime);assert(Render(runtime)<.02f);assert(sfx.SetBypass(true));assert(Render(runtime)>.1f);assert(sfx.SetBypass(false));
+    filter.Enabled=false;assert(sfx.SetEffects({filter}));assert(Render(runtime)>.1f);auto meter=sfx.GetPeakLevels();assert(meter[0]>.1f||meter[1]>.1f);
+    auto snapshot=AudioMixer::CaptureSnapshot();assert(sfx.SetMuted(true));assert(AudioMixer::ApplySnapshot(snapshot));assert(!sfx.GetSettings().Muted);
+    for(auto type:{AudioEffectType::Highpass,AudioEffectType::Echo,AudioEffectType::Distortion,AudioEffectType::Reverb,AudioEffectType::Equalizer}){AudioEffectSettings fx;fx.Type=type;assert(sfx.SetEffects({fx}));Render(runtime,12000);}
+    filter.Parameters["Cutoff Freq"]=0;assert(!sfx.SetEffects({filter}));assert(sfx.SetEffects({}));
     listener.GetComponent<AudioListener>().Enabled=false;runtime.Update(.01f);assert(!Audio::GetActiveListener());Render(runtime);assert(Render(runtime)<.0001f);listener.GetComponent<AudioListener>().Enabled=true;
     settings.SpatialBlend=1;settings.MinDistance=1;settings.MaxDistance=10;settings.RolloffCurve=AudioRolloff::Linear;entity.GetComponent<Transform>().Position={0,0,-20};runtime.Update(.01f);Render(runtime);assert(Render(runtime)<.0001f);
     entity.GetComponent<Transform>().Position={0,0,-1};runtime.Update(.01f);assert(Render(runtime)>.1f);

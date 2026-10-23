@@ -161,8 +161,14 @@ class RuntimeService(QObject):
         return bool(self._host and hasattr(self._host,"audio_control") and self._host.audio_control(voice,action,value))
     def AudioBuses(self,mixer:str="")->list:
         return [dict(bus) for bus in self._host.audio_buses(mixer)] if self._host and hasattr(self._host,"audio_buses") else []
-    def SaveAudioMixer(self,identity:str,buses:list)->bool:
-        return bool(self._host and hasattr(self._host,"save_audio_mixer") and self._host.save_audio_mixer(identity,buses))
+    def SaveAudioMixer(self,identity:str,buses:list,editor_state:str="")->bool:
+        return bool(self._host and hasattr(self._host,"save_audio_mixer") and self._host.save_audio_mixer(identity,buses,editor_state))
+    def AudioMixerEditorState(self,identity):
+        return str(self._host.audio_mixer_editor_state(identity)) if self._host and hasattr(self._host,'audio_mixer_editor_state') else ''
+    def AudioMixerLevels(self,identity):
+        return dict(self._host.audio_mixer_levels(identity)) if self._host and hasattr(self._host,'audio_mixer_levels') else {}
+    def PreviewMixerAudio(self,mixer,clip,bus):
+        return int(self._host.audio_mixer_preview(mixer,clip,bus)) if self._host and hasattr(self._host,'audio_mixer_preview') else 0
     def RefreshAudioMixer(self,identity:str)->bool:
         return bool(self._host and hasattr(self._host,"refresh_audio_mixer") and self._host.refresh_audio_mixer(identity))
     def SetEditorStatisticsText(self,text:str,visible:bool)->None:

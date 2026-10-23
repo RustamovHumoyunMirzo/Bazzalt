@@ -5,7 +5,7 @@ import os
 import sys
 import uuid
 from pathlib import Path
-from PySide6.QtCore import QFile,QFileSystemWatcher,QMimeData,QSize,Qt,Signal,QTimer
+from PySide6.QtCore import QFile,QFileSystemWatcher,QMimeData,QSize,Qt,Signal,QTimer,QItemSelectionModel
 from PySide6.QtGui import QColor,QIcon,QLinearGradient,QPainter,QPixmap,QRadialGradient
 from PySide6.QtWidgets import (QAbstractItemView,QFileDialog,QLineEdit,QListWidget,QListWidgetItem,QMenu,QSplitter,QStyledItemDelegate,QTreeWidget,QTreeWidgetItem,QVBoxLayout,QWidget)
 from ...localization import LocalizationManager
@@ -110,19 +110,30 @@ class AssetBrowserPanel(QWidget):
         finally:self.Browser.blockSignals(blocked)
     def Refresh(self,select=None)->None:
         self.AssetsChanged.emit()
+        selected={Path(item.data(Qt.ItemDataRole.UserRole)) for item in self.Browser.selectedItems()}
+        current=self.Browser.currentItem();current_path=Path(current.data(Qt.ItemDataRole.UserRole)) if current else None
+        scroll=self.Browser.verticalScrollBar().value()
         previous_folder=self._folder if self._folder is not None and self._InsideRoot(self._folder) else self._root
         if select and self._InsideRoot(select):
             # Newly created/renamed assets must remain visible and editable,
             # even when their name no longer matches the search query.
             self.Search.clear();self._search_timer.stop();previous_folder=Path(select).parent
-        self.Tree.clear();self.Browser.clear();self._folder=None
-        if self._root is None or not self._root.is_dir():return
-        root=QTreeWidgetItem([self._root.name]);root.setData(0,Qt.ItemDataRole.UserRole,self._root);root.setIcon(0,self._Icon(self._root));self.Tree.addTopLevelItem(root);self._PopulateDirectories(root,self._root);root.setExpanded(True)
-        target=self._FindDirectoryItem(root,previous_folder) or root;self.Tree.setCurrentItem(target);self.Tree.scrollToItem(target)
-        if select:
+        tree_blocked=self.Tree.blockSignals(True);browser_blocked=self.Browser.blockSignals(True)
+        try:
+            self.Tree.clear();self.Browser.clear();self._folder=None
+            if self._root is None or not self._root.is_dir():return
+            root=QTreeWidgetItem([self._root.name]);root.setData(0,Qt.ItemDataRole.UserRole,self._root);root.setIcon(0,self._Icon(self._root));self.Tree.addTopLevelItem(root);self._PopulateDirectories(root,self._root);root.setExpanded(True)
+            target=self._FindDirectoryItem(root,previous_folder) or root;self.Tree.setCurrentItem(target);self.Tree.scrollToItem(target);self._FolderSelected(target,None)
             for i in range(self.Browser.count()):
                 item=self.Browser.item(i)
-                if Path(item.data(Qt.ItemDataRole.UserRole))==Path(select):item.setSelected(True);self.Browser.setCurrentItem(item);break
+                path=Path(item.data(Qt.ItemDataRole.UserRole))
+                if path in ({Path(select)} if select else selected):
+                    item.setSelected(True)
+                    if select or path==current_path or self.Browser.currentItem() is None:self.Browser.setCurrentItem(item,QItemSelectionModel.SelectionFlag.NoUpdate)
+            self.Browser.verticalScrollBar().setValue(scroll)
+        finally:self.Tree.blockSignals(tree_blocked);self.Browser.blockSignals(browser_blocked)
+        if select:self._SelectionChanged()
+        elif selected and not self.Browser.selectedItems():self.SelectionCleared.emit()
     def _FindDirectoryItem(self,item,path):
         if path is not None and Path(item.data(0,Qt.ItemDataRole.UserRole))==Path(path):return item
         for index in range(item.childCount()):

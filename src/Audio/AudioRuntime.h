@@ -6,8 +6,8 @@
 #include "Bazzalt/Serialization.h"
 namespace Bazzalt::Runtime {
 bool InspectAudioFile(const std::filesystem::path& path, AudioClipInfo& info, std::string& error);
-bool ReadAudioMixer(const std::filesystem::path& path, std::vector<AudioBusSettings>& buses, std::string& error);
-bool SaveAudioMixer(const std::filesystem::path& path, const std::vector<AudioBusSettings>& buses, std::string& error);
+bool ReadAudioMixer(const std::filesystem::path& path, std::vector<AudioBusSettings>& buses, std::string& error, std::string* editorState=nullptr);
+bool SaveAudioMixer(const std::filesystem::path& path, const std::vector<AudioBusSettings>& buses, std::string& error, const std::string& editorState="");
 class AudioRuntime final {
 public:
     AudioRuntime();
@@ -18,7 +18,7 @@ public:
     void SetHostPaused(bool paused);
     bool ReadFrames(float* stereo, std::uint32_t frames); // Offline/device-free verification only.
     void Stop();
-    AudioVoice Preview(UUID clip);
+    AudioVoice Preview(UUID clip, AudioBus bus={});
     void StopPreview();
     UUID GetMixerAsset() const;
     static AudioRuntime* Current();

@@ -1,4 +1,5 @@
 #include "Audio/AudioRuntime.h"
+#include "Audio/AudioEffects.h"
 #include "Bazzalt/AssetManager.h"
 #include "Bazzalt/Console.h"
 #include <miniaudio.h>
@@ -87,14 +88,14 @@ bool InspectAudioFile(const std::filesystem::path& path,AudioClipInfo& info,std:
     if(ma_decoder_read_pcm_frames(&decoder,probe.data(),256,&read)!=MA_SUCCESS&&read==0){error="Audio Clip cannot decode its first frames";return false;}
     info={double(frames)/rate,frames,channels,rate};error.clear();return true;
 }
-bool ReadAudioMixer(const std::filesystem::path& path,std::vector<AudioBusSettings>& buses,std::string& error){
+bool ReadAudioMixer(const std::filesystem::path& path,std::vector<AudioBusSettings>& buses,std::string& error,std::string* editorState){
     std::error_code ec;if(std::filesystem::file_size(path,ec)>1024*1024||ec){error="Could not read Audio Mixer (1 MiB maximum)";return false;}
     std::ifstream stream(path,std::ios::binary);std::string text((std::istreambuf_iterator<char>(stream)),{});
     try{
         auto tree=ryml::parse_in_arena(ryml::csubstr(text.data(),text.size()));auto root=tree.rootref();
-        if(!root.is_map()||!root.has_child("Version")||root["Version"].val()!="1"||!root.has_child("Buses")||!root["Buses"].is_seq())throw std::invalid_argument("Expected Version: 1 and Buses sequence");
+        if(!root.is_map()||!root.has_child("Version")||(root["Version"].val()!="1"&&root["Version"].val()!="2")||!root.has_child("Buses")||!root["Buses"].is_seq())throw std::invalid_argument("Expected supported Version and Buses sequence");
         std::vector<AudioBusSettings> parsed;
-        auto value=[](ryml::ConstNodeRef n){auto v=n.val();return std::string(v.str,v.len);};
+        auto value=[](ryml::ConstNodeRef n){if(!n.has_val())throw std::invalid_argument("Expected scalar mixer value");auto v=n.val();return std::string(v.str,v.len);};
         for(auto n:root["Buses"].children()){
             if(parsed.size()>=256||!n.is_map())throw std::invalid_argument("Invalid mixer bus list");
             AudioBusSettings bus;
@@ -103,9 +104,21 @@ bool ReadAudioMixer(const std::filesystem::path& path,std::vector<AudioBusSettin
             auto number=[&](const char* key,float& v){if(!n.has_child(key))return;auto t=value(n[key]);auto r=std::from_chars(t.data(),t.data()+t.size(),v);if(r.ec!=std::errc{}||r.ptr!=t.data()+t.size())throw std::invalid_argument("Invalid bus number");};
             number("Volume",bus.Volume);number("Pitch",bus.Pitch);
             auto boolean=[&](const char* key,bool& v){if(!n.has_child(key))return;auto t=value(n[key]);if(t!="true"&&t!="false")throw std::invalid_argument("Invalid bus boolean");v=t=="true";};
-            boolean("Muted",bus.Muted);boolean("Solo",bus.Solo);boolean("Paused",bus.Paused);parsed.push_back(bus);
+            boolean("Muted",bus.Muted);boolean("Solo",bus.Solo);boolean("Paused",bus.Paused);boolean("Bypass",bus.Bypass);
+            if(n.has_child("Effects")){
+                if(!n["Effects"].is_seq())throw std::invalid_argument("Expected effect sequence");
+                for(auto fx:n["Effects"].children()){
+                    if(bus.Effects.size()>=16||!fx.is_map())throw std::invalid_argument("Too many effects");
+                    AudioEffectSettings e;if(!fx.has_child("Id")||!UUID::TryParse(value(fx["Id"]),e.Id)||!fx.has_child("Type"))throw std::invalid_argument("Invalid effect ID/type");
+                    const auto type=value(fx["Type"]);const char* types[]={"Lowpass","Highpass","Echo","Distortion","Reverb","Equalizer"};int index=0;for(;index<6&&type!=types[index];++index){}if(index==6)throw std::invalid_argument("Unknown audio effect");e.Type=AudioEffectType(index);
+                    if(fx.has_child("Enabled")){auto enabled=value(fx["Enabled"]);if(enabled!="true"&&enabled!="false")throw std::invalid_argument("Invalid effect enabled flag");e.Enabled=enabled=="true";}
+                    if(fx.has_child("Parameters")){if(!fx["Parameters"].is_map())throw std::invalid_argument("Invalid effect parameters");for(auto p:fx["Parameters"].children()){float v;auto t=value(p);auto r=std::from_chars(t.data(),t.data()+t.size(),v);if(r.ec!=std::errc{}||r.ptr!=t.data()+t.size())throw std::invalid_argument("Invalid effect parameter number");auto key=p.key();e.Parameters.emplace(std::string(key.str,key.len),v);}}
+                    bus.Effects.push_back(std::move(e));
+                }
+            }
+            parsed.push_back(std::move(bus));
         }
-        if(!AudioMixer::Validate(parsed,error))return false;buses=std::move(parsed);error.clear();return true;
+        if(!AudioMixer::Validate(parsed,error))return false;buses=std::move(parsed);if(editorState)*editorState=root.has_child("EditorState")?value(root["EditorState"]):"";error.clear();return true;
     }catch(const std::exception& e){error=e.what();return false;}
 }
 struct AudioRuntime::Impl {
@@ -117,7 +130,7 @@ struct AudioRuntime::Impl {
         ma_sound_group* RoutedGroup=nullptr;
         ~Voice(){if(DryReady)ma_sound_uninit(&Dry);if(WetReady)ma_sound_uninit(&Wet);}
     };
-    struct Bus {ma_sound_group Group{};bool Ready=false;~Bus(){if(Ready)ma_sound_group_uninit(&Group);}};
+    struct Bus {ma_sound_group Group{};Runtime::BusProcessor Processor;bool Ready=false;~Bus(){if(Ready)ma_sound_group_uninit(&Group);}};
     ma_engine Engine{};bool Ready=false,NoDevice=false,Running=false,Paused=false,HostPaused=false;
     Scene* World=nullptr;
     std::string Error;
@@ -150,12 +163,15 @@ struct AudioRuntime::Impl {
     }
     bool BuildGroups(){
         ClearGroups();
-        for(const auto& [id,b]:Buses){auto g=std::make_unique<Bus>();if(ma_sound_group_init(&Engine,MA_SOUND_FLAG_NO_SPATIALIZATION,nullptr,&g->Group)!=MA_SUCCESS){Error="Could not create audio mixer bus";ClearGroups();return false;}g->Ready=true;Groups[id]=std::move(g);}
-        for(const auto& [id,b]:Buses)if(id)ma_node_attach_output_bus(&Groups.at(id)->Group,0,&Groups.at(b.Parent)->Group,0);
+        for(const auto& [id,b]:Buses){auto g=std::make_unique<Bus>();if(ma_sound_group_init(&Engine,MA_SOUND_FLAG_NO_SPATIALIZATION,nullptr,&g->Group)!=MA_SUCCESS){Error="Could not create audio mixer bus";ClearGroups();return false;}g->Ready=true;if(!g->Processor.Initialize(&Engine,b)){Error="Could not create audio effect processor";ClearGroups();return false;}Groups[id]=std::move(g);}
+        for(const auto& [id,b]:Buses){auto& g=*Groups.at(id);ma_node_attach_output_bus(&g.Group,0,&g.Processor.Node,0);ma_node_attach_output_bus(&g.Processor.Node,0,id?static_cast<ma_node*>(&Groups.at(b.Parent)->Group):ma_node_graph_get_endpoint(ma_engine_get_node_graph(&Engine)),0);}
         ApplyBuses();return true;
     }
     bool ReplaceBuses(const std::vector<AudioBusSettings>& values){
         std::map<UUID,AudioBusSettings> replacement;for(auto b:values)replacement[b.Id]=b;
+        bool reusable=replacement.size()==Buses.size();
+        if(reusable)for(const auto& [id,b]:replacement)if(!Buses.contains(id)||Buses.at(id).Effects!=b.Effects||Buses.at(id).Bypass!=b.Bypass){reusable=false;break;}
+        if(reusable){Buses=std::move(replacement);if(Ready){for(const auto& [id,b]:Buses)if(id)ma_node_attach_output_bus(&Groups.at(id)->Processor.Node,0,&Groups.at(b.Parent)->Group,0);ApplyBuses();for(auto& [id,v]:Voices)Apply(*v,0);}return true;}
         auto previous=std::move(Buses);Buses=std::move(replacement);auto oldGroups=std::move(Groups);
         if(Ready&&!BuildGroups()){Buses=std::move(previous);Groups=std::move(oldGroups);return false;}
         for(auto& [id,v]:Voices)Apply(*v,0);
@@ -255,7 +271,7 @@ void AudioRuntime::SetHostPaused(bool paused){if(Data->HostPaused==paused)return
 bool AudioRuntime::ReadFrames(float* stereo,std::uint32_t frames){return stereo&&Data->Ready&&Data->NoDevice&&ma_engine_read_pcm_frames(&Data->Engine,stereo,frames,nullptr)==MA_SUCCESS;}
 void AudioRuntime::StopPreview(){std::erase_if(Data->Voices,[](const auto& e){return e.second->Preview;});}
 UUID AudioRuntime::GetMixerAsset() const{return Data->Mixer;}
-AudioVoice AudioRuntime::Preview(UUID id){StopPreview();AudioSource s;s.Clip=AudioClip::Load(id);s.SpatialBlend=0;s.OutputBus={};return Data->Play(s,{}, {},true);}
+AudioVoice AudioRuntime::Preview(UUID id,AudioBus bus){StopPreview();AudioSource s;s.Clip=AudioClip::Load(id);s.SpatialBlend=0;s.OutputBus=bus;return Data->Play(s,{}, {},true);}
 void AudioRuntime::Update(float dt){
     auto& d=*Data;
     if(d.Running&&d.World){
@@ -298,21 +314,41 @@ AudioBus AudioMixer::GetSFXBus(){return AudioBus::Load(SFX);}
 bool AudioMixer::Validate(const std::vector<AudioBusSettings>& values,std::string& error){
     std::map<UUID,AudioBusSettings> buses;
     if(values.empty()||values.size()>256){error="Audio Mixer requires 1–256 buses";return false;}
-    for(const auto& b:values)if(b.Id==UUID{~0ull,~0ull}||!buses.emplace(b.Id,b).second||b.Name.empty()||b.Name.size()>128||!Range(b.Volume,0,4)||!Range(b.Pitch,.25f,4)){error="Invalid/duplicate audio bus";return false;}
+    std::set<UUID> effects;float delayBudget=0;
+    for(const auto& b:values){if(b.Id==UUID{~0ull,~0ull}||!buses.emplace(b.Id,b).second||b.Name.empty()||b.Name.size()>128||!Range(b.Volume,0,10)||!Range(b.Pitch,.25f,4)||b.Effects.size()>16){error="Invalid/duplicate audio bus";return false;}
+        for(const auto& e:b.Effects){if(!e.Id||!effects.insert(e.Id).second||effects.size()>512||int(e.Type)<0||int(e.Type)>5){error="Invalid/duplicate audio effect";return false;}
+            std::map<std::string,std::pair<float,float>> bounds;
+            switch(e.Type){
+                case AudioEffectType::Lowpass:case AudioEffectType::Highpass:bounds={{"Cutoff Freq",{10,22000}},{"Resonance",{1,10}}};break;
+                case AudioEffectType::Echo:bounds={{"Delay",{10,5000}},{"Decay Ratio",{0,1}},{"Dry Mix",{0,1}},{"Wet Mix",{0,1}}};delayBudget+=e.Parameters.contains("Delay")?e.Parameters.at("Delay")/1000:.5f;break;
+                case AudioEffectType::Distortion:bounds={{"Level",{0,1}}};break;
+                case AudioEffectType::Reverb:bounds={{"Dry Level",{-80,0}},{"Room",{-80,0}},{"Decay Time",{.1f,20}},{"Density",{0,100}}};delayBudget+=.18f;break;
+                case AudioEffectType::Equalizer:bounds={{"Center Freq",{20,22000}},{"Octave Range",{.2f,5}},{"Frequency Gain",{.05f,3}}};break;
+            }
+            for(const auto& [key,v]:e.Parameters)if(!bounds.contains(key)||!Range(v,bounds.at(key).first,bounds.at(key).second)){error="Invalid audio effect parameter: "+key;return false;}
+        }
+    }
+    if(!std::isfinite(delayBudget)||delayBudget>64){error="Mixer delay memory budget exceeded (64 stereo seconds)";return false;}
     if(!buses.contains(UUID{})||buses.at(UUID{}).Parent){error="Audio Mixer requires the root Master bus";return false;}
     for(const auto& [id,b]:buses){if(!buses.contains(b.Parent)){error="Audio bus parent does not exist";return false;}if(!id)continue;std::set<UUID> visited;UUID p=id;while(p){if(!visited.insert(p).second){error="Audio bus routing cycle";return false;}p=buses.at(p).Parent;}}
     error.clear();return true;
 }
 std::vector<AudioBusSettings> AudioMixer::GetBuses(){auto d=Data();if(!d)return DefaultBuses();std::vector<AudioBusSettings> result;for(const auto& [id,b]:d->Buses)result.push_back(b);return result;}
+AudioMixerSnapshot AudioMixer::CaptureSnapshot(){return {GetBuses()};}
+bool AudioMixer::ApplySnapshot(const AudioMixerSnapshot& snapshot){
+    auto d=Data();if(!d)return false;auto values=GetBuses();
+    for(auto& b:values)for(const auto& stored:snapshot.Buses)if(b.Id==stored.Id){b.Volume=stored.Volume;b.Pitch=stored.Pitch;b.Muted=stored.Muted;b.Bypass=stored.Bypass;
+        for(auto& fx:b.Effects)for(const auto& saved:stored.Effects)if(fx.Id==saved.Id&&fx.Type==saved.Type){fx.Enabled=saved.Enabled;fx.Parameters=saved.Parameters;}}
+    if(!Validate(values,d->Error))return false;return d->ReplaceBuses(values);
+}
 AudioBus AudioMixer::CreateBus(const std::string& name,AudioBus parent,UUID id){
     auto d=Data();if(!d||!id||id==UUID{~0ull,~0ull}||d->Buses.contains(id)||!d->Buses.contains(parent.GetUUID())||name.empty()||name.size()>128||d->Buses.size()>=256)return AudioBus::Load(UUID{~0ull,~0ull});
     AudioBusSettings b;b.Id=id;b.Parent=parent.GetUUID();b.Name=name;
-    if(d->Ready){auto group=std::make_unique<Runtime::AudioRuntime::Impl::Bus>();if(ma_sound_group_init(&d->Engine,MA_SOUND_FLAG_NO_SPATIALIZATION,&d->Groups.at(b.Parent)->Group,&group->Group)!=MA_SUCCESS)return AudioBus::Load(UUID{~0ull,~0ull});group->Ready=true;d->Groups[id]=std::move(group);}
-    d->Buses[id]=b;d->ApplyBuses();return AudioBus::Load(id);
+    auto all=AudioMixer::GetBuses();all.push_back(b);if(!d->ReplaceBuses(all))return AudioBus::Load(UUID{~0ull,~0ull});return AudioBus::Load(id);
 }
 bool AudioMixer::RemoveBus(AudioBus bus){
     auto d=Data();auto id=bus.GetUUID();if(!d||!id||!d->Buses.contains(id))return false;const auto parent=d->Buses.at(id).Parent;
-    for(auto& [child,b]:d->Buses)if(child&&b.Parent==id){b.Parent=parent;if(d->Ready)ma_node_attach_output_bus(&d->Groups.at(child)->Group,0,&d->Groups.at(parent)->Group,0);}
+    for(auto& [child,b]:d->Buses)if(child&&b.Parent==id){b.Parent=parent;if(d->Ready)ma_node_attach_output_bus(&d->Groups.at(child)->Processor.Node,0,&d->Groups.at(parent)->Group,0);}
     for(auto& [n,v]:d->Voices)if(v->Settings.OutputBus.GetUUID()==id){v->Settings.OutputBus=AudioBus::Load(parent);d->Apply(*v,0);}
     d->Groups.erase(id);d->Buses.erase(id);d->ApplyBuses();return true;
 }
@@ -327,15 +363,21 @@ AudioBusSettings AudioBus::GetSettings() const{auto d=Data();if(d&&d->Buses.cont
 bool AudioBus::SetSettings(const AudioBusSettings& value) const{
     auto d=Data();if(!d||value.Id!=m_id||!d->Buses.contains(m_id))return false;
     auto all=AudioMixer::GetBuses();for(auto& b:all)if(b.Id==m_id)b=value;std::string error;if(!AudioMixer::Validate(all,error))return false;
-    d->Buses[m_id]=value;if(d->Ready&&m_id)ma_node_attach_output_bus(&d->Groups.at(m_id)->Group,0,&d->Groups.at(value.Parent)->Group,0);
-    d->ApplyBuses();for(auto& [id,v]:d->Voices)d->Apply(*v,0);return true;
+    if(d->Buses.at(m_id).Effects==value.Effects&&d->Buses.at(m_id).Bypass==value.Bypass){
+        d->Buses[m_id]=value;if(d->Ready&&m_id)ma_node_attach_output_bus(&d->Groups.at(m_id)->Processor.Node,0,&d->Groups.at(value.Parent)->Group,0);
+        d->ApplyBuses();for(auto& [id,v]:d->Voices)d->Apply(*v,0);return true;
+    }
+    return d->ReplaceBuses(all);
 }
 bool AudioBus::SetVolume(float v) const{auto s=GetSettings();s.Volume=v;return SetSettings(s);}
-bool AudioBus::SetVolumeDecibels(float v) const{if(!Range(v,-96,12))return false;return SetVolume(std::pow(10.0f,v/20));}
+bool AudioBus::SetVolumeDecibels(float v) const{if(!Range(v,-96,20))return false;return SetVolume(std::pow(10.0f,v/20));}
 bool AudioBus::SetPitch(float v) const{auto s=GetSettings();s.Pitch=v;return SetSettings(s);}
 bool AudioBus::SetMuted(bool v) const{auto s=GetSettings();s.Muted=v;return SetSettings(s);}
 bool AudioBus::SetSolo(bool v) const{auto s=GetSettings();s.Solo=v;return SetSettings(s);}
 bool AudioBus::SetPaused(bool v) const{auto s=GetSettings();s.Paused=v;return SetSettings(s);}
+bool AudioBus::SetBypass(bool v) const{auto s=GetSettings();s.Bypass=v;return SetSettings(s);}
+bool AudioBus::SetEffects(const std::vector<AudioEffectSettings>& v) const{auto s=GetSettings();s.Effects=v;return SetSettings(s);}
+std::array<float,2> AudioBus::GetPeakLevels() const{auto d=Data();if(!d||!d->Groups.contains(m_id))return {};auto& p=d->Groups.at(m_id)->Processor;return {p.Peaks[0].exchange(0),p.Peaks[1].exchange(0)};}
 AudioVoice Audio::Play(Entity source){auto d=Data();if(!d||!d->Running||!source||source.GetScene()!=d->World)return {};auto s=source.TryGetComponent<AudioSource>();if(!s||!s->IsEnabled())return {};if(auto v=d->Source(source.GetUUID()))d->Voices.erase(v->Id);d->Seen.insert(source.GetUUID());return d->Play(*s,source.GetUUID(),source.GetWorldTransform().Position);}
 AudioVoice Audio::GetVoice(Entity e){auto d=Data();if(!d||!e||e.GetScene()!=d->World)return {};auto v=d->Source(e.GetUUID());return v?AudioVoice(v->Id):AudioVoice{};}
 Entity Audio::GetActiveListener(){auto d=Data();return d&&d->World&&d->HasListener?d->World->GetEntity(d->Listener):Entity{};}

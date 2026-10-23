@@ -86,7 +86,7 @@ class Editor(QMainWindow):
         self.Hierarchy = HierarchyPanel(self.Localization, install_shortcuts=False)
         self.Properties = PropertiesPanel(self.Localization)
         self.AssetBrowser = AssetBrowserPanel(self.Localization, self.Resources)
-        self.AudioMixer=AudioMixerPanel(self.Runtime,self.Localization,self.Resources)
+        self.AudioMixer=AudioMixerPanel(self.Runtime,self.Localization,self.Resources,self.ThemeManager)
         from ..asset_opening import ExternalAssetOpener
         self.AssetBrowser.ExternalOpener = ExternalAssetOpener(self._settings, self._settings_saver)
         self._PanelWidgets = {

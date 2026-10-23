@@ -42,7 +42,7 @@ class AudioTests(unittest.TestCase):
                 mixer=root/'Assets'/'New Audio Mixer.bmixer';mixer_info=runtime.AssetInfo(str(mixer));buses=runtime.AudioBuses(mixer_info['uuid']);self.assertEqual(len(buses),3)
                 buses[1]['volume']=.3;self.assertTrue(runtime.SaveAudioMixer(mixer_info['uuid'],buses));self.assertAlmostEqual(runtime.AudioBuses(mixer_info['uuid'])[1]['volume'],.3,places=5)
                 properties=PropertiesPanel(locale);controller=EditorController.__new__(EditorController);controller.Runtime=runtime;controller.Window=SimpleNamespace(Localization=locale,Properties=properties,Console=SimpleNamespace(AddMessage=Mock()));controller._inspected_asset=mixer
-                controller._InspectAudioMixer(mixer);self.assertGreaterEqual(len(properties._sections),4);properties.deleteLater();browser.deleteLater()
+                controller._InspectAudioMixer(mixer);self.assertEqual(len(properties._sections),1);self.assertIn('mixer_preview',properties._sections);properties.deleteLater();browser.deleteLater()
         finally:runtime.Release()
 
     def test_preview_and_curve_controls(self):

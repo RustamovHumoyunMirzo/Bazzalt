@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="The Audio Mixer edits a .bmixer asset as a routing tree and channel strips. Open it from Window &gt; Audio Mixer, double-click a mixer in the Asset Browser, or choose Edit in Audio Mixer from the asset&#x27;s context menu. This panel edits an asset, not an entity or an Audio Source component.">
+  <meta name="description" content="The Audio Mixer edits a project&#x27;s .bmixer asset. Open it from Window &gt; Audio Mixer, double-click a mixer in the Asset Browser, or choose Edit in Audio Mixer. The panel contains Mixers, Snapshots, Groups and Views on the left, and channel strips on the right. Its menus, divider and controls use the editor theme.">
   <title>Audio Mixer panel | BAZZALT Docs</title>
   <link rel="stylesheet" href="../../../../assets/docs.css">
   <script src="../../../../assets/theme.js"></script>
@@ -27,23 +27,32 @@
     <main id="content" tabindex="-1">
       <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Editor manual / Panels / Audio Mixer panel</nav>
       <article class="doc"><h1>Audio Mixer panel</h1>
-<p>The Audio Mixer edits a .bmixer asset as a routing tree and channel strips. Open it from Window &gt; Audio Mixer, double-click a mixer in the Asset Browser, or choose Edit in Audio Mixer from the asset's context menu. This panel edits an asset, not an entity or an Audio Source component.</p>
-<h2 id="choose">Choose a mixer</h2>
-<p>Use the asset picker at the top, or drag a .bmixer asset from the Asset Browser into it. Other asset types are rejected. Create a mixer with Asset Browser &gt; Create &gt; Audio Mixer. The selected mixer's name is displayed rather than its UUID.</p>
-<h2 id="channels">Channel strips</h2>
-<p>Each bus has a compact channel strip. Rename it at the top. The custom vertical fader shows a decibel scale and a precise dB readout; double-click it to reset to unity gain (0 dB). It controls gain, not a live signal meter. The numeric Volume field is the exact linear gain, from 0 to 4. Pitch ranges from 0.25 to 4. M mutes the bus, S solos it, and P pauses its voices while keeping playback positions. These settings compose with the bus's parents.</p>
-<p>In narrow docks the routing tree moves above the channel strips. Scroll horizontally for more buses, or vertically when the dock is too short to show all controls. Faders, channel switches and selection colors follow the editor theme. Wheel adjustment requires field focus.</p>
-<p>Select a bus in the routing tree, then use Add Bus to create a child or Remove Bus to remove the selected bus. Removing a bus reparents its children; Audio Source references to the removed UUID should be reassigned. Master cannot be removed.</p>
-<h2 id="routing">Routing</h2>
-<p>The tree shows how buses feed into Master. Drag a bus onto another bus to change its output, or use the output selector on its strip. Routing a bus into itself or its descendants is rejected, preventing feedback cycles. Master is always the root.</p>
-<h2 id="saving">Saving and live playback</h2>
-<p>Edits are saved automatically after a short pause. Save flushes pending changes immediately; switching mixer assets and closing the editor also flush pending edits. Reload discards pending local edits and reloads the asset. If the file changes externally while there are pending edits, the panel refuses to overwrite it and asks you to reload.</p>
-<p>To use the mixer in gameplay, assign it to the active Audio Listener's Audio Mixer field and route sources to its buses. Editing the mixer currently used during Play updates its routing and gain without restarting voices. Editing a different mixer does not switch the active gameplay mixer. Outside Play, the panel authors settings but does not start any audio by itself.</p>
-<p>See <a href="../../audio/en.html">Audio</a> for clips, previews, sources, listeners and distance settings.</p></article>
+<p>The Audio Mixer edits a project's .bmixer asset. Open it from Window &gt; Audio Mixer, double-click a mixer in the Asset Browser, or choose Edit in Audio Mixer. The panel contains Mixers, Snapshots, Groups and Views on the left, and channel strips on the right. Its menus, divider and controls use the editor theme.</p>
+<h2 id="choose">Choose an asset</h2>
+<p>Create a mixer through Asset Browser &gt; Create &gt; Audio Mixer. Select one in the panel's Mixers list, use the top asset picker, or drag a .bmixer into that picker. These are actual project assets; the panel does not save a separate JSON demo file. Bus UUIDs remain stable when groups are renamed.</p>
+<h2 id="channels">Channel strips and routing</h2>
+<p>Each strip has a colored header, a numeric gain field, a non-linear dB fader and stereo level meters. The gain range is −80 dB (silence) to +20 dB. Double-click the fader to return to 0 dB. Shift-wheel uses finer adjustment; wheel editing requires focus. M mutes, S solos, and B bypasses that group's effect rack without bypassing its gain. Ancestor gain and mute still apply.</p>
+<p>Use the Groups section's plus button to add a child. Drag a group onto another group to reroute its output. Cycles are rejected. Master is the root and cannot be removed or renamed. Group context menus provide rename, color, visibility, lock and deletion controls. Hiding a strip or locking its editor controls does not mute gameplay audio.</p>
+<h2 id="effects">Effects</h2>
+<p>Use Add.. on a strip to append an effect. Click an effect row for its parameters; use its context menu to enable/bypass, reorder or remove it. Audio flows through the rack in displayed order, after group attenuation, then into the parent group.</p>
+<table><thead><tr><th>Effect</th><th>Controls</th></tr></thead><tbody>
+<tr><td>Lowpass / Highpass</td><td>Cutoff Freq 10–22000 Hz; Resonance 1–10.</td></tr>
+<tr><td>Echo</td><td>Delay 10–5000 ms; Decay Ratio, Dry Mix and Wet Mix 0–1. Feedback is bounded below unity.</td></tr>
+<tr><td>Distortion</td><td>Level 0–1; 0 is transparent, increasing values blend soft saturation.</td></tr>
+<tr><td>Reverb</td><td>Dry Level and Room −80–0 dB; Decay Time 0.1–20 seconds; Density 0–100%.</td></tr>
+<tr><td>Equalizer</td><td>Center Freq 20–22000 Hz; Octave Range 0.2–5; Frequency Gain 0.05–3 (linear).</td></tr></tbody></table>
+<p>Processing is native, not a GUI simulation. There are at most 16 effects per group, 512 per mixer, and 64 stereo seconds of combined delay storage. Invalid parameters or excessive storage are rejected without replacing the saved asset.</p>
+<h2 id="snapshots">Snapshots and views</h2>
+<p>A snapshot stores group gain, mute, bypass and existing effect enabled/parameter values. Create snapshots with the plus button; select one to apply its mix. Editing updates the active snapshot. Solo is a session control, not a snapshot value. Renaming a group preserves its snapshots. Views store which strips are visible, without changing the audio mix. Both are saved in the mixer asset; favorites and group colors/locks are also retained.</p>
+<h2 id="preview">Preview and metering</h2>
+<p>The mixer asset's Properties inspector is read-only for authoring. It shows group/effect counts, a project Audio Clip picker, an audition output bus, player controls, preview volume, and a stereo level scale. Select a clip and press Play to audition through the chosen mixer bus. This does not require a gameplay listener. Auditioning is unavailable during Play, so it cannot replace the game's active mixer.</p>
+<p>The panel meters show actual post-effect peaks from playback or audition. They are idle when there is no signal; no random demo signal is generated. During gameplay assign the mixer asset to the active Audio Listener and set Audio Source output buses as needed.</p>
+<h2 id="saving">Saving</h2>
+<p>Edits autosave after a short pause; Save flushes immediately. Switching assets and closing the editor flush pending changes. Reload discards pending local edits. If the file changes externally while local edits are pending, the panel refuses to overwrite it. Editing the currently playing mixer updates playback without restarting voices. Gain-only edits retain DSP histories; changing effect configuration replaces its processor histories. Browser selection is preserved during refreshes.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../console/en.html"><small>Previous</small>Console</a>
 <a class="next" href="../../menus/en.html"><small>Next</small>Menus and play controls</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#choose">Choose a mixer</a><a class="toc-link" href="#channels">Channel strips</a><a class="toc-link" href="#routing">Routing</a><a class="toc-link" href="#saving">Saving and live playback</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#choose">Choose an asset</a><a class="toc-link" href="#channels">Channel strips and routing</a><a class="toc-link" href="#effects">Effects</a><a class="toc-link" href="#snapshots">Snapshots and views</a><a class="toc-link" href="#preview">Preview and metering</a><a class="toc-link" href="#saving">Saving</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">
