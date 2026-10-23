@@ -275,6 +275,25 @@ target_compile_definitions(Bazzalt PRIVATE
 )
 
 option(BAZZALT_BUILD_EDITOR_BRIDGE "Build the private Python editor runtime bridge" ON)
+if(WIN32)
+    set(_game_logo_header "${_bazzalt_generated_dir}/game_logo.h")
+    add_custom_command(OUTPUT "${_game_logo_header}"
+        COMMAND "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_game_logo.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/Launcher/BazzaltLogo.svg" "${_game_logo_header}"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Launcher/BazzaltLogo.svg" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_game_logo.py"
+        VERBATIM COMMENT "Embedding shared Bazzalt startup logo")
+    add_executable(BazzaltPlayer WIN32 Compiler/native/Player.cpp "${_game_logo_header}")
+    target_include_directories(BazzaltPlayer PRIVATE src include Compiler/native "${_bazzalt_generated_dir}")
+    target_link_libraries(BazzaltPlayer PRIVATE Bazzalt ryml bcrypt advapi32 ole32 shell32 user32 gdi32)
+    target_compile_definitions(BazzaltPlayer PRIVATE UNICODE _UNICODE)
+    set_target_properties(BazzaltPlayer PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor")
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        add_executable(BazzaltCooker Compiler/native/Cooker.cpp)
+        target_include_directories(BazzaltCooker PRIVATE src include)
+        target_link_libraries(BazzaltCooker PRIVATE Bazzalt ryml)
+        set_target_properties(BazzaltCooker PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor")
+    endif()
+endif()
 if(BAZZALT_BUILD_EDITOR_BRIDGE)
     if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
         message(FATAL_ERROR "The Editor requires 64-bit. For 32-bit game/runtime builds set BAZZALT_BUILD_EDITOR_BRIDGE=OFF.")

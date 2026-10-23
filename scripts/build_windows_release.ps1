@@ -45,10 +45,14 @@ if ($Product -ne 'hub') {
     if ($LASTEXITCODE -ne 0) { throw 'Native build failed' }
     cmake --build $Build --config Release --target BazzaltGui
     if ($LASTEXITCODE -ne 0) { throw 'GUI runtime build failed' }
+    cmake --build $Build --config Release --target BazzaltPlayer
+    if ($LASTEXITCODE -ne 0) { throw 'Native game player build failed' }
 }
 if ($Product -eq 'core') {
     New-Item -ItemType Directory -Path $Stage | Out-Null
     Copy-ReleaseSDK $Stage
+    python (Join-Path $Root 'scripts/stage_game_runtime.py') --build $Build --architecture $Architecture --output (Join-Path $Stage "RuntimeTemplates/windows-$Architecture")
+    if ($LASTEXITCODE -ne 0) { throw 'Game runtime template packaging failed' }
     Copy-Item -LiteralPath (Join-Path $Root 'LICENSE') -Destination $Stage
     @{version=$Version;architecture=$Architecture;platform='windows';abi=1;lua_version='5.4.9';gui_abi=1} | ConvertTo-Json | Set-Content (Join-Path $Stage 'core.json') -Encoding utf8
 } else {
@@ -74,6 +78,15 @@ if ($Product -eq 'core') {
             Copy-Item -LiteralPath $File -Destination (Join-Path $Stage 'Editor')
         }
         Copy-ReleaseSDK (Join-Path $Stage 'ScriptSDK')
+        cmake --build $Build --config Release --target BazzaltCooker
+        if ($LASTEXITCODE -ne 0) { throw 'Content cooker build failed' }
+        & (Join-Path $PSScriptRoot 'build_game_compiler.ps1') -BuildDirectory $BuildDirectory -OutputDirectory (Join-Path $OutputDirectory "compiler-$Version")
+        python -c "from pathlib import Path; from scripts.release_artifacts import Archive; Archive(Path(r'$Output/compiler-$Version/bazzalt_compiler.dist'), Path(r'$Output/Bazzalt-Compiler-$Version-windows-x64.zip'))"
+        if ($LASTEXITCODE -ne 0) { throw 'Game compiler archive failed' }
+        New-Item -ItemType Directory -Force -Path (Join-Path $Stage 'tools') | Out-Null
+        Copy-Item -LiteralPath (Join-Path $Output "compiler-$Version/bazzalt_compiler.dist") -Destination (Join-Path $Stage 'tools/compiler') -Recurse
+        python (Join-Path $Root 'scripts/stage_game_runtime.py') --build $Build --architecture $Architecture --output (Join-Path $Stage "RuntimeTemplates/windows-$Architecture")
+        if ($LASTEXITCODE -ne 0) { throw 'Editor game runtime template packaging failed' }
         New-Item -ItemType Directory -Path (Join-Path $Stage 'tools/filament') -Force | Out-Null
         foreach ($Tool in @('matc.exe','cmgen.exe','filamesh.exe')) {
             Copy-Item -LiteralPath (Join-Path $Filament "bin/$Tool") -Destination (Join-Path $Stage 'tools/filament')

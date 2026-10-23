@@ -29,6 +29,8 @@
 #include <cmath>
 #include <stdexcept>
 #include <cstdlib>
+#include <fstream>
+#include <iomanip>
 
 namespace Bazzalt::Runtime {
 
@@ -277,6 +279,7 @@ void Engine::ResizeEditorViewport(std::uint64_t id, std::uint32_t width, std::ui
 void Engine::DestroyEditorViewport(std::uint64_t id) {
     if (m_isInitialized) m_renderBackend->DestroyViewport(id);
 }
+bool Engine::WaitForViewportFrame(std::uint64_t id){return m_renderBackend->WaitForViewportFrame(id);}
 
 void Engine::SetEditorCamera(std::uint64_t id, float eyeX, float eyeY, float eyeZ,
                              float targetX, float targetY, float targetZ) {
@@ -356,7 +359,7 @@ bool Engine::RefreshLuaAsset(const std::filesystem::path& source){
 }
 bool Engine::StartScripts(bool resetTime){
     if(!m_luaConfigured){
-        std::vector<ScriptBinding> bindings;
+        std::vector<ScriptBinding> bindings,native;
         for(auto handle:m_scene->GetRegistry().view<ScriptComponents>()){
             const auto& scripts=m_scene->GetRegistry().get<ScriptComponents>(handle);if(!scripts.IsEnabled())continue;
             for(const auto& script:scripts.Values){
@@ -365,16 +368,19 @@ bool Engine::StartScripts(bool resetTime){
                 UUID sourceId;auto asset=UUID::TryParse(script.Source,sourceId)?m_assetDatabase->Find(sourceId):std::optional<AssetInfo>{};
                 if(asset)path=asset->SourcePath;
                 auto extension=path.extension().string();std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){return char(std::tolower(c));});
-                if(extension!=".lua"&&extension!=".blua")continue;
+                const bool nativeModule=extension==".cpp";
+                if(extension!=".lua"&&extension!=".blua"&&!nativeModule)continue;
                 if(path.is_relative())path=m_projectPath.parent_path()/path;
                 if(!asset)asset=m_assetDatabase->Find(path);if(!asset||asset->State!=AssetState::Ready){m_lastError="Lua scene asset is not ready";return false;}
                 ScriptBinding binding;binding.Module=asset->CachePath;binding.TypeName=script.TypeName;
                 binding.Entity=m_scene->GetEntity(static_cast<Entity::Id>(handle)).GetUUID().ToString();
                 for(const auto& property:script.Properties)binding.Properties[property.Name]=property.Value;
-                bindings.push_back(std::move(binding));
+                if(nativeModule){if(asset->CachePath.extension()!=".dll"){m_lastError="Native game script has not been compiled";return false;}native.push_back(std::move(binding));}
+                else bindings.push_back(std::move(binding));
             }
         }
         if(!m_luaRuntime->Configure(std::move(bindings),m_lastError))return false;
+        if(!m_scriptRuntime->Configure(std::move(native),m_lastError))return false;
     }
     if(resetTime)TimeAccess::Reset();m_fixedAccumulator=0.0;m_lastFrameTime=std::chrono::steady_clock::now();
     m_audioRuntime->Start(*m_scene,m_headlessAudio);
@@ -546,6 +552,42 @@ bool Engine::SaveProject(const std::filesystem::path& path)
     }
     m_projectPath = path;
     return true;
+}
+
+bool Engine::ExportCookedProject(const std::filesystem::path& destination,const std::vector<ScriptBinding>& bindings){
+    if(!m_assetDatabase->ExportCooked(destination)){m_lastError=m_assetDatabase->GetLastError();return false;}
+    try {
+        auto project=m_project;
+        if(project.StartupScene.empty())throw std::runtime_error("A startup scene is required for a game build");
+        ProjectSerializer serializer;if(!serializer.Save(project,destination/"Game.bproject"))throw std::runtime_error("Could not write game project");
+        std::map<std::string,UUID> modules;
+        auto utf8=[](const std::filesystem::path& path){auto value=path.generic_u8string();return std::string(reinterpret_cast<const char*>(value.data()),value.size());};
+        std::ofstream index(destination/".bazzalt/CookedAssets.yaml",std::ios::binary|std::ios::app);
+        for(const auto& binding:bindings)if(!modules.contains(binding.TypeName)){
+            auto id=UUID::Generate();modules[binding.TypeName]=id;
+            auto relative=std::filesystem::path("Scripts")/binding.Module.filename();
+            std::filesystem::create_directories(destination/"Scripts");
+            std::filesystem::copy_file(binding.Module,destination/relative,std::filesystem::copy_options::overwrite_existing);
+            index<<"  - UUID: "<<std::quoted(id.ToString())<<"\n    Source: "<<std::quoted(utf8(project.AssetDirectory/"__Scripts"/(binding.TypeName+".cpp")))<<"\n    Cache: "<<std::quoted(utf8(relative))<<"\n    Importer: Bazzalt.NativeScript\n";
+        }
+        for(const auto& [id,asset]:m_assetDatabase->GetRecords())if(asset.SourcePath.extension()==".bscene"){
+            auto scene=LoadSceneAsset(asset.SourcePath);if(!scene)throw std::runtime_error("Could not cook scene");
+            for(const auto& binding:bindings){UUID entityId;if(!UUID::TryParse(binding.Entity,entityId))throw std::runtime_error("Invalid script entity UUID");auto entity=scene->GetEntity(entityId);if(!entity)continue;
+                auto* scripts=entity.TryGetComponent<ScriptComponents>();if(!scripts)scripts=&entity.AddComponent<ScriptComponents>();
+                ScriptAttachment value;value.Source=modules.at(binding.TypeName).ToString();value.TypeName=binding.TypeName;
+                for(const auto& [key,property]:binding.Properties)value.Properties.push_back({key,"",property});
+                std::erase_if(scripts->Values,[&](const auto& old){return old.TypeName==value.TypeName;});scripts->Values.push_back(std::move(value));
+            }
+            for(auto handle:scene->GetRegistry().view<ScriptComponents>())for(auto& script:scene->GetRegistry().get<ScriptComponents>(handle).Values){
+                UUID sourceId;if(UUID::TryParse(script.Source,sourceId))continue;
+                auto source=std::filesystem::u8path(script.Source);if(source.is_relative())source=m_projectPath.parent_path()/source;
+                if(auto sourceAsset=m_assetDatabase->Find(source))script.Source=sourceAsset->Id.ToString();
+                else throw std::runtime_error("Script source is outside project assets: "+script.Source);
+            }
+            if(!SaveSceneAsset(*scene,destination/asset.SourcePath.lexically_relative(m_projectPath.parent_path()))||!SaveSceneAsset(*scene,destination/asset.CachePath.lexically_relative(m_projectPath.parent_path())))throw std::runtime_error("Could not save cooked scene");
+        }
+        if(!index)throw std::runtime_error("Could not write script index");return true;
+    }catch(const std::exception& error){m_lastError=error.what();return false;}
 }
 
 bool Engine::LoadProject(const std::filesystem::path& path, bool loadStartupScene)

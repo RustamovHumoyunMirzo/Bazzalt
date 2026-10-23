@@ -42,6 +42,8 @@ public:
     bool RefreshSource(const std::filesystem::path& source);
     bool SetEnvironmentImportSettings(UUID id,const PropertyMap& settings);
     PropertyMap GetImportSettings(UUID id);
+    bool ExportCooked(const std::filesystem::path& destination);
+    [[nodiscard]] const auto& GetRecords() const { return m_byId; }
 
     [[nodiscard]] std::optional<AssetInfo> Find(UUID id) const;
     [[nodiscard]] std::optional<AssetInfo> Find(const std::filesystem::path& sourcePath) const;
@@ -59,6 +61,7 @@ private:
 
     bool RegisterSource(const std::filesystem::path& source);
     bool RegisterSourceContent(const std::filesystem::path& source);
+    bool OpenCooked(const std::filesystem::path& index);
     bool LoadMetadata(const std::filesystem::path& path, Metadata& metadata);
     bool SaveMetadata(const std::filesystem::path& path, const Metadata& metadata);
     bool ImportAsset(AssetInfo& record, Metadata& metadata, AssetImporter& importer,
@@ -74,6 +77,7 @@ private:
     std::unordered_map<UUID, AssetInfo> m_byId;
     std::unordered_map<std::string, UUID> m_byPath;
     std::string m_lastError;
+    bool m_cooked=false;
 };
 
 } // namespace Bazzalt::Runtime

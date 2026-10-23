@@ -119,6 +119,8 @@ class Editor(QMainWindow):
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.Toolbar)
         self.setCentralWidget(self.Docking)
         self.Controller = EditorController(self, self.Runtime)
+        from ..game_build import GameBuildController
+        self.GameBuild=GameBuildController(self)
         self.ObjectTools=ObjectTools(self)
         self.MenuBar.EditCommandRequested.connect(self.ExecuteEditCommand)
         self.MenuBar.EditMenu.aboutToShow.connect(self.RefreshEditActions)
@@ -374,6 +376,8 @@ class Editor(QMainWindow):
             except (OSError,ValueError):pass
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if self.GameBuild.IsRunning():
+            QMessageBox.information(self,self.Localization.Translate('menu.build'),self.Localization.Translate('build.close_wait'));event.ignore();return
         if not self.AudioMixer.Flush():
             QMessageBox.warning(self,self.Localization.Translate("panel.audio_mixer"),self.AudioMixer.Error.text());event.ignore();return
         if self.Controller.IsDirty and self.isVisible() and self.PreferenceValue("general","confirm_unsaved",True):

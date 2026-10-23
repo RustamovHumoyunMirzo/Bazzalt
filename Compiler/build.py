@@ -1,0 +1,225 @@
+"""Content-only game builds. Consumes prebuilt runtime SDKs; never invokes CMake."""
+from __future__ import annotations
+import argparse
+from contextlib import contextmanager
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+import uuid
+import zipfile
+from .settings import Load,Validate
+from .pak import Pack
+
+def Emit(stage,message,**fields):
+    # ASCII JSON is lossless and safe through legacy Windows pipe code pages.
+    print(json.dumps(dict(stage=stage,message=message,**fields),ensure_ascii=True),flush=True)
+def Architecture(path):
+    from scripts.release_artifacts import Architecture as Inspect
+    return Inspect(path)
+@contextmanager
+def BuildLock(project):
+    directory=Path(project)/'.bazzalt/Cache/Build';directory.mkdir(parents=True,exist_ok=True)
+    with (directory/'build.lock').open('a+b') as file:
+        file.seek(0);file.write(b'\0');file.flush();file.seek(0)
+        try:
+            if os.name=='nt':
+                import msvcrt
+                msvcrt.locking(file.fileno(),msvcrt.LK_NBLCK,1)
+            else:
+                import fcntl
+                fcntl.flock(file,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except OSError as error:raise ValueError('Another build is already running for this project') from error
+        try:yield directory
+        finally:
+            if os.name=='nt':file.seek(0);msvcrt.locking(file.fileno(),msvcrt.LK_UNLCK,1)
+            else:fcntl.flock(file,fcntl.LOCK_UN)
+def Run(command,**kwargs):
+    process=subprocess.run([str(arg) for arg in command],capture_output=True,text=True,encoding='utf-8',errors='replace',creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0,**kwargs)
+    if process.returncode:raise ValueError((process.stderr or process.stdout or 'Tool failed')[-12000:])
+    return process
+
+@contextmanager
+def BuildWorkspace(directory):
+    """Disposable cook output; incremental script cache lives outside this tree."""
+    directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='work-',dir=directory) as temporary:
+        yield Path(temporary)
+def ValidateRuntime(runtime,architecture):
+    runtime=Path(runtime).resolve()
+    manifest=json.loads((runtime/'runtime.json').read_text(encoding='utf-8-sig'))
+    if manifest.get('format_version')!=1 or manifest.get('architecture')!=architecture:raise ValueError('Runtime template version or architecture mismatch')
+    versions=Path(__file__).resolve().parents[1]/'releases/versions.json'
+    core_version=json.loads(versions.read_text(encoding='utf-8-sig'))['core']
+    if manifest.get('core_version')!=core_version:raise ValueError('Runtime template does not match this compiler/core version')
+    required=['BazzaltPlayer.exe','Bazzalt.dll','bazzalt_lua.dll','bazzalt_gui.dll']
+    files=manifest.get('files',required)
+    if not set(required)<=set(files):raise ValueError('Incomplete runtime template')
+    for name in files:
+        if Path(name).name!=name or Path(name).suffix.lower() not in {'.exe','.dll'}:raise ValueError('Unsafe runtime manifest')
+        if Architecture(runtime/name)!=architecture:raise ValueError('Runtime binary architecture mismatch: '+name)
+        if name.lower().startswith(('python','pyside','qt6','bazzalthub','_bazzalt')):raise ValueError('Editor/Python binaries are forbidden in game output')
+    return runtime,files
+def KeyFor(settings):
+    security=settings['security']
+    if security['encryption']=='none':return None
+    if security['key_storage']=='environment':
+        key=bytes.fromhex(os.environ.get(security['key_environment'],''))
+        if len(key)!=32:raise ValueError('Set the configured key environment variable to 64 hex characters before building')
+        return key
+    return os.urandom(32)
+def CompileScripts(project,runtime,architecture,cache,compiler_path=''):
+    from Editor.scripting import ScriptCompiler,ScriptAttachments
+    import yaml
+    class GameScriptCompiler(ScriptCompiler):
+        def _Validate(self,paths):return super()._Validate([*paths,*(p for p in assets.rglob('*') if p.is_file() and p.suffix.lower() in {'.cpp','.lua'})])
+        def _compiler(self):
+            if compiler_path:
+                value=Path(compiler_path)
+                if value.is_dir():value=value/'bin/clang++.exe'
+                return value if value.is_file() else None
+            base=Path(os.environ.get('LOCALAPPDATA',Path.home()/'AppData/Local'))/'BAZZALT/data/Tools/llvm/bin/clang++.exe'
+            candidates=(base,Path(os.environ.get('APPDATA',Path.home()/'AppData/Roaming'))/'BAZZALT/data/Tools/llvm/bin/clang++.exe',Path(__file__).resolve().parents[1]/'toolchain/llvm/bin/clang++.exe')
+            return next((path for path in candidates if path.is_file()),None)
+    compiler=GameScriptCompiler(project.parent,app_root=runtime,tools={'sdk_path':str(runtime/'ScriptSDK'),'compiler_path':compiler_path},architecture=architecture)
+    compiler.cache=cache/'Scripts';compiler.state_file=compiler.cache/'build-state.json'
+    attachments=ScriptAttachments(project.parent);sources=attachments.UsedSources()
+    # Native attachments saved in scenes are authoritative when no legacy
+    # editor-side attachment exists (e.g. projects copied to a build machine).
+    project_data=yaml.safe_load(project.read_text(encoding='utf-8-sig'));assets=project.parent/project_data.get('AssetDirectory','Assets')
+    if not assets.resolve().is_relative_to(project.parent):raise ValueError('Asset directory is outside the project')
+    identities={}
+    for meta in assets.rglob('*.meta'):
+        record=yaml.safe_load(meta.read_text(encoding='utf-8-sig')) or {}
+        if isinstance(record,dict) and record.get('UUID'):identities[str(record['UUID'])]=Path(str(meta)[:-5])
+    for path in assets.rglob('*.bscene'):
+        scene=yaml.safe_load(path.read_text(encoding='utf-8-sig')) or {}
+        for entity in scene.get('Entities') or []:
+            for component in entity.get('Components') or []:
+                if component.get('Type')!='Bazzalt.ScriptComponents':continue
+                fields=component.get('Properties',{})
+                count=int(fields.get('Count',0))
+                if not 0<=count<=1024:raise ValueError('Invalid scene script count')
+                for index in range(count):
+                    prefix=f'Script.{index}.';source=str(fields.get(prefix+'Source',''));source=identities.get(source,Path(source));source=source if source.is_absolute() else project.parent/source
+                    if source.suffix.lower()!='.cpp':continue
+                    entries=attachments.values.setdefault('entities',{}).setdefault(entity['UUID'],[])
+                    if any(item.get('type')==fields.get(prefix+'TypeName') for item in entries):continue
+                    count_properties=int(fields.get(prefix+'Count',0))
+                    if not 0<=count_properties<=1024:raise ValueError('Invalid scene property count')
+                    properties={str(fields[prefix+f'Property.{i}.Name']):str(fields[prefix+f'Property.{i}.Value']) for i in range(count_properties)}
+                    entries.append(dict(source=str(source.resolve()),type=str(fields[prefix+'TypeName']),enabled=str(fields.get(prefix+'Enabled',True)).lower()=='true',properties=properties))
+    sources=attachments.UsedSources()
+    if any(not Path(path).resolve().is_relative_to(project.parent) for path in sources):raise ValueError('Script attachments must reference sources inside the project')
+    result=compiler.Build([p for p in sources if Path(p).suffix.lower()!='.lua'])
+    if not result.success:raise ValueError('\n'.join(d.message for d in result.diagnostics))
+    return [binding for binding in attachments.RuntimeBindings(result.outputs) if Path(binding['module']).suffix.lower()=='.dll']
+def CookShaders(cooked,cooker):
+    import yaml
+    from Editor.materials import MaterialCompiler
+    records=yaml.safe_load((cooked/'.bazzalt/CookedAssets.yaml').read_text(encoding='utf-8'))['Assets']
+    by_id={value['UUID']:dict(uuid=value['UUID'],path=str(cooked/value['Source']),cache=str(cooked/value['Cache'])) for value in records}
+    class Assets:
+        def AssetInfo(self,reference):return by_id.get(str(reference),{})
+    class ShaderCompiler(MaterialCompiler):
+        def _Tool(self,name):
+            path=cooker.parent/'filament'/(name+'.exe')
+            return path if path.is_file() else super()._Tool(name)
+    compiler=ShaderCompiler(Assets(),app_root=cooker.parent)
+    for record in records:
+        if Path(record['Source']).suffix.lower() in {'.mat','.shad','.bshader'}:compiler.CompileShader(record['UUID'])
+def Publish(staged,output,owner):
+    marker='.bazzalt-game-build'
+    if output.exists():
+        if not output.is_dir() or not (output/marker).is_file() or (output/marker).read_text()!=owner:raise ValueError('Refusing to replace an output not owned by this project: '+str(output))
+    (staged/marker).write_text(owner,encoding='utf-8')
+    backup=output.with_name(output.name+'.previous-'+uuid.uuid4().hex)
+    if output.exists():output.rename(backup)
+    try:staged.rename(output)
+    except OSError:
+        if backup.exists():backup.rename(output)
+        raise
+    if backup.exists():shutil.rmtree(backup)
+def Build(project,runtime,cooker,launch=False,compiler_path=''):
+    project=Path(project).resolve();settings=Validate(Load(project));arch=settings['target']['architecture']
+    if not project.is_file() or project.suffix!='.bproject':raise ValueError('Select a valid project file')
+    runtime,files=ValidateRuntime(runtime,arch)
+    cooker=Path(cooker).resolve()
+    if not cooker.is_file() or Architecture(cooker)!='x64':raise ValueError('The x64 content cooker tool is missing or incompatible')
+    with BuildLock(project.parent) as cache, BuildWorkspace(cache/arch) as work:
+        cooked=work/'Cooked';cooked.mkdir()
+        Emit('scripts','Compiling game scripts',architecture=arch)
+        bindings=CompileScripts(project,runtime,arch,cache/arch,compiler_path)
+        for binding in bindings:
+            binding['properties']={key:('true' if value is True else 'false' if value is False else ','.join(map(str,value)) if isinstance(value,list) else str(value)) for key,value in binding['properties'].items()}
+        manifest=work/'bindings.json';manifest.write_text(json.dumps(dict(startup=settings['target']['startup_scene'],bindings=bindings),ensure_ascii=False),encoding='utf-8')
+        Emit('cook','Importing and cooking game assets')
+        environment=dict(os.environ)
+        tools=cooker.parent/'filament'
+        if tools.is_dir():environment['BAZZALT_FILAMENT_TOOLS']=str(tools)
+        Run([cooker,project,cooked,manifest],cwd=cooker.parent,env=environment)
+        CookShaders(cooked,cooker)
+        # No source code, import tools, or editor settings can enter the final game.
+        forbidden={'.py','.pyc','.pyd','.cpp','.hpp','.h','.cc','.cxx','.lua'}
+        for path in cooked.rglob('*'):
+            if path.is_file() and path.suffix.lower() in forbidden:raise ValueError('Source file leaked into cooked content: '+str(path))
+        destination=project.parent/'bin';destination.mkdir(exist_ok=True)
+        name=settings['production']['name'];output=destination/f'{name}-windows-{arch}'
+        with tempfile.TemporaryDirectory(prefix='.bazzalt-build-',dir=destination) as temp:
+            root=Path(temp)/'Game';root.mkdir()
+            for filename in files:shutil.copy2(runtime/filename,root/(name+'.exe' if filename=='BazzaltPlayer.exe' else filename))
+            from .pe_resources import Apply
+            Apply(root/(name+'.exe'),settings['production'])
+            key=KeyFor(settings);packages=[]
+            if settings['packaging']['format']=='pak':
+                Emit('package','Packing game content')
+                packages=[p.name for p in Pack(cooked,root,settings['packaging']['chunk_mb'],key)]
+            else:shutil.copytree(cooked,root/'Data')
+            if key:
+                method=settings['security']['key_storage']
+                if method=='embedded':
+                    with (root/(name+'.exe')).open('ab') as executable:executable.write(b'BZKEY001'+key)
+                elif method=='file':(root/'game.key').write_bytes(key)
+            if settings['packaging']['decoy_kb']:(root/'padding.bin').write_bytes(os.urandom(settings['packaging']['decoy_kb']*1024))
+            game=dict(format_version=1,format=settings['packaging']['format'],production=settings['production'],window=settings['window'],intro=settings['intro'],packages=packages,**{k:settings['security'][k] for k in ('encryption','key_storage','key_environment')})
+            (root/'game.json').write_text(json.dumps(game,ensure_ascii=False,indent=2),encoding='utf-8')
+            (root/'LICENSE.txt').write_text(settings['production']['license'],encoding='utf-8')
+            if (runtime/'licenses').is_dir():shutil.copytree(runtime/'licenses',root/'licenses')
+            Emit('verify','Verifying the packaged game')
+            Run([root/(name+'.exe'),'--verify-package'],cwd=root,timeout=120)
+            if settings['packaging']['archive']:
+                archive=destination/f'{name}-windows-{arch}.zip';temporary=work/'Game.zip'
+                with zipfile.ZipFile(temporary,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as zipped:
+                    for path in root.rglob('*'):
+                        if path.is_file():zipped.write(path,path.relative_to(root).as_posix())
+                # Existing archives require the compiler's companion ownership marker.
+                marker=archive.with_suffix('.zip.owner');owner=hashlib.sha256(str(project).encode('utf-8')).hexdigest()
+                if archive.exists() and (not marker.is_file() or marker.read_text()!=owner):raise ValueError('Archive is not owned by this project')
+                os.replace(temporary,archive);marker.write_text(owner,encoding='utf-8');result=archive
+                if output.is_dir() and (output/'.bazzalt-game-build').is_file() and (output/'.bazzalt-game-build').read_text()==owner:shutil.rmtree(output)
+                if launch:
+                    # The game outlives the disposable cook workspace. Keep one
+                    # compiler-owned launch image rather than one per build.
+                    launch_output=cache/arch/'Launch'
+                    Publish(root,launch_output,owner);launch_path=launch_output/(name+'.exe')
+            else:
+                Publish(root,output,hashlib.sha256(str(project).encode('utf-8')).hexdigest());result=output
+                if launch:launch_path=output/(name+'.exe')
+        # Publication and temporary-file cleanup must finish before launch.
+        Emit('complete','Game build completed',output=str(result))
+        if launch:
+            try:RunLaunch(launch_path)
+            except OSError as error:Emit('launch_error','Game was built, but could not be launched: '+str(error),output=str(result))
+        return result
+def RunLaunch(executable):subprocess.Popen([str(executable)],cwd=executable.parent,close_fds=True,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+def main():
+    parser=argparse.ArgumentParser(description='Build game content using a prebuilt Bazzalt runtime')
+    parser.add_argument('--project',type=Path,required=True);parser.add_argument('--runtime',type=Path,required=True);parser.add_argument('--cooker',type=Path,required=True);parser.add_argument('--launch',action='store_true');parser.add_argument('--script-compiler',default='')
+    args=parser.parse_args()
+    try:Build(args.project,args.runtime,args.cooker,args.launch,args.script_compiler);return 0
+    except Exception as error:Emit('error',str(error));return 1
+if __name__=='__main__':sys.exit(main())

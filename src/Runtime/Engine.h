@@ -72,6 +72,7 @@ public:
     bool SaveSceneAsset(const Scene& scene, const std::filesystem::path& path);
     bool SaveProject(const std::filesystem::path& path);
     bool LoadProject(const std::filesystem::path& path, bool loadStartupScene = true);
+    bool ExportCookedProject(const std::filesystem::path& destination,const std::vector<ScriptBinding>& bindings);
 
     [[nodiscard]] SceneSerializer& GetSceneSerializer() { return m_sceneSerializer; }
     [[nodiscard]] ProjectMetadata& GetProject() { return m_project; }
@@ -82,6 +83,7 @@ public:
     void ResizeEditorViewport(std::uint64_t id, std::uint32_t width, std::uint32_t height,
                               float pixelRatio = 1.0f);
     void DestroyEditorViewport(std::uint64_t id);
+    bool WaitForViewportFrame(std::uint64_t id);
     void SetEditorCamera(std::uint64_t id, float eyeX, float eyeY, float eyeZ,
                          float targetX, float targetY, float targetZ);
     void SetEditorGizmo(bool visible, float x, float y, float z, int mode);

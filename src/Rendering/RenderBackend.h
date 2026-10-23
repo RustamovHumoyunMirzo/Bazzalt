@@ -51,6 +51,7 @@ public:
     void ResizeViewport(std::uint64_t id, std::uint32_t width, std::uint32_t height,
                         float pixelRatio = 1.0f);
     void DestroyViewport(std::uint64_t id);
+    bool WaitForViewportFrame(std::uint64_t id);
     void SetSceneCamera(std::uint64_t id, float eyeX, float eyeY, float eyeZ,
                         float targetX, float targetY, float targetZ);
     void SetEditorGizmo(bool visible, float x, float y, float z, int mode);
@@ -132,6 +133,7 @@ private:
     std::unordered_map<UUID,CameraOutput> m_cameraOutputs;
     std::unordered_map<UUID,filament::Texture*> m_captureReads;
     std::unordered_map<std::uint64_t, std::unique_ptr<ViewportResource>> m_viewports;
+    std::unordered_set<std::uint64_t> m_presentedViewports;
     std::unique_ptr<GizmoResource> m_gizmo;
     bool m_gizmoVisible = false;
     float m_gizmoX = 0, m_gizmoY = 0, m_gizmoZ = 0;

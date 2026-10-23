@@ -29,12 +29,14 @@ class BuildResult:
 
 class ScriptCompiler:
     """Incremental compiler using shared Hub tools or explicit local overrides."""
-    def __init__(self, project: str|Path, engine_root: str|Path|None=None, app_root: str|Path|None=None, tools: dict|None=None):
+    def __init__(self, project: str|Path, engine_root: str|Path|None=None, app_root: str|Path|None=None, tools: dict|None=None,architecture:str|None=None):
         self.project=Path(project).resolve();self.engine_root=Path(engine_root or Path(__file__).resolve().parents[1])
         self.app_root=Path(app_root or Path(os.path.abspath(os.path.dirname(os.sys.executable))))
         self.cache=self.project/".bazzalt"/"ScriptAssemblies";self.state_file=self.cache/"build-state.json"
         self.Diagnostics=[]
         self.Tools = dict(tools or {})
+        self.Architecture=architecture
+        if architecture not in (None,'x64','x86'):raise ValueError('Unsupported script target architecture')
     @staticmethod
     def Inspect(path: str|Path)->ScriptDescriptor|None:
         path=Path(path)
@@ -151,7 +153,7 @@ class ScriptCompiler:
         headers+=b"".join(str(path.relative_to(sdk)).encode()+path.read_bytes() for path in sorted((sdk/"include").rglob("*.hpp")))
         import struct
         compiler_stat=compiler.stat()
-        compiler_identity=f"{compiler.resolve()}:{compiler_stat.st_size}:{compiler_stat.st_mtime_ns}:{struct.calcsize('P')}".encode("utf-8")
+        compiler_identity=f"{compiler.resolve()}:{compiler_stat.st_size}:{compiler_stat.st_mtime_ns}:{self.Architecture or struct.calcsize('P')}".encode("utf-8")
         sdk_digest=hashlib.sha256(headers+library.read_bytes()+compiler_identity).digest()
         for descriptor in descriptors:
             digest=hashlib.sha256(descriptor.path.read_bytes()+b"\0bazzalt-script-linked-sdk-1"+sdk_digest).hexdigest()
@@ -163,7 +165,7 @@ class ScriptCompiler:
             command=[str(compiler),"-std=c++20","-shared","-fvisibility=hidden",f"-I{sdk/'include'}",str(wrapper),str(library),"-o",str(output)]
             if os.name=="nt":
                 import struct
-                command.append("--target=" + ("x86_64" if struct.calcsize("P")==8 else "i686") + "-pc-windows-msvc")
+                command.append("--target=" + ("x86_64" if self.Architecture=='x64' or self.Architecture is None and struct.calcsize("P")==8 else "i686") + "-pc-windows-msvc")
             if os.name=="nt":command.extend(["-fms-runtime-lib=dll","-D_ITERATOR_DEBUG_LEVEL=0"])
             else:
                 command.extend(["-fPIC",f"-Wl,-rpath,{sdk/'lib'}"])

@@ -150,8 +150,14 @@ bool CollectGltfUris(const std::filesystem::path& source,
     }
 }
 
-bool RunTool(const std::filesystem::path& executable,
+bool RunTool(const std::filesystem::path& requested,
              const std::vector<std::filesystem::path>& arguments, std::string& error) {
+    auto executable=requested;
+#ifdef _WIN32
+    if(const auto* directory=_wgetenv(L"BAZZALT_FILAMENT_TOOLS"))executable=std::filesystem::path(directory)/requested.filename();
+#else
+    if(const auto* directory=std::getenv("BAZZALT_FILAMENT_TOOLS"))executable=std::filesystem::u8path(directory)/requested.filename();
+#endif
     if (!std::filesystem::exists(executable)) {
         error = "Filament tool was not found: " + PathUtf8(executable); return false;
     }
@@ -447,10 +453,78 @@ bool AssetDatabase::Open(std::filesystem::path projectDirectory, std::filesystem
         return false;
     }
     m_cacheDirectory = m_projectDirectory / ".bazzalt" / "Cache";
+    m_cooked=std::filesystem::is_regular_file(m_projectDirectory/".bazzalt/CookedAssets.yaml");
+    if(m_cooked)return OpenCooked(m_projectDirectory/".bazzalt/CookedAssets.yaml");
     return Refresh();
 }
 
+bool AssetDatabase::OpenCooked(const std::filesystem::path& index) {
+    m_byId.clear();m_byPath.clear();
+    try {
+        if(std::filesystem::file_size(index)>64u*1024u*1024u)throw std::runtime_error("Cooked index is too large");
+        std::ifstream input(index,std::ios::binary);std::string yaml((std::istreambuf_iterator<char>(input)),{});
+        auto tree=ryml::parse_in_arena(ryml::csubstr(yaml.data(),yaml.size()));auto root=tree.rootref();
+        if(Text(root["FormatVersion"])!="1")throw std::runtime_error("Unsupported cooked index");
+        for(auto node:root["Assets"].children()) {
+            AssetInfo asset;if(!UUID::TryParse(Text(node["UUID"]),asset.Id)||!asset.Id)throw std::runtime_error("Invalid cooked UUID");
+            asset.SourcePath=(m_projectDirectory/std::filesystem::u8path(Text(node["Source"]))).lexically_normal();
+            asset.CachePath=(m_projectDirectory/std::filesystem::u8path(Text(node["Cache"]))).lexically_normal();
+            if(!IsPathWithin(m_assetDirectory,asset.SourcePath)||!IsPathWithin(m_projectDirectory,asset.CachePath)||!std::filesystem::is_regular_file(asset.CachePath))throw std::runtime_error("Invalid cooked asset path");
+            asset.MetaPath=asset.SourcePath;asset.MetaPath+=".meta";asset.Importer=Text(node["Importer"]);asset.State=AssetState::Ready;
+            if(m_byId.contains(asset.Id))throw std::runtime_error("Duplicate cooked UUID");
+            m_byPath.emplace(PathUtf8(NormalizeSource(asset.SourcePath)),asset.Id);m_byId.emplace(asset.Id,std::move(asset));
+        }
+        return true;
+    }catch(const std::exception& error){m_lastError=error.what();m_byId.clear();m_byPath.clear();return false;}
+}
+
+bool AssetDatabase::ExportCooked(const std::filesystem::path& destination) {
+    try {
+        std::filesystem::create_directories(destination/".bazzalt");
+        std::ofstream index(destination/".bazzalt/CookedAssets.yaml",std::ios::binary);
+        index<<"FormatVersion: 1\nAssets:\n";
+        for(const auto& [id,asset]:m_byId){
+            if(asset.State!=AssetState::Ready)throw std::runtime_error(asset.LastError.empty()?"Asset is not ready":asset.LastError);
+            auto source=asset.SourcePath.lexically_relative(m_projectDirectory);auto cache=asset.CachePath.lexically_relative(m_projectDirectory);
+            auto extension=LowerExtension(asset.SourcePath);
+            if(extension==".cpp"||extension==".h"||extension==".hpp")continue;
+            if(!IsPathWithin(m_assetDirectory,asset.SourcePath)||std::filesystem::is_symlink(asset.SourcePath)||IsPathWithin(asset.SourcePath,destination))throw std::runtime_error("Unsafe cooked source path");
+            std::filesystem::create_directories((destination/source).parent_path());
+            if(extension!=".lua")std::filesystem::copy_file(asset.SourcePath,destination/source,std::filesystem::copy_options::overwrite_existing);
+            auto meta=destination/source;meta+=".meta";
+            if(std::filesystem::is_regular_file(asset.MetaPath))std::filesystem::copy_file(asset.MetaPath,meta,std::filesystem::copy_options::overwrite_existing);
+            // Export only this generation, never the UUID directory containing
+            // old imports. In particular, an IBL edit must not ship every old IBL.
+            const auto copyProduct=[&](const std::filesystem::path& product){
+                if(!IsPathWithin(m_cacheDirectory,product)||IsPathWithin(product,destination))throw std::runtime_error("Unsafe cooked product path");
+                const auto copyFile=[&](const std::filesystem::path& file){
+                    if(std::filesystem::is_symlink(file)||!IsPathWithin(m_cacheDirectory,file))throw std::runtime_error("Unsafe linked import product");
+                    auto target=destination/file.lexically_relative(m_projectDirectory);
+                    std::filesystem::create_directories(target.parent_path());
+                    std::filesystem::copy_file(file,target,std::filesystem::copy_options::overwrite_existing);
+                };
+                if(std::filesystem::is_directory(product)){
+                    for(const auto& entry:std::filesystem::recursive_directory_iterator(product)){
+                        if(entry.is_symlink())throw std::runtime_error("Linked import directory is not supported");
+                        if(entry.is_regular_file())copyFile(entry.path());
+                    }
+                }else copyFile(product);
+            };
+            copyProduct(asset.CachePath);
+            if(asset.Importer=="Bazzalt.Environment"){auto products=asset.CachePath;products+=".environment";copyProduct(products);}
+            if(extension==".gltf"){
+                std::vector<std::filesystem::path> uris;std::string error;
+                if(!CollectGltfUris(asset.CachePath,uris,error))throw std::runtime_error(error);
+                for(const auto& uri:uris)copyProduct(asset.CachePath.parent_path()/uri);
+            }
+            index<<"  - UUID: "<<QuoteYaml(id.ToString())<<"\n    Source: "<<QuoteYaml(PathUtf8(source))<<"\n    Cache: "<<QuoteYaml(PathUtf8(cache))<<"\n    Importer: "<<QuoteYaml(asset.Importer)<<'\n';
+        }
+        if(!index)throw std::runtime_error("Could not write cooked asset index");return true;
+    }catch(const std::exception& error){m_lastError=error.what();return false;}
+}
+
 bool AssetDatabase::Refresh() {
+    if(m_cooked)return true;
     m_lastError.clear();
     auto previousById = std::move(m_byId);
     auto previousByPath = std::move(m_byPath);
@@ -695,6 +769,7 @@ std::optional<AssetInfo> AssetDatabase::Find(UUID id) const {
 }
 
 bool AssetDatabase::RefreshSource(const std::filesystem::path& source){
+    if(m_cooked){m_lastError="Cooked assets are read-only";return false;}
     const auto path=NormalizeSource(source);
     if(!IsPathWithin(m_assetDirectory,path)){m_lastError="Asset source is outside the project Assets directory";return false;}
     m_lastError.clear();const bool result=RegisterSource(path);

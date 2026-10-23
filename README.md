@@ -18,6 +18,12 @@ sources/listeners, distance curves, streaming, playback controls, and mixer
 buses. C++ and Lua share the same audio API. See the
 [audio guide](docs/public/0.6.0/manual/audio/en.html).
 
+Build standalone Windows x86/x64 games from **Build → Build Settings**. The
+separate content compiler packages saved scenes, scripts, and assets with a
+prebuilt native runtime; games do not include Python or the editor. See
+[building a game](docs/public/0.6.0/manual/building-games/en.html), including
+packaging, ZIP output, and the limits of asset encryption.
+
 ## Documentation
 
 Read the [public guides](docs/public/index.html) for scene editing, C++ and Lua

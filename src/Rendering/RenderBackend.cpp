@@ -374,6 +374,7 @@ void RenderBackend::ResizeViewport(std::uint64_t id, std::uint32_t width,
     const auto found = m_viewports.find(id);
     if (found == m_viewports.end()) return;
     auto& viewport = *found->second;
+    if(viewport.Width!=std::max(1u,width)||viewport.Height!=std::max(1u,height))m_presentedViewports.erase(id);
     viewport.Width = std::max(1u, width);
     viewport.Height = std::max(1u, height);
     viewport.PixelRatio = std::max(1.0f,pixelRatio);
@@ -409,6 +410,7 @@ void RenderBackend::ResizeViewport(std::uint64_t id, std::uint32_t width,
 }
 
 void RenderBackend::DestroyViewport(std::uint64_t id) {
+    m_presentedViewports.erase(id);
     const auto found = m_viewports.find(id);
     if (found == m_viewports.end()) return;
     auto& viewport = *found->second;
@@ -757,8 +759,13 @@ void RenderBackend::Render() {
                 if (view&&!view->getRenderTarget()) m_renderer->render(view);
         }
         if(resource->Kind==ViewportKind::Game&&m_guiScene&&m_guiRenderer){m_guiRenderer->RenderOverlay(*m_guiScene,{float(resource->Width),float(resource->Height)});m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});}
-        m_renderer->endFrame();
+        m_renderer->endFrame();m_presentedViewports.insert(id);
     }
+}
+
+bool RenderBackend::WaitForViewportFrame(std::uint64_t id){
+    if(!m_engine||!m_presentedViewports.contains(id))return false;
+    return m_engine->flushAndWait(1000000000ull);
 }
 
 void RenderBackend::Shutdown() {
