@@ -286,6 +286,12 @@ public:
         for(std::size_t i=0;i<m_loadedScenes.size();++i){auto view=SceneAt(i).GetRegistry().view<Camera>();for(auto handle:view){const auto& camera=view.get<Camera>(handle);if(!camera.IsEnabled())continue;for(const auto& effect:camera.PostProcessing.CustomEffects.GetEffects())if(effect.Enabled&&effect.ShaderAsset)result.append(effect.ShaderAsset.ToString());}}
         return result;
     }
+    py::dict AssetStatus(const std::string& text) const {
+        py::dict result;UUID id;
+        const auto asset=UUID::TryParse(text,id)?AssetManager::GetAsset(id):AssetManager::GetAsset(std::filesystem::u8path(text));
+        if(asset)result["error"]=asset->LastError;
+        return result;
+    }
     py::dict AssetInfo(const std::string& text) const {
         py::dict result;UUID id;
         const auto asset=UUID::TryParse(text,id)?AssetManager::GetAsset(id):AssetManager::GetAsset(std::filesystem::u8path(text));
@@ -747,6 +753,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("update_project_info", &Bazzalt::EditorBridge::EditorHost::UpdateProjectInfo)
         .def("asset_directory", &Bazzalt::EditorBridge::EditorHost::AssetDirectory)
         .def("asset_info", &Bazzalt::EditorBridge::EditorHost::AssetInfo)
+        .def("asset_status", &Bazzalt::EditorBridge::EditorHost::AssetStatus)
         .def("refresh_assets", &Bazzalt::EditorBridge::EditorHost::RefreshAssets)
         .def("refresh_asset", &Bazzalt::EditorBridge::EditorHost::RefreshAsset)
         .def("texture_asset_info", &Bazzalt::EditorBridge::EditorHost::TextureAssetInfo)

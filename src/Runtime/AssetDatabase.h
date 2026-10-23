@@ -58,6 +58,7 @@ private:
     };
 
     bool RegisterSource(const std::filesystem::path& source);
+    bool RegisterSourceContent(const std::filesystem::path& source);
     bool LoadMetadata(const std::filesystem::path& path, Metadata& metadata);
     bool SaveMetadata(const std::filesystem::path& path, const Metadata& metadata);
     bool ImportAsset(AssetInfo& record, Metadata& metadata, AssetImporter& importer,

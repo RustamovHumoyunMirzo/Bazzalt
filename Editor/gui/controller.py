@@ -101,6 +101,8 @@ class EditorController(QObject):
         window.Properties.AddComponentRequested.connect(self.ShowAddComponentMenu)
         window.Properties.RemoveComponentRequested.connect(self.RemoveComponent)
         window.AssetBrowser.AssetSelected.connect(self.SelectAsset)
+        window.AssetBrowser.AssetInfoProvider=runtime.AssetStatus
+        window.AssetBrowser.UpdateAssetIssues()
         window.AssetBrowser.AssetsChanged.connect(lambda:setattr(self,"_asset_database_dirty",True))
         window.AssetBrowser.AssetActivated.connect(self.ActivateAsset)
         window.AssetBrowser.LoadSceneRequested.connect(self.LoadSceneAdditive)
@@ -380,6 +382,7 @@ class EditorController(QObject):
 
     def SelectAsset(self,path)->None:
         self.Runtime.StopAudioPreview()
+        self._audio_preview=None
         self._script_rule_rows=[];self._script_descriptor_cache={}
         self._inspected_asset=Path(path)
         path=Path(path);self.SelectedEntity="";self.SelectedEntities=[];self.Window.Scene.Surface.SetSelection(None);self.Runtime.SetGizmo("",0);self.Window.Properties.Clear();self.Window.Properties.AddComponentButton.setVisible(False)
@@ -388,6 +391,11 @@ class EditorController(QObject):
         self.InspectedScene="";self._UpdateGizmo()
         section=self.Window.Properties.AddComponentSection("asset",self.Window.Localization.Translate("properties.asset"),removable=False)
         for label,value in (("Name",path.name),("Type",path.suffix.lower() or "Folder"),("Path",str(path)),("Size",self._FormatAssetSize(self._AssetSize(path)))):section.AddField(self.Window.Localization.Translate(f"properties.asset_{label.lower()}") if label!="Name" else self.Window.Localization.Translate("properties.asset_name"),QLabel(value))
+        issue=(self.Runtime.AssetInfo(str(path)) or {}).get('error','')
+        if issue:
+            label=QLabel(issue);label.setWordWrap(True);label.setTextFormat(Qt.TextFormat.PlainText);label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            warning=self.Window.Properties.AddComponentSection('asset.issue',self.Window.Localization.Translate('assets.import_issue'),removable=False)
+            warning.AddWideWidget(label);self.Window.AssetBrowser.UpdateAssetIssues();return
         if path.suffix.lower()==".matinst":self._InspectMaterial(path)
         elif path.suffix.lower()==".btexture":self._InspectTexture(path)
         elif path.suffix.lower() in AUDIO_EXTENSIONS:self._InspectAudioClip(path)
@@ -572,7 +580,8 @@ class EditorController(QObject):
     def _PrepareUsedMaterials(self)->bool:
         if not self.Runtime.AssetDirectory():return True
         try:
-            if self._asset_database_dirty:self.Runtime.RefreshAssets();self._asset_database_dirty=False
+            if self._asset_database_dirty:
+                self.Runtime.RefreshAssets();self._asset_database_dirty=False;self.Window.AssetBrowser.UpdateAssetIssues()
             used=set();shaders=set(getattr(self.Runtime,"UsedShaderAssets",lambda:[])())
             if self._material_scenes is None or self.Runtime.IsPlaying():self._material_scenes=self.Runtime.LoadedScenes()
             scenes=self._material_scenes
@@ -932,7 +941,7 @@ class EditorController(QObject):
         elif path.suffix.lower()==".bmixer":self.OpenAudioMixer(path)
         elif path.suffix.lower() in AUDIO_EXTENSIONS:
             self.SelectAsset(path)
-            if hasattr(self,"_audio_preview"):self._audio_preview.Play()
+            if self._audio_preview is not None:self._audio_preview.Play()
     def OpenAudioMixer(self,path):
         info=self.Runtime.AssetInfo(str(path))
         if not info:return

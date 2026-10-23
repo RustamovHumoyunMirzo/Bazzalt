@@ -55,4 +55,12 @@ int main(){
     }
     runtime.Stop();assert(!Audio::IsAvailable());
     {std::ofstream f(folder/"Broken.wav");f<<"not audio";}assert(!Runtime::InspectAudioFile(folder/"Broken.wav",info,error));
+    auto misnamed=folder/std::filesystem::u8path("Не MP3.mp3");{std::ofstream f(misnamed,std::ios::binary);const char mp4Header[]={0,0,0,24,'f','t','y','p','i','s','o','m',0,0,0,0,'i','s','o','m','m','p','4','1'};f.write(mp4Header,sizeof(mp4Header));}
+    assert(!Runtime::InspectAudioFile(misnamed,info,error));assert(error.find("MP4/M4A")!=std::string::npos&&error.find("convert")!=std::string::npos);
+    auto invalidPath=folder/"Assets"/"Invalid.mp3";std::filesystem::copy_file(misnamed,invalidPath);
+    assert(engine.RefreshAssets());auto failed=AssetManager::GetAsset(invalidPath);
+    assert(failed&&failed->State==AssetState::Failed&&!failed->LastError.empty());
+    auto failedId=failed->Id;assert(engine.RefreshAssets());assert(AssetManager::GetAsset(invalidPath)->Id==failedId);
+    assert(AssetManager::GetAsset(source)->State==AssetState::Ready);
+    Wave(invalidPath);assert(engine.RefreshAssets());failed=AssetManager::GetAsset(invalidPath);assert(failed&&failed->Id==failedId&&failed->State==AssetState::Ready&&failed->LastError.empty());
 }

@@ -73,7 +73,7 @@ class AssetBrowserPanel(QWidget):
     AssetsChanged=Signal()
     AssetActivated=Signal(object);AssetSelected=Signal(object);ContextMenuRequested=Signal(object,object);SelectionCleared=Signal();LoadSceneRequested=Signal(object);AssetOperationFailed=Signal(str)
     def __init__(self,localization:LocalizationManager,resources=None)->None:
-        super().__init__();self._localization=localization;self._resources=resources;self._root=None;self._folder=None;self._clipboard=[];self.SceneRenameHandler=None;self.DirectoryRenameHandler=None;self.SceneLoadedChecker=None;self.ExternalOpener=None
+        super().__init__();self._localization=localization;self._resources=resources;self._root=None;self._folder=None;self._clipboard=[];self.SceneRenameHandler=None;self.DirectoryRenameHandler=None;self.SceneLoadedChecker=None;self.ExternalOpener=None;self.AssetInfoProvider=None;self._issues={}
         self._watcher=QFileSystemWatcher(self);self._watcher.directoryChanged.connect(lambda _path:self.Refresh())
         self._thumbnails=ModelThumbnailCache(self);self._thumbnails.Ready.connect(self._ThumbnailReady)
         self._thumbnail_timer=QTimer(self);self._thumbnail_timer.setSingleShot(True);self._thumbnail_timer.timeout.connect(self._RequestVisibleThumbnails)
@@ -110,6 +110,7 @@ class AssetBrowserPanel(QWidget):
         except (OSError,ValueError):return False
     def _Icon(self,path):
         path=Path(path);ext=path.suffix.lower()
+        if str(path) in self._issues and self._resources:return self._resources.Icon('icons/abrowser/warn.svg')
         if ext==".lua" and self._resources:return self._resources.Icon("icons/abrowser/lua.svg")
         if ext==".bmixer" and self._resources:return self._resources.Icon("icons/abrowser/audiomixer.svg")
         if ext in AUDIO_EXTENSIONS and self._resources:return self._resources.Icon("icons/abrowser/audio.svg")
@@ -127,6 +128,7 @@ class AssetBrowserPanel(QWidget):
         return self._resources.Icon(f"icons/abrowser/{name}") if self._resources else QIcon()
     def _ThumbnailReady(self,path,image):
         self._thumbnail_timer.start(0)
+        if path in self._issues:return
         if image.isNull():return
         current=self._thumbnails.Request(path)
         if current is None or current.cacheKey()!=image.cacheKey():return
@@ -140,7 +142,7 @@ class AssetBrowserPanel(QWidget):
         try:
             for index in range(self.Browser.count()):
                 item=self.Browser.item(index);path=Path(item.data(Qt.ItemDataRole.UserRole))
-                if path.suffix.lower() not in MODEL_EXTENSIONS or not self.Browser.visualItemRect(item).intersects(self.Browser.viewport().rect()):continue
+                if str(path) in self._issues or path.suffix.lower() not in MODEL_EXTENSIONS or not self.Browser.visualItemRect(item).intersects(self.Browser.viewport().rect()):continue
                 image=self._thumbnails.Request(path)
                 if image is not None and not image.isNull():item.setIcon(QIcon(QPixmap.fromImage(image)))
         finally:self.Browser.blockSignals(blocked)
@@ -170,6 +172,20 @@ class AssetBrowserPanel(QWidget):
         finally:self.Tree.blockSignals(tree_blocked);self.Browser.blockSignals(browser_blocked)
         if select:self._SelectionChanged()
         elif selected and not self.Browser.selectedItems():self.SelectionCleared.emit()
+    def UpdateAssetIssues(self):
+        """Read indexed status only: never launch import work from icon painting."""
+        if not callable(self.AssetInfoProvider):return
+        blocked=self.Browser.blockSignals(True)
+        try:
+            for index in range(self.Browser.count()):
+                item=self.Browser.item(index);path=item.data(Qt.ItemDataRole.UserRole)
+                if Path(path).is_dir():continue
+                error=(self.AssetInfoProvider(str(path)) or {}).get('error','')
+                old=self._issues.pop(str(path),None)
+                if error:self._issues[str(path)]=error
+                if error or old:item.setIcon(self._Icon(path))
+                item.setToolTip(str(path)+(('\n\n'+error) if error else ''))
+        finally:self.Browser.blockSignals(blocked)
     def _FindDirectoryItem(self,item,path):
         if path is not None and Path(item.data(0,Qt.ItemDataRole.UserRole))==Path(path):return item
         for index in range(item.childCount()):
@@ -211,6 +227,7 @@ class AssetBrowserPanel(QWidget):
             asset.setToolTip(str(entry.relative_to(self._root)) if self._root else str(entry))
             if str(entry) in selected:asset.setSelected(True)
         self.Browser.blockSignals(blocked)
+        self.UpdateAssetIssues()
     @staticmethod
     def _DisplayName(path)->str:
         path=Path(path);return path.name if path.is_dir() else path.stem

@@ -214,6 +214,9 @@ class RuntimeService(QObject):
 
     def AssetInfo(self, reference) -> dict:
         return dict(self._host.asset_info(str(reference))) if self._host else {}
+    def AssetStatus(self, reference) -> dict:
+        # Indexed diagnostic only; do not parse .meta files for every browser icon.
+        return dict(self._host.asset_status(str(reference))) if self._host and hasattr(self._host,'asset_status') else self.AssetInfo(reference)
 
     def RefreshAssets(self) -> bool:
         return bool(self._host and self._host.refresh_assets())

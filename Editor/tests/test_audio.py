@@ -21,6 +21,19 @@ from Editor.lua_declarations import ReadDeclarations
 APP=QApplication.instance() or QApplication([])
 
 class AudioTests(unittest.TestCase):
+    def test_invalid_audio_does_not_prevent_project_opening(self):
+        runtime=RuntimeService()
+        if not runtime.IsAvailable():self.skipTest('Native runtime is not built')
+        try:
+            with tempfile.TemporaryDirectory() as folder, ExitStack() as cleanup:
+                cleanup.callback(runtime.Release)
+                root=Path(folder);(root/'Assets').mkdir();clip=root/'Assets'/'Invalid.mp3';clip.write_bytes(b'\x00\x00\x00\x18ftypisom'+b'\x00'*12)
+                project=root/'Audio.bproject';project.write_text('FormatVersion: 1\nProjectUUID: "12345678-1234-4234-8234-123456789abc"\nName: Audio\nAssetDirectory: Assets\nStartupScene: ""\nProperties:\n',encoding='utf-8')
+                self.assertTrue(runtime.LoadProject(str(project)),runtime.LastError())
+                info=runtime.AssetInfo(str(clip));self.assertIn('MP4/M4A',info['error']);self.assertEqual(runtime.AudioClipInfo(clip),{})
+                self.assertTrue(runtime.RefreshAssets());self.assertEqual(runtime.AssetInfo(str(clip))['uuid'],info['uuid'])
+        finally:runtime.Release()
+
     def test_audio_component_bridge_and_clip_import(self):
         runtime=RuntimeService()
         if not runtime.IsAvailable():self.skipTest('Native runtime is not built')

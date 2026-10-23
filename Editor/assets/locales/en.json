@@ -616,5 +616,6 @@
   "audio.preview_bus": "Preview output bus",
   "audio.preview_volume": "Preview volume",
   "audio.bus_count": "Groups",
-  "audio.effect_count": "Effects"
+  "audio.effect_count": "Effects",
+  "assets.import_issue": "Import issue"
 }

@@ -477,10 +477,9 @@ bool AssetDatabase::Refresh() {
         if (!isFile) continue;
         if (LowerExtension(iterator->path()) == ".meta") continue;
         if (!RegisterSource(iterator->path())) {
-            // A Lua syntax error must not prevent opening the editor/project.
-            // Keep a failed UUID asset and let Play report its import error.
+            // Content errors belong to individual assets, not the project.
             const auto asset=Find(iterator->path());
-            if(LowerExtension(iterator->path())==".lua"&&asset&&asset->State==AssetState::Failed&&!asset->LastError.empty())continue;
+            if(asset&&asset->State==AssetState::Failed&&!asset->LastError.empty())continue;
             const std::string error = m_lastError;
             return fail(error);
         }
@@ -490,6 +489,27 @@ bool AssetDatabase::Refresh() {
 }
 
 bool AssetDatabase::RegisterSource(const std::filesystem::path& source) {
+    const auto normalized=NormalizeSource(source);
+    if (!IsPathWithin(m_assetDirectory,normalized)) {
+        m_lastError="Asset resolves outside the configured asset directory: "+PathUtf8(source);
+        return false;
+    }
+    try {
+        if(RegisterSourceContent(source))return true;
+    } catch(const std::exception& error) {
+        m_lastError="Could not import asset "+PathUtf8(source)+": "+error.what();
+    }
+    // Include metadata/decoder failures in the browser without making them usable.
+    auto record=Find(normalized).value_or(AssetInfo{});
+    if(record.Id.IsRoot())record.Id=UUID::Generate();
+    record.SourcePath=normalized;record.MetaPath=normalized;record.MetaPath+=".meta";
+    record.State=AssetState::Failed;record.CachePath.clear();record.LastError=m_lastError;
+    m_byPath.insert_or_assign(PathUtf8(normalized),record.Id);
+    m_byId.insert_or_assign(record.Id,std::move(record));
+    return false;
+}
+
+bool AssetDatabase::RegisterSourceContent(const std::filesystem::path& source) {
     const std::filesystem::path normalized = NormalizeSource(source);
     if (!IsPathWithin(m_assetDirectory, normalized)) {
         m_lastError = "Asset resolves outside the configured asset directory: " + PathUtf8(source);
@@ -544,11 +564,9 @@ bool AssetDatabase::RegisterSource(const std::filesystem::path& source) {
     }
     if (record.State != AssetState::Ready) {
         if (!ImportAsset(record, metadata, *importer, sourceHash)) {
-            if(importer->GetName()=="LuaBytecode"){
-                record.LastError=m_lastError;
-                if(metadataDirty){metadata.Importer=record.Importer;metadata.ImporterVersion=record.ImporterVersion;if(!SaveMetadata(metaPath,metadata))return false;}
-                m_byPath.insert_or_assign(PathUtf8(normalized),record.Id);m_byId.insert_or_assign(record.Id,std::move(record));
-            }
+            record.LastError=m_lastError;
+            if(metadataDirty){metadata.Importer=record.Importer;metadata.ImporterVersion=record.ImporterVersion;if(!SaveMetadata(metaPath,metadata))return false;}
+            m_byPath.insert_or_assign(PathUtf8(normalized),record.Id);m_byId.insert_or_assign(record.Id,std::move(record));
             return false;
         }
         metadataDirty = true;

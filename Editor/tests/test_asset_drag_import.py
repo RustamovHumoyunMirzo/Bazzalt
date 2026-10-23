@@ -48,3 +48,36 @@ class AssetDragImportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             panel=self.Panel(folder)
             for suffix,icon in (('.mp3','audio'),('.MP3','audio'),('.bmixer','audiomixer')):self.assertEqual(panel._Icon(Path(folder)/('Asset'+suffix)).cacheKey(),panel._resources.Icon('icons/abrowser/'+icon+'.svg').cacheKey())
+    def test_import_issues_override_icons_without_changing_selection_and_recover(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'Broken.mp3';path.write_bytes(b'invalid');panel=self.Panel(folder);item=panel.Browser.item(0);item.setSelected(True)
+            changes=[];panel.AssetSelected.connect(changes.append)
+            panel.AssetInfoProvider=lambda _:dict(error='Unsupported audio container')
+            panel.UpdateAssetIssues()
+            self.assertEqual(item.icon().cacheKey(),panel._resources.Icon('icons/abrowser/warn.svg').cacheKey())
+            self.assertIn('Unsupported audio container',item.toolTip());self.assertTrue(item.isSelected());self.assertEqual(changes,[])
+            panel.AssetInfoProvider=lambda _:dict(error='');panel.UpdateAssetIssues()
+            self.assertEqual(item.icon().cacheKey(),panel._resources.Icon('icons/abrowser/audio.svg').cacheKey());self.assertNotIn('Unsupported',item.toolTip());self.assertTrue(item.isSelected())
+    def test_failed_asset_inspector_shows_issue_without_starting_preview(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from Editor.gui.controller import EditorController
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'Broken.mp3';path.write_bytes(b'invalid')
+            issue='Unsupported MP4/M4A container';runtime=Mock();runtime.AssetInfo.return_value={'error':issue}
+            section=Mock();properties=Mock();properties.AddComponentSection.return_value=section
+            resources=ResourceManager();window=SimpleNamespace(Scene=Mock(),Properties=properties,Localization=LocalizationManager(resources),AssetBrowser=Mock())
+            controller=SimpleNamespace(Runtime=runtime,Window=window,_UpdateGizmo=Mock(),_FormatAssetSize=str,_AssetSize=lambda _:7,_InspectAudioClip=Mock())
+            EditorController.SelectAsset(controller,path)
+            controller._InspectAudioClip.assert_not_called();self.assertEqual(section.AddWideWidget.call_args.args[0].text(),issue)
+            self.assertIsNone(controller._audio_preview)
+            self.assertEqual(properties.AddComponentSection.call_args.args[0],'asset.issue')
+    def test_activating_failed_audio_does_not_reuse_a_deleted_preview(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from Editor.gui.controller import EditorController
+        previous=Mock()
+        controller=SimpleNamespace(_audio_preview=previous)
+        controller.SelectAsset=lambda path:setattr(controller,'_audio_preview',None)
+        EditorController.ActivateAsset(controller,Path('Invalid.mp3'))
+        previous.Play.assert_not_called()

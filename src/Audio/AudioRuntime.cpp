@@ -13,6 +13,7 @@
 #include <map>
 #include <mutex>
 #include <set>
+#include <string_view>
 #include <unordered_set>
 
 extern "C" void BazzaltInitializeAudioCodecs(void);
@@ -79,7 +80,16 @@ bool InspectAudioFile(const std::filesystem::path& path,AudioClipInfo& info,std:
 #else
     const auto result=ma_decoder_init_file(path.c_str(),&config,&decoder);
 #endif
-    if(result!=MA_SUCCESS){error="Unsupported or invalid Audio Clip: "+std::string(ma_result_description(result));return false;}
+    if(result!=MA_SUCCESS){
+        // Extensions are hints, not proof of the encoded payload. In particular
+        // browser downloads are sometimes MP4 audio saved with an .mp3 suffix.
+        std::ifstream input(path,std::ios::binary);std::array<char,12> header{};input.read(header.data(),header.size());
+        if(input.gcount()>=12&&std::string_view(header.data()+4,4)=="ftyp"){
+            error="Audio Clip contains an unsupported MP4/M4A container, not MP3 audio. Renaming the extension does not convert it. Export or convert to MP3, WAV, FLAC or Ogg Vorbis.";return false;
+        }
+        const std::string description=ma_result_description(result);
+        error="Unsupported or invalid Audio Clip: "+(description=="Unknown error"?"decoder could not recognize the audio payload":description)+" (decoder code "+std::to_string(result)+")";return false;
+    }
     struct Cleanup{ma_decoder* Value;~Cleanup(){ma_decoder_uninit(Value);}} cleanup{&decoder};
     ma_uint64 frames=0;ma_format format;ma_uint32 channels=0,rate=0;
     if(ma_decoder_get_data_format(&decoder,&format,&channels,&rate,nullptr,0)!=MA_SUCCESS||ma_decoder_get_length_in_pcm_frames(&decoder,&frames)!=MA_SUCCESS||!frames||!channels||channels>8||rate<8000||rate>384000||frames>ma_uint64(rate)*86400){error="Audio Clip has invalid duration, channels or sample rate (maximum 8 channels, 24 hours)";return false;}
