@@ -10,10 +10,17 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 import zipfile
+import threading
 from .settings import Load,Validate
 from .pak import Pack
+
+class BuildCancelled(Exception):pass
+
+def CheckCancelled(cancel):
+    if cancel is not None and cancel():raise BuildCancelled('Game build cancelled before publication')
 
 def Emit(stage,message,**fields):
     # ASCII JSON is lossless and safe through legacy Windows pipe code pages.
@@ -63,7 +70,7 @@ def ValidateRuntime(runtime,architecture):
     runtime=Path(runtime).resolve()
     manifest=json.loads((runtime/'runtime.json').read_text(encoding='utf-8-sig'))
     if manifest.get('format_version')!=1 or manifest.get('architecture')!=architecture:raise ValueError('Runtime template version or architecture mismatch')
-    if manifest.get('game_format_version')!=2:raise ValueError('Runtime template does not support signed BPAK v2 builds; install the updated matching Core runtime template')
+    if manifest.get('game_format_version')!=3:raise ValueError('Runtime template does not support protected version-3 manifests; install the updated matching Core runtime template')
     versions=Path(__file__).resolve().parents[1]/'releases/versions.json'
     core_version=json.loads(versions.read_text(encoding='utf-8-sig'))['core']
     if manifest.get('core_version')!=core_version:raise ValueError('Runtime template does not match this compiler/core version')
@@ -132,7 +139,7 @@ def CompileScripts(project,runtime,architecture,cache,compiler_path=''):
     result=compiler.Build([p for p in sources if Path(p).suffix.lower()!='.lua'])
     if not result.success:raise ValueError('\n'.join(d.message for d in result.diagnostics))
     return [binding for binding in attachments.RuntimeBindings(result.outputs) if Path(binding['module']).suffix.lower()=='.dll']
-def CookShaders(cooked,cooker):
+def CookShaders(cooked,cooker,check=lambda:None):
     import yaml
     from Editor.materials import MaterialCompiler
     records=yaml.safe_load((cooked/'.bazzalt/CookedAssets.yaml').read_text(encoding='utf-8'))['Assets']
@@ -145,29 +152,42 @@ def CookShaders(cooked,cooker):
             return path if path.is_file() else super()._Tool(name)
     compiler=ShaderCompiler(Assets(),app_root=cooker.parent)
     for record in records:
+        check()
         if Path(record['Source']).suffix.lower() in {'.mat','.shad','.bshader'}:compiler.CompileShader(record['UUID'])
+def RenameWithRetry(source,target):
+    # Windows can briefly retain image/AV handles after a verifier exits.
+    # Never bypass a persistent lock from a game that is still running.
+    for attempt in range(12):
+        try:source.rename(target);return
+        except PermissionError:
+            if attempt==11:raise
+            time.sleep(.05*(attempt+1))
+
 def Publish(staged,output,owner):
     marker='.bazzalt-game-build'
     if output.exists():
         if not output.is_dir() or not (output/marker).is_file() or (output/marker).read_text()!=owner:raise ValueError('Refusing to replace an output not owned by this project: '+str(output))
     (staged/marker).write_text(owner,encoding='utf-8')
     backup=output.with_name(output.name+'.previous-'+uuid.uuid4().hex)
-    if output.exists():output.rename(backup)
-    try:staged.rename(output)
+    if output.exists():RenameWithRetry(output,backup)
+    try:RenameWithRetry(staged,output)
     except OSError:
-        if backup.exists():backup.rename(output)
+        if backup.exists():RenameWithRetry(backup,output)
         raise
     if backup.exists():shutil.rmtree(backup)
-def Build(project,runtime,cooker,launch=False,compiler_path=''):
+def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
     project=Path(project).resolve();settings=Validate(Load(project));arch=settings['target']['architecture']
     if not project.is_file() or project.suffix!='.bproject':raise ValueError('Select a valid project file')
     runtime,files=ValidateRuntime(runtime,arch)
     cooker=Path(cooker).resolve()
     if not cooker.is_file() or Architecture(cooker)!='x64':raise ValueError('The x64 content cooker tool is missing or incompatible')
     with BuildLock(project.parent) as cache, BuildWorkspace(cache/arch) as work:
+        check=lambda:CheckCancelled(cancel)
+        check()
         cooked=work/'Cooked';cooked.mkdir()
         Emit('scripts','Compiling game scripts',architecture=arch)
         bindings=CompileScripts(project,runtime,arch,cache/arch,compiler_path)
+        check()
         for binding in bindings:
             binding['properties']={key:('true' if value is True else 'false' if value is False else ','.join(map(str,value)) if isinstance(value,list) else str(value)) for key,value in binding['properties'].items()}
         manifest=work/'bindings.json';manifest.write_text(json.dumps(dict(startup=settings['target']['startup_scene'],bindings=bindings),ensure_ascii=False),encoding='utf-8')
@@ -176,7 +196,8 @@ def Build(project,runtime,cooker,launch=False,compiler_path=''):
         tools=cooker.parent/'filament'
         if tools.is_dir():environment['BAZZALT_FILAMENT_TOOLS']=str(tools)
         Run([cooker,project,cooked,manifest],cwd=cooker.parent,env=environment)
-        CookShaders(cooked,cooker)
+        from .content import FilterCooked
+        check();CookShaders(cooked,cooker,check);check();FilterCooked(cooked,settings['packaging']);check()
         # No source code, import tools, or editor settings can enter the final game.
         forbidden={'.py','.pyc','.pyd','.cpp','.hpp','.h','.cc','.cxx','.lua'}
         for path in cooked.rglob('*'):
@@ -188,31 +209,33 @@ def Build(project,runtime,cooker,launch=False,compiler_path=''):
             for filename in files:shutil.copy2(runtime/filename,root/(name+'.exe' if filename=='BazzaltPlayer.exe' else filename))
             from .pe_resources import Apply
             Apply(root/(name+'.exe'),settings['production'])
-            key=KeyFor(settings);packages=[]
+            from .security import SecurityContext
+            security=SecurityContext(settings,KeyFor(settings));packages=[];content_hashes={}
             if settings['packaging']['format']=='pak':
                 Emit('package','Packing game content')
-                packages=[p.name for p in Pack(cooked,root,settings['packaging']['chunk_mb'],key)]
+                packages=[p.name for p in Pack(cooked,root,settings['packaging']['chunk_mb'],security.PackageKey,hashes=content_hashes,check=check)]
             else:shutil.copytree(cooked,root/'Data')
-            if key:
-                method=settings['security']['key_storage']
-                if method=='file':(root/'game.key').write_bytes(key)
             if settings['packaging']['decoy_kb']:(root/'padding.bin').write_bytes(os.urandom(settings['packaging']['decoy_kb']*1024))
-            game=dict(format_version=2,format=settings['packaging']['format'],production=settings['production'],window=settings['window'],intro=settings['intro'],packages=packages,**{k:settings['security'][k] for k in ('encryption','key_storage','key_environment')})
+            game=dict(format_version=3,format=settings['packaging']['format'],production=settings['production'],window=settings['window'],intro=settings['intro'],packages=packages,**{k:settings['security'][k] for k in ('encryption','key_storage','key_environment')})
             (root/'game.json').write_text(json.dumps(game,ensure_ascii=False,indent=2),encoding='utf-8')
             (root/'LICENSE.txt').write_text(settings['production']['license'],encoding='utf-8')
             if (runtime/'licenses').is_dir():shutil.copytree(runtime/'licenses',root/'licenses')
             from .integrity import Seal
-            Seal(root,root/(name+'.exe'),key if settings['security']['key_storage']=='embedded' else None)
+            Seal(root,root/(name+'.exe'),security=security,content=content_hashes)
+            check()
             Emit('verify','Verifying the packaged game')
             Run([root/(name+'.exe'),'--verify-package'],cwd=root,timeout=120)
+            check()
             if settings['packaging']['archive']:
                 archive=destination/f'{name}-windows-{arch}.zip';temporary=work/'Game.zip'
                 with zipfile.ZipFile(temporary,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as zipped:
                     for path in root.rglob('*'):
+                        check()
                         if path.is_file():zipped.write(path,path.relative_to(root).as_posix())
                 # Existing archives require the compiler's companion ownership marker.
                 marker=archive.with_suffix('.zip.owner');owner=hashlib.sha256(str(project).encode('utf-8')).hexdigest()
                 if archive.exists() and (not marker.is_file() or marker.read_text()!=owner):raise ValueError('Archive is not owned by this project')
+                check();Emit('publish','Publishing verified game output')
                 os.replace(temporary,archive);marker.write_text(owner,encoding='utf-8');result=archive
                 if output.is_dir() and (output/'.bazzalt-game-build').is_file() and (output/'.bazzalt-game-build').read_text()==owner:shutil.rmtree(output)
                 if launch:
@@ -221,6 +244,7 @@ def Build(project,runtime,cooker,launch=False,compiler_path=''):
                     launch_output=cache/arch/'Launch'
                     Publish(root,launch_output,owner);launch_path=launch_output/(name+'.exe')
             else:
+                check();Emit('publish','Publishing verified game output')
                 Publish(root,output,hashlib.sha256(str(project).encode('utf-8')).hexdigest());result=output
                 if launch:launch_path=output/(name+'.exe')
     # Exit both the staging context and build lock before reporting success or
@@ -231,10 +255,45 @@ def Build(project,runtime,cooker,launch=False,compiler_path=''):
         except OSError as error:Emit('launch_error','Game was built, but could not be launched: '+str(error),output=str(result))
     return result
 def RunLaunch(executable):subprocess.Popen([str(executable)],cwd=executable.parent,close_fds=True,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+def ReadControls(cancelled,stop):
+    # Never leave a daemon holding buffered stdin's lock during shutdown.
+    try:descriptor=sys.stdin.fileno()
+    except (AttributeError,OSError,ValueError):return
+    pending=b''
+    if os.name=='nt':
+        import ctypes,msvcrt
+        api=ctypes.WinDLL('kernel32');api.PeekNamedPipe.argtypes=[ctypes.c_void_p,ctypes.c_void_p,ctypes.c_uint,ctypes.c_void_p,ctypes.POINTER(ctypes.c_uint),ctypes.c_void_p];api.PeekNamedPipe.restype=ctypes.c_int
+        handle=msvcrt.get_osfhandle(descriptor)
+    while not stop.is_set():
+        if os.name=='nt':
+            available=ctypes.c_uint()
+            if not api.PeekNamedPipe(handle,None,0,None,ctypes.byref(available),None):return
+            size=min(available.value,4096)
+        else:
+            import select
+            size=4096 if select.select([descriptor],[],[],.05)[0] else 0
+        if size:
+            try:data=os.read(descriptor,size)
+            except OSError:return
+            if not data:return
+            pending+=data
+            while b'\n' in pending:
+                line,pending=pending.split(b'\n',1)
+                if line.strip()==b'cancel':cancelled.set();return
+            if len(pending)>4096:pending=b''
+        stop.wait(.05)
+
 def main():
     parser=argparse.ArgumentParser(description='Build game content using a prebuilt Bazzalt runtime')
-    parser.add_argument('--project',type=Path,required=True);parser.add_argument('--runtime',type=Path,required=True);parser.add_argument('--cooker',type=Path,required=True);parser.add_argument('--launch',action='store_true');parser.add_argument('--script-compiler',default='')
+    parser.add_argument('--project',type=Path);parser.add_argument('--runtime',type=Path);parser.add_argument('--cooker',type=Path);parser.add_argument('--launch',action='store_true');parser.add_argument('--script-compiler',default='');parser.add_argument('--generate-key',action='store_true',help='Print a fresh 256-bit key; treat stdout as secret')
     args=parser.parse_args()
-    try:Build(args.project,args.runtime,args.cooker,args.launch,args.script_compiler);return 0
+    if args.generate_key:
+        if args.project or args.runtime or args.cooker or args.launch or args.script_compiler:parser.error('--generate-key cannot be combined with build arguments')
+        print(os.urandom(32).hex(),flush=True);return 0
+    if not args.project or not args.runtime or not args.cooker:parser.error('--project, --runtime and --cooker are required for a build')
+    cancelled=threading.Event();stop=threading.Event();controls=threading.Thread(target=ReadControls,args=(cancelled,stop),daemon=True);controls.start()
+    try:Build(args.project,args.runtime,args.cooker,args.launch,args.script_compiler,cancel=cancelled.is_set);return 0
+    except BuildCancelled as error:Emit('cancelled',str(error));return 2
     except Exception as error:Emit('error',str(error));return 1
+    finally:stop.set();controls.join(timeout=.5)
 if __name__=='__main__':sys.exit(main())

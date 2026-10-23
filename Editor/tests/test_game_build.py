@@ -18,6 +18,8 @@ class GameBuildTests(unittest.TestCase):
             project=Path(folder)/'Game.bproject';editor=QWidget();editor.Runtime=Mock();editor.Runtime.ProjectInfo.return_value={'project_path':str(project)};editor.Localization=LocalizationManager(ResourceManager())
             dialog=BuildSettingsDialog(editor);self.assertTrue(dialog.isModal());self.assertEqual(dialog.Sections.count(),6)
             preset=dialog.Controls[('security','preset')];preset.setCurrentIndex(preset.findData('high'));dialog._Preset();self.assertEqual(dialog.GetValues()['security']['key_storage'],'environment')
+            self.assertTrue(dialog.Controls[('security','encrypt_manifests')].isChecked())
+            self.assertGreaterEqual(dialog.Controls[('security','key_storage')].findData('dpapi_user'),0)
             dialog._Apply();self.assertEqual(Load(project)['security']['preset'],'high');dialog.deleteLater();editor.deleteLater()
     def Controller(self,launch=False):
         from Editor.game_build import GameBuildController
@@ -40,3 +42,10 @@ class GameBuildTests(unittest.TestCase):
         with patch('Editor.game_build.BuildCompleteDialog') as complete:
             controller._Finished(1,QProcess.ExitStatus.NormalExit);complete.assert_not_called();controller.Progress.Fail.assert_called_once_with('A real failure')
         dialog=BuildProgressDialog(editor);dialog.show();dialog.close();self.assertTrue(dialog.isVisible());self.assertTrue(dialog.isModal());dialog.Finish();self.assertFalse(dialog.isVisible());dialog.deleteLater()
+    def test_cancellation_is_cooperative_and_has_no_success_dialog(self):
+        from PySide6.QtCore import QProcess
+        from Editor.gui.build_progress import BuildProgressDialog
+        editor,controller=self.Controller();controller.Cancel();controller.Process.write.assert_called_once_with(b'cancel\n');controller._cancelled=True
+        with patch('Editor.game_build.BuildCompleteDialog') as complete:
+            controller._Finished(2,QProcess.ExitStatus.NormalExit);complete.assert_not_called();controller.Progress.Finish.assert_called_once()
+        dialog=BuildProgressDialog(editor);requested=Mock();dialog.CancelRequested.connect(requested);dialog.Cancel.click();requested.assert_called_once();self.assertFalse(dialog.Cancel.isEnabled());self.assertTrue(dialog.Active);dialog.Finish();dialog.deleteLater()

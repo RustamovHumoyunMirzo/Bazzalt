@@ -36,11 +36,11 @@ class GameBuildController(QObject):
             compiler=self.Editor.PreferenceValue('tools','compiler_path','')
             if compiler:arguments+=['--script-compiler',compiler]
             if launch:arguments+=['--launch']
-            process=QProcess(self);self.Process=process;self._buffer='';self._stderr='';self._error='';self._result_path='';self._launch_requested=launch;self._launch_error=''
+            process=QProcess(self);self.Process=process;self._buffer='';self._stderr='';self._error='';self._result_path='';self._launch_requested=launch;self._launch_error='';self._cancelled=False
             process.setProgram(program);process.setArguments(arguments);process.setWorkingDirectory(str(root));environment=QProcessEnvironment.systemEnvironment();environment.insert('PYTHONUTF8','1');environment.insert('PYTHONIOENCODING','utf-8');process.setProcessEnvironment(environment)
             process.readyReadStandardOutput.connect(self._Output);process.readyReadStandardError.connect(self._Stderr);process.finished.connect(self._Finished);process.errorOccurred.connect(self._Failed)
             for action in (self.Editor.MenuBar.BuildAction,self.Editor.MenuBar.BuildLaunchAction):action.setEnabled(False)
-            self.Progress=BuildProgressDialog(self.Editor);self.Progress.show();process.start()
+            self.Progress=BuildProgressDialog(self.Editor);self.Progress.CancelRequested.connect(self.Cancel);self.Progress.show();process.start()
         except (OSError,ValueError,KeyError) as error:self._Message(str(error),True)
     def _Output(self):
         if self.Process is None:return
@@ -50,6 +50,7 @@ class GameBuildController(QObject):
             try:
                 event=json.loads(line);stage=event.get('stage','')
                 if stage=='error':self._error=event.get('message','')
+                elif stage=='cancelled':self._cancelled=True
                 elif stage=='launch_error':self._launch_error=event.get('message','')
                 else:
                     if self.Progress is not None:self.Progress.SetStage(stage)
@@ -61,11 +62,17 @@ class GameBuildController(QObject):
     def _Failed(self,error):
         if self.Process is not None:self._error=self.Process.errorString()
         if error==QProcess.ProcessError.FailedToStart:self._Finished(-1,None)
+    def Cancel(self):
+        if self.Process is not None:self.Process.write(b'cancel\n')
     def _Finished(self,code,status):
         if self.Process is None:return
         self._Output();self._Stderr()
         self.Process.deleteLater();self.Process=None
         for action in (self.Editor.MenuBar.BuildAction,self.Editor.MenuBar.BuildLaunchAction):action.setEnabled(True)
+        if getattr(self,'_cancelled',False) and code==2 and status!=QProcess.ExitStatus.CrashExit:
+            self._cancelled=False
+            if self.Progress is not None:self.Progress.Finish()
+            self._Message(self.Editor.Localization.Translate('build.cancelled'));return
         if code or status==QProcess.ExitStatus.CrashExit or self._error or not self._result_path:
             message=self._error or self._stderr or self.Editor.Localization.Translate('build.failed')
             if self.Progress is not None:self.Progress.Fail(message)

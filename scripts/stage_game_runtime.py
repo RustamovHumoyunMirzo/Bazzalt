@@ -41,7 +41,7 @@ def Stage(build,output,architecture,root=None):
     for source,name in ((root/'LICENSE','Bazzalt.txt'),(root/'deps/lua/README','Lua.txt'),(root/'deps/sol2/LICENSE.txt','Sol2.txt'),(root/'deps/filament/LICENSE','Filament.txt'),(root/'deps/SDL3/LICENSE.txt','SDL3.txt')):
         if source.is_file():shutil.copy2(source,licenses/name)
     versions=json.loads((root/'releases/versions.json').read_text())
-    (output/'runtime.json').write_text(json.dumps(dict(format_version=1,game_format_version=2,core_version=versions['core'],architecture=architecture,files=names),indent=2),encoding='utf-8')
+    (output/'runtime.json').write_text(json.dumps(dict(format_version=1,game_format_version=3,core_version=versions['core'],architecture=architecture,files=names),indent=2),encoding='utf-8')
     return output
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--build',type=Path,default=Path('build'));parser.add_argument('--output',type=Path,required=True);parser.add_argument('--architecture',choices=('x64','x86'),required=True);args=parser.parse_args();Stage(args.build,args.output,args.architecture)

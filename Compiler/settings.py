@@ -9,21 +9,24 @@ DEFAULTS={
     'target':{'architecture':'x64','startup_scene':'','runtime_directory':''},
     'window':{'title':'Game','width':1280,'height':720,'resizable':True,'mode':'windowed','backend':'automatic'},
     'intro':{'enabled':True,'duration_ms':2000,'logo_size':144,'allow_skip':False},
-    'packaging':{'format':'pak','archive':False,'chunk_mb':64,'decoy_kb':0},
-    'security':{'preset':'low','encryption':'none','key_storage':'embedded','key_environment':'BAZZALT_GAME_KEY'},
+    'packaging':{'format':'pak','archive':False,'chunk_mb':64,'decoy_kb':0,'include_assets':'**','exclude_assets':''},
+    'security':{'preset':'low','encryption':'none','key_storage':'embedded','key_environment':'BAZZALT_GAME_KEY','encrypt_manifests':False},
 }
 PRESETS={
-    'low':{'encryption':'none','key_storage':'embedded','chunk_mb':64,'decoy_kb':0},
-    'medium':{'encryption':'aes-256-gcm','key_storage':'embedded','chunk_mb':64,'decoy_kb':0},
-    'high':{'encryption':'aes-256-gcm','key_storage':'environment','chunk_mb':32,'decoy_kb':0},
-    'very_high':{'encryption':'aes-256-gcm','key_storage':'environment','chunk_mb':16,'decoy_kb':0},
+    'low':{'encryption':'none','key_storage':'embedded','encrypt_manifests':False,'chunk_mb':64,'decoy_kb':0},
+    'medium':{'encryption':'aes-256-gcm','key_storage':'embedded','encrypt_manifests':True,'chunk_mb':64,'decoy_kb':0},
+    'high':{'encryption':'aes-256-gcm','key_storage':'environment','encrypt_manifests':True,'chunk_mb':32,'decoy_kb':0},
+    'very_high':{'encryption':'aes-256-gcm','key_storage':'environment','encrypt_manifests':True,'chunk_mb':16,'decoy_kb':0},
 }
 def PathFor(project):return Path(project).parent/'BuildSettings.json'
 def Merge(value):
     result=copy.deepcopy(DEFAULTS)
-    if not isinstance(value,dict) or value.get('version',1)!=1:raise ValueError('Unsupported build settings version')
+    if not isinstance(value,dict) or type(value.get('version',1)) is not int or value.get('version',1)!=1:raise ValueError('Unsupported build settings version')
     for section,fields in value.items():
+        if section in result and isinstance(result[section],dict) and not isinstance(fields,dict):raise ValueError('Invalid build settings section: '+section)
+        if section=='security' and any(key not in result['security'] for key in fields):raise ValueError('Unsupported security setting; update the compiler or correct the profile')
         if section in result and isinstance(fields,dict):result[section].update({k:v for k,v in fields.items() if k in result[section]})
+    if result['security']['encryption']!='none' and 'encrypt_manifests' not in value.get('security',{}):result['security']['encrypt_manifests']=True
     return result
 def Load(project):
     path=PathFor(project)
@@ -39,7 +42,7 @@ def Validate(value):
         if not isinstance(field,str) or '\0' in field or len(field)>65535:raise ValueError('Invalid production metadata: '+key)
     version=value['production']['version']
     if not re.fullmatch(r'\d+(?:\.\d+){1,3}',version) or any(int(part)>65535 for part in version.split('.')):raise ValueError('Product version must contain 2 to 4 numeric parts between 0 and 65535')
-    choices={'target':{'architecture':('x64','x86')},'window':{'mode':('windowed','maximized','borderless','fullscreen'),'backend':('automatic','vulkan','opengl')},'packaging':{'format':('loose','pak')},'security':{'preset':tuple(PRESETS)+('custom',),'encryption':('none','aes-256-gcm'),'key_storage':('embedded','file','environment')}}
+    choices={'target':{'architecture':('x64','x86')},'window':{'mode':('windowed','maximized','borderless','fullscreen'),'backend':('automatic','vulkan','opengl')},'packaging':{'format':('loose','pak')},'security':{'preset':tuple(PRESETS)+('custom',),'encryption':('none','aes-256-gcm'),'key_storage':('embedded','file','environment','dpapi_user')}}
     for section,fields in choices.items():
         for key,items in fields.items():
             if value[section][key] not in items:raise ValueError(f'Invalid {section}.{key}')
@@ -48,6 +51,14 @@ def Validate(value):
         if type(field)!=int or not low<=field<=high:raise ValueError(f'Invalid {section}.{key}')
     if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,100}',value['security']['key_environment']):raise ValueError('Invalid key environment variable')
     if value['security']['encryption']!='none' and value['packaging']['format']!='pak':raise ValueError('Encryption requires BPAK packaging')
+    if value['security']['encrypt_manifests'] and value['security']['encryption']=='none':raise ValueError('Manifest encryption requires AES-256-GCM')
+    for key in ('include_assets','exclude_assets'):
+        patterns=value['packaging'][key]
+        if len(patterns)>65536:raise ValueError('Asset rules exceed size limit')
+        for pattern in patterns.splitlines():
+            pattern=pattern.strip()
+            if not pattern:continue
+            if len(pattern)>4096 or pattern.startswith('/') or any(c in pattern for c in '\\:\0') or '..' in pattern.split('/'):raise ValueError('Asset patterns must use safe project-relative paths')
     return value
 def Save(project,value):
     value=Validate(value);path=PathFor(project);temporary=path.with_suffix('.json.tmp');temporary.write_text(json.dumps(value,ensure_ascii=False,indent=2),encoding='utf-8');temporary.replace(path)

@@ -23,16 +23,16 @@ inline std::filesystem::path SafePath(const std::string& name){
     auto path=std::filesystem::u8path(name);Require(!path.is_absolute()&&!path.has_root_name(),"Absolute package path");
     for(auto part:path){auto text=part.wstring();Require(!text.empty()&&text!=L"."&&text!=L".."&&text.back()!=L'.'&&text.back()!=L' '&&text.find_first_of(L"<>\"|?*")==std::wstring::npos,"Unsafe package path");
         auto base=text.substr(0,text.find(L'.'));CharUpperBuffW(base.data(),DWORD(base.size()));
-        Require(base!=L"CON"&&base!=L"PRN"&&base!=L"AUX"&&base!=L"NUL"&&!(base.size()==4&&(base.substr(0,3)==L"COM"||base.substr(0,3)==L"LPT")&&base[3]>=L'1'&&base[3]<=L'9'),"Reserved package path");}
+        Require(base!=L"CON"&&base!=L"PRN"&&base!=L"AUX"&&base!=L"NUL"&&base!=L"CONIN$"&&base!=L"CONOUT$"&&!(base.size()==4&&(base.substr(0,3)==L"COM"||base.substr(0,3)==L"LPT")&&((base[3]>=L'0'&&base[3]<=L'9')||base[3]==wchar_t(0x00b9)||base[3]==wchar_t(0x00b2)||base[3]==wchar_t(0x00b3))),"Reserved package path");}
     return path;
 }
 struct Algorithm {BCRYPT_ALG_HANDLE Value{};~Algorithm(){if(Value)BCryptCloseAlgorithmProvider(Value,0);}};
 struct Key {BCRYPT_KEY_HANDLE Value{};~Key(){if(Value)BCryptDestroyKey(Value);}};
 struct WipeBytes {std::vector<unsigned char>& Value;~WipeBytes(){if(!Value.empty())SecureZeroMemory(Value.data(),Value.size());}};
 struct Decompressor {DECOMPRESSOR_HANDLE Value{};~Decompressor(){if(Value)CloseDecompressor(Value);}};
-inline std::array<unsigned char,32> Hash(const std::vector<unsigned char>& data){
-    Algorithm alg;Require(BCryptOpenAlgorithmProvider(&alg.Value,BCRYPT_SHA256_ALGORITHM,nullptr,0)>=0,"SHA-256 unavailable");
-    std::array<unsigned char,32> digest{};Require(BCryptHash(alg.Value,nullptr,0,const_cast<PUCHAR>(data.data()),ULONG(data.size()),digest.data(),ULONG(digest.size()))>=0,"Hash failed");return digest;
+inline std::array<unsigned char,32> Hash(const std::vector<unsigned char>& data,const std::vector<unsigned char>& key={}){
+    Algorithm alg;Require(BCryptOpenAlgorithmProvider(&alg.Value,BCRYPT_SHA256_ALGORITHM,nullptr,key.empty()?0:BCRYPT_ALG_HANDLE_HMAC_FLAG)>=0,"SHA-256 unavailable");
+    std::array<unsigned char,32> digest{};Require(BCryptHash(alg.Value,key.empty()?nullptr:const_cast<PUCHAR>(key.data()),ULONG(key.size()),const_cast<PUCHAR>(data.data()),ULONG(data.size()),digest.data(),ULONG(digest.size()))>=0,"Hash failed");return digest;
 }
 inline std::vector<unsigned char> HexKey(const std::wstring& value){
     Require(value.size()==64,"Environment key must contain 64 hex characters");std::vector<unsigned char> key;
@@ -55,43 +55,41 @@ inline std::uint64_t PlayerSealOffset(const std::filesystem::path& executable){
     if(certificate.VirtualAddress||certificate.Size){Require(certificate.VirtualAddress>=std::uint64_t(dos.e_lfanew)+sizeof(DWORD)+sizeof(header)+optional.size()&&certificate.Size>=8&&std::uint64_t(certificate.VirtualAddress)+certificate.Size==length,"Invalid player certificate table");end=certificate.VirtualAddress;}
     for(std::uint64_t padding=0;padding<=7&&end>=112+padding;++padding){
         file.clear();file.seekg(std::streamoff(end-112-padding));std::array<char,8> marker{};file.read(marker.data(),marker.size());
-        if(file&&std::string(marker.data(),8)=="BZSIG002"){
+        if(file&&(std::string(marker.data(),8)=="BZSIG002"||std::string(marker.data(),8)=="BZSIG003")){
             file.seekg(std::streamoff(end-padding));bool zeros=true;for(std::uint64_t i=0;i<padding;++i)if(file.get()!=0)zeros=false;
             if(zeros)return end-112-padding;
         }
     }
     throw std::runtime_error("Missing game content signature seal; rebuild the game");
 }
-inline std::vector<unsigned char> LoadKey(ryml::ConstNodeRef config,const std::filesystem::path& executable){
-    if(Text(config["encryption"])=="none")return {};
-    const auto method=Text(config["key_storage"]);
-    if(method=="file"){auto text=Read(executable.parent_path()/"game.key",32);Require(text.size()==32,"Invalid key file");return {text.begin(),text.end()};}
-    if(method=="environment"){
-        auto name=std::filesystem::u8path(Text(config["key_environment"])).wstring();std::array<wchar_t,66> buffer{};
-        auto n=GetEnvironmentVariableW(name.c_str(),buffer.data(),DWORD(buffer.size()));Require(n==64,"Game encryption key is not available in the environment");return HexKey(buffer.data());
-    }
-    Require(method=="embedded","Unsupported key storage");std::ifstream f(executable,std::ios::binary);f.seekg(std::streamoff(PlayerSealOffset(executable)+72));std::array<char,8> magic{};std::vector<unsigned char> key(32);f.read(magic.data(),8);f.read(reinterpret_cast<char*>(key.data()),32);Require(bool(f)&&std::string(magic.data(),8)=="BZKEY001","Missing embedded key");return key;
-}
 template<class T> inline T Number(std::istream& f){T value{};f.read(reinterpret_cast<char*>(&value),sizeof(value));Require(bool(f),"Truncated package");return value;}
 inline void Bytes(std::istream& f,void* data,size_t size){f.read(static_cast<char*>(data),std::streamsize(size));Require(bool(f),"Truncated package payload");}
 inline void Extract(const std::filesystem::path& folder,const std::filesystem::path& output,const std::vector<std::string>& packages,const std::vector<unsigned char>& key){
     struct Progress{std::uint64_t Offset=0,Total=0;};std::map<std::string,Progress> progress;std::uint64_t allocated=0;size_t records=0;
     Algorithm alg;Key aes;Decompressor codec;
+    std::vector<unsigned char> digestKey;WipeBytes wipeDigestKey{digestKey};
     Require(CreateDecompressor(COMPRESS_ALGORITHM_XPRESS_HUFF,nullptr,&codec.Value)!=0,"Package decompressor unavailable");
     if(!key.empty()){
         Require(key.size()==32&&BCryptOpenAlgorithmProvider(&alg.Value,BCRYPT_AES_ALGORITHM,nullptr,0)>=0,"AES unavailable");
         Require(BCryptSetProperty(alg.Value,BCRYPT_CHAINING_MODE,reinterpret_cast<PUCHAR>(const_cast<wchar_t*>(BCRYPT_CHAIN_MODE_GCM)),sizeof(BCRYPT_CHAIN_MODE_GCM),0)>=0,"GCM unavailable");
         Require(BCryptGenerateSymmetricKey(alg.Value,&aes.Value,nullptr,0,const_cast<PUCHAR>(key.data()),ULONG(key.size()),0)>=0,"Could not initialize encryption key");
+        const std::string purpose="Bazzalt/v3/segment-digest";auto derived=Hash(std::vector<unsigned char>(purpose.begin(),purpose.end()),key);digestKey.assign(derived.begin(),derived.end());SecureZeroMemory(derived.data(),derived.size());
     }
     for(const auto& filename:packages){
-        auto relative=SafePath(filename);Require(relative.extension()==".bpak"&&!relative.has_parent_path(),"Invalid chunk filename");std::ifstream f(folder/relative,std::ios::binary);std::array<char,8> magic{};Bytes(f,magic.data(),8);const bool version2=std::string(magic.data(),8)=="BZPAK002";Require(version2||std::string(magic.data(),8)=="BZPAK001","Unsupported package version");
+        auto relative=SafePath(filename);Require(relative.extension()==".bpak"&&!relative.has_parent_path(),"Invalid chunk filename");std::ifstream f(folder/relative,std::ios::binary);std::array<char,8> magic{};Bytes(f,magic.data(),8);const auto version=std::string(magic.data(),8);const bool version3=version=="BZPAK003",modern=version3||version=="BZPAK002";Require(modern||version=="BZPAK001","Unsupported package version");
         while(f.peek()!=std::char_traits<char>::eof()){
-            Require(++records<=1000000,"Package record limit exceeded");std::vector<unsigned char> header(version2?29:25);Bytes(f,header.data(),header.size());
+            Require(++records<=1000000,"Package record limit exceeded");std::vector<unsigned char> header(modern?29:25);Bytes(f,header.data(),header.size());
             auto u32=[&](int i){std::uint32_t v;std::memcpy(&v,header.data()+i,4);return v;};auto u64=[&](int i){std::uint64_t v;std::memcpy(&v,header.data()+i,8);return v;};
-            auto names=u32(0),size=u32(4),rawSize=version2?u32(8):size;auto offset=u64(version2?12:8),total=u64(version2?20:16);auto flags=header[version2?28:24];const bool encrypted=flags&1,compressed=flags&2,alias=flags&4;
-            Require(names>0&&names<=4096&&size<=4u*1024u*1024u&&rawSize<=4u*1024u*1024u&&total<=8ull*1024*1024*1024&&offset<=total&&flags<=(version2?7:1)&&encrypted==!key.empty(),"Invalid package record");
+            auto names=u32(0),size=u32(4),rawSize=modern?u32(8):size;auto offset=u64(modern?12:8),total=u64(modern?20:16);auto flags=header[modern?28:24];const bool encrypted=flags&1,compressed=flags&2,alias=flags&4;
+            Require(names>0&&names<=4096u+(version3&&encrypted?28u:0u)&&size<=4u*1024u*1024u&&rawSize<=4u*1024u*1024u&&total<=8ull*1024*1024*1024&&offset<=total&&flags<=(modern?7:1)&&encrypted==!key.empty(),"Invalid package record");
             Require(alias?(!compressed&&offset==0&&rawSize==0&&size>0&&size<=4096):(rawSize<=total-offset&&(rawSize>0||total==0)&&(!compressed?size==rawSize:size>0)),"Invalid package payload framing");
-            std::string name(names,'\0');Bytes(f,name.data(),names);auto path=SafePath(name);
+            std::string encodedName(names,'\0');Bytes(f,encodedName.data(),names);std::string name=encodedName;
+            if(version3&&encrypted){
+                Require(names>28,"Invalid encrypted package path");const auto count=names-28;std::vector<unsigned char> decoded(count);ULONG written=0;
+                BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO info;BCRYPT_INIT_AUTH_MODE_INFO(info);info.pbNonce=reinterpret_cast<PUCHAR>(encodedName.data());info.cbNonce=12;info.pbTag=reinterpret_cast<PUCHAR>(encodedName.data()+names-16);info.cbTag=16;info.pbAuthData=header.data();info.cbAuthData=ULONG(header.size());
+                Require(BCryptDecrypt(aes.Value,reinterpret_cast<PUCHAR>(encodedName.data()+12),count,&info,nullptr,0,decoded.data(),count,&written,0)>=0&&written==count,"Package path authentication failed");name.assign(decoded.begin(),decoded.end());SecureZeroMemory(decoded.data(),decoded.size());
+            }
+            auto path=SafePath(name);
             // Case-insensitive filesystem aliases must not overwrite a previous entry.
             auto identity=path.wstring();CharLowerBuffW(identity.data(),DWORD(identity.size()));auto utf8=std::filesystem::path(identity).u8string();std::string canonical(reinterpret_cast<const char*>(utf8.data()),utf8.size());
             auto [found,inserted]=progress.try_emplace(canonical);auto& item=found->second;
@@ -100,11 +98,11 @@ inline void Extract(const std::filesystem::path& folder,const std::filesystem::p
             Require(item.Offset==offset&&item.Total==total,"Out-of-order package segment");
             std::array<unsigned char,12> nonce{};std::array<unsigned char,16> tag{};std::array<unsigned char,32> digest{};Bytes(f,nonce.data(),12);Bytes(f,tag.data(),16);Bytes(f,digest.data(),32);std::vector<unsigned char> data(size);Bytes(f,data.data(),size);
             if(encrypted){
-                auto aad=std::vector<unsigned char>(header.begin(),header.end());aad.insert(aad.end(),name.begin(),name.end());
+                auto aad=std::vector<unsigned char>(header.begin(),header.end());aad.insert(aad.end(),encodedName.begin(),encodedName.end());
                 BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO info;BCRYPT_INIT_AUTH_MODE_INFO(info);info.pbNonce=nonce.data();info.cbNonce=12;info.pbTag=tag.data();info.cbTag=16;info.pbAuthData=aad.data();info.cbAuthData=ULONG(aad.size());
                 std::vector<unsigned char> plain(size?size:1);ULONG count=0;Require(BCryptDecrypt(aes.Value,data.data(),size,&info,nullptr,0,plain.data(),ULONG(plain.size()),&count,0)>=0&&count==size,"Package authentication failed");plain.resize(size);data=std::move(plain);
             }
-            Require(Hash(data)==digest,"Package checksum mismatch");std::filesystem::create_directories((output/path).parent_path());
+            Require((version3&&encrypted?Hash(data,digestKey):Hash(data))==digest,"Package checksum mismatch");std::filesystem::create_directories((output/path).parent_path());
             if(alias){
                 auto target=SafePath(std::string(data.begin(),data.end()));auto identity=target.wstring();CharLowerBuffW(identity.data(),DWORD(identity.size()));auto utf8=std::filesystem::path(identity).u8string();std::string canonical(reinterpret_cast<const char*>(utf8.data()),utf8.size());
                 const auto previous=progress.find(canonical);Require(previous!=progress.end()&&previous!=found&&previous->second.Offset==total&&previous->second.Total==total,"Invalid package alias");

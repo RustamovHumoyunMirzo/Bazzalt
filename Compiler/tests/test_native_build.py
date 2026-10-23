@@ -1,5 +1,5 @@
 """Real cooker -> packages -> native player, without a Python game runtime."""
-import json,os,subprocess,tempfile,unittest,zipfile,uuid,struct
+import json,os,subprocess,tempfile,unittest,zipfile,uuid,struct,sys
 from unittest.mock import patch
 from pathlib import Path
 from Compiler.settings import DEFAULTS,ApplyPreset,Save
@@ -9,6 +9,19 @@ from scripts.stage_game_runtime import Stage
 ROOT=Path(__file__).resolve().parents[2]
 @unittest.skipUnless(os.name=='nt' and (ROOT/'build/Editor/Release/BazzaltPlayer.exe').is_file() and (ROOT/'build/Editor/Release/BazzaltCooker.exe').is_file(),'Prebuilt native player/cooker are required')
 class NativeBuildTests(unittest.TestCase):
+    def test_cli_cancellation_with_open_control_pipe_exits_cleanly(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);runtime=Stage(ROOT/'build',root/'Runtime','x64');project=root/'Game.bproject';assets=root/'Assets';assets.mkdir()
+            (assets/'Main.bscene').write_text('FormatVersion: 1\nSceneUUID: "12345678-1234-4234-8234-123456789abc"\nEntities: []\n')
+            project.write_text('FormatVersion: 1\nProjectUUID: "23456789-1234-4234-8234-123456789abc"\nName: Test\nAssetDirectory: Assets\nStartupScene: Assets/Main.bscene\nProperties: {}\n')
+            command=[sys.executable,'-m','Compiler.build','--project',str(project),'--runtime',str(runtime),'--cooker',str(ROOT/'build/Editor/Release/BazzaltCooker.exe')]
+            process=subprocess.Popen(command,cwd=ROOT,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,creationflags=subprocess.CREATE_NO_WINDOW)
+            try:
+                process.stdin.write(b'cancel\n');process.stdin.flush();self.assertEqual(process.wait(timeout=30),2)
+                self.assertIn(b'"stage": "cancelled"',process.stdout.read());self.assertNotIn(b'Fatal Python error',process.stderr.read());self.assertFalse((root/'bin').exists())
+            finally:
+                if process.poll() is None:process.kill();process.wait()
+                process.stdin.close();process.stdout.close();process.stderr.close()
     def test_cooked_game_loose_encrypted_and_archive(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder)/'Документы';root.mkdir();runtime=Stage(ROOT/'build',root/'Runtime','x64');project=root/'Game.bproject';assets=root/'Assets';assets.mkdir()
@@ -16,8 +29,11 @@ class NativeBuildTests(unittest.TestCase):
             (assets/'Compressed.bin').write_bytes(b'Compressible game payload\n'*200000)
             (assets/'Duplicate.bin').write_bytes((assets/'Compressed.bin').read_bytes())
             project.write_text('FormatVersion: 1\nProjectUUID: "23456789-1234-4234-8234-123456789abc"\nName: Test\nAssetDirectory: Assets\nStartupScene: Assets/Main.bscene\nProperties: {}\n',encoding='utf-8')
-            for preset,archive,format in (('low',False,'loose'),('low',False,'pak'),('medium',False,'pak'),('high',False,'pak'),('low',True,'pak')):
-                settings=ApplyPreset(DEFAULTS,preset);settings['production']['name']='TestGame';settings['packaging']['archive']=archive;settings['packaging']['format']=format;Save(project,settings)
+            for preset,archive,format in (('low',False,'loose'),('low',False,'pak'),('medium',False,'pak'),('high',False,'pak'),('file',False,'pak'),('dpapi_user',False,'pak'),('plain_manifest',False,'pak'),('low',True,'pak')):
+                settings=ApplyPreset(DEFAULTS,'medium' if preset in ('file','dpapi_user','plain_manifest') else preset)
+                if preset in ('file','dpapi_user'):settings['security']['key_storage']=preset;settings['security']['preset']='custom'
+                if preset=='plain_manifest':settings['security']['encrypt_manifests']=False;settings['security']['preset']='custom'
+                settings['production']['name']='TestGame';settings['packaging']['archive']=archive;settings['packaging']['format']=format;Save(project,settings)
                 with patch.dict(os.environ,{'BAZZALT_GAME_KEY':'01'*32}):output=Build(project,runtime,ROOT/'build/Editor/Release/BazzaltCooker.exe')
                 self.assertFalse(list((root/'.bazzalt/Cache/Build/x64').glob('work-*')))
                 # Obsolete products beside the current scene cache must never
@@ -31,6 +47,9 @@ class NativeBuildTests(unittest.TestCase):
                     executable=output/'TestGame.exe'
                     with patch.dict(os.environ,{'BAZZALT_GAME_KEY':'01'*32}):result=subprocess.run([str(executable),'--verify-package'],timeout=30)
                     self.assertEqual(result.returncode,0)
+                    original_player=executable.read_bytes();modified_player=bytearray(original_player);modified_player[32]^=1;executable.write_bytes(modified_player)
+                    with patch.dict(os.environ,{'BAZZALT_GAME_KEY':'01'*32}):result=subprocess.run([str(executable),'--verify-package'],capture_output=True,timeout=30)
+                    self.assertNotEqual(result.returncode,0);self.assertIn(b'hash mismatch',result.stderr);executable.write_bytes(original_player)
                     if preset=='medium':
                         # Simulate the PE certificate-table layout produced by
                         # signing, not a trusted publisher certificate itself.
@@ -50,7 +69,13 @@ class NativeBuildTests(unittest.TestCase):
                         with (active/'.bazzalt-session').open('rb') as lock,patch.dict(os.environ,{'TEMP':str(sessions),'TMP':str(sessions)}):
                             result=subprocess.run([str(executable),'--verify-package'],capture_output=True,timeout=30)
                         self.assertEqual(result.returncode,0,result.stderr);self.assertFalse(stale.exists());self.assertTrue(active.exists());self.assertTrue(unowned.exists())
-                    for target in (output/'game.json',output/'game.integrity',output/'game.signature'):
+                    if settings['security']['encrypt_manifests']:
+                        self.assertTrue((output/'game.json').read_bytes().startswith(b'BZENC003'));self.assertTrue((output/'game.integrity').read_bytes().startswith(b'BZENC003'));self.assertNotIn(b'Main.bscene',(output/'game.integrity').read_bytes())
+                    if settings['security']['encryption']!='none':self.assertFalse(any(b'Assets/Main.bscene' in path.read_bytes() for path in output.glob('*.bpak')))
+                    if preset=='high':
+                        with patch.dict(os.environ,{'BAZZALT_GAME_KEY':'02'*32}):result=subprocess.run([str(executable),'--verify-package'],capture_output=True,timeout=30)
+                        self.assertNotEqual(result.returncode,0);self.assertNotIn(b'020202',result.stderr)
+                    for target in (output/'game.bootstrap',output/'game.json',output/'game.integrity',output/'game.signature'):
                         original=target.read_bytes();changed=bytearray(original);changed[-1]^=1;target.write_bytes(changed)
                         with patch.dict(os.environ,{'BAZZALT_GAME_KEY':'01'*32}):result=subprocess.run([str(executable),'--verify-package'],capture_output=True,timeout=30)
                         self.assertNotEqual(result.returncode,0);target.write_bytes(original)
@@ -70,10 +95,26 @@ class NativeBuildTests(unittest.TestCase):
                             Seal(output,executable)
                             result=subprocess.run([str(executable),'--verify-package'],capture_output=True,timeout=30)
                             self.assertNotEqual(result.returncode,0);self.assertIn(b'compressed',result.stderr)
+                            # Independently signed decoded-file hashes must also
+                            # be enforced after successful decompression.
+                            first.write_bytes(bytes(data[:-1])+bytes([data[-1]^1]))
+                            Seal(output,executable,content={'Game.bproject':dict(size=0,sha256='0'*64)})
+                            result=subprocess.run([str(executable),'--verify-package'],capture_output=True,timeout=30)
+                            self.assertNotEqual(result.returncode,0);self.assertIn(b'hash mismatch',result.stderr)
             events=[]
             with patch('Compiler.build.Emit',side_effect=lambda stage,*args,**kwargs:events.append(stage)),patch('Compiler.build.RunLaunch',side_effect=lambda path:events.append('launched')):
                 Build(project,runtime,ROOT/'build/Editor/Release/BazzaltCooker.exe',launch=True)
             self.assertLess(events.index('complete'),events.index('launched'));self.assertNotIn('error',events)
+            settings['packaging']['format']='loose';settings['packaging']['include_assets']='Assets/Main.bscene';Save(project,settings)
+            filtered=Build(project,runtime,ROOT/'build/Editor/Release/BazzaltCooker.exe')
+            with zipfile.ZipFile(filtered) as zipped:
+                self.assertIn('Data/Assets/Main.bscene',zipped.namelist());self.assertNotIn('Data/Assets/Compressed.bin',zipped.namelist());self.assertNotIn('Data/Assets/Duplicate.bin',zipped.namelist())
+            import hashlib,threading
+            from Compiler.build import BuildCancelled
+            archive_path=root/'bin/TestGame-windows-x64.zip';before=hashlib.sha256(archive_path.read_bytes()).digest();cancel=threading.Event()
+            def stop_scripts(*args):cancel.set();return []
+            with patch('Compiler.build.CompileScripts',side_effect=stop_scripts),self.assertRaises(BuildCancelled):Build(project,runtime,ROOT/'build/Editor/Release/BazzaltCooker.exe',cancel=cancel.is_set)
+            self.assertEqual(before,hashlib.sha256(archive_path.read_bytes()).digest());self.assertFalse(list((root/'.bazzalt/Cache/Build/x64').glob('work-*')))
     @unittest.skipUnless(os.environ.get('BAZZALT_GAME_GPU_TEST')=='1','Opt in to real hidden-window rendering')
     def test_native_game_renders_and_runs_script_lifecycle(self):
         with tempfile.TemporaryDirectory() as folder:

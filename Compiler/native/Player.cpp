@@ -13,6 +13,7 @@
 using namespace Bazzalt::Game;
 namespace {
 Bazzalt::Runtime::Engine* Engine=nullptr;
+struct LibraryDirectory {DLL_DIRECTORY_COOKIE Value{};~LibraryDirectory(){if(Value)RemoveDllDirectory(Value);}};
 int PhysicalKey(WPARAM key,LPARAM flags){
     const int scan=int((flags>>16)&255);
     if(key==VK_PAUSE)return 72;if(key==VK_SNAPSHOT)return 70;
@@ -60,6 +61,7 @@ inline void CreatePrivateContentDirectory(const std::filesystem::path& path){
 }
 struct TemporaryContent {
     std::filesystem::path Path;
+    FileLeases* Leases=nullptr;
     HANDLE Session=INVALID_HANDLE_VALUE;
     void Lock(){
         Session=CreateFileW((Path/".bazzalt-session").c_str(),GENERIC_READ|GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_HIDDEN,nullptr);
@@ -84,7 +86,7 @@ struct TemporaryContent {
             CloseHandle(session);if(safe&&!inspect){std::error_code ignored;std::filesystem::remove_all(path,ignored);}
         }
     }
-    ~TemporaryContent(){if(Session!=INVALID_HANDLE_VALUE)CloseHandle(Session);if(!Path.empty()){std::error_code error;std::filesystem::remove_all(Path,error);}}
+    ~TemporaryContent(){if(Leases)Leases->clear();if(Session!=INVALID_HANDLE_VALUE)CloseHandle(Session);if(!Path.empty()){std::error_code error;std::filesystem::remove_all(Path,error);}}
 };
 }
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,LPWSTR,int){
@@ -92,11 +94,16 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,LPWSTR,int){
     if(arguments){for(int i=1;i<argumentCount;++i){if(std::wstring(arguments[i])==L"--verify-package")verify=true;if(std::wstring(arguments[i])==L"--smoke-test")smoke=true;}LocalFree(arguments);}
     HWND window=nullptr;
     try{
-        SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_APPLICATION_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32|LOAD_LIBRARY_SEARCH_USER_DIRS);
+        Require(SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32|LOAD_LIBRARY_SEARCH_USER_DIRS)!=0,"Could not restrict library search paths");
         SetProcessDPIAware();std::vector<wchar_t> path(32768);auto count=GetModuleFileNameW(nullptr,path.data(),DWORD(path.size()));Require(count>0&&count<path.size(),"Could not locate player executable");
-        auto executable=std::filesystem::path(std::wstring(path.data(),count));auto folder=executable.parent_path();
-        VerifyInventory(executable);
-        auto json=Read(folder/"game.json");auto tree=ryml::parse_in_arena(ryml::csubstr(json.data(),json.size()));auto config=tree.rootref();Require(Text(config["format_version"])=="2","Unsupported game manifest");
+        auto executable=std::filesystem::canonical(std::filesystem::path(std::wstring(path.data(),count)));auto folder=executable.parent_path();
+        LibraryDirectory libraries;libraries.Value=AddDllDirectory(folder.c_str());Require(libraries.Value!=nullptr,"Could not register the verified runtime directory");
+        auto verified=VerifyInventory(executable);
+        auto tree=ryml::parse_in_arena(ryml::csubstr(verified.Configuration.data(),verified.Configuration.size()));auto config=tree.rootref();Require(Text(config["format_version"])=="3","Unsupported game manifest");
+        Require(Text(config["encryption"])=="none"||Text(config["encryption"])=="aes-256-gcm","Unsupported game encryption");
+        Require(Text(config["format"])=="pak"||Text(config["format"])=="loose","Unsupported content format");
+        Require((Text(config["encryption"])=="aes-256-gcm")==!verified.PackageKey.empty(),"Game encryption settings do not match the bootstrap");
+        Require(Text(config["format"])=="pak"||verified.PackageKey.empty(),"Encrypted content requires packages");
         int duration=2000,logoSize=144;bool introEnabled=true,allowSkip=false;
         if(config.has_child("intro")){auto intro=config["intro"];introEnabled=Text(intro["enabled"])=="true";duration=std::stoi(Text(intro["duration_ms"]));logoSize=std::stoi(Text(intro["logo_size"]));allowSkip=Text(intro["allow_skip"])=="true";}
         Require(duration>=0&&duration<=30000&&logoSize>=48&&logoSize<=512,"Invalid intro settings");
@@ -121,7 +128,8 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,LPWSTR,int){
             GUID id;Require(SUCCEEDED(CoCreateGuid(&id)),"Could not allocate game cache");wchar_t guid[40];StringFromGUID2(id,guid,40);
             content.Path=std::filesystem::temp_directory_path()/(std::wstring(L"BazzaltGame-")+guid);CreatePrivateContentDirectory(content.Path);content.Lock();
             std::vector<std::string> packages;for(auto name:config["packages"].children())packages.push_back(Text(name));Require(!packages.empty()&&packages.size()<=65536,"Invalid game package list");
-            auto key=LoadKey(config,executable);WipeBytes wipe{key};Extract(folder,content.Path,packages,key);data=content.Path;
+            Extract(folder,content.Path,packages,verified.PackageKey);content.Leases=&verified.ExtractedLeases;VerifyExtracted(verified,content.Path);data=content.Path;
+            if(!verified.PackageKey.empty()){SecureZeroMemory(verified.PackageKey.data(),verified.PackageKey.size());verified.PackageKey.clear();}
         }
         Bazzalt::Runtime::Engine engine;Engine=&engine;Require(engine.LoadProject(data/"Game.bproject"),engine.GetLastError().c_str());
         const auto startup=engine.GetProject().StartupScene.generic_u8string();
