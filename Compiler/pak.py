@@ -1,11 +1,11 @@
-"""BPAK v1: bounded independently authenticated file segments. No custom crypto."""
+"""BPAK v2: bounded compression, deduplication and authenticated segments."""
 import hashlib
 import os
 from pathlib import Path,PurePosixPath
 import struct
 
-MAGIC=b'BZPAK001'
-HEADER=struct.Struct('<IIQQB')
+MAGIC=b'BZPAK002'
+HEADER=struct.Struct('<IIIQQB')
 MAX_SEGMENT=4*1024*1024
 def SafeName(name):
     path=PurePosixPath(name)
@@ -14,27 +14,47 @@ def SafeName(name):
     if any(any(c in part for c in '<>"|?*') or part.split('.')[0].upper() in reserved for part in path.parts):raise ValueError('Reserved package path')
     return path
 def Pack(source,destination,chunk_mb=64,key=None):
+    from .compression import Compressor
+    if type(chunk_mb)!=int or not 4<=chunk_mb<=256:raise ValueError('Invalid package chunk size')
     aes=None
     if key is not None:
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
         if len(key)!=32:raise ValueError('AES-256 needs a 32-byte key')
         aes=AESGCM(key)
     destination=Path(destination);destination.mkdir(parents=True,exist_ok=True);outputs=[];stream=None;size=0
+    codec=Compressor();seen={};identities=set()
     try:
         for path in sorted(Path(source).rglob('*')):
             if path.is_symlink():raise ValueError('Symlinks are not allowed in game packages')
             if not path.is_file():continue
             name=path.relative_to(source).as_posix();SafeName(name);encoded=name.encode('utf-8');total=path.stat().st_size;offset=0
+            identity=name.casefold()
+            if identity in identities:raise ValueError('Case-insensitive package path collision')
+            identities.add(identity)
+            if total>8*1024**3:raise ValueError('Package file exceeds the player limit')
+            with path.open('rb') as file:fingerprint=(total,hashlib.file_digest(file,'sha256').digest())
+            alias=seen.get(fingerprint) if total else None
             with path.open('rb') as file:
+                packaged_hash=hashlib.sha256()
                 while offset<total or offset==0:
-                    data=file.read(MAX_SEGMENT);header=HEADER.pack(len(encoded),len(data),offset,total,bool(aes));digest=hashlib.sha256(data).digest();nonce=os.urandom(12);tag=bytes(16)
+                    if alias:data=alias.encode('utf-8');raw_size=0;flags=4
+                    else:
+                        raw=file.read(MAX_SEGMENT);raw_size=len(raw)
+                        if total and not raw:raise ValueError('Asset changed while packaging')
+                        packaged_hash.update(raw)
+                        data,compressed=codec.Encode(raw);flags=2 if compressed else 0
+                    flags|=int(bool(aes))
+                    header=HEADER.pack(len(encoded),len(data),raw_size,offset,total,flags);digest=hashlib.sha256(data).digest();nonce=os.urandom(12);tag=bytes(16)
                     if aes:data=aes.encrypt(nonce,data,header+encoded);data,tag=data[:-16],data[-16:]
                     record=header+encoded+nonce+tag+digest+data
                     if stream is None or size+len(record)>chunk_mb*1024*1024:
                         if stream:stream.close()
                         output=destination/f'content-{len(outputs):05d}.bpak';outputs.append(output);stream=output.open('xb');stream.write(MAGIC);size=len(MAGIC)
-                    stream.write(record);size+=len(record);offset+=len(data)
+                    stream.write(record);size+=len(record);offset=total if alias else offset+raw_size
                     if offset>=total:break
+                if not alias and (file.read(1) or packaged_hash.digest()!=fingerprint[1]):raise ValueError('Asset changed while packaging')
+            seen[fingerprint]=name
         return outputs
     finally:
         if stream:stream.close()
+        codec.Close()

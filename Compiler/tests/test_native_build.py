@@ -1,5 +1,5 @@
 """Real cooker -> packages -> native player, without a Python game runtime."""
-import json,os,subprocess,tempfile,unittest,zipfile
+import json,os,subprocess,tempfile,unittest,zipfile,uuid,struct
 from unittest.mock import patch
 from pathlib import Path
 from Compiler.settings import DEFAULTS,ApplyPreset,Save
@@ -13,6 +13,8 @@ class NativeBuildTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder)/'Документы';root.mkdir();runtime=Stage(ROOT/'build',root/'Runtime','x64');project=root/'Game.bproject';assets=root/'Assets';assets.mkdir()
             (assets/'Main.bscene').write_text('FormatVersion: 1\nSceneUUID: "12345678-1234-4234-8234-123456789abc"\nEntities: []\n',encoding='utf-8')
+            (assets/'Compressed.bin').write_bytes(b'Compressible game payload\n'*200000)
+            (assets/'Duplicate.bin').write_bytes((assets/'Compressed.bin').read_bytes())
             project.write_text('FormatVersion: 1\nProjectUUID: "23456789-1234-4234-8234-123456789abc"\nName: Test\nAssetDirectory: Assets\nStartupScene: Assets/Main.bscene\nProperties: {}\n',encoding='utf-8')
             for preset,archive,format in (('low',False,'loose'),('low',False,'pak'),('medium',False,'pak'),('high',False,'pak'),('low',True,'pak')):
                 settings=ApplyPreset(DEFAULTS,preset);settings['production']['name']='TestGame';settings['packaging']['archive']=archive;settings['packaging']['format']=format;Save(project,settings)
@@ -29,10 +31,45 @@ class NativeBuildTests(unittest.TestCase):
                     executable=output/'TestGame.exe'
                     with patch.dict(os.environ,{'BAZZALT_GAME_KEY':'01'*32}):result=subprocess.run([str(executable),'--verify-package'],timeout=30)
                     self.assertEqual(result.returncode,0)
+                    if preset=='medium':
+                        # Simulate the PE certificate-table layout produced by
+                        # signing, not a trusted publisher certificate itself.
+                        original=executable.read_bytes();signed=bytearray(original);padding=(-len(signed))%8;signed.extend(bytes(padding));start=len(signed);signed.extend(struct.pack('<IHH',16,0x200,2)+bytes(8))
+                        pe=struct.unpack_from('<I',signed,60)[0];optional=pe+24;magic=struct.unpack_from('<H',signed,optional)[0];directory=optional+(96 if magic==0x10b else 112)+32
+                        struct.pack_into('<II',signed,directory,start,16);executable.write_bytes(signed)
+                        result=subprocess.run([str(executable),'--verify-package'],capture_output=True,timeout=30)
+                        self.assertEqual(result.returncode,0,result.stderr)
+                        from Compiler.pe_resources import StripTemplateSignature
+                        StripTemplateSignature(executable);self.assertEqual(executable.stat().st_size,len(original)+padding)
+                        executable.write_bytes(original)
+                    if format=='pak' and preset=='low':
+                        sessions=root/'PlayerTemp';sessions.mkdir(exist_ok=True)
+                        stale=sessions/('BazzaltGame-{'+str(uuid.uuid4()).upper()+'}');stale.mkdir();(stale/'.bazzalt-session').write_bytes(b'BZSESSION002');(stale/'private.bin').write_bytes(b'old plaintext')
+                        active=sessions/('BazzaltGame-{'+str(uuid.uuid4()).upper()+'}');active.mkdir();(active/'.bazzalt-session').write_bytes(b'BZSESSION002')
+                        unowned=sessions/('BazzaltGame-{'+str(uuid.uuid4()).upper()+'}');unowned.mkdir();(unowned/'keep').touch()
+                        with (active/'.bazzalt-session').open('rb') as lock,patch.dict(os.environ,{'TEMP':str(sessions),'TMP':str(sessions)}):
+                            result=subprocess.run([str(executable),'--verify-package'],capture_output=True,timeout=30)
+                        self.assertEqual(result.returncode,0,result.stderr);self.assertFalse(stale.exists());self.assertTrue(active.exists());self.assertTrue(unowned.exists())
+                    for target in (output/'game.json',output/'game.integrity',output/'game.signature'):
+                        original=target.read_bytes();changed=bytearray(original);changed[-1]^=1;target.write_bytes(changed)
+                        with patch.dict(os.environ,{'BAZZALT_GAME_KEY':'01'*32}):result=subprocess.run([str(executable),'--verify-package'],capture_output=True,timeout=30)
+                        self.assertNotEqual(result.returncode,0);target.write_bytes(original)
                     if format=='pak':
+                        self.assertLess(sum(p.stat().st_size for p in output.glob('*.bpak')),1024*1024)
                         first=next(output.glob('*.bpak'));data=bytearray(first.read_bytes());data[-1]^=1;first.write_bytes(data)
                         with patch.dict(os.environ,{'BAZZALT_GAME_KEY':'01'*32}):result=subprocess.run([str(executable),'--verify-package'],timeout=30)
                         self.assertNotEqual(result.returncode,0)
+                        if preset=='low':
+                            # A valid inventory alone must not make malformed
+                            # compressed data acceptable to the bounded reader.
+                            import hashlib
+                            from Compiler.pak import HEADER,MAGIC
+                            from Compiler.integrity import Seal
+                            path=b'bad.bin';body=b'not a compressed stream';header=HEADER.pack(len(path),len(body),1024,0,1024,2)
+                            first.write_bytes(MAGIC+header+path+bytes(28)+hashlib.sha256(body).digest()+body)
+                            Seal(output,executable)
+                            result=subprocess.run([str(executable),'--verify-package'],capture_output=True,timeout=30)
+                            self.assertNotEqual(result.returncode,0);self.assertIn(b'compressed',result.stderr)
             events=[]
             with patch('Compiler.build.Emit',side_effect=lambda stage,*args,**kwargs:events.append(stage)),patch('Compiler.build.RunLaunch',side_effect=lambda path:events.append('launched')):
                 Build(project,runtime,ROOT/'build/Editor/Release/BazzaltCooker.exe',launch=True)

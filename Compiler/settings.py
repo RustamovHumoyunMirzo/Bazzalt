@@ -15,8 +15,8 @@ DEFAULTS={
 PRESETS={
     'low':{'encryption':'none','key_storage':'embedded','chunk_mb':64,'decoy_kb':0},
     'medium':{'encryption':'aes-256-gcm','key_storage':'embedded','chunk_mb':64,'decoy_kb':0},
-    'high':{'encryption':'aes-256-gcm','key_storage':'environment','chunk_mb':32,'decoy_kb':64},
-    'very_high':{'encryption':'aes-256-gcm','key_storage':'environment','chunk_mb':16,'decoy_kb':256},
+    'high':{'encryption':'aes-256-gcm','key_storage':'environment','chunk_mb':32,'decoy_kb':0},
+    'very_high':{'encryption':'aes-256-gcm','key_storage':'environment','chunk_mb':16,'decoy_kb':0},
 }
 def PathFor(project):return Path(project).parent/'BuildSettings.json'
 def Merge(value):

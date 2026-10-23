@@ -4,6 +4,27 @@ from ctypes import wintypes
 import re
 import struct
 
+def StripTemplateSignature(executable):
+    """Changing production resources invalidates a template's old signature.
+
+    Remove its certificate table before appending the game's new seal; the
+    publisher must sign the final game, not reuse the template's signature.
+    """
+    from pathlib import Path
+    path=Path(executable);data=bytearray(path.read_bytes())
+    if len(data)<64 or data[:2]!=b'MZ':raise ValueError('Invalid player template')
+    pe=struct.unpack_from('<I',data,60)[0]
+    if pe+24+152>len(data) or data[pe:pe+4]!=b'PE\0\0':raise ValueError('Invalid player template PE header')
+    optional=pe+24;magic=struct.unpack_from('<H',data,optional)[0]
+    if magic not in (0x10b,0x20b):raise ValueError('Unsupported player template format')
+    certificate=optional+(96 if magic==0x10b else 112)+32
+    offset,size=struct.unpack_from('<II',data,certificate)
+    if offset or size:
+        if offset<certificate+8 or size<8 or offset+size!=len(data):raise ValueError('Invalid template certificate table')
+        del data[offset:];struct.pack_into('<II',data,certificate,0,0)
+        struct.pack_into('<I',data,optional+64,0)
+        path.write_bytes(data)
+
 def Block(name,value=b'',children=(),text=False,length=None):
     key=name.encode('utf-16le')+b'\0\0';head=struct.pack('<HHH',0,len(value)//2 if text else len(value) if length is None else length,int(text))+key
     result=head+b'\0'*((-len(head))%4)+value
@@ -22,6 +43,7 @@ def VersionResource(production):
     info=Block('StringFileInfo',children=[table],text=True);variables=Block('VarFileInfo',children=[Block('Translation',struct.pack('<HH',0x409,1200))],text=True)
     return Block('VS_VERSION_INFO',fixed,[info,variables])
 def Apply(executable,production):
+    StripTemplateSignature(executable)
     data=VersionResource(production);api=ctypes.WinDLL('kernel32',use_last_error=True)
     api.BeginUpdateResourceW.argtypes=[wintypes.LPCWSTR,wintypes.BOOL];api.BeginUpdateResourceW.restype=wintypes.HANDLE
     api.UpdateResourceW.argtypes=[wintypes.HANDLE,ctypes.c_void_p,ctypes.c_void_p,wintypes.WORD,ctypes.c_void_p,wintypes.DWORD];api.UpdateResourceW.restype=wintypes.BOOL

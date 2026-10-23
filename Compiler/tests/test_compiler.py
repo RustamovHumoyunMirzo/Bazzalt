@@ -10,6 +10,8 @@ class CompilerTests(unittest.TestCase):
         from Compiler.build import BuildWorkspace
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);scripts=root/'Scripts';scripts.mkdir();(scripts/'keep').touch()
+            stale=root/'work-abandoned';stale.mkdir();(stale/'.bazzalt-build-workspace').write_bytes(b'BazzaltBuildWorkspace-v1')
+            unowned=root/'work-user';unowned.mkdir();(unowned/'keep').touch()
             for fail in (False,True):
                 try:
                     with BuildWorkspace(root) as work:
@@ -17,6 +19,7 @@ class CompilerTests(unittest.TestCase):
                         if fail:raise ValueError('failed cook')
                 except ValueError:pass
                 self.assertFalse(work.exists());self.assertTrue((scripts/'keep').exists())
+            self.assertFalse(stale.exists());self.assertTrue((unowned/'keep').exists())
             for name in ('bad\x00name','bad\nname','a'*4097):
                 with self.assertRaises(ValueError):SafeName(name)
     def test_status_protocol_is_safe_with_windows_legacy_codepages(self):
@@ -55,16 +58,47 @@ class CompilerTests(unittest.TestCase):
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
         import hashlib
         with tempfile.TemporaryDirectory() as folder:
-            root=Path(folder);source=root/'Data';source.mkdir();(source/'音声.txt').write_bytes(b'A'*(5*1024*1024));(source/'empty').touch();key=os.urandom(32)
+            root=Path(folder);source=root/'Data';source.mkdir();(source/'音声.txt').write_bytes(os.urandom(5*1024*1024));(source/'empty').touch();key=os.urandom(32)
             packs=Pack(source,root/'Pak',4,key);self.assertGreater(len(packs),1);restored={};nonces=set()
             for path in packs:
                 with path.open('rb') as f:
                     self.assertEqual(f.read(8),MAGIC)
                     while header:=f.read(HEADER.size):
-                        names,size,offset,total,encrypted=HEADER.unpack(header);self.assertLessEqual(size,4*1024*1024);name=f.read(names);nonce=f.read(12);tag=f.read(16);digest=f.read(32);data=f.read(size)
+                        names,size,raw_size,offset,total,flags=HEADER.unpack(header);self.assertLessEqual(size,4*1024*1024);self.assertEqual(flags,1);self.assertEqual(raw_size,size);name=f.read(names);nonce=f.read(12);tag=f.read(16);digest=f.read(32);data=f.read(size)
                         self.assertNotIn(nonce,nonces);nonces.add(nonce);plain=AESGCM(key).decrypt(nonce,data+tag,header+name);self.assertEqual(hashlib.sha256(plain).digest(),digest)
                         output=restored.setdefault(name,bytearray());self.assertEqual(len(output),offset);output.extend(plain)
             self.assertEqual(restored['音声.txt'.encode()],(source/'音声.txt').read_bytes());self.assertEqual(restored[b'empty'],b'')
+    def test_compression_and_duplicate_records_reduce_package_size(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);source=root/'Data';source.mkdir();data=b'Compress and deduplicate me!\n'*100000
+            (source/'a.bin').write_bytes(data);(source/'b.bin').write_bytes(data)
+            packs=Pack(source,root/'Pak');self.assertEqual(len(packs),1)
+            if os.name=='nt':self.assertLess(packs[0].stat().st_size,len(data)//10)
+            else:self.assertLess(packs[0].stat().st_size,len(data)+4096)
+            flags=[]
+            with packs[0].open('rb') as file:
+                file.read(8)
+                while header:=file.read(HEADER.size):
+                    names,size,raw_size,offset,total,bits=HEADER.unpack(header);flags.append(bits);file.seek(names+60+size,1)
+            self.assertEqual(flags[-1],4)
+            if os.name=='nt':self.assertEqual(flags[0],2)
+    def test_signed_inventory_is_pinned_without_shipping_private_key(self):
+        from Compiler.integrity import Seal
+        from cryptography.hazmat.primitives.asymmetric import ec,utils
+        from cryptography.hazmat.primitives import hashes
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);player=root/'Game.exe';player.write_bytes(b'PE fixture');(root/'game.json').write_text('{}')
+            Seal(root,player);seal=player.read_bytes()[-112:];self.assertEqual(seal[:8],b'BZSIG002')
+            public=ec.EllipticCurvePublicNumbers(int.from_bytes(seal[8:40],'big'),int.from_bytes(seal[40:72],'big'),ec.SECP256R1()).public_key()
+            signature=(root/'game.signature').read_bytes();der=utils.encode_dss_signature(int.from_bytes(signature[:32],'big'),int.from_bytes(signature[32:],'big'))
+            public.verify(der,(root/'game.integrity').read_bytes(),ec.ECDSA(hashes.SHA256()))
+            self.assertEqual([v['path'] for v in json.loads((root/'game.integrity').read_bytes())['files']],['game.json'])
+            self.assertFalse(any('private' in p.name for p in root.iterdir()))
+    def test_asset_root_cannot_recursively_include_build_outputs(self):
+        from Compiler.build import CompileScripts
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);project=root/'Game.bproject';project.write_text('AssetDirectory: .\n')
+            with self.assertRaisesRegex(ValueError,'dedicated folder'):CompileScripts(project,root/'Runtime','x64',root/'Cache')
     def test_paths_and_output_ownership(self):
         for name in ('../x','/x','C:/x','x\\y','x/../y','x/','x./y'):
             with self.assertRaises(ValueError):SafeName(name)

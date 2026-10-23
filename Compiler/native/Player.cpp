@@ -1,4 +1,5 @@
 #include "Package.h"
+#include "Integrity.h"
 #include "StartupCover.h"
 #include "Runtime/Engine.h"
 #include "Runtime/InputAccess.h"
@@ -59,7 +60,31 @@ inline void CreatePrivateContentDirectory(const std::filesystem::path& path){
 }
 struct TemporaryContent {
     std::filesystem::path Path;
-    ~TemporaryContent(){if(!Path.empty()){std::error_code error;std::filesystem::remove_all(Path,error);}}
+    HANDLE Session=INVALID_HANDLE_VALUE;
+    void Lock(){
+        Session=CreateFileW((Path/".bazzalt-session").c_str(),GENERIC_READ|GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_HIDDEN,nullptr);
+        Require(Session!=INVALID_HANDLE_VALUE,"Could not lock game content session");DWORD written=0;
+        Require(WriteFile(Session,"BZSESSION002",12,&written,nullptr)&&written==12&&FlushFileBuffers(Session),"Could not mark game content session");
+    }
+    static void ReclaimAbandoned(){
+        std::error_code error;const auto temp=std::filesystem::temp_directory_path(error);if(error)return;
+        for(std::filesystem::directory_iterator it(temp,std::filesystem::directory_options::skip_permission_denied,error),end;it!=end&&!error;it.increment(error)){
+            const auto path=it->path();const auto name=path.filename().wstring();
+            if(name.size()!=50||name.rfind(L"BazzaltGame-{",0)!=0||name.back()!=L'}')continue;
+            GUID id{};if(FAILED(CLSIDFromString(name.c_str()+12,&id)))continue;
+            const auto attributes=GetFileAttributesW(path.c_str());if(attributes==INVALID_FILE_ATTRIBUTES||(attributes&FILE_ATTRIBUTE_REPARSE_POINT)||!(attributes&FILE_ATTRIBUTE_DIRECTORY))continue;
+            HANDLE session=CreateFileW((path/".bazzalt-session").c_str(),GENERIC_READ,0,nullptr,OPEN_EXISTING,FILE_FLAG_OPEN_REPARSE_POINT,nullptr);if(session==INVALID_HANDLE_VALUE)continue;
+            char marker[12]{};DWORD count=0;const bool owned=ReadFile(session,marker,12,&count,nullptr)&&count==12&&std::string(marker,12)=="BZSESSION002";
+            // An active session keeps its marker exclusively locked. Refuse
+            // trees containing reparse points even for an abandoned session.
+            bool safe=owned;std::error_code inspect;
+            if(safe)for(std::filesystem::recursive_directory_iterator files(path,std::filesystem::directory_options::none,inspect),last;files!=last&&!inspect;files.increment(inspect)){
+                const auto flags=GetFileAttributesW(files->path().c_str());if(flags==INVALID_FILE_ATTRIBUTES||(flags&FILE_ATTRIBUTE_REPARSE_POINT)){safe=false;break;}
+            }
+            CloseHandle(session);if(safe&&!inspect){std::error_code ignored;std::filesystem::remove_all(path,ignored);}
+        }
+    }
+    ~TemporaryContent(){if(Session!=INVALID_HANDLE_VALUE)CloseHandle(Session);if(!Path.empty()){std::error_code error;std::filesystem::remove_all(Path,error);}}
 };
 }
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,LPWSTR,int){
@@ -70,7 +95,8 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,LPWSTR,int){
         SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_APPLICATION_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32|LOAD_LIBRARY_SEARCH_USER_DIRS);
         SetProcessDPIAware();std::vector<wchar_t> path(32768);auto count=GetModuleFileNameW(nullptr,path.data(),DWORD(path.size()));Require(count>0&&count<path.size(),"Could not locate player executable");
         auto executable=std::filesystem::path(std::wstring(path.data(),count));auto folder=executable.parent_path();
-        auto json=Read(folder/"game.json");auto tree=ryml::parse_in_arena(ryml::csubstr(json.data(),json.size()));auto config=tree.rootref();Require(Text(config["format_version"])=="1","Unsupported game manifest");
+        VerifyInventory(executable);
+        auto json=Read(folder/"game.json");auto tree=ryml::parse_in_arena(ryml::csubstr(json.data(),json.size()));auto config=tree.rootref();Require(Text(config["format_version"])=="2","Unsupported game manifest");
         int duration=2000,logoSize=144;bool introEnabled=true,allowSkip=false;
         if(config.has_child("intro")){auto intro=config["intro"];introEnabled=Text(intro["enabled"])=="true";duration=std::stoi(Text(intro["duration_ms"]));logoSize=std::stoi(Text(intro["logo_size"]));allowSkip=Text(intro["allow_skip"])=="true";}
         Require(duration>=0&&duration<=30000&&logoSize>=48&&logoSize<=512,"Invalid intro settings");
@@ -91,10 +117,11 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,LPWSTR,int){
         }
         TemporaryContent content;auto data=folder/"Data";
         if(Text(config["format"])=="pak"){
+            TemporaryContent::ReclaimAbandoned();
             GUID id;Require(SUCCEEDED(CoCreateGuid(&id)),"Could not allocate game cache");wchar_t guid[40];StringFromGUID2(id,guid,40);
-            content.Path=std::filesystem::temp_directory_path()/(std::wstring(L"BazzaltGame-")+guid);CreatePrivateContentDirectory(content.Path);
+            content.Path=std::filesystem::temp_directory_path()/(std::wstring(L"BazzaltGame-")+guid);CreatePrivateContentDirectory(content.Path);content.Lock();
             std::vector<std::string> packages;for(auto name:config["packages"].children())packages.push_back(Text(name));Require(!packages.empty()&&packages.size()<=65536,"Invalid game package list");
-            auto key=LoadKey(config,executable);Extract(folder,content.Path,packages,key);SecureZeroMemory(key.data(),key.size());data=content.Path;
+            auto key=LoadKey(config,executable);WipeBytes wipe{key};Extract(folder,content.Path,packages,key);data=content.Path;
         }
         Bazzalt::Runtime::Engine engine;Engine=&engine;Require(engine.LoadProject(data/"Game.bproject"),engine.GetLastError().c_str());
         const auto startup=engine.GetProject().StartupScene.generic_u8string();

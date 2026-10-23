@@ -47,12 +47,23 @@ def Run(command,**kwargs):
 def BuildWorkspace(directory):
     """Disposable cook output; incremental script cache lives outside this tree."""
     directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
+    # The caller holds BuildLock. Only reclaim explicitly owned abandoned
+    # workspaces, never legacy/user folders or links into another directory.
+    marker='.bazzalt-build-workspace'
+    for candidate in directory.glob('work-*'):
+        if candidate.is_symlink() or candidate.is_junction() or not candidate.is_dir():continue
+        ownership=candidate/marker
+        if ownership.is_file() and not ownership.is_symlink() and ownership.read_bytes()==b'BazzaltBuildWorkspace-v1':
+            if any(p.is_symlink() or p.is_junction() for p in candidate.rglob('*')):continue
+            shutil.rmtree(candidate)
     with tempfile.TemporaryDirectory(prefix='work-',dir=directory) as temporary:
-        yield Path(temporary)
+        work=Path(temporary);(work/marker).write_bytes(b'BazzaltBuildWorkspace-v1')
+        yield work
 def ValidateRuntime(runtime,architecture):
     runtime=Path(runtime).resolve()
     manifest=json.loads((runtime/'runtime.json').read_text(encoding='utf-8-sig'))
     if manifest.get('format_version')!=1 or manifest.get('architecture')!=architecture:raise ValueError('Runtime template version or architecture mismatch')
+    if manifest.get('game_format_version')!=2:raise ValueError('Runtime template does not support signed BPAK v2 builds; install the updated matching Core runtime template')
     versions=Path(__file__).resolve().parents[1]/'releases/versions.json'
     core_version=json.loads(versions.read_text(encoding='utf-8-sig'))['core']
     if manifest.get('core_version')!=core_version:raise ValueError('Runtime template does not match this compiler/core version')
@@ -90,8 +101,11 @@ def CompileScripts(project,runtime,architecture,cache,compiler_path=''):
     attachments=ScriptAttachments(project.parent);sources=attachments.UsedSources()
     # Native attachments saved in scenes are authoritative when no legacy
     # editor-side attachment exists (e.g. projects copied to a build machine).
-    project_data=yaml.safe_load(project.read_text(encoding='utf-8-sig'));assets=project.parent/project_data.get('AssetDirectory','Assets')
-    if not assets.resolve().is_relative_to(project.parent):raise ValueError('Asset directory is outside the project')
+    project_data=yaml.safe_load(project.read_text(encoding='utf-8-sig'))
+    if not isinstance(project_data,dict):raise ValueError('Project metadata must be a mapping')
+    assets=project.parent/project_data.get('AssetDirectory','Assets')
+    if not assets.resolve().is_relative_to(project.parent) or assets.resolve()==project.parent:raise ValueError('AssetDirectory must be a dedicated folder inside the project, not the project root')
+    if any(assets.resolve().is_relative_to(project.parent/name) for name in ('.bazzalt','bin')):raise ValueError('AssetDirectory cannot be a build output or cache folder')
     identities={}
     for meta in assets.rglob('*.meta'):
         record=yaml.safe_load(meta.read_text(encoding='utf-8-sig')) or {}
@@ -181,14 +195,14 @@ def Build(project,runtime,cooker,launch=False,compiler_path=''):
             else:shutil.copytree(cooked,root/'Data')
             if key:
                 method=settings['security']['key_storage']
-                if method=='embedded':
-                    with (root/(name+'.exe')).open('ab') as executable:executable.write(b'BZKEY001'+key)
-                elif method=='file':(root/'game.key').write_bytes(key)
+                if method=='file':(root/'game.key').write_bytes(key)
             if settings['packaging']['decoy_kb']:(root/'padding.bin').write_bytes(os.urandom(settings['packaging']['decoy_kb']*1024))
-            game=dict(format_version=1,format=settings['packaging']['format'],production=settings['production'],window=settings['window'],intro=settings['intro'],packages=packages,**{k:settings['security'][k] for k in ('encryption','key_storage','key_environment')})
+            game=dict(format_version=2,format=settings['packaging']['format'],production=settings['production'],window=settings['window'],intro=settings['intro'],packages=packages,**{k:settings['security'][k] for k in ('encryption','key_storage','key_environment')})
             (root/'game.json').write_text(json.dumps(game,ensure_ascii=False,indent=2),encoding='utf-8')
             (root/'LICENSE.txt').write_text(settings['production']['license'],encoding='utf-8')
             if (runtime/'licenses').is_dir():shutil.copytree(runtime/'licenses',root/'licenses')
+            from .integrity import Seal
+            Seal(root,root/(name+'.exe'),key if settings['security']['key_storage']=='embedded' else None)
             Emit('verify','Verifying the packaged game')
             Run([root/(name+'.exe'),'--verify-package'],cwd=root,timeout=120)
             if settings['packaging']['archive']:
@@ -209,12 +223,13 @@ def Build(project,runtime,cooker,launch=False,compiler_path=''):
             else:
                 Publish(root,output,hashlib.sha256(str(project).encode('utf-8')).hexdigest());result=output
                 if launch:launch_path=output/(name+'.exe')
-        # Publication and temporary-file cleanup must finish before launch.
-        Emit('complete','Game build completed',output=str(result))
-        if launch:
-            try:RunLaunch(launch_path)
-            except OSError as error:Emit('launch_error','Game was built, but could not be launched: '+str(error),output=str(result))
-        return result
+    # Exit both the staging context and build lock before reporting success or
+    # launching. Cleanup failures must never arrive after a game was launched.
+    Emit('complete','Game build completed',output=str(result))
+    if launch:
+        try:RunLaunch(launch_path)
+        except OSError as error:Emit('launch_error','Game was built, but could not be launched: '+str(error),output=str(result))
+    return result
 def RunLaunch(executable):subprocess.Popen([str(executable)],cwd=executable.parent,close_fds=True,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 def main():
     parser=argparse.ArgumentParser(description='Build game content using a prebuilt Bazzalt runtime')
