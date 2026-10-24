@@ -10,6 +10,8 @@ struct FontGlyph {
     std::vector<std::uint8_t> Alpha;
 };
 struct FontPreviewImage {std::uint32_t Width=0,Height=0;std::vector<std::uint8_t> Pixels;};
+struct ShapedGlyph {std::uint32_t Index=0,Cluster=0;float X=0,Y=0,Advance=0;};
+struct ShapedText {std::vector<ShapedGlyph> Glyphs;Vec2 Size{};};
 class FontFace final {
 public:
     FontFace();~FontFace();
@@ -18,6 +20,8 @@ public:
     bool SetSize(std::uint32_t pixels);
     FontInfo GetInfo() const;
     FontGlyph Render(std::uint32_t codepoint);
+    FontGlyph RenderGlyph(std::uint32_t glyphIndex);
+    ShapedText Layout(const std::string& text,float wrapWidth=0,float letterSpacing=0,float lineSpacing=1,bool kerning=true);
     float GetKerning(std::uint32_t left,std::uint32_t right) const;
     float GetAscender() const;float GetLineHeight() const;
 private:

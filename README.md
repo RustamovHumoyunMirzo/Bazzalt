@@ -19,9 +19,10 @@ buses. C++ and Lua share the same audio API. See the
 [audio guide](docs/public/0.6.0/manual/audio/en.html).
 
 Runtime GUI supports responsive layouts, CSS stylesheet assets and FreeType font
-assets, with C++/Lua access and editor authoring/preview. See the
+assets with HarfBuzz shaping and bidirectional text, C++/Lua access and editor authoring/preview. See the
 [GUI guide](docs/public/0.6.0/native/gui/en.html). Source builds also require the
-pinned FreeType source (`scripts/get_freetype.ps1` / `scripts/get_freetype.sh`);
+pinned FreeType source (`scripts/get_freetype.ps1` / `scripts/get_freetype.sh`) and
+text shaping sources (`scripts/get_text_shaping.ps1` / `.sh`);
 large renderer dependencies remain supplied by the existing CI workflows.
 
 Build standalone Windows x86/x64 games from **Build → Build Settings**. The

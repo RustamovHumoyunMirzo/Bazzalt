@@ -118,6 +118,7 @@ static void TestStylesheetsAndFonts(){
         assert(!button.GetComponent<GuiText>().Font&&button.GetComponent<GuiText>().FontSize==16);
         auto references=Runtime::GetStylesheetReferences(css);assert(references.size()==1&&references[0]==fontAsset->Id);
         nested.GetComponent<Frame>().Enabled=false; // Isolate the text readback from the overlapping independent Frame above.
+        button.GetComponent<GuiText>().Value="\xD8\xB3\xD9\x84\xD8\xA7\xD9\x85"; // Shaped Arabic in the real glyph-atlas readback.
         const bool gpu=std::getenv("BAZZALT_GUI_GPU_TEST")!=nullptr;
         Runtime::RenderBackend backend;assert(backend.Initialize(!gpu));backend.SetGuiScene(&scene);Runtime::GuiRenderer renderer(backend);renderer.PrepareOverlay(scene,{500,200});assert(renderer.GetBatchCount()>0);
         if(gpu){

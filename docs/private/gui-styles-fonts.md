@@ -60,7 +60,7 @@ grayscale/monochrome alpha and basic pair kerning. CPU metadata/measurement/prev
 uses a bounded eight-face cache. Invalid handles return empty metadata/zero size.
 
 The renderer caches up to 16 RGBA 1024-square pages by UUID, face, pixel size and
-cache revision, with at most 8,192 codepoints per page. Glyph uploads use owned
+cache revision, with at most 8,192 glyph IDs per page. Glyph uploads use owned
 buffers and occur before beginFrame. Existing spatial/camera batches protect
 sampled pages from eviction. Teardown destroys batches/material instances before
 their textures. Capacity or missing glyphs use the built-in fallback.
@@ -71,8 +71,26 @@ are debounced. `GuiAssetWatcher` watches used GUI sources and the selected asset
 then performs targeted reimport; it does not scan the project each editor tick.
 Atomic-save replacements reattach their watcher. Asset pickers filter CSS/fonts.
 
-FreeType provides rasterization and pair kerning, not complex-script shaping,
-bidirectional layout or a fallback-font chain. Those are explicit future features.
+HarfBuzz 11.5.0 and SheenBidi 3.0.0 are pinned in `get_text_shaping.ps1` / `.sh`
+and linked privately/static by `TextShaping.cmake`. FreeType remains configured
+without its optional HarfBuzz auto-hinter integration, preventing circular linkage.
+`FontFace::Layout` is shared by GPU text, public measurement and native preview.
+It decodes UTF-8 with replacement, resolves Unicode paragraph levels and visual
+line runs through SheenBidi, itemizes script runs and shapes them using HarfBuzz.
+Glyph IDs (not source codepoints) key atlas entries. OpenType substitutions,
+mark positioning, ligatures and kerning are therefore preserved in every Frame mode.
+Neutral/inherited script characters use neighboring strong scripts. Language is
+`und`, with automatic base paragraph direction and standard font features.
+
+Wrapping accumulates logical cluster advances, breaks only between shaped clusters,
+then reshapes each line with its own context and paragraph bidi levels. It is
+cluster-based emergency wrapping, not full Unicode word-breaking or hyphenation.
+Letter spacing is added per cluster. Size changes invalidate a four-entry bounded
+layout cache per face; short static text does not reshape every editor tick.
+Inputs are limited to 256 KiB / 65,536 decoded scalars and bounded glyph outputs.
+No font-fallback chain or color-glyph renderer is provided; pick a font with the
+required script coverage. IME/caret editing and vertical writing are separate work.
+Production staging carries HarfBuzz COPYING and SheenBidi Apache license notices.
 WOFF2 requires Brotli and is not advertised by the current build configuration.
 
 ## Extending and verifying

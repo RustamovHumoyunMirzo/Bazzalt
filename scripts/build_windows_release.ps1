@@ -32,6 +32,8 @@ function Copy-ReleaseSDK([string]$Destination) {
     Copy-Item -LiteralPath (Join-Path $Root 'deps/lua/README') -Destination (Join-Path $Destination 'licenses/Lua.txt')
     Copy-Item -LiteralPath (Join-Path $Root 'deps/sol2/LICENSE.txt') -Destination (Join-Path $Destination 'licenses/Sol2.txt')
     Copy-Item -LiteralPath (Join-Path $Root 'deps/freetype/docs/FTL.TXT') -Destination (Join-Path $Destination 'licenses/FreeType.txt')
+    Copy-Item -LiteralPath (Join-Path $Root 'deps/harfbuzz/COPYING') -Destination (Join-Path $Destination 'licenses/HarfBuzz.txt')
+    Copy-Item -LiteralPath (Join-Path $Root 'deps/sheenbidi/LICENSE') -Destination (Join-Path $Destination 'licenses/SheenBidi.txt')
     Copy-Item -LiteralPath (Join-Path $Root 'deps/freetype/src/gzip/zlib.h') -Destination (Join-Path $Destination 'licenses/FreeType-zlib.txt')
     Copy-Item -LiteralPath (Join-Path $Root 'deps/miniaudio/LICENSE') -Destination (Join-Path $Destination 'licenses/miniaudio.txt')
     Copy-Item -LiteralPath (Join-Path $Root 'deps/miniaudio/extras/stb_vorbis.c') -Destination (Join-Path $Destination 'licenses/stb_vorbis-source.txt')

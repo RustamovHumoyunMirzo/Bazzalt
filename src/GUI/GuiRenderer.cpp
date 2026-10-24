@@ -115,11 +115,11 @@ struct GuiRendererModule::Impl {
         page->Texture=filament::Texture::Builder().width(1024).height(1024).levels(1).sampler(filament::Texture::Sampler::SAMPLER_2D).format(filament::Texture::InternalFormat::RGBA8).build(Engine);
         page->Dirty=true;auto* result=page.get();UsedFonts.insert(page->Texture);Fonts.emplace(key,std::move(page));return result;
     }
-    const AtlasGlyph& Glyph(FontPage& page,std::uint32_t cp){
-        if(auto found=page.Glyphs.find(cp);found!=page.Glyphs.end())return found->second;
+    const AtlasGlyph& Glyph(FontPage& page,std::uint32_t index){
+        if(auto found=page.Glyphs.find(index);found!=page.Glyphs.end())return found->second;
         if(page.Glyphs.size()>=8192){static const AtlasGlyph fallback{FontGlyph{0,0,0,0,0,8},Vec4{},false};return fallback;}
-        AtlasGlyph glyph;glyph.Metrics=page.Face.Render(cp);const auto width=glyph.Metrics.Width,height=glyph.Metrics.Height;
-        if(width==0||height==0)glyph.Baked=glyph.Metrics.Index!=0||cp==32||cp==160;
+        AtlasGlyph glyph;glyph.Metrics=page.Face.RenderGlyph(index);const auto width=glyph.Metrics.Width,height=glyph.Metrics.Height;
+        if(width==0||height==0)glyph.Baked=glyph.Metrics.Index!=0;
         else {
             if(page.X+width+1>=1024){page.X=1;page.Y+=page.Row+1;page.Row=0;}
             if(page.Y+height+1<1024){
@@ -127,22 +127,19 @@ struct GuiRendererModule::Impl {
                 glyph.UV={float(page.X)/1024,float(page.Y)/1024,float(page.X+width)/1024,float(page.Y+height)/1024};glyph.Baked=true;page.X+=width+1;page.Row=std::max(page.Row,height);page.Dirty=true;
             }
         }
-        std::vector<std::uint8_t>().swap(glyph.Metrics.Alpha);return page.Glyphs.emplace(cp,std::move(glyph)).first->second;
+        std::vector<std::uint8_t>().swap(glyph.Metrics.Alpha);return page.Glyphs.emplace(index,std::move(glyph)).first->second;
     }
     void FlushFonts(){for(auto& [key,page]:Fonts)if(page->Dirty){auto* copy=new std::vector<std::uint8_t>(page->Pixels);page->Texture->setImage(Engine,0,filament::Texture::PixelBufferDescriptor(copy->data(),copy->size(),filament::Texture::Format::RGBA,filament::Texture::Type::UBYTE,[](void*,std::size_t,void* user){delete static_cast<std::vector<std::uint8_t>*>(user);},copy));page->Dirty=false;}}
     void Text(std::vector<Batch>& batches,GuiItem item,const std::string& text,float size,Vec4 color,bool wrap,bool spatial,UUID font={},std::uint32_t face=0,float letterSpacing=0,float lineSpacing=1,bool kerning=true){
         if(!std::isfinite(size)||size<=0)return;
         if(auto* page=FontAtlas(font,face,std::uint32_t(std::ceil(std::clamp(size*item.Scale,1.f,512.f))))){
-            float x=item.Bounds.Position.X,y=item.Bounds.Position.Y;std::uint32_t previous=0;
-            const auto height=std::max(1.f,page->Face.GetLineHeight())*std::clamp(lineSpacing,.1f,10.f);
-            for(std::size_t at=0;at<text.size()&&at<256*1024;){auto cp=NextCodepoint(text,at);if(cp=='\n'){x=item.Bounds.Position.X;y+=height;previous=0;continue;}if(cp<32)continue;
-                const auto& glyph=Glyph(*page,cp);auto gap=kerning?page->Face.GetKerning(previous,glyph.Metrics.Index):0;
-                if(wrap&&x>item.Bounds.Position.X&&x+gap+glyph.Metrics.Advance>item.Bounds.Position.X+item.Bounds.Size.X){x=item.Bounds.Position.X;y+=height;gap=0;previous=0;}
-                if(y>=item.Bounds.Position.Y+item.Bounds.Size.Y)break;
-                x+=gap;
+            const auto shaped=page->Face.Layout(text,wrap?item.Bounds.Size.X:0,letterSpacing*item.Scale,lineSpacing,kerning);
+            for(const auto& placed:shaped.Glyphs){
+                if(placed.Y>=item.Bounds.Size.Y)continue;
+                const auto& glyph=Glyph(*page,placed.Index);
+                const float x=item.Bounds.Position.X+placed.X,y=item.Bounds.Position.Y+placed.Y;
                 if(glyph.Baked)Quad(batches,item,{{x+glyph.Metrics.Left,y+page->Face.GetAscender()-glyph.Metrics.Top},{float(glyph.Metrics.Width),float(glyph.Metrics.Height)}},color,page->Texture,glyph.UV,spatial);
                 else Quad(batches,item,{{x,y},{size*.625f*item.Scale,size*.875f*item.Scale}},color,Atlas,{120.f/128,56.f/64,125.f/128,63.f/64},spatial);
-                x+=glyph.Metrics.Advance+letterSpacing*item.Scale;previous=glyph.Metrics.Index;
             }return;
         }
         if(!std::isfinite(size)||size<=0)return;size=std::clamp(size*item.Scale,1.f,512.f);const float advance=size*.75f;

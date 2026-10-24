@@ -80,7 +80,7 @@ GUI must never use editor layer 0x80 or Qt/editor widgets.
 
 The built-in atlas is generated from small in-source glyph bitmaps. It is a
 foundation fallback, not Unicode typography. Unsupported glyphs render a box;
-UTF-8 values are retained. FreeType font assets now provide glyph rasterization, metrics and kerning. Complex-script shaping remains unsupported; see [gui-styles-fonts.md](gui-styles-fonts.md).
+UTF-8 values are retained. FreeType font assets now provide glyph rasterization, metrics and kerning. HarfBuzz shaping and SheenBidi bidirectional layout are integrated; see [gui-styles-fonts.md](gui-styles-fonts.md).
 The first texture slot is white for rectangle fills/borders. Images borrow
 textures from RenderAssets; camera feeds borrow the camera's color attachment.
 GuiRenderer must be cleared before those owners retire textures, before scene

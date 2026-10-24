@@ -62,6 +62,7 @@ class GuiStyleAssetTests(unittest.TestCase):
                 if font:
                     path=assets/'Шрифт.ttf';info=runtime.FontInfo(path);self.assertGreater(info['glyphs'],0)
                     image=runtime.FontPreview(path,'AV Привет',32);self.assertEqual(image['height'],192);self.assertTrue(any(image['pixels'][3::4]))
+                    shaped=runtime.FontPreview(path,'سلام ABC אבג 123',32);self.assertEqual(shaped['height'],192);self.assertTrue(any(shaped['pixels'][3::4]));self.assertNotEqual(image['pixels'],shaped['pixels'])
                     preview=FontPreview(path,LocalizationManager(ResourceManager()),runtime);self.assertIsNotNone(preview.Sample.pixmap());preview.Text.setText('New sample');QTest.qWait(140);self.assertIsNotNone(preview.Sample.pixmap());preview.deleteLater()
                     self.assertTrue(runtime.AddComponent(entity,'GuiText'));self.assertTrue(runtime.SetComponentProperty(entity,'GuiText','Font',runtime.AssetInfo(path)['uuid']))
                     self.assertIn(str(path),runtime.GuiAssetSources())

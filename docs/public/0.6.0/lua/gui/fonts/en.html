@@ -50,7 +50,7 @@ return Label</code></pre>
 local size = self.Typeface:MeasureText("AV example", 24, 240)
 -- info.Valid, Family, Style, FaceCount, GlyphCount, Scalable, Kerning
 -- size.X and size.Y are pixel dimensions.</code></pre>
-<p>MeasureText has optional size (16) and wrapWidth (0). Invalid/unavailable input returns zero dimensions; invalid handles return default FontInfo. See <a href="../../reference/Font/en.html">Font</a>, <a href="../../reference/FontInfo/en.html">FontInfo</a>, and <a href="../../../native/gui/fonts/en.html">font contracts and limits</a>. Complex-script shaping, bidirectional layout and font-fallback chains are not implemented.</p></article>
+<p>MeasureText has optional size (16) and wrapWidth (0). Invalid/unavailable input returns zero dimensions; invalid handles return default FontInfo. See <a href="../../reference/Font/en.html">Font</a>, <a href="../../reference/FontInfo/en.html">FontInfo</a>, and <a href="../../../native/gui/fonts/en.html">font contracts and limits</a>. HarfBuzz shaping and SheenBidi mixed-direction layout apply automatically to assigned fonts, including contextual joining, Indic substitutions and combining marks. Supply logical UTF-8 text and a font covering the script. Measurement and rendering share the same cluster-based wrapping. Automatic font fallback, vertical writing and IME editing are not implemented.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../en.html"><small>Previous</small>GUI in Lua</a>
 <a class="next" href="../layout/en.html"><small>Next</small>GUI layout and inheritance in Lua</a></nav>
     </main>
