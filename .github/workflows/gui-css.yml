@@ -1,0 +1,36 @@
+name: GUI CSS library
+on:
+  push:
+    paths: ['src/GUI/CSS/**', 'tests/CSSTests.cpp', 'CMakeLists.txt', '.github/workflows/gui-css.yml']
+  pull_request:
+    paths: ['src/GUI/CSS/**', 'tests/CSSTests.cpp', 'CMakeLists.txt', '.github/workflows/gui-css.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  css:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            architecture: x64
+            generator_args: ''
+          - os: windows-latest
+            architecture: x64
+            generator_args: '-A x64'
+          - os: windows-latest
+            architecture: x86
+            generator_args: '-A Win32'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure standalone parser (no engine dependencies)
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            export CXXFLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          fi
+          cmake -S src/GUI/CSS -B build/css-tests -DCMAKE_BUILD_TYPE=Debug ${{ matrix.generator_args }}
+      - run: cmake --build build/css-tests --config Debug --parallel 2
+      - run: ctest --test-dir build/css-tests -C Debug --output-on-failure

@@ -162,6 +162,8 @@ file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/EditorBridge/")
+list(FILTER LIB_SOURCES EXCLUDE REGEX "/GUI/CSS/")
+add_subdirectory(src/GUI/CSS)
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/GUI/(GuiSystem|GuiRenderer|GuiSerialization|GuiModule)\\.cpp$")
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/Script/Lua[^/]*\\.cpp$|/Runtime/LuaRuntime\\.cpp$")
 file(GLOB BAZZALT_LUA_BINDING_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/Script/Lua*.cpp")
@@ -230,7 +232,7 @@ target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE BazzaltMiniaudio Bazzalt
 add_library(BazzaltGui SHARED src/GUI/GuiModule.cpp src/GUI/GuiSystem.cpp
     src/GUI/GuiRenderer.cpp src/GUI/GuiSerialization.cpp ${BAZZALT_EMBEDDED_HEADERS})
 target_include_directories(BazzaltGui PRIVATE include src "${_bazzalt_generated_dir}")
-target_link_libraries(BazzaltGui PRIVATE Bazzalt Filament::Filament)
+target_link_libraries(BazzaltGui PRIVATE Bazzalt Filament::Filament BazzaltCSS)
 target_compile_features(BazzaltGui PRIVATE cxx_std_20)
 set_target_properties(BazzaltGui PROPERTIES OUTPUT_NAME bazzalt_gui
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"
@@ -353,6 +355,10 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(BazzaltCSSTests tests/CSSTests.cpp)
+    target_link_libraries(BazzaltCSSTests PRIVATE BazzaltCSS)
+    add_test(NAME BazzaltCSSTests COMMAND BazzaltCSSTests)
+    set_tests_properties(BazzaltCSSTests PROPERTIES TIMEOUT 20)
     if(WIN32)
         add_executable(BazzaltPackageSecurityTests Compiler/tests/NativeSecurityTests.cpp)
         target_include_directories(BazzaltPackageSecurityTests PRIVATE Compiler/native)

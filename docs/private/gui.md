@@ -205,6 +205,9 @@ references, and regression tests together.
 
 ## Layout and inheritance foundation
 
+The next stylesheet foundation is documented in [gui-css.md](gui-css.md). Its
+private parser/cascade library does not yet attach CSS assets to GUI entities.
+
 RectTransform.Layout selects Absolute/Row/Column. The container's Padding insets
 the content box; flow children use preferred Size, MinSize/MaxSize, Margin,
 FlexGrow/FlexShrink, Gap, Align and Justify. The iterative main-axis solver freezes

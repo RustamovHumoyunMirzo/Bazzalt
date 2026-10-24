@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Bazzalt now has a private CSS parser and cascade library for the upcoming GUI stylesheet system. This page specifies its language, not a completed editor stylesheet workflow. CSS assets, component stylesheet pickers and class/ID authoring are the next integration step. Dropping a .css file into a project does not apply these rules yet.">
+  <title>GUI CSS language foundation | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / C++ / GUI in C++ / GUI CSS language foundation</nav>
+      <article class="doc"><h1>GUI CSS language foundation</h1>
+<p>Bazzalt now has a private CSS parser and cascade library for the upcoming GUI stylesheet system. This page specifies its language, not a completed editor stylesheet workflow. CSS assets, component stylesheet pickers and class/ID authoring are the next integration step. Dropping a .css file into a project does not apply these rules yet.</p>
+<h2 id="engine-model">Engine terms, familiar syntax</h2>
+<p>A stylesheet describes GUI entities, not web pages. A type selector names a widget such as Button, an ID identifies one widget, a class identifies a reusable group and an attribute describes explicit widget metadata. Hierarchy relations mean GUI parent/child or sibling relations within a Frame. States such as hover and focus come from engine input. There is no DOM, JavaScript, browser history or network loading.</p>
+<pre><code>/* Language examples for the forthcoming asset integration. */
+@layer defaults, theme;
+@layer defaults {
+    Button { color: white; gap: 8px; }
+}
+:root { --accent: #4a90e2; --spacing: 12px; }
+.toolbar &gt; Button.primary:hover {
+    color: var(--accent, rgb(74 144 226));
+    margin: calc(var(--spacing) * 2);
+}
+@viewport (min-width: 900px) and (orientation: landscape) {
+    .toolbar { gap: clamp(8px, 2vw, 24px); }
+}</code></pre>
+<p>Property names and balanced values are parsed as data. Parsing a property is not a promise that a current GUI component implements it: the future typed property adapter must map supported properties, validate ranges and reject unsupported ones. Existing <a href="../layout/en.html">layout and explicit Inherit flags</a> already work programmatically and in the inspector.</p>
+<h2 id="selectors">Selectors</h2>
+<table><thead><tr><th>Syntax</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>* / Button / #play / .primary</td><td>Every GUI entity / widget type / exact ID / class.</td></tr>
+<tr><td>[disabled], [state="active"]</td><td>Attribute presence or exact value. Other operators: ~= word, |= language-prefix, ^= starts with, $= ends with, *= substring. Optional i/s flags choose ASCII-insensitive/sensitive value matching.</td></tr>
+<tr><td>.container Button / .container &gt; Button</td><td>Any descendant / direct child.</td></tr>
+<tr><td>Button + Label / Button ~ Label</td><td>Immediately following sibling / any later sibling.</td></tr>
+<tr><td>:hover, :active, :focus, :focus-visible, :focus-within</td><td>Explicit GUI interaction states.</td></tr>
+<tr><td>:disabled, :enabled, :checked, :selected, :state(name)</td><td>Engine state queries; :enabled means not disabled.</td></tr>
+<tr><td>:root, :empty</td><td>Frame-root and explicit empty-state queries supplied by the GUI adapter.</td></tr>
+<tr><td>:first-child, :last-child, :only-child</td><td>Sibling-position queries. First/last/only-of-type variants restrict the sibling count to the same widget type.</td></tr>
+<tr><td>:nth-child(2n + 1)</td><td>An+B, odd/even and integer forms. nth-last-child, nth-of-type and nth-last-of-type are also supported.</td></tr>
+<tr><td>:is(...), :not(...), :where(...)</td><td>Selector lists. :where contributes no specificity; :is/:not use the most specific argument.</td></tr>
+</tbody></table>
+<p>Comma-separated selectors share a declaration block. Widget type and pseudo names are ASCII-insensitive; IDs, classes, attributes and custom-property names are case-sensitive by default. Unsupported/malformed selectors produce diagnostics rather than silently becoming a broader match. Pseudo-elements, namespaces, :has and nested style-rule syntax are not implemented.</p>
+<h2 id="cascade">Cascading and variables</h2>
+<p>The winning declaration is chosen by !important, layer precedence, specificity, then declaration order. ID specificity outranks classes/attributes/pseudo-classes, which outrank widget types. Unlayered normal rules beat layered normal rules; important rules reverse layer order. Duplicate declarations preserve their order. Layer names may have dotted paths; full browser nested-layer/revert-layer behavior is not claimed.</p>
+<pre><code>:root { --accent: #acf; --padding: 12px; }
+Button { color: var(--accent); padding: var(--missing, var(--padding)); }
+#play { color: rgb(255 255 255 / 80%) !important; }</code></pre>
+<p>Custom properties inherit through the GUI snapshot hierarchy. Parent variables are computed before child redefinitions. Variables are substituted as tokens, not executable text. Nested fallbacks work. Missing variables without a usable fallback, cycles (including fallback dependencies), excessive depth or expansion size invalidate the declaration and produce a diagnostic. A losing lower-priority declaration is not substituted as a fallback for an invalid winning value.</p>
+<p>Ordinary inherit, initial and unset keywords remain in computed values for the typed GUI adapter. They do not mutate local authored component fields. The eventual application layer will use the existing explicit inheritance contract instead of copying parent values permanently into children.</p>
+<h2 id="values">Values and conversion</h2>
+<table><thead><tr><th>Value family</th><th>Supported conversion</th></tr></thead><tbody>
+<tr><td>Numbers and lengths</td><td>Signed/exponent numbers; px/dp, %, em/rem, vw/vh/vmin/vmax. The layout context supplies percentage and font-size bases. Unitless values are retained for scalar properties.</td></tr>
+<tr><td>Math</td><td>calc with +, −, *, /; min, max and clamp. Invalid dimensional arithmetic, division by zero and nonfinite results are rejected.</td></tr>
+<tr><td>Colors</td><td>#RGB, #RGBA, #RRGGBB, #RRGGBBAA; rgb/rgba comma or space/slash forms; hsl/hsla with angle hues; hwb; color(srgb ...); transparent/currentColor. Basic CSS 16-color names plus grey, orange, rebeccapurple, cyan and magenta are recognized.</td></tr>
+<tr><td>Strings and booleans</td><td>Escaped UTF-8 strings/identifiers; true/false literals. Strings never execute commands.</td></tr>
+<tr><td>References</td><td>url("asset://...") and asset(...) are parsed references. The parser never fetches, opens or imports them; the future asset adapter validates identities and allowed asset types.</td></tr>
+</tbody></table>
+<p>Balanced unknown functions and units remain available in parsed data, but typed conversion can reject them. This is not full browser CSS: every named color, CSS Color 4/5 color space, gradient, animation and web-only unit is not implemented. Parsed colors are encoded sRGB values; renderer conversion is a separate responsibility.</p>
+<h2 id="at-rules">At-rules</h2>
+<p>@viewport and @media conditionally contain rules. Supported features are min/max/exact width and height, orientation, prefers-color-scheme and prefers-reduced-motion. Queries support screen/all, and/or/not, comma alternatives and parentheses. @viewport is an engine conditional, not a way to create or resize the native game window.</p>
+<p>@layer statements and blocks define cascade order. Other at-rules, including @import, @font-face, @keyframes and @supports, are retained with warnings and not executed. Their bodies do not leak into the normal cascade. In particular, @import never downloads or reads another file, and @font-face does not imply FreeType/font-asset support has landed.</p>
+<h2 id="diagnostics">Errors and safety</h2>
+<p>Diagnostics carry severity, UTF-8 byte offset and one-based line/byte column. The parser recovers enough to report later errors, but a syntax-invalid sheet is not authoritative for cascading. UTF-8 and NUL validation, finite-number checks and byte/token/rule/declaration/recursion/expansion/work limits prevent unbounded input processing. Unknown conditions fail closed. All functions operate on owned data and caller-provided hierarchy snapshots; no editor loop, renderer or OS access is exposed.</p>
+<h2 id="next">What comes next</h2>
+<p>Stylesheet asset import and pickers, GUI class/ID/attribute editing, typed property application and live invalidation remain the next TODO. FreeType/font assets are a later TODO. Until those integrations are complete, use the existing C++/Lua GUI components and editor fields for working game UI.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../layout/en.html"><small>Previous</small>GUI layout and style inheritance</a>
+<a class="next" href="../../reference/en.html"><small>Next</small>C++ API reference</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#engine-model">Engine terms, familiar syntax</a><a class="toc-link" href="#selectors">Selectors</a><a class="toc-link" href="#cascade">Cascading and variables</a><a class="toc-link" href="#values">Values and conversion</a><a class="toc-link" href="#at-rules">At-rules</a><a class="toc-link" href="#diagnostics">Errors and safety</a><a class="toc-link" href="#next">What comes next</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>
