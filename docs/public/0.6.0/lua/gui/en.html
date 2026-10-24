@@ -29,6 +29,7 @@
       <article class="doc"><h1>GUI in Lua</h1>
 <p class="lead">Lua uses the same scene entities, layout, styles, and interaction state as C++. There is no separate Lua or editor renderer.</p>
 <h2 id="create">Create a GUI hierarchy</h2>
+<p>For responsive rows/columns and inherited styles, see <a href="layout/en.html">GUI layout and inheritance in Lua</a>. It uses the same components and copy/write-back rules as these examples.</p>
 <pre><code class="language-lua">local B = Bazzalt
 local Behavior = {}
 function Behavior:OnCreate()
@@ -86,7 +87,7 @@ imageEntity:SetComponent("GuiImage", image)</code></pre>
 <p>CameraBound follows the active camera's viewport, including split-screen rectangles. CameraRenderTarget makes a camera render offscreen for a GuiImage feed. No low-level texture handle or render API enters Lua. Read the shared reference's foundation boundaries before using spatial picking or expecting complete text-editing/stylesheet support.</p>
 <p><a href="../reference/RenderTexture/en.html">RenderTexture reference</a> covers resizing, live material samplers, and GuiImage source setters. Feeds render independently of Game panel visibility. A dependency graph orders chained feeds; cycles sample completed history.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../audio/en.html"><small>Previous</small>Lua audio</a>
-<a class="next" href="../reference/en.html"><small>Next</small>Lua API reference</a></nav>
+<a class="next" href="layout/en.html"><small>Next</small>GUI layout and inheritance in Lua</a></nav>
     </main>
     <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#create">Create a GUI hierarchy</a><a class="toc-link" href="#types">Types, fields, and enums</a><a class="toc-link" href="#interaction">GUI method reference</a><a class="toc-link" href="#input">Editable text</a><a class="toc-link" href="#split-screen">Split-screen and camera feeds</a></nav></aside>
   </div>

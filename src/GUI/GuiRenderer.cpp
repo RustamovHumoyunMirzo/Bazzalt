@@ -109,12 +109,13 @@ struct GuiRendererModule::Impl {
             if(!camera&&!spatial&&frame.Mode==FrameMode::CameraBound){const auto owner=scene.GetEntity(frame.Camera);const auto* source=owner.TryGetComponent<Camera>();const auto* target=owner.TryGetComponent<CameraRenderTarget>();if((source&&source->RenderTarget)||(target&&target->Enabled))continue;}
             const auto state=GUI::GetInteraction(item.Owner);auto bounds=item.Bounds;
             if(const auto* r=item.Owner.TryGetComponent<Rectangle>();r&&r->Enabled){
-                Vec4 color=r->Style.Color;
+                const auto style=GUI::ResolveStyle(item.Owner);
+                Vec4 color=style.Color;
                 const auto* button=item.Owner.TryGetComponent<GuiButton>();const auto* input=item.Owner.TryGetComponent<GuiTextInput>();
-                if((button&&(!button->Enabled||!button->Interactable))||(input&&(!input->Enabled||!input->Interactable)))color=r->Style.DisabledColor;
-                else if(state.Pressed)color=r->Style.PressedColor;else if(state.Hovered||state.Focused)color=r->Style.HoverColor;
-                const float opacity=std::isfinite(r->Style.Opacity)?std::clamp(r->Style.Opacity,0.f,1.f):0;const float border=std::isfinite(r->Style.BorderWidth)?std::clamp(r->Style.BorderWidth*item.Scale,0.f,std::min(bounds.Size.X,bounds.Size.Y)*.5f):0;
-                if(border>0){auto edge=r->Style.BorderColor;edge.W*=opacity;const Vec4 white{.02f,.04f,.02f,.04f};
+                if((button&&(!button->Enabled||!button->Interactable))||(input&&(!input->Enabled||!input->Interactable)))color=style.DisabledColor;
+                else if(state.Pressed)color=style.PressedColor;else if(state.Hovered||state.Focused)color=style.HoverColor;
+                const float opacity=std::isfinite(style.Opacity)?std::clamp(style.Opacity,0.f,1.f):0;const float border=std::isfinite(style.BorderWidth)?std::clamp(style.BorderWidth*item.Scale,0.f,std::min(bounds.Size.X,bounds.Size.Y)*.5f):0;
+                if(border>0){auto edge=style.BorderColor;edge.W*=opacity;const Vec4 white{.02f,.04f,.02f,.04f};
                     Quad(output,item,{bounds.Position,{bounds.Size.X,border}},edge,Atlas,white,spatial);
                     Quad(output,item,{{bounds.Position.X,bounds.Position.Y+bounds.Size.Y-border},{bounds.Size.X,border}},edge,Atlas,white,spatial);
                     Quad(output,item,{{bounds.Position.X,bounds.Position.Y+border},{border,bounds.Size.Y-border*2}},edge,Atlas,white,spatial);
@@ -123,8 +124,12 @@ struct GuiRendererModule::Impl {
                 }
                 color.W*=opacity;Quad(output,item,bounds,color,Atlas,{.02f,.04f,.02f,.04f},spatial);
             }
-            if(const auto* image=item.Owner.TryGetComponent<GuiImage>();image&&image->Enabled){auto* texture=image->Camera?Backend.GetCameraTexture(image->Camera):Backend.GetAssets().GetGuiTexture(image->Texture);Quad(output,item,item.Bounds,image->Color,texture,{0,0,1,1},spatial);}
-            if(const auto* text=item.Owner.TryGetComponent<GuiText>();text&&text->Enabled){auto clipped=item;clipped.Clip=Intersect(item.Clip,item.Bounds);Text(output,clipped,text->Value,text->FontSize,text->Color,text->Wrap,spatial);}
+            if(const auto* image=item.Owner.TryGetComponent<GuiImage>();image&&image->Enabled){auto* texture=image->Camera?Backend.GetCameraTexture(image->Camera):Backend.GetAssets().GetGuiTexture(image->Texture);Quad(output,item,item.Bounds,GUI::ResolveImage(item.Owner).Color,texture,{0,0,1,1},spatial);}
+            if(const auto* text=item.Owner.TryGetComponent<GuiText>();text&&text->Enabled){
+                auto clipped=item;clipped.Clip=Intersect(item.Clip,item.Bounds);
+                if(text->InheritColor||text->InheritFontSize||text->InheritWrap){auto resolved=GUI::ResolveText(item.Owner);Text(output,clipped,text->Value,resolved.FontSize,resolved.Color,resolved.Wrap,spatial);}
+                else Text(output,clipped,text->Value,text->FontSize,text->Color,text->Wrap,spatial);
+            }
             if(const auto* input=item.Owner.TryGetComponent<GuiTextInput>();input&&input->Enabled){auto clipped=item;clipped.Clip=Intersect(item.Clip,item.Bounds);std::string value=input->Value.empty()?input->Placeholder:input->Value;if(input->Password&&!input->Value.empty()){value.clear();for(unsigned char c:input->Value)if((c&0xc0)!=0x80)value+='*';}Text(output,clipped,value,16,{1,1,1,input->Value.empty()?.5f:1.f},false,spatial);}
         }
     }

@@ -4,6 +4,7 @@
 #include "GUI/GuiRenderer.h"
 namespace Bazzalt { class ComponentSerializationRegistry; }
 namespace Bazzalt::Runtime {
+inline constexpr std::uint32_t GuiModuleVersion=2;
 // Private, versioned interface. Modules are built with the matching core/toolchain.
 struct GuiModuleApi {
     std::uint32_t Version,Size;

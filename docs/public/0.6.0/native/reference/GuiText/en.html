@@ -26,7 +26,7 @@
     <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
     <main id="content" tabindex="-1">
       <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / C++ / C++ API reference / GuiText</nav>
-      <article class="doc"><h1>GuiText</h1><p>GuiText declares the values and operations listed below. Types, defaults and overloads are part of its contract; it is not an editor panel.</p><p>See the <a href="../../gui/en.html">GUI guide</a> for layout, rendering, component write-back and input examples.</p><!-- API-SOURCE-BEGIN -->
+      <article class="doc"><h1>GuiText</h1><p>GuiText declares the values and operations listed below. Types, defaults and overloads are part of its contract; it is not an editor panel.</p><p>See the <a href="../../gui/en.html">GUI guide</a> for layout, rendering, component write-back and input examples.</p><h2 id="inheritance">Text style inheritance</h2><p>InheritColor, InheritFontSize and InheritWrap default to false. When true, each property resolves from matching enabled ancestor GuiText components within the nearest Frame. Missing components are skipped, chained inheritance is honored, and no matching source leaves the authored value as fallback. Text Value is never inherited; color does not come from Rectangle background styles. GUI.ResolveText returns an effective copy without modifying the local component.</p><!-- API-SOURCE-BEGIN -->
 <h2 id="source-contract">Public declarations</h2>
 <p>Header: <code>Bazzalt/GUI.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
 <pre><code class="language-cpp">struct GuiText {
@@ -34,12 +34,13 @@ std::string Value;
 Vec4 Color{1,1,1,1};
 float FontSize=16;
 bool Wrap=true;
+bool InheritColor=false,InheritFontSize=false,InheritWrap=false;
 };</code></pre>
 <!-- API-SOURCE-END --></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../GuiStyle/en.html"><small>Previous</small>GuiStyle</a>
 <a class="next" href="../GuiTextInput/en.html"><small>Next</small>GuiTextInput</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#inheritance">Text style inheritance</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

@@ -55,6 +55,10 @@ class ApiReferenceTests(unittest.TestCase):
             ['static void SetTargetFrameRate(int framesPerSecond);'])
         self.assertIn('Bazzalt.Application.SetTargetFrameRate(value: number)',usage)
         self.assertNotIn('sol::table',usage)
+        usage=lua_usage('GuiText','InheritFontSize','&GuiText::InheritFontSize',
+            ['bool InheritColor=false,InheritFontSize=false,InheritWrap=false;'])
+        self.assertIn('value.InheritFontSize: boolean',usage)
+        self.assertNotIn('boolean InheritColor',usage)
 
 
 if __name__=='__main__': unittest.main()

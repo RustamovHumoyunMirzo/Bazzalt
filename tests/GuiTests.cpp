@@ -16,6 +16,7 @@
 #include "Bazzalt/Components/PrimitiveObject.h"
 #include <filament/RenderTarget.h>
 #include "GUI/GuiSystem.h"
+#include "GUI/GuiSerialization.h"
 #include "GUI/GuiRenderer.h"
 #include "Runtime/Engine.h"
 #include "Runtime/InputAccess.h"
@@ -33,7 +34,56 @@
 #include <utils/EntityManager.h>
 using namespace Bazzalt;
 namespace Bazzalt::Runtime {struct GuiTestAccess {static RenderBackend& Backend(Engine& engine){return *engine.m_renderBackend;}};}
+static void TestLayoutAndInheritance(){
+    Scene scene;auto root=scene.CreateEntity("Layout");root.AddComponent<Frame>().ScaleMode=GuiScaleMode::ConstantPixels;
+    auto& group=root.AddComponent<RectTransform>();group.Layout=GuiLayoutMode::Row;group.Padding={10,20,30,40};group.Gap=10;group.Align=GuiAlignment::Stretch;
+    const auto child=[&](const char* name){auto e=scene.CreateEntity(name);e.SetParent(root,false);auto& r=e.AddComponent<RectTransform>();r.Size={100,30};r.FlexGrow=1;return e;};
+    auto a=child("A"),b=child("B");a.GetComponent<RectTransform>().MaxSize.X=140;a.GetComponent<RectTransform>().ZIndex=10;
+    auto& gui=scene.GetSystem<Runtime::GuiSystem>();gui.Layout(scene,{400,200});
+    auto first=GUI::GetBounds(a),second=GUI::GetBounds(b);
+    assert(first.Position.X==10&&first.Position.Y==20&&first.Size.X==140&&first.Size.Y==140);
+    assert(second.Position.X==160&&second.Size.X==210);assert(gui.Items[0].Owner==b); // Z does not reorder layout.
+    gui.Layout(scene,{200,100});assert(GUI::GetBounds(a).Size.X==75&&GUI::GetBounds(b).Size.X==75);
+    a.GetComponent<RectTransform>().MinSize.X=90;gui.Layout(scene,{200,100});assert(GUI::GetBounds(a).Size.X==90&&GUI::GetBounds(b).Size.X==60);
+    auto& br=b.GetComponent<RectTransform>();br.IgnoreLayout=true;br.Position={30,40};
+    gui.Layout(scene,{200,100});assert(GUI::GetBounds(b).Position.X==40&&GUI::GetBounds(b).Position.Y==60);
+    br.IgnoreLayout=false;a.GetComponent<RectTransform>().MinSize.X=0;a.GetComponent<RectTransform>().FlexGrow=br.FlexGrow=0;
+    group.Layout=GuiLayoutMode::Column;group.Align=GuiAlignment::Center;group.Justify=GuiJustify::SpaceBetween;
+    gui.Layout(scene,{400,200});assert(GUI::GetBounds(a).Position.X==140&&GUI::GetBounds(a).Position.Y==20&&GUI::GetBounds(b).Position.Y==130);
+    br.Visible=false;gui.Layout(scene,{400,200});assert(GUI::GetBounds(b).Size.X==0);
+    br.Visible=true;group.Layout=GuiLayoutMode::Absolute;group.Padding={};a.GetComponent<RectTransform>().Position={7,9};
+    gui.Layout(scene,{400,200});assert(GUI::GetBounds(a).Position.X==7&&GUI::GetBounds(a).Position.Y==9);
+    gui.Layout(scene,{});assert(gui.Items.empty()&&GUI::GetBounds(a).Size.X==0); // No stale hit boxes.
+    auto& source=root.AddComponent<Rectangle>();source.Style.Color={1,0,0,1};source.Style.Opacity=.6f;
+    auto& target=a.AddComponent<Rectangle>();target.Style.Color={0,1,0,1};target.Style.InheritColor=target.Style.InheritOpacity=true;
+    auto style=GUI::ResolveStyle(a);assert(style.Color.X==1&&style.Color.Y==0&&style.Opacity==.6f);assert(target.Style.Color.Y==1);
+    source.Style.Color={0,0,1,1};assert(GUI::ResolveStyle(a).Color.Z==1);target.Style.InheritColor=false;assert(GUI::ResolveStyle(a).Color.Y==1);
+    auto& text=root.AddComponent<GuiText>();text.FontSize=24;text.Color={1,0,0,1};text.Wrap=false;
+    auto& leaf=a.AddComponent<GuiText>();leaf.InheritColor=leaf.InheritFontSize=leaf.InheritWrap=true;
+    assert(GUI::ResolveText(a).FontSize==24&&!GUI::ResolveText(a).Wrap&&leaf.FontSize==16);
+    text.Enabled=false;assert(GUI::ResolveText(a).FontSize==16);text.Enabled=true;
+    auto middle=scene.CreateEntity("Transparent container");middle.SetParent(root,false);a.SetParent(middle,false);assert(GUI::ResolveText(a).FontSize==24);
+    middle.AddComponent<GuiText>().InheritFontSize=true;assert(GUI::ResolveText(a).FontSize==24);
+    middle.AddComponent<Frame>();assert(GUI::ResolveText(a).FontSize==16); // Nested Frame boundary.
+    auto other=scene.CreateEntity("Other frame");other.AddComponent<Frame>();other.AddComponent<GuiText>().FontSize=32;a.SetParent(other,false);assert(GUI::ResolveText(a).FontSize==32);
+    root.AddComponent<GuiImage>().Color={.2f,.3f,.4f,1};b.AddComponent<GuiImage>().InheritColor=true;assert(GUI::ResolveImage(b).Color.X==.2f);
+    assert(GUI::ResolveStyle({}).Opacity==1&&GUI::ResolveText({}).FontSize==16);
+    ComponentSerializationRegistry registry;Runtime::RegisterGuiComponents(registry);
+    const auto* descriptor=registry.Find("Bazzalt.RectTransform");PropertyMap properties;assert(descriptor->Version==2&&descriptor->Serialize(b,properties));
+    auto restored=scene.CreateEntity("Restored");assert(descriptor->Deserialize(restored,properties,2));assert(restored.GetComponent<RectTransform>().FlexShrink==1);
+    auto invalid=properties;invalid["Layout"]="99";assert(!descriptor->Deserialize(restored,invalid,2));assert(!descriptor->Deserialize(restored,properties,3));
+    invalid=properties;invalid["Gap"]="-1";assert(!descriptor->Deserialize(restored,invalid,2));
+    invalid=properties;invalid["Padding"]="nan,0,0,0";assert(!descriptor->Deserialize(restored,invalid,2));
+    for(const auto* key:{"Layout","Padding","Margin","Gap","FlexGrow","FlexShrink","Align","Justify","IgnoreLayout"})properties.erase(key);
+    assert(descriptor->Deserialize(restored,properties,1));assert(restored.GetComponent<RectTransform>().Layout==GuiLayoutMode::Absolute);
+    assert(!descriptor->Deserialize(restored,properties,2));
+    descriptor=registry.Find("Bazzalt.Rectangle");assert(descriptor->Serialize(a,properties));
+    assert(descriptor->Deserialize(restored,properties,2));assert(restored.GetComponent<Rectangle>().Style.InheritOpacity);
+    for(auto it=properties.begin();it!=properties.end();)if(it->first.starts_with("Inherit"))it=properties.erase(it);else ++it;
+    assert(descriptor->Deserialize(restored,properties,1));assert(!restored.GetComponent<Rectangle>().Style.InheritOpacity);
+}
 int main(){
+    TestLayoutAndInheritance();
     {const auto a=UUID::Generate(),b=UUID::Generate(),c=UUID::Generate();
      auto plan=Runtime::BuildCapturePlan({a,b,c},{{a,{b}},{b,{c}}});assert(plan.size()==3&&plan[0][0]==c&&plan[1][0]==b&&plan[2][0]==a);
      plan=Runtime::BuildCapturePlan({a,b,c},{{a,{b}},{b,{a,c}}});assert(plan.size()==2&&plan[0][0]==c&&plan[1].size()==2);
@@ -171,8 +221,8 @@ int main(){
             feed.GetComponent<Camera>().Enabled=false;cameras.Synchronize(scene);backend.Render();engine.flushAndWait();
             backend.GetAssets().DestroyPrimitive(handle);scene.RemoveSystem<Runtime::CameraSystem>();backend.SetGuiScene(nullptr);engine.destroy(swap);
         }
-        Scene pixels;auto hud=pixels.CreateEntity("Pixel HUD");hud.AddComponent<Frame>().ScaleMode=GuiScaleMode::ConstantPixels;
-        auto box=pixels.CreateEntity("Pixel Box");box.SetParent(hud,false);auto& layout=box.AddComponent<RectTransform>();layout.Position={20,30};layout.Size={40,20};box.AddComponent<Rectangle>().Style.Color={1,0,0,1};
+        Scene pixels;auto hud=pixels.CreateEntity("Pixel HUD");hud.AddComponent<Frame>().ScaleMode=GuiScaleMode::ConstantPixels;hud.AddComponent<Rectangle>().Style.Color={1,0,0,1};
+        auto box=pixels.CreateEntity("Pixel Box");box.SetParent(hud,false);auto& layout=box.AddComponent<RectTransform>();layout.Position={20,30};layout.Size={40,20};box.AddComponent<Rectangle>().Style.InheritColor=true;
         auto clipping=pixels.CreateEntity("Pixel Clip");clipping.SetParent(hud,false);auto& container=clipping.AddComponent<RectTransform>();container.Position={80,30};container.Size={10,10};container.ClipChildren=true;
         auto green=pixels.CreateEntity("Clipped Green");green.SetParent(clipping,false);green.AddComponent<RectTransform>().Size={40,20};green.AddComponent<Rectangle>().Style.Color={0,1,0,1};
         auto letters=pixels.CreateEntity("Pixel Text");letters.SetParent(hud,false);letters.AddComponent<RectTransform>().Position={20,70};auto& glyph=letters.AddComponent<GuiText>();glyph.Value="A";glyph.Color={0,0,1,1};

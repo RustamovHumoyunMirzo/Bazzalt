@@ -3,7 +3,7 @@
 Public contract: `include/Bazzalt/GUI.h`, forwarding component headers in
 `Components/GUI`, and `CameraRenderTarget.h`. Gameplay never initializes GUI or
 gets Filament/SDL objects. C++ and Lua must remain in parity (`LuaGUI.cpp`).
-Public usage/reference lives in `docs/public/0.5.0/native/gui/en.html` and
+Public usage/reference lives in `docs/public/0.6.0/native/gui/en.html` and
 `lua/gui/en.html`; these files are the maintained source, not generated snapshots.
 
 ## Binary/module boundary
@@ -23,12 +23,17 @@ Ship matching binaries/compiler/CRT; this is not a third-party plugin ABI. Keep
 the module resident until process exit because component descriptors retain its
 callbacks. RenderBackend destroys GUI GPU resources before its Filament engine.
 Missing/incompatible modules produce an explicit runtime error, not silent GUI
-fallbacks. Release manifests declare `gui_abi: 1`; Hub validates new packages but
+fallbacks. Current release manifests declare `gui_abi: 2`; Hub accepts 1 and 2
+for complete, internally matching historical/new packages, but never mixes core
+and GUI modules from different builds. The native loader requires ABI 2. Hub
+validates new packages but
 still accepts older editor releases that do not declare this module.
 
 In hierarchy, **Add New > GUI** creates Frames and compositional widgets. Widgets
 automatically get a Viewport Frame if the parent has no Frame ancestor. Frame
-roots never carry Rectangle/Text/Button components themselves. A Camera-Bound
+widgets render on descendants, not on the Frame entity itself. A Frame may carry
+Rectangle/GuiText/GuiImage components as inheritance sources without rendering
+those root widgets. A Camera-Bound
 Frame requires selecting its camera in the inspector.
 
 ## Ownership and update order
@@ -176,8 +181,13 @@ input. Game code can gate its actions using GUI state.
 
 ## Persistence, editor, and regression work
 
-GuiSerialization registers stable version-1 component descriptors with finite
-numeric/type/range validation. Interaction pulses/focus/capture are transient.
+GuiSerialization registers version-2 RectTransform/Rectangle/GuiText/GuiImage
+descriptors; other GUI descriptors remain version 1. Version-1 input defaults
+new fields to absolute layout, zero insets/gap, grow 0, shrink 1, and local styles.
+Only the new fields may be omitted during migration; malformed legacy fields
+still fail. New version-2 records require all fields. Deserialization constructs
+a candidate and commits only after finite numeric/type/range validation.
+Interaction pulses/focus/capture are transient.
 EcsConfig assigns stable component hashes across compiler/module boundaries.
 GuiBridge uses those descriptors for editor Inspector values and validated edits;
 do not add a second unvalidated GUI property setter path.
@@ -192,3 +202,36 @@ headless-swap-chain/readback test for rectangle placement, clipping, and glyphs.
 It is opt-in because ordinary CI workers need not have a graphics device.
 Any new public GUI field/method must update Lua bindings, serialization, public
 references, and regression tests together.
+
+## Layout and inheritance foundation
+
+RectTransform.Layout selects Absolute/Row/Column. The container's Padding insets
+the content box; flow children use preferred Size, MinSize/MaxSize, Margin,
+FlexGrow/FlexShrink, Gap, Align and Justify. The iterative main-axis solver freezes
+constrained children and redistributes spare/negative space. Shrink weights use
+the original preferred size, not an already-shrunken value. Flow order is hierarchy
+order; compute positions before ZIndex paint sorting. IgnoreLayout children keep
+anchor positioning and do not reserve flow space. Invisible/disabled layouts and
+nested Frames never reserve flow space. Positions/pivots/anchors are ignored only
+for participating flow children. Minimum-size overflow is allowed, not negative
+geometry. There is no content measurement, wrapping or CSS Grid/Flexbox claim.
+
+Explicit Inherit* flags live in GuiStyle, GuiText and GuiImage. GUI.ResolveStyle,
+ResolveText and ResolveImage resolve snapshots in the core facade and are used by
+the renderer. They never mutate serialized/local values. Per property, walk the
+nearest enabled matching component, then continue only if its corresponding flag
+also requests inheritance. Nonmatching hierarchy containers are transparent.
+The nearest Frame, including its own components, is the boundary. A missing source
+falls back to the last matching authored value. Rectangle backgrounds, image tints
+and text foregrounds are distinct sources. Do not multiply opacity when resolving
+inherit: this is assignment, not group alpha compositing. Content/texture IDs and
+interaction are not inherited. Unset flags skip ancestor traversal.
+
+The future CSS layer should translate explicit inherit declarations into the same
+resolution contract rather than copying parent values into child components.
+Keep computed state separate from authored data. The editor exposes enum dropdowns
+and per-property inheritance toggles using GuiRegistry; SetGUIProperty passes the
+descriptor's current version, not a hardcoded legacy version. Unknown enum values,
+negative insets/weights and nonfinite values must fail transactionally. API refs,
+examples and the editor-only authoring page are under the current version's GUI
+sections. Do not change historical version pages.

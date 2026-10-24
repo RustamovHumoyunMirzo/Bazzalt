@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="GUI objects are ordinary hierarchy entities with GUI components. Use Hierarchy &gt; Add New &gt; GUI to create a Frame, container, rectangle, image, text, button or text input. Place widgets under a Frame; attaching a widget to the Frame object itself does not draw it.">
+  <title>Author GUI layout and inheritance | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Editor manual / Author GUI layout and inheritance</nav>
+      <article class="doc"><h1>Author GUI layout and inheritance</h1>
+<p>GUI objects are ordinary hierarchy entities with GUI components. Use Hierarchy &gt; Add New &gt; GUI to create a Frame, container, rectangle, image, text, button or text input. Place widgets under a Frame; attaching a widget to the Frame object itself does not draw it.</p>
+<h2 id="containers">Arrange children</h2>
+<p>Select a container in the Hierarchy and expand RectTransform in the inspector. Set Layout to Row or Column to position its direct GUI children automatically. Set Gap and Padding to create spacing, Align for cross-axis alignment and Justify for main-axis alignment. Insets use left, top, right, bottom order.</p>
+<p>On each child, Size is its preferred size, MinSize/MaxSize constrain it, Margin reserves space, FlexGrow allocates extra room and FlexShrink controls shrinking. Ignore parent layout lets that child keep anchored placement. Absolute remains the default, so existing scenes do not move when loaded. A RectTransform on the Frame entity controls children without resizing the Frame surface. Reordering siblings changes flow order; ZIndex only changes drawing order.</p>
+<h2 id="styles">Inherit a style value</h2>
+<p>For rectangles, expand Rectangle and enable the desired Inherit color/opacity/border checkboxes. Text offers inheritance for color, font size and wrapping; images offer tint-color inheritance. Put the source component on a parent, including the Frame root when useful. A text color inherits from parent text, not from a rectangle background.</p>
+<p>Inheritance updates live when a parent changes. The inspector still displays the child's own local fallback value; changing that value while inheritance is enabled does not override the parent's effective value. Turn the inheritance checkbox off to use it again. Disabled sources are skipped, and inheritance never crosses the nearest Frame boundary. These edits participate in the normal scene save/dirty and undo history paths.</p>
+<h2 id="reference">Programming and detailed rules</h2>
+<p>See <a href="../../native/gui/layout/en.html">C++ layout and inheritance</a> or <a href="../../lua/gui/layout/en.html">Lua layout and inheritance</a> for examples and exact contracts. Rows and columns are single-line layouts for now; CSS stylesheets, automatic content measurement, wrapping and advanced fonts remain separate work.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../global-subsystems/en.html"><small>Previous</small>Global subsystems</a>
+<a class="next" href="../preferences/en.html"><small>Next</small>Editor preferences</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#containers">Arrange children</a><a class="toc-link" href="#styles">Inherit a style value</a><a class="toc-link" href="#reference">Programming and detailed rules</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

@@ -26,7 +26,7 @@
     <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
     <main id="content" tabindex="-1">
       <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / C++ / C++ API reference / GuiStyle</nav>
-      <article class="doc"><h1>GuiStyle</h1><p>GuiStyle declares the values and operations listed below. Types, defaults and overloads are part of its contract; it is not an editor panel.</p><p>See the <a href="../../gui/en.html">GUI guide</a> for layout, rendering, component write-back and input examples.</p><!-- API-SOURCE-BEGIN -->
+      <article class="doc"><h1>GuiStyle</h1><p>GuiStyle declares the values and operations listed below. Types, defaults and overloads are part of its contract; it is not an editor panel.</p><p>See the <a href="../../gui/en.html">GUI guide</a> for layout, rendering, component write-back and input examples.</p><h2 id="inheritance">Per-property inheritance</h2><p>The InheritColor, InheritHoverColor, InheritPressedColor, InheritDisabledColor, InheritBorderColor, InheritBorderWidth and InheritOpacity booleans default to false. A true flag resolves that property from the nearest enabled ancestor Rectangle; if that ancestor's flag is also true, resolution continues. Missing components are skipped. The nearest Frame is included, then traversal stops. If no source exists, the authored local value remains the fallback.</p><p>Each property is independent. Opacity is assigned, not multiplied. Local authored values and flags are never overwritten by rendering. Disable the flag to restore the local value. See <a href="../GUI/en.html">GUI.ResolveStyle</a> for effective copies.</p><!-- API-SOURCE-BEGIN -->
 <h2 id="source-contract">Public declarations</h2>
 <p>Header: <code>Bazzalt/GUI.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
 <pre><code class="language-cpp">struct GuiStyle {
@@ -37,12 +37,16 @@ Vec4 DisabledColor{0.16f,0.17f,0.19f,0.7f};
 Vec4 BorderColor{0.05f,0.06f,0.08f,1};
 float BorderWidth=0;
 float Opacity=1;
+// Explicit, per-property inheritance. Local authored values remain unchanged.
+    bool InheritColor=false,InheritHoverColor=false,InheritPressedColor=false;
+bool InheritDisabledColor=false,InheritBorderColor=false;
+bool InheritBorderWidth=false,InheritOpacity=false;
 };</code></pre>
 <!-- API-SOURCE-END --></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../GuiScaleMode/en.html"><small>Previous</small>GuiScaleMode</a>
 <a class="next" href="../GuiText/en.html"><small>Next</small>GuiText</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#inheritance">Per-property inheritance</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

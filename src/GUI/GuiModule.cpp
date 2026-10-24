@@ -3,7 +3,7 @@
 namespace Bazzalt::Runtime {
 void ModuleRegisterGuiComponents(ComponentSerializationRegistry&);
 static const GuiModuleApi Api{
-    1,sizeof(GuiModuleApi),
+    GuiModuleVersion,sizeof(GuiModuleApi),
     [](GuiSystem& system,Scene& scene,Vec2 size){system.ModuleLayout(scene,size);},
     [](GuiSystem& system,Scene& scene){system.ModuleProcessInput(scene);},
     [](GuiSystem& system,Scene& scene,Entity entity){return system.ModuleFocus(scene,entity);},
@@ -24,5 +24,5 @@ static const GuiModuleApi Api{
 #define GUI_EXPORT __attribute__((visibility("default")))
 #endif
 extern "C" GUI_EXPORT const Bazzalt::Runtime::GuiModuleApi* BazzaltGetGuiModuleApi(std::uint32_t version,std::uint32_t size){
-    return version==1&&size==sizeof(Bazzalt::Runtime::GuiModuleApi)?&Bazzalt::Runtime::Api:nullptr;
+    return version==Bazzalt::Runtime::GuiModuleVersion&&size==sizeof(Bazzalt::Runtime::GuiModuleApi)?&Bazzalt::Runtime::Api:nullptr;
 }

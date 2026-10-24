@@ -191,7 +191,11 @@ def lua_usage(name, member, binding, signatures):
     field = binding.startswith('&') and declaration and not re.search(r'\b'+re.escape(member)+r'\s*\(',declaration)
     if field:
         match = re.search(r'(.+?)\b'+re.escape(member)+r'\b',declaration,re.S)
-        return '<pre><code>'+html.escape('value.'+member+': '+lua_type(match[1] if match else 'value'))+'</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p>'
+        # Multiple fields may share a declaration: bool A=false,B=false.
+        # B's type is bool, not the preceding declarator/initializer text.
+        leading = re.match(r'([\w:]+(?:<[^;]+>)?)\s+',declaration)
+        field_type = leading[1] if leading else match[1] if match else 'value'
+        return '<pre><code>'+html.escape('value.'+member+': '+lua_type(field_type))+'</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p>'
     direct = re.search(r'\b'+re.escape(member)+r'\s*\((.*?)\)\s*(?:const|noexcept|;|$)',declaration,re.S)
     adapter = re.search(r'\]\s*\(([^)]*)\)',binding)
     args = split_arguments(adapter[1] if adapter else direct[1] if direct else '')

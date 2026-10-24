@@ -8,6 +8,9 @@
 namespace Bazzalt {
 enum class FrameMode { Viewport, CameraBound, Spatial };
 enum class GuiScaleMode { ConstantPixels, ScaleWithViewport };
+enum class GuiLayoutMode { Absolute, Row, Column };
+enum class GuiAlignment { Start, Center, End, Stretch };
+enum class GuiJustify { Start, Center, End, SpaceBetween };
 
 struct GuiBounds {
     Vec2 Position{}, Size{};
@@ -36,6 +39,13 @@ struct RectTransform : Component {
     int ZIndex=0;
     bool Visible=true;
     bool ClipChildren=false;
+    // Layout controls direct RectTransform children. Insets are left/top/right/bottom.
+    GuiLayoutMode Layout=GuiLayoutMode::Absolute;
+    Vec4 Padding{},Margin{};
+    float Gap=0,FlexGrow=0,FlexShrink=1;
+    GuiAlignment Align=GuiAlignment::Start;
+    GuiJustify Justify=GuiJustify::Start;
+    bool IgnoreLayout=false;
 };
 struct GuiStyle {
     Vec4 Color{0.22f,0.24f,0.28f,1};
@@ -45,16 +55,24 @@ struct GuiStyle {
     Vec4 BorderColor{0.05f,0.06f,0.08f,1};
     float BorderWidth=0;
     float Opacity=1;
+    // Explicit, per-property inheritance. Local authored values remain unchanged.
+    bool InheritColor=false,InheritHoverColor=false,InheritPressedColor=false;
+    bool InheritDisabledColor=false,InheritBorderColor=false;
+    bool InheritBorderWidth=false,InheritOpacity=false;
 };
 struct Rectangle : Component { GuiStyle Style{}; bool RaycastTarget=true; };
 struct GuiImage : Component {
     UUID Texture{},Camera{}; Vec4 Color{1,1,1,1}; bool RaycastTarget=false;
+    bool InheritColor=false;
     void SetTexture(UUID asset) { Texture=asset;Camera={}; }
     void SetTexture(Bazzalt::Texture asset) { SetTexture(asset.GetAssetUUID()); }
     void SetRenderTexture(RenderTexture value) { Camera=value.GetCameraUUID();Texture={}; }
     [[nodiscard]] RenderTexture GetRenderTexture() const { return RenderTexture::FromCameraUUID(Camera); }
 };
-struct GuiText : Component { std::string Value; Vec4 Color{1,1,1,1}; float FontSize=16; bool Wrap=true; };
+struct GuiText : Component {
+    std::string Value; Vec4 Color{1,1,1,1}; float FontSize=16; bool Wrap=true;
+    bool InheritColor=false,InheritFontSize=false,InheritWrap=false;
+};
 struct GuiButton : Component { bool Interactable=true; int TabIndex=0; };
 struct GuiTextInput : Component {
     std::string Value,Placeholder;
@@ -76,6 +94,10 @@ public:
     [[nodiscard]] static GuiInteraction GetInteraction(Entity entity);
     [[nodiscard]] static GuiBounds GetBounds(Entity entity);
     [[nodiscard]] static Entity GetFrame(Entity entity);
+    // Return effective copies, following ancestors up to and including the nearest Frame.
+    [[nodiscard]] static GuiStyle ResolveStyle(Entity entity);
+    [[nodiscard]] static GuiText ResolveText(Entity entity);
+    [[nodiscard]] static GuiImage ResolveImage(Entity entity);
     static bool Focus(Entity entity);
     static void ClearFocus(Scene& scene);
     [[nodiscard]] static bool IsPointerOverUI(Scene& scene);

@@ -5,10 +5,74 @@
 #include <algorithm>
 #include <cmath>
 #include <unordered_set>
+#include <unordered_map>
 
 namespace Bazzalt::Runtime {
 namespace {
 bool Finite(Vec2 v){return std::isfinite(v.X)&&std::isfinite(v.Y);}
+bool Insets(Vec4 v){return std::isfinite(v.X)&&std::isfinite(v.Y)&&std::isfinite(v.Z)&&std::isfinite(v.W)&&v.X>=0&&v.Y>=0&&v.Z>=0&&v.W>=0;}
+bool ValidLayout(const RectTransform& v){
+    return v.Enabled&&v.Visible&&static_cast<unsigned>(v.Layout)<=2&&static_cast<unsigned>(v.Align)<=3&&static_cast<unsigned>(v.Justify)<=3&&Finite(v.Position)&&Finite(v.Size)&&Finite(v.AnchorMin)&&Finite(v.AnchorMax)&&Finite(v.Pivot)&&Finite(v.MinSize)&&Finite(v.MaxSize)&&
+        v.MinSize.X>=0&&v.MinSize.Y>=0&&v.MaxSize.X>=v.MinSize.X&&v.MaxSize.Y>=v.MinSize.Y&&v.AnchorMax.X>=v.AnchorMin.X&&v.AnchorMax.Y>=v.AnchorMin.Y&&
+        Insets(v.Padding)&&Insets(v.Margin)&&std::isfinite(v.Gap)&&v.Gap>=0&&std::isfinite(v.FlexGrow)&&v.FlexGrow>=0&&std::isfinite(v.FlexShrink)&&v.FlexShrink>=0;
+}
+GuiBounds ContentBounds(GuiBounds bounds,const RectTransform* group,float scale){
+    if(!group||!ValidLayout(*group))return bounds;
+    const auto p=group->Padding*scale;
+    return {bounds.Position+Vec2{p.X,p.Y},{std::max(0.f,bounds.Size.X-p.X-p.Z),std::max(0.f,bounds.Size.Y-p.Y-p.W)}};
+}
+// Resolve layout in hierarchy order, independently of ZIndex paint/hit order.
+std::unordered_map<UUID,GuiBounds> FlowBounds(const std::vector<Entity>& children,GuiBounds content,const RectTransform* group,float scale){
+    std::unordered_map<UUID,GuiBounds> result;
+    if(!group||!ValidLayout(*group)||group->Layout==GuiLayoutMode::Absolute)return result;
+    const bool row=group->Layout==GuiLayoutMode::Row;
+    struct Entry {Entity Owner;const RectTransform* Rect;float Main,Cross,Minimum,Maximum,Basis,Before,After,CrossBefore,CrossAfter;};
+    std::vector<Entry> entries;
+    const float mainSize=row?content.Size.X:content.Size.Y,crossSize=row?content.Size.Y:content.Size.X;
+    float used=0;
+    for(auto child:children){
+        const auto* r=child.TryGetComponent<RectTransform>();
+        if(child.HasComponent<Frame>()||!r||!ValidLayout(*r)||r->IgnoreLayout)continue;
+        const auto size=r->Size*scale,min=r->MinSize*scale,max=r->MaxSize*scale;
+        const auto margin=r->Margin*scale;
+        const float main=std::clamp(row?size.X:size.Y,row?min.X:min.Y,row?max.X:max.Y);
+        entries.push_back({child,r,main,std::clamp(row?size.Y:size.X,row?min.Y:min.X,row?max.Y:max.X),row?min.X:min.Y,row?max.X:max.Y,main,
+                           row?margin.X:margin.Y,row?margin.Z:margin.W,row?margin.Y:margin.X,row?margin.W:margin.Z});
+        used+=main+entries.back().Before+entries.back().After;
+    }
+    if(entries.empty())return result;
+    float gap=group->Gap*scale;
+    used+=gap*float(entries.size()-1);
+    // Iteratively freeze min/max-constrained children and redistribute remaining
+    // space. Shrink is weighted by each child's original preferred size.
+    for(std::size_t pass=0;pass<=entries.size();++pass){
+        const float free=mainSize-used;if(std::fabs(free)<.001f)break;
+        float weight=0;
+        for(const auto& e:entries)if(free>0?e.Main<e.Maximum:e.Main>e.Minimum)weight+=free>0?e.Rect->FlexGrow:e.Rect->FlexShrink*e.Basis;
+        if(weight<=0||!std::isfinite(weight))break;
+        float applied=0;
+        for(auto& e:entries){
+            if(!(free>0?e.Main<e.Maximum:e.Main>e.Minimum))continue;
+            const float factor=free>0?e.Rect->FlexGrow:e.Rect->FlexShrink*e.Basis;
+            const float next=std::clamp(e.Main+free*factor/weight,e.Minimum,e.Maximum);
+            applied+=next-e.Main;e.Main=next;
+        }
+        used+=applied;if(std::fabs(applied)<.001f)break;
+    }
+    const float spare=std::max(0.f,mainSize-used);
+    float cursor=group->Justify==GuiJustify::Center?spare*.5f:group->Justify==GuiJustify::End?spare:0;
+    if(group->Justify==GuiJustify::SpaceBetween&&entries.size()>1)gap+=spare/float(entries.size()-1);
+    for(auto& e:entries){
+        const float available=std::max(0.f,crossSize-e.CrossBefore-e.CrossAfter);
+        if(group->Align==GuiAlignment::Stretch)e.Cross=std::clamp(available,(row?e.Rect->MinSize.Y:e.Rect->MinSize.X)*scale,(row?e.Rect->MaxSize.Y:e.Rect->MaxSize.X)*scale);
+        const float remaining=std::max(0.f,available-e.Cross);
+        const float cross=e.CrossBefore+(group->Align==GuiAlignment::Center?remaining*.5f:group->Align==GuiAlignment::End?remaining:0);
+        cursor+=e.Before;
+        result.emplace(e.Owner.GetUUID(),GuiBounds{content.Position+(row?Vec2{cursor,cross}:Vec2{cross,cursor}),row?Vec2{e.Main,e.Cross}:Vec2{e.Cross,e.Main}});
+        cursor+=e.Main+e.After+gap;
+    }
+    return result;
+}
 GuiBounds Intersect(GuiBounds a,GuiBounds b){
     Vec2 begin{std::max(a.Position.X,b.Position.X),std::max(a.Position.Y,b.Position.Y)};
     return {begin,{std::max(0.f,std::min(a.Position.X+a.Size.X,b.Position.X+b.Size.X)-begin.X),
@@ -26,6 +90,9 @@ void Backspace(std::string& text){if(text.empty())return;std::size_t start=text.
 void GuiSystem::Descend(Entity parent,Entity root,GuiBounds bounds,GuiBounds clip,GuiBounds surface,float scale,std::size_t depth){
     if(depth>128)return;
     auto children=parent.GetChildren();
+    const auto* group=parent.TryGetComponent<RectTransform>();
+    bounds=ContentBounds(bounds,group,scale);
+    const auto flow=FlowBounds(children,bounds,group,scale);
     std::stable_sort(children.begin(),children.end(),[](Entity a,Entity b){
         const auto* x=a.TryGetComponent<RectTransform>();const auto* y=b.TryGetComponent<RectTransform>();
         return (x?x->ZIndex:0)<(y?y->ZIndex:0);
@@ -34,21 +101,23 @@ void GuiSystem::Descend(Entity parent,Entity root,GuiBounds bounds,GuiBounds cli
         if(child.HasComponent<Frame>())continue; // A nested Frame is an independent render root.
         const auto* layout=child.TryGetComponent<RectTransform>();
         if(!layout){Descend(child,root,bounds,clip,surface,scale,depth+1);continue;}
-        if(!layout->Enabled||!layout->Visible||!Finite(layout->Position)||!Finite(layout->Size)||!Finite(layout->AnchorMin)||!Finite(layout->AnchorMax)||!Finite(layout->Pivot)||!Finite(layout->MinSize)||!Finite(layout->MaxSize))continue;
+        if(!ValidLayout(*layout))continue;
         const auto& v=*layout;
         Vec2 size{bounds.Size.X*(v.AnchorMax.X-v.AnchorMin.X)+v.Size.X*scale,bounds.Size.Y*(v.AnchorMax.Y-v.AnchorMin.Y)+v.Size.Y*scale};
         size.X=std::clamp(size.X,std::max(0.f,v.MinSize.X*scale),std::max(std::max(0.f,v.MinSize.X*scale),v.MaxSize.X*scale));
         size.Y=std::clamp(size.Y,std::max(0.f,v.MinSize.Y*scale),std::max(std::max(0.f,v.MinSize.Y*scale),v.MaxSize.Y*scale));
         GuiBounds resolved{{bounds.Position.X+bounds.Size.X*v.AnchorMin.X+v.Position.X*scale-v.Pivot.X*size.X,
                             bounds.Position.Y+bounds.Size.Y*v.AnchorMin.Y+v.Position.Y*scale-v.Pivot.Y*size.Y},size};
+        if(auto placed=flow.find(child.GetUUID());placed!=flow.end())resolved=placed->second;
         if(!Finite(resolved.Position)||!Finite(resolved.Size))continue;
         Items.push_back({child,root,resolved,clip,surface,scale,Items.size()});
         Descend(child,root,resolved,v.ClipChildren?Intersect(clip,resolved):clip,surface,scale,depth+1);
     }
 }
 void GuiSystem::ModuleLayout(Scene& scene,Vec2 size){
-    if(!Finite(size)||size.X<=0||size.Y<=0)return;
-    PresentationSize=size;Items.clear();
+    Items.clear();
+    if(!Finite(size)||size.X<=0||size.Y<=0){Interactions.clear();Focused=Hovered=Captured={};return;}
+    PresentationSize=size;
     std::vector<Entity> roots;for(auto handle:scene.GetRegistry().view<Frame>())roots.push_back(scene.GetEntity(static_cast<Entity::Id>(handle)));
     std::sort(roots.begin(),roots.end(),[](Entity a,Entity b){const auto& x=a.GetComponent<Frame>();const auto& y=b.GetComponent<Frame>();return x.ZIndex==y.ZIndex?a.GetUUID()<b.GetUUID():x.ZIndex<y.ZIndex;});
     for(auto root:roots){

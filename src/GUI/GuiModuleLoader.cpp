@@ -33,8 +33,8 @@ const GuiModuleApi* Load(){
     if(!module){const auto* error=dlerror();throw std::runtime_error(std::string("Could not load sibling GUI runtime: ")+(error?error:"unknown error"));}
     auto get=reinterpret_cast<GetGuiModuleApi>(dlsym(module,"BazzaltGetGuiModuleApi"));
 #endif
-    const auto* api=get?get(1,sizeof(GuiModuleApi)):nullptr;
-    if(!api||api->Version!=1||api->Size!=sizeof(GuiModuleApi)||!api->Layout||!api->ProcessInput||!api->Focus||!api->RegisterComponents||!api->CreateRenderer||!api->DestroyRenderer||!api->ClearRenderer||!api->BatchCount||!api->PrepareSpatial||!api->PrepareOverlay||!api->RenderOverlay||!api->RenderCameraOverlay)throw std::runtime_error("Incompatible GUI runtime. Core and bazzalt_gui must come from the same build.");
+    const auto* api=get?get(GuiModuleVersion,sizeof(GuiModuleApi)):nullptr;
+    if(!api||api->Version!=GuiModuleVersion||api->Size!=sizeof(GuiModuleApi)||!api->Layout||!api->ProcessInput||!api->Focus||!api->RegisterComponents||!api->CreateRenderer||!api->DestroyRenderer||!api->ClearRenderer||!api->BatchCount||!api->PrepareSpatial||!api->PrepareOverlay||!api->RenderOverlay||!api->RenderCameraOverlay)throw std::runtime_error("Incompatible GUI runtime. Core and bazzalt_gui must come from the same build.");
     return api;
 }
 }
@@ -57,6 +57,49 @@ namespace { Runtime::GuiSystem* SystemFor(Entity entity){auto* scene=entity.GetS
 GuiInteraction GUI::GetInteraction(Entity entity){auto* system=SystemFor(entity);if(!system)return {};auto it=system->Interactions.find(entity.GetUUID());return it==system->Interactions.end()?GuiInteraction{}:it->second;}
 GuiBounds GUI::GetBounds(Entity entity){auto* system=SystemFor(entity);if(system)for(const auto& item:system->Items)if(item.Owner==entity)return item.Bounds;return {};}
 Entity GUI::GetFrame(Entity entity){auto current=entity.GetParent();for(std::size_t depth=0;current&&depth<128;++depth){if(current.HasComponent<Frame>())return current;current=current.GetParent();}return {};}
+GuiStyle GUI::ResolveStyle(Entity entity){
+    auto* local=entity.TryGetComponent<Rectangle>();GuiStyle value=local?local->Style:GuiStyle{};
+    if(!entity||entity.HasComponent<Frame>())return value;
+    auto flags=value;
+    std::size_t depth=0;
+    for(auto parent=entity.GetParent();parent&&depth++<128&&(flags.InheritColor||flags.InheritHoverColor||flags.InheritPressedColor||flags.InheritDisabledColor||flags.InheritBorderColor||flags.InheritBorderWidth||flags.InheritOpacity);parent=parent.GetParent()){
+        if(const auto* source=parent.TryGetComponent<Rectangle>();source&&source->Enabled){
+            const auto& style=source->Style;
+#define INHERIT(Field) if(flags.Inherit##Field){value.Field=style.Field;flags.Inherit##Field=style.Inherit##Field;}
+            INHERIT(Color) INHERIT(HoverColor) INHERIT(PressedColor) INHERIT(DisabledColor)
+            INHERIT(BorderColor) INHERIT(BorderWidth) INHERIT(Opacity)
+#undef INHERIT
+        }
+        if(parent.HasComponent<Frame>())break;
+    }
+    return value;
+}
+GuiText GUI::ResolveText(Entity entity){
+    auto* local=entity.TryGetComponent<GuiText>();GuiText value=local?*local:GuiText{};
+    if(!entity||entity.HasComponent<Frame>())return value;
+    auto flags=value;
+    std::size_t depth=0;
+    for(auto parent=entity.GetParent();parent&&depth++<128&&(flags.InheritColor||flags.InheritFontSize||flags.InheritWrap);parent=parent.GetParent()){
+        if(const auto* source=parent.TryGetComponent<GuiText>();source&&source->Enabled){
+#define INHERIT(Field) if(flags.Inherit##Field){value.Field=source->Field;flags.Inherit##Field=source->Inherit##Field;}
+            INHERIT(Color) INHERIT(FontSize) INHERIT(Wrap)
+#undef INHERIT
+        }
+        if(parent.HasComponent<Frame>())break;
+    }
+    return value;
+}
+GuiImage GUI::ResolveImage(Entity entity){
+    auto* local=entity.TryGetComponent<GuiImage>();GuiImage value=local?*local:GuiImage{};
+    if(!entity||entity.HasComponent<Frame>())return value;
+    bool inherit=value.InheritColor;
+    std::size_t depth=0;
+    for(auto parent=entity.GetParent();parent&&inherit&&depth++<128;parent=parent.GetParent()){
+        if(const auto* source=parent.TryGetComponent<GuiImage>();source&&source->Enabled){value.Color=source->Color;inherit=source->InheritColor;}
+        if(parent.HasComponent<Frame>())break;
+    }
+    return value;
+}
 bool GUI::Focus(Entity entity){auto* system=SystemFor(entity);return system&&system->Focus(*entity.GetScene(),entity);}
 void GUI::ClearFocus(Scene& scene){if(scene.HasSystem<Runtime::GuiSystem>()){auto& s=scene.GetSystem<Runtime::GuiSystem>();if(s.Focused)s.Interactions[s.Focused].Focused=false;s.Focused={};}}
 bool GUI::IsPointerOverUI(Scene& scene){return scene.HasSystem<Runtime::GuiSystem>()&&bool(scene.GetSystem<Runtime::GuiSystem>().Hovered);}

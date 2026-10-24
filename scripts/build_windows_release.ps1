@@ -54,7 +54,7 @@ if ($Product -eq 'core') {
     python (Join-Path $Root 'scripts/stage_game_runtime.py') --build $Build --architecture $Architecture --output (Join-Path $Stage "RuntimeTemplates/windows-$Architecture")
     if ($LASTEXITCODE -ne 0) { throw 'Game runtime template packaging failed' }
     Copy-Item -LiteralPath (Join-Path $Root 'LICENSE') -Destination $Stage
-    @{version=$Version;architecture=$Architecture;platform='windows';abi=1;lua_version='5.4.9';gui_abi=1} | ConvertTo-Json | Set-Content (Join-Path $Stage 'core.json') -Encoding utf8
+    @{version=$Version;architecture=$Architecture;platform='windows';abi=1;lua_version='5.4.9';gui_abi=2} | ConvertTo-Json | Set-Content (Join-Path $Stage 'core.json') -Encoding utf8
 } else {
     python (Join-Path $Root 'scripts/compile_resources.py') --build-directory (Join-Path $Build 'CompiledResources')
     if ($LASTEXITCODE -ne 0) { throw 'Resource compilation failed' }
@@ -91,7 +91,7 @@ if ($Product -eq 'core') {
         foreach ($Tool in @('matc.exe','cmgen.exe','filamesh.exe')) {
             Copy-Item -LiteralPath (Join-Path $Filament "bin/$Tool") -Destination (Join-Path $Stage 'tools/filament')
         }
-        @{version=$Version;core_version=$Versions.core;architecture=$Architecture;executable='Bazzalt.exe';project_format_max=1;lua_version='5.4.9';gui_abi=1} | ConvertTo-Json | Set-Content (Join-Path $Stage 'editor.json') -Encoding utf8
+        @{version=$Version;core_version=$Versions.core;architecture=$Architecture;executable='Bazzalt.exe';project_format_max=1;lua_version='5.4.9';gui_abi=2} | ConvertTo-Json | Set-Content (Join-Path $Stage 'editor.json') -Encoding utf8
         $Check = Start-Process -FilePath (Join-Path $Stage 'Bazzalt.exe') -ArgumentList '--check-runtime' -WorkingDirectory $Stage -WindowStyle Hidden -Wait -PassThru
         if ($Check.ExitCode -ne 0) { throw 'Packaged native runtime check failed' }
     }

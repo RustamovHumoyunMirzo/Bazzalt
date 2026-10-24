@@ -696,6 +696,9 @@ class EditorController(QObject):
         if isinstance(value, bool):
             editor=BoolInput(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
         if isinstance(value, int):
+            if component=="RectTransform" and name in ("Layout","Align","Justify"):
+                keys={"Layout":("absolute","row","column"),"Align":("start","center","end","stretch"),"Justify":("start","center","end","space_between")}[name]
+                tr=self.Window.Localization.Translate;editor=EnumInput();editor.SetOptions(tuple((tr("gui.layout."+key),index) for index,key in enumerate(keys)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
             if component=="Frame" and name in ("Mode","ScaleMode"):
                 tr=self.Window.Localization.Translate
                 options=((tr("gui.mode.viewport"),0),(tr("gui.mode.camera_bound"),1),(tr("gui.mode.spatial"),2)) if name=="Mode" else ((tr("gui.scale.constant"),0),(tr("gui.scale.responsive"),1))

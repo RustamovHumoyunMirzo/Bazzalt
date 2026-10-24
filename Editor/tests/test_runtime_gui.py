@@ -30,9 +30,18 @@ class RuntimeGuiTests(unittest.TestCase):
         self.assertTrue(runtime.AddComponent(frame,"Frame"));self.assertTrue(runtime.AddComponent(button,"RectTransform"));self.assertTrue(runtime.AddComponent(button,"Rectangle"));self.assertTrue(runtime.AddComponent(button,"GuiButton"))
         self.assertFalse(runtime.HasActiveCamera());self.assertTrue(runtime.HasGameOutput())
         self.assertTrue(runtime.SetComponentProperty(button,"RectTransform","Size",[200,32]))
+        self.assertTrue(runtime.SetComponentProperty(button,"RectTransform","Layout",1))
+        self.assertTrue(runtime.SetComponentProperty(button,"RectTransform","Padding",[4,6,4,6]))
+        self.assertTrue(runtime.SetComponentProperty(button,"RectTransform","Gap",8))
+        self.assertTrue(runtime.SetComponentProperty(button,"Rectangle","InheritColor",True))
+        self.assertFalse(runtime.SetComponentProperty(button,"RectTransform","Layout",99))
+        self.assertFalse(runtime.SetComponentProperty(button,"RectTransform","Gap",-1))
         self.assertFalse(runtime.SetComponentProperty(frame,"Frame","ReferenceSize",[-1,720]))
         row=next(entity for entity in runtime.Entities() if entity["uuid"]==button)
         self.assertEqual(list(row["component_data"]["RectTransform"]["Size"]),[200,32]);self.assertTrue(row["component_enabled"]["Rectangle"])
+        self.assertIsInstance(row["component_data"]["RectTransform"]["Layout"],int)
+        self.assertEqual(row["component_data"]["RectTransform"]["Layout"],1)
+        self.assertTrue(row["component_data"]["Rectangle"]["InheritColor"])
         self.assertTrue(runtime.SetComponentEnabled(frame,"Frame",False));self.assertFalse(runtime.HasGameOutput())
         self.assertTrue(runtime.RemoveComponent(button,"GuiButton"))
         row=next(entity for entity in runtime.Entities() if entity["uuid"]==button);self.assertNotIn("GuiButton",row["components"])
@@ -49,6 +58,16 @@ class RuntimeGuiTests(unittest.TestCase):
                 next(action for action in gui_actions if action.text()=="Button").trigger()
         with patch("Editor.gui.panels.hierarchy.QMenu",InspectMenu):panel._ShowContextMenu(QPoint(-1,-1))
         self.assertEqual(requested,[("GUI:button",None)]);panel.deleteLater()
+
+    def test_layout_inspector_uses_localized_enum_values(self):
+        locale=LocalizationManager(ResourceManager())
+        controller=SimpleNamespace(Window=SimpleNamespace(Localization=locale),_CommitComponent=Mock())
+        for name,count in (("Layout",3),("Align",4),("Justify",4)):
+            editor=EditorController._ComponentEditor(controller,"entity","RectTransform",name,1)
+            self.assertEqual(editor.count(),count);self.assertEqual(editor.GetValue(),1)
+            editor.SetValue(count-1)
+            controller._CommitComponent.assert_called_with("entity","RectTransform",name,count-1)
+            self.assertNotIn("gui.layout.",editor.currentText());editor.deleteLater()
 
     def test_gui_authoring_reuses_frame_and_is_single_history_operation(self):
         locale=LocalizationManager(ResourceManager());history=Mock();selected=[]

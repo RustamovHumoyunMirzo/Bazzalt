@@ -28,7 +28,7 @@ inline void InspectGUI(Entity entity,py::list components,py::dict enabled,py::di
             if(key=="Value"||key=="Placeholder"||key=="Texture"||key=="Camera")fields[py::str(key)]=text;
             else if(text=="true"||text=="false")fields[py::str(key)]=text=="true";
             else if(text.find(',')!=std::string::npos){py::list vector;std::stringstream input(text);std::string part;while(std::getline(input,part,','))vector.append(std::stof(part));fields[py::str(key)]=py::tuple(vector);}
-            else if(key=="Mode"||key=="ScaleMode"||key=="ZIndex"||key=="TabIndex"||key=="MaxLength"||key=="Width"||key=="Height")fields[py::str(key)]=std::stoll(text);
+            else if(key=="Mode"||key=="ScaleMode"||key=="Layout"||key=="Align"||key=="Justify"||key=="ZIndex"||key=="TabIndex"||key=="MaxLength"||key=="Width"||key=="Height")fields[py::str(key)]=std::stoll(text);
             else fields[py::str(key)]=std::stof(text);
         }
         data[name]=fields;
@@ -40,6 +40,6 @@ inline bool SetGUIProperty(Entity entity,const std::string& type,const std::stri
     if(py::isinstance<py::bool_>(value))text=value.cast<bool>()?"true":"false";
     else if(py::isinstance<py::sequence>(value)&&!py::isinstance<py::str>(value)){for(auto part:py::reinterpret_borrow<py::sequence>(value)){if(!text.empty())text+=',';text+=py::str(part).cast<std::string>();}}
     else text=py::str(value).cast<std::string>();
-    values[key]=std::move(text);return descriptor->Deserialize(entity,values,1);
+    values[key]=std::move(text);return descriptor->Deserialize(entity,values,descriptor->Version);
 }
 }
