@@ -1,5 +1,6 @@
 #include "GUI/GuiModuleApi.h"
 #include "GUI/GuiRendererModule.h"
+#include "GUI/FontFace.h"
 namespace Bazzalt::Runtime {
 void ModuleRegisterGuiComponents(ComponentSerializationRegistry&);
 static const GuiModuleApi Api{
@@ -15,7 +16,8 @@ static const GuiModuleApi Api{
     [](void* state,Scene& scene){static_cast<GuiRendererModule*>(state)->PrepareSpatial(scene);},
     [](void* state,Scene& scene,Vec2 size,UUID camera,filament::RenderTarget* target){static_cast<GuiRendererModule*>(state)->PrepareOverlay(scene,size,camera,target);},
     [](void* state,Scene& scene,Vec2 size){static_cast<GuiRendererModule*>(state)->RenderOverlay(scene,size);},
-    [](void* state,Scene& scene,UUID camera,Vec2 size,filament::RenderTarget* target){static_cast<GuiRendererModule*>(state)->RenderCameraOverlay(scene,camera,size,target);}
+    [](void* state,Scene& scene,UUID camera,Vec2 size,filament::RenderTarget* target){static_cast<GuiRendererModule*>(state)->RenderCameraOverlay(scene,camera,size,target);},
+    ValidateGuiAsset,InspectFontAsset,MeasureFontAsset,StylesheetReferences,PreviewFontAsset
 };
 }
 #if defined(_WIN32)

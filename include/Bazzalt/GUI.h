@@ -4,6 +4,7 @@
 #include "Bazzalt/Component.h"
 #include "Bazzalt/Entity.h"
 #include "Bazzalt/RenderTexture.h"
+#include "Bazzalt/Font.h"
 
 namespace Bazzalt {
 enum class FrameMode { Viewport, CameraBound, Spatial };
@@ -30,6 +31,12 @@ struct Frame : Component {
     int ZIndex=0;
     bool Visible=true;
     bool Interactable=true;
+    UUID Stylesheet{};
+};
+// Common GUI selector metadata and an optional stylesheet scoped to this subtree.
+struct GuiElement : Component {
+    UUID Stylesheet{};
+    std::string ID,Classes,Tags,Attributes;
 };
 // Top-left coordinates, anchor fractions relative to parent, pixel offsets.
 struct RectTransform : Component {
@@ -72,6 +79,10 @@ struct GuiImage : Component {
 struct GuiText : Component {
     std::string Value; Vec4 Color{1,1,1,1}; float FontSize=16; bool Wrap=true;
     bool InheritColor=false,InheritFontSize=false,InheritWrap=false;
+    UUID Font{};std::uint32_t FontFace=0;
+    float LetterSpacing=0,LineSpacing=1;
+    bool Kerning=true,InheritFont=false;
+    void SetFont(Bazzalt::Font font){Font=font.GetAssetUUID();FontFace=font.GetFaceIndex();}
 };
 struct GuiButton : Component { bool Interactable=true; int TabIndex=0; };
 struct GuiTextInput : Component {
@@ -81,6 +92,8 @@ struct GuiTextInput : Component {
     bool Password=false;
     bool Interactable=true;
     int TabIndex=0;
+    UUID Font{};std::uint32_t FontFace=0;
+    float FontSize=16;
 };
 struct GuiInteraction {
     bool Hovered=false,Pressed=false,Focused=false;
@@ -98,6 +111,7 @@ public:
     [[nodiscard]] static GuiStyle ResolveStyle(Entity entity);
     [[nodiscard]] static GuiText ResolveText(Entity entity);
     [[nodiscard]] static GuiImage ResolveImage(Entity entity);
+    [[nodiscard]] static std::vector<std::string> GetStyleDiagnostics(Entity entity);
     static bool Focus(Entity entity);
     static void ClearFocus(Scene& scene);
     [[nodiscard]] static bool IsPointerOverUI(Scene& scene);

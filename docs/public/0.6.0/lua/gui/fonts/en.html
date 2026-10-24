@@ -1,0 +1,68 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Lua uses the same imported fonts and FreeType GUI renderer as C++. The engine owns initialization. Font and component values are edited through the normal copy/write-back API.">
+  <title>Font assets in Lua | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / GUI in Lua / Font assets in Lua</nav>
+      <article class="doc"><h1>Font assets in Lua</h1>
+<p>Lua uses the same imported fonts and FreeType GUI renderer as C++. The engine owns initialization. Font and component values are edited through the normal copy/write-back API.</p>
+<h2 id="example">Example behavior</h2>
+<pre><code>local B = Bazzalt
+local Label = COMPONENT("LabelFont")
+Label.Typeface = PROPERTY("Font", B.Font.new())
+
+function Label:OnCreate()
+    if not self.Typeface:IsValid() then return end
+    local text = self.Entity:GetComponent("GuiText")
+    text:SetFont(self.Typeface)
+    text.FontSize = 24
+    text.Kerning = true
+    text.LetterSpacing = 0
+    text.LineSpacing = 1.2
+    self.Entity:SetComponent("GuiText", text)
+end
+return Label</code></pre>
+<p>The entity needs GuiText and RectTransform under a Frame. Pick a project font in Typeface. To refer to an existing UUID value, call Bazzalt.Font.Load(assetUUID, faceIndex), where faceIndex defaults to 0. GuiText.Font stores the UUID, and FontFace the collection index.</p>
+<h2 id="query">Metadata and measurement</h2>
+<pre><code>local info = self.Typeface:GetInfo()
+local size = self.Typeface:MeasureText("AV example", 24, 240)
+-- info.Valid, Family, Style, FaceCount, GlyphCount, Scalable, Kerning
+-- size.X and size.Y are pixel dimensions.</code></pre>
+<p>MeasureText has optional size (16) and wrapWidth (0). Invalid/unavailable input returns zero dimensions; invalid handles return default FontInfo. See <a href="../../reference/Font/en.html">Font</a>, <a href="../../reference/FontInfo/en.html">FontInfo</a>, and <a href="../../../native/gui/fonts/en.html">font contracts and limits</a>. Complex-script shaping, bidirectional layout and font-fallback chains are not implemented.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../en.html"><small>Previous</small>GUI in Lua</a>
+<a class="next" href="../layout/en.html"><small>Next</small>GUI layout and inheritance in Lua</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example behavior</a><a class="toc-link" href="#query">Metadata and measurement</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

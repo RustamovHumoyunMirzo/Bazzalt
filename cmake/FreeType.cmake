@@ -1,0 +1,17 @@
+set(BAZZALT_FREETYPE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/freetype" CACHE PATH "Pinned FreeType source")
+if(NOT EXISTS "${BAZZALT_FREETYPE_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR "FreeType is missing. Run scripts/get_freetype.ps1 or scripts/get_freetype.sh.")
+endif()
+# Keep the font library private/static; optional compression/shaping packages are
+# deliberately not auto-discovered from the developer's machine.
+set(FT_DISABLE_ZLIB ON CACHE BOOL "" FORCE)
+set(FT_DISABLE_BZIP2 ON CACHE BOOL "" FORCE)
+set(FT_DISABLE_PNG ON CACHE BOOL "" FORCE)
+set(FT_DISABLE_HARFBUZZ ON CACHE BOOL "" FORCE)
+set(FT_DISABLE_BROTLI ON CACHE BOOL "" FORCE)
+set(FT_ENABLE_ERROR_STRINGS ON CACHE BOOL "" FORCE)
+set(_bazzalt_saved_shared "${BUILD_SHARED_LIBS}")
+set(BUILD_SHARED_LIBS OFF)
+add_subdirectory("${BAZZALT_FREETYPE_DIR}" "${CMAKE_BINARY_DIR}/deps/freetype" EXCLUDE_FROM_ALL)
+set(BUILD_SHARED_LIBS "${_bazzalt_saved_shared}")
+set_target_properties(freetype PROPERTIES POSITION_INDEPENDENT_CODE ON)

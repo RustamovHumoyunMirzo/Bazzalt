@@ -8,7 +8,7 @@ struct Camera; struct GaussianBlur; struct Hierarchy; struct Identity;
 struct Light; struct Mesh; struct ModelInstance; struct ModelNode; struct Name;
 struct PrimitiveObject; struct SceneQueryBounds; struct ScriptComponents;
 struct Transform; struct Vignette; struct UnresolvedComponents;
-struct Frame;struct RectTransform;struct Rectangle;struct GuiImage;struct GuiText;
+struct Frame;struct GuiElement;struct RectTransform;struct Rectangle;struct GuiImage;struct GuiText;
 struct GuiButton;struct GuiTextInput;struct CameraRenderTarget;
 }
 #define BAZZALT_COMPONENT_ID(Type) \
@@ -33,6 +33,7 @@ BAZZALT_COMPONENT_ID(Transform)
 BAZZALT_COMPONENT_ID(Vignette)
 BAZZALT_COMPONENT_ID(UnresolvedComponents)
 BAZZALT_COMPONENT_ID(Frame)
+BAZZALT_COMPONENT_ID(GuiElement)
 BAZZALT_COMPONENT_ID(RectTransform)
 BAZZALT_COMPONENT_ID(Rectangle)
 BAZZALT_COMPONENT_ID(GuiImage)

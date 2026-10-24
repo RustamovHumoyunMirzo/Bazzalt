@@ -31,6 +31,8 @@ function Copy-ReleaseSDK([string]$Destination) {
     New-Item -ItemType Directory -Force -Path (Join-Path $Destination 'licenses') | Out-Null
     Copy-Item -LiteralPath (Join-Path $Root 'deps/lua/README') -Destination (Join-Path $Destination 'licenses/Lua.txt')
     Copy-Item -LiteralPath (Join-Path $Root 'deps/sol2/LICENSE.txt') -Destination (Join-Path $Destination 'licenses/Sol2.txt')
+    Copy-Item -LiteralPath (Join-Path $Root 'deps/freetype/docs/FTL.TXT') -Destination (Join-Path $Destination 'licenses/FreeType.txt')
+    Copy-Item -LiteralPath (Join-Path $Root 'deps/freetype/src/gzip/zlib.h') -Destination (Join-Path $Destination 'licenses/FreeType-zlib.txt')
     Copy-Item -LiteralPath (Join-Path $Root 'deps/miniaudio/LICENSE') -Destination (Join-Path $Destination 'licenses/miniaudio.txt')
     Copy-Item -LiteralPath (Join-Path $Root 'deps/miniaudio/extras/stb_vorbis.c') -Destination (Join-Path $Destination 'licenses/stb_vorbis-source.txt')
     Copy-Item -LiteralPath (Join-Path $Build 'ScriptSDK/include') -Destination $Destination -Recurse
@@ -54,7 +56,7 @@ if ($Product -eq 'core') {
     python (Join-Path $Root 'scripts/stage_game_runtime.py') --build $Build --architecture $Architecture --output (Join-Path $Stage "RuntimeTemplates/windows-$Architecture")
     if ($LASTEXITCODE -ne 0) { throw 'Game runtime template packaging failed' }
     Copy-Item -LiteralPath (Join-Path $Root 'LICENSE') -Destination $Stage
-    @{version=$Version;architecture=$Architecture;platform='windows';abi=1;lua_version='5.4.9';gui_abi=2} | ConvertTo-Json | Set-Content (Join-Path $Stage 'core.json') -Encoding utf8
+    @{version=$Version;architecture=$Architecture;platform='windows';abi=1;lua_version='5.4.9';gui_abi=3} | ConvertTo-Json | Set-Content (Join-Path $Stage 'core.json') -Encoding utf8
 } else {
     python (Join-Path $Root 'scripts/compile_resources.py') --build-directory (Join-Path $Build 'CompiledResources')
     if ($LASTEXITCODE -ne 0) { throw 'Resource compilation failed' }
@@ -91,7 +93,7 @@ if ($Product -eq 'core') {
         foreach ($Tool in @('matc.exe','cmgen.exe','filamesh.exe')) {
             Copy-Item -LiteralPath (Join-Path $Filament "bin/$Tool") -Destination (Join-Path $Stage 'tools/filament')
         }
-        @{version=$Version;core_version=$Versions.core;architecture=$Architecture;executable='Bazzalt.exe';project_format_max=1;lua_version='5.4.9';gui_abi=2} | ConvertTo-Json | Set-Content (Join-Path $Stage 'editor.json') -Encoding utf8
+        @{version=$Version;core_version=$Versions.core;architecture=$Architecture;executable='Bazzalt.exe';project_format_max=1;lua_version='5.4.9';gui_abi=3} | ConvertTo-Json | Set-Content (Join-Path $Stage 'editor.json') -Encoding utf8
         $Check = Start-Process -FilePath (Join-Path $Stage 'Bazzalt.exe') -ArgumentList '--check-runtime' -WorkingDirectory $Stage -WindowStyle Hidden -Wait -PassThru
         if ($Check.ExitCode -ne 0) { throw 'Packaged native runtime check failed' }
     }

@@ -1,4 +1,5 @@
 #include "Runtime/AssetDatabase.h"
+#include "GUI/GuiAssetImport.h"
 #include "Audio/AudioRuntime.h"
 #include "Runtime/LuaRuntime.h"
 #include "Runtime/TextureLibrary.h"
@@ -279,6 +280,21 @@ public:
         return CopyAsset(context, error);
     }
 };
+class GuiDataImporter final : public AssetImporter {
+    bool m_font;
+public:
+    explicit GuiDataImporter(bool font):m_font(font){}
+    std::string GetName()const override{return m_font?"Bazzalt.Font":"Bazzalt.Stylesheet";}
+    std::uint32_t GetVersion()const override{return m_font?21403:1;}
+    bool Supports(const std::filesystem::path& source)const override{
+        const auto ext=LowerExtension(source);return m_font?(ext==".ttf"||ext==".otf"||ext==".ttc"||ext==".otc"||ext==".pfa"||ext==".pfb"||ext==".bdf"||ext==".pcf"||ext==".woff"):ext==".css";
+    }
+    bool Import(const AssetImportContext& context,std::string& error)override{
+        if(!ValidateGuiAssetFile(context.SourcePath,m_font?"font":"css",error)||!CopyAsset(context,error))return false;
+        if(!m_font){auto path=context.OutputPath;path+=".dependencies.yml";std::ofstream output(path,std::ios::binary);auto refs=GetStylesheetReferences(context.SourcePath);if(refs.empty())output<<"[]\n";else for(auto id:refs)output<<"- "<<id.ToString()<<'\n';if(!output){error="Cannot write stylesheet dependencies";return false;}}
+        return true;
+    }
+};
 class RenderTextureImporter final : public AssetImporter {
 public:
     std::string GetName() const override{return "Bazzalt.RenderTexture";}
@@ -419,6 +435,7 @@ AssetDatabase::AssetDatabase() {
         }
     };
     RegisterImporter(std::make_unique<RawImporter>());
+    RegisterImporter(std::make_unique<GuiDataImporter>(false));RegisterImporter(std::make_unique<GuiDataImporter>(true));
     RegisterImporter(std::make_unique<LuaImporter>());
     RegisterImporter(std::make_unique<GltfImporter>());
     RegisterImporter(std::make_unique<TextureImporter>());
@@ -511,6 +528,7 @@ bool AssetDatabase::ExportCooked(const std::filesystem::path& destination) {
                 }else copyFile(product);
             };
             copyProduct(asset.CachePath);
+            if(asset.Importer=="Bazzalt.Stylesheet"){auto dependencies=asset.CachePath;dependencies+=".dependencies.yml";copyProduct(dependencies);}
             if(asset.Importer=="Bazzalt.Environment"){auto products=asset.CachePath;products+=".environment";copyProduct(products);}
             if(extension==".gltf"){
                 std::vector<std::filesystem::path> uris;std::string error;
@@ -630,6 +648,7 @@ bool AssetDatabase::RegisterSourceContent(const std::filesystem::path& source) {
             std::filesystem::is_regular_file(candidate)) {
             record.CachePath = candidate;
             record.State = AssetState::Ready;
+            if(importer->GetName()=="Bazzalt.Stylesheet"){auto manifest=candidate;manifest+=".dependencies.yml";if(!std::filesystem::is_regular_file(manifest))record.State=AssetState::NeedsImport;}
             if(importer->GetName()=="Bazzalt.Environment"&&LowerExtension(normalized)!=".ktx"){
                 auto folder=candidate;folder+=".environment";
                 if(!std::filesystem::is_regular_file(folder/(folder.stem().string()+"_ibl.ktx"))||!std::filesystem::is_regular_file(folder/(folder.stem().string()+"_skybox.ktx"))||!std::filesystem::is_regular_file(folder/"preview"/candidate.stem()/"skybox.png")||!std::filesystem::is_regular_file(folder/"texture"/candidate.stem()/"skybox.hdr"))record.State=AssetState::NeedsImport;

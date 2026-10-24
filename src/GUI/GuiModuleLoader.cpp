@@ -1,5 +1,6 @@
 #include "GUI/GuiModuleApi.h"
 #include "GUI/GuiSerialization.h"
+#include "GUI/GuiAssetImport.h"
 #include <filesystem>
 #include <stdexcept>
 #if defined(_WIN32)
@@ -35,10 +36,14 @@ const GuiModuleApi* Load(){
 #endif
     const auto* api=get?get(GuiModuleVersion,sizeof(GuiModuleApi)):nullptr;
     if(!api||api->Version!=GuiModuleVersion||api->Size!=sizeof(GuiModuleApi)||!api->Layout||!api->ProcessInput||!api->Focus||!api->RegisterComponents||!api->CreateRenderer||!api->DestroyRenderer||!api->ClearRenderer||!api->BatchCount||!api->PrepareSpatial||!api->PrepareOverlay||!api->RenderOverlay||!api->RenderCameraOverlay)throw std::runtime_error("Incompatible GUI runtime. Core and bazzalt_gui must come from the same build.");
+    if(!api->ValidateAsset||!api->InspectFont||!api->MeasureFont||!api->StylesheetReferences||!api->PreviewFont)throw std::runtime_error("Incomplete GUI asset/font module");
     return api;
 }
 }
 const GuiModuleApi& GuiModule(){static const auto* api=Load();return *api;}
+bool ValidateGuiAssetFile(const std::filesystem::path& path,const std::string& kind,std::string& error){return GuiModule().ValidateAsset(path,kind,error);}
+std::vector<UUID> GetStylesheetReferences(const std::filesystem::path& path){return GuiModule().StylesheetReferences(path);}
+FontPreviewImage GetFontPreview(UUID asset,std::uint32_t face,const std::string& text,float size,std::uint32_t width){return GuiModule().PreviewFont(asset,face,text,size,width);}
 void GuiSystem::Layout(Scene& scene,Vec2 size){GuiModule().Layout(*this,scene,size);}
 void GuiSystem::ProcessInput(Scene& scene){GuiModule().ProcessInput(*this,scene);}
 bool GuiSystem::Focus(Scene& scene,Entity entity){return GuiModule().Focus(*this,scene,entity);}
@@ -58,13 +63,15 @@ GuiInteraction GUI::GetInteraction(Entity entity){auto* system=SystemFor(entity)
 GuiBounds GUI::GetBounds(Entity entity){auto* system=SystemFor(entity);if(system)for(const auto& item:system->Items)if(item.Owner==entity)return item.Bounds;return {};}
 Entity GUI::GetFrame(Entity entity){auto current=entity.GetParent();for(std::size_t depth=0;current&&depth<128;++depth){if(current.HasComponent<Frame>())return current;current=current.GetParent();}return {};}
 GuiStyle GUI::ResolveStyle(Entity entity){
+    if(auto* system=SystemFor(entity)){auto found=system->Computed.find(entity.GetUUID());if(found!=system->Computed.end())return found->second.Style;}
     auto* local=entity.TryGetComponent<Rectangle>();GuiStyle value=local?local->Style:GuiStyle{};
     if(!entity||entity.HasComponent<Frame>())return value;
     auto flags=value;
     std::size_t depth=0;
     for(auto parent=entity.GetParent();parent&&depth++<128&&(flags.InheritColor||flags.InheritHoverColor||flags.InheritPressedColor||flags.InheritDisabledColor||flags.InheritBorderColor||flags.InheritBorderWidth||flags.InheritOpacity);parent=parent.GetParent()){
         if(const auto* source=parent.TryGetComponent<Rectangle>();source&&source->Enabled){
-            const auto& style=source->Style;
+            auto style=source->Style;
+            if(auto* system=SystemFor(parent)){auto found=system->Computed.find(parent.GetUUID());if(found!=system->Computed.end())style=found->second.Style;}
 #define INHERIT(Field) if(flags.Inherit##Field){value.Field=style.Field;flags.Inherit##Field=style.Inherit##Field;}
             INHERIT(Color) INHERIT(HoverColor) INHERIT(PressedColor) INHERIT(DisabledColor)
             INHERIT(BorderColor) INHERIT(BorderWidth) INHERIT(Opacity)
@@ -75,14 +82,18 @@ GuiStyle GUI::ResolveStyle(Entity entity){
     return value;
 }
 GuiText GUI::ResolveText(Entity entity){
+    if(auto* system=SystemFor(entity)){auto found=system->Computed.find(entity.GetUUID());if(found!=system->Computed.end()){auto value=found->second.Text;if(auto* local=entity.TryGetComponent<GuiText>())value.Value=local->Value;return value;}}
     auto* local=entity.TryGetComponent<GuiText>();GuiText value=local?*local:GuiText{};
     if(!entity||entity.HasComponent<Frame>())return value;
     auto flags=value;
     std::size_t depth=0;
-    for(auto parent=entity.GetParent();parent&&depth++<128&&(flags.InheritColor||flags.InheritFontSize||flags.InheritWrap);parent=parent.GetParent()){
+    for(auto parent=entity.GetParent();parent&&depth++<128&&(flags.InheritColor||flags.InheritFontSize||flags.InheritWrap||flags.InheritFont);parent=parent.GetParent()){
         if(const auto* source=parent.TryGetComponent<GuiText>();source&&source->Enabled){
-#define INHERIT(Field) if(flags.Inherit##Field){value.Field=source->Field;flags.Inherit##Field=source->Inherit##Field;}
+            auto effective=*source;
+            if(auto* system=SystemFor(parent)){auto found=system->Computed.find(parent.GetUUID());if(found!=system->Computed.end())effective=found->second.Text;}
+#define INHERIT(Field) if(flags.Inherit##Field){value.Field=effective.Field;flags.Inherit##Field=effective.Inherit##Field;}
             INHERIT(Color) INHERIT(FontSize) INHERIT(Wrap)
+            if(flags.InheritFont){value.Font=effective.Font;value.FontFace=effective.FontFace;flags.InheritFont=effective.InheritFont;}
 #undef INHERIT
         }
         if(parent.HasComponent<Frame>())break;
@@ -90,12 +101,13 @@ GuiText GUI::ResolveText(Entity entity){
     return value;
 }
 GuiImage GUI::ResolveImage(Entity entity){
+    if(auto* system=SystemFor(entity)){auto found=system->Computed.find(entity.GetUUID());if(found!=system->Computed.end())return found->second.Image;}
     auto* local=entity.TryGetComponent<GuiImage>();GuiImage value=local?*local:GuiImage{};
     if(!entity||entity.HasComponent<Frame>())return value;
     bool inherit=value.InheritColor;
     std::size_t depth=0;
     for(auto parent=entity.GetParent();parent&&inherit&&depth++<128;parent=parent.GetParent()){
-        if(const auto* source=parent.TryGetComponent<GuiImage>();source&&source->Enabled){value.Color=source->Color;inherit=source->InheritColor;}
+        if(const auto* source=parent.TryGetComponent<GuiImage>();source&&source->Enabled){auto effective=*source;if(auto* system=SystemFor(parent)){auto found=system->Computed.find(parent.GetUUID());if(found!=system->Computed.end())effective=found->second.Image;}value.Color=effective.Color;inherit=effective.InheritColor;}
         if(parent.HasComponent<Frame>())break;
     }
     return value;
@@ -103,4 +115,8 @@ GuiImage GUI::ResolveImage(Entity entity){
 bool GUI::Focus(Entity entity){auto* system=SystemFor(entity);return system&&system->Focus(*entity.GetScene(),entity);}
 void GUI::ClearFocus(Scene& scene){if(scene.HasSystem<Runtime::GuiSystem>()){auto& s=scene.GetSystem<Runtime::GuiSystem>();if(s.Focused)s.Interactions[s.Focused].Focused=false;s.Focused={};}}
 bool GUI::IsPointerOverUI(Scene& scene){return scene.HasSystem<Runtime::GuiSystem>()&&bool(scene.GetSystem<Runtime::GuiSystem>().Hovered);}
+std::vector<std::string> GUI::GetStyleDiagnostics(Entity entity){auto* system=SystemFor(entity);return system?system->StyleDiagnostics:std::vector<std::string>{};}
+bool Font::IsValid()const{return GetInfo().Valid;}
+FontInfo Font::GetInfo()const{return Runtime::GuiModule().InspectFont(m_asset,m_face);}
+Vec2 Font::MeasureText(const std::string& text,float size,float wrapWidth)const{return Runtime::GuiModule().MeasureFont(m_asset,m_face,text,size,wrapWidth);}
 }

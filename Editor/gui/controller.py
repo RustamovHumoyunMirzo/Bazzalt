@@ -13,10 +13,12 @@ from ..runtime import RuntimeService
 from ..history import SceneHistory
 from ..scripting import ScriptAttachments, ScriptCompiler, ScriptValidationError, BuildResult
 from ..lua_assets import LuaAssetWatcher
+from ..gui_assets import GuiAssetWatcher
 from ..property_rules import State as PropertyState,Validate as ValidateProperty,RuleError
 from .widgets.fields import FieldState
 from ..materials import MaterialCompiler, MaterialError, ZERO, COUNTS
 from ..environments import InspectEnvironment
+from ..font_assets import FONT_EXTENSIONS
 from ..game_input import GameInputRouter
 from .widgets.inspector_viewport import InspectorViewport
 from .widgets.audio import AudioPreview,AudioCurveInput
@@ -51,11 +53,15 @@ class EditorController(QObject):
         self._snap_modes=set();self._pivot_center=False;self._local_space=False
         self.ScriptCompiler=None;self.ScriptAttachments=None
         self._lua_play_pending=False;self.LuaAssets=LuaAssetWatcher(self.Runtime,self)
+        self.GuiAssets=GuiAssetWatcher(self.Runtime,self);self._gui_asset_check=0.0
+        self.GuiAssets.Changed.connect(self._GuiAssetsChanged)
+        self.GuiAssets.Failed.connect(lambda path,error:self.Window.Console.AddMessage(self.Window.Localization.Translate("stylesheets.import_failed",path=path,error=error),ConsoleLevel.Warning,True,"GUI"))
         self.LuaAssets.Finished.connect(self._LuaImportFinished);self.LuaAssets.Failed.connect(self._LuaImportFailed)
         self.MaterialCompiler=MaterialCompiler(runtime);self._material_check=0.0;self._material_error=""
         window.AudioMixer.AssetProvider=self._ProjectAssets
         window.AudioMixer.Saved.connect(self._MixerSaved)
         self._asset_database_dirty=True
+        self._asset_picker_records=None
         self._material_scenes=None
         self.History=SceneHistory(runtime,self)
         self.Timer = QTimer(self)
@@ -103,7 +109,7 @@ class EditorController(QObject):
         window.AssetBrowser.AssetSelected.connect(self.SelectAsset)
         window.AssetBrowser.AssetInfoProvider=runtime.AssetStatus
         window.AssetBrowser.UpdateAssetIssues()
-        window.AssetBrowser.AssetsChanged.connect(lambda:setattr(self,"_asset_database_dirty",True))
+        window.AssetBrowser.AssetsChanged.connect(self._AssetsChanged)
         window.AssetBrowser.AssetActivated.connect(self.ActivateAsset)
         window.AssetBrowser.LoadSceneRequested.connect(self.LoadSceneAdditive)
         window.AssetBrowser.SceneRenameHandler=self.RenameSceneAsset
@@ -144,6 +150,8 @@ class EditorController(QObject):
         if path and self.Runtime.LoadScene(path): self.ScenePath = path
 
     def _Tick(self) -> None:
+        if getattr(self,'GuiAssets',None) and monotonic()-getattr(self,'_gui_asset_check',0)>=1:
+            self._gui_asset_check=monotonic();self.GuiAssets.Track()
         self.Window.Console.RefreshNative(False)
         self.GameInput.SyncFocus()
         surface=self.Window.Scene.Surface
@@ -383,13 +391,14 @@ class EditorController(QObject):
             else:self._RefreshInspectorValues();self._UpdateGizmo()
 
     def SelectAsset(self,path)->None:
+        if getattr(self,'GuiAssets',None):self.GuiAssets.Select(path)
         self.Runtime.StopAudioPreview()
         self._audio_preview=None
         self._script_rule_rows=[];self._script_descriptor_cache={}
         self._inspected_asset=Path(path)
         path=Path(path);self.SelectedEntity="";self.SelectedEntities=[];self.Window.Scene.Surface.SetSelection(None);self.Runtime.SetGizmo("",0);self.Window.Properties.Clear();self.Window.Properties.AddComponentButton.setVisible(False)
         resolver=getattr(self.Runtime,'ResolveAssetRecord',None)
-        if path.suffix.lower() in AUDIO_EXTENSIONS|{'.bmixer'} and callable(resolver):resolver(path)
+        if path.suffix.lower() in AUDIO_EXTENSIONS|FONT_EXTENSIONS|{'.bmixer','.css'} and callable(resolver):resolver(path)
         self.InspectedScene="";self._UpdateGizmo()
         section=self.Window.Properties.AddComponentSection("asset",self.Window.Localization.Translate("properties.asset"),removable=False)
         for label,value in (("Name",path.name),("Type",path.suffix.lower() or "Folder"),("Path",str(path)),("Size",self._FormatAssetSize(self._AssetSize(path)))):section.AddField(self.Window.Localization.Translate(f"properties.asset_{label.lower()}") if label!="Name" else self.Window.Localization.Translate("properties.asset_name"),QLabel(value))
@@ -400,6 +409,8 @@ class EditorController(QObject):
             warning.AddWideWidget(label);self.Window.AssetBrowser.UpdateAssetIssues();return
         if path.suffix.lower()==".matinst":self._InspectMaterial(path)
         elif path.suffix.lower()==".btexture":self._InspectTexture(path)
+        elif path.suffix.lower() in FONT_EXTENSIONS:self._InspectFont(path)
+        elif path.suffix.lower()==".css":self._InspectStylesheet(path)
         elif path.suffix.lower() in AUDIO_EXTENSIONS:self._InspectAudioClip(path)
         elif path.suffix.lower()==".bmixer":self._InspectAudioMixer(path)
         elif path.suffix.lower() in {".hdr",".exr",".ktx"}:self._InspectEnvironment(path)
@@ -409,6 +420,28 @@ class EditorController(QObject):
                 section.AddField(self.Window.Localization.Translate("materials.parameters"),QLabel(str(len(reflection["parameters"]))))
                 section.AddField(self.Window.Localization.Translate("materials.requires"),QLabel(", ".join(reflection["requires"])))
             except (OSError,ValueError) as error:self._MaterialError(error)
+
+    def _GuiAssetsChanged(self,paths)->None:
+        self.Window.AssetBrowser.UpdateAssetIssues()
+        inspected=getattr(self,'_inspected_asset',None)
+        if inspected and not self.SelectedEntity and str(Path(inspected).resolve()) in paths:self.SelectAsset(inspected)
+
+    def _InspectFont(self,path)->None:
+        from .widgets.font_preview import FontPreview
+        tr=self.Window.Localization.Translate;data=self.Runtime.FontInfo(path)
+        section=self.Window.Properties.AddComponentSection("asset.font",tr("fonts.title"),removable=False)
+        for key in ("family","style","faces","glyphs","scalable","kerning"):
+            if key in data:section.AddField(tr("fonts."+key),QLabel(tr("common.yes" if data[key] else "common.no") if isinstance(data[key],bool) else str(data[key])))
+        section.AddViewport(FontPreview(path,self.Window.Localization,self.Runtime,faces=data.get("faces",1)))
+
+    def _InspectStylesheet(self,path)->None:
+        from PySide6.QtWidgets import QPlainTextEdit
+        tr=self.Window.Localization.Translate;section=self.Window.Properties.AddComponentSection("asset.stylesheet",tr("assets.stylesheet"),removable=False)
+        preview=QPlainTextEdit();preview.setReadOnly(True);preview.setMinimumHeight(180);preview.setMaximumHeight(300)
+        try:
+            if path.stat().st_size<=1024*1024:preview.setPlainText(path.read_text(encoding="utf-8"))
+        except (OSError,UnicodeError):preview.setPlainText(tr("stylesheets.read_failed"))
+        section.AddViewport(preview)
 
     def _MaterialError(self,error)->None:
         message=self.Window.Localization.Translate("materials.failed",error=str(error))
@@ -733,6 +766,8 @@ class EditorController(QObject):
                 editor=ColorInput(QColor.fromRgbF(values[0],values[1],values[2],alpha));editor.ValueChanged.connect(lambda color:self._CommitComponent(entity_id,component,name,(color.redF(),color.greenF(),color.blueF(),color.alphaF()) if len(values)==4 else (color.redF(),color.greenF(),color.blueF())));return editor
             editor={2:Vec2Input,3:Vec3Input,4:Vec4Input}[len(value)](value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
         if isinstance(value, str):
+            if component in ("Frame","GuiElement") and name=="Stylesheet":return self._AssetPicker(value,{".css"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
+            if component in ("GuiText","GuiTextInput") and name=="Font":return self._AssetPicker(value,FONT_EXTENSIONS,lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
             if component in ("Frame","GuiImage") and name=="Camera":
                 entities={str(item["uuid"]):item for item in self.Runtime.Entities()};tr=self.Window.Localization.Translate
                 cameras={identity:item for identity,item in entities.items() if "Camera" in item.get("components",[])}
@@ -810,6 +845,7 @@ class EditorController(QObject):
             return self._AssetPicker(value,{".matinst"} if "Material" in prop.type else {".mat",".shad",".bshader"},commit)
         if prop and prop.type.replace("Bazzalt::","").strip()=="Texture":return self._AssetPicker(value,set(IMAGE_EXTENSIONS)|{".btexture"},commit)
         if prop and prop.type.replace("Bazzalt::","").strip()=="AudioClip":return self._AssetPicker(value,AUDIO_EXTENSIONS,commit)
+        if prop and prop.type.replace("Bazzalt::","").strip()=="Font":return self._AssetPicker(value,FONT_EXTENSIONS,commit)
         if isinstance(value,bool):editor=BoolInput(value);editor.ValueChanged.connect(commit);return editor
         if isinstance(value,int):editor=IntInput(value=value);editor.valueChanged.connect(commit);return editor
         if isinstance(value,float):editor=FloatInput(value=value);editor.valueChanged.connect(commit);return editor
@@ -825,9 +861,14 @@ class EditorController(QObject):
         if "scene" in name:return {".bscene"}
         return set()
 
+    def _AssetsChanged(self)->None:
+        self._asset_database_dirty=True;self._asset_picker_records=None
+
     def _ProjectAssets(self)->list[dict]:
         root_text=self.Runtime.AssetDirectory()
         if not root_text:return []
+        cached=getattr(self,'_asset_picker_records',None)
+        if cached is not None and cached[0]==root_text:return list(cached[1])
         root=Path(root_text).resolve();result=[]
         try:paths=sorted((value for value in root.rglob("*") if value.is_file() and not value.name.endswith(".meta")),key=lambda value:str(value).casefold())
         except OSError:return []
@@ -845,7 +886,8 @@ class EditorController(QObject):
                                "relative_path":path.relative_to(root).as_posix(),
                                "extension":path.suffix.lower(),"importer":fields.get("Importer",fields.get("importer",""))})
             except (OSError,UnicodeError,ValueError):continue
-        return result
+        self._asset_picker_records=(root_text,result)
+        return list(result)
 
     def _CommitComponent(self, entity_id: str, component: str, name: str, value) -> None:  # type: ignore[no-untyped-def]
         if not self._updating_inspector and entity_id==self.SelectedEntity and self._Mutate(f"Edit {component}",lambda:self.Runtime.SetComponentProperty(entity_id,component,name,value)):
@@ -1031,6 +1073,7 @@ class EditorController(QObject):
             if not created_root:created_root=entity_id
             if not entity_id:raise RuntimeError("Could not create GUI entity")
             components={"viewport":("Frame",),"camera_bound":("Frame",),"spatial":("Frame",),"container":("RectTransform",),"rectangle":("RectTransform","Rectangle"),"text":("RectTransform","GuiText"),"image":("RectTransform","GuiImage"),"button":("RectTransform","Rectangle","GuiText","GuiButton"),"text_input":("RectTransform","Rectangle","GuiTextInput")}[kind]
+            components=(*components,"GuiElement")
             for component in components:
                 if not self.Runtime.AddComponent(entity_id,component):raise RuntimeError(f"Could not add {component}")
             if kind in {"camera_bound","spatial"}:

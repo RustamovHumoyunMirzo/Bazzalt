@@ -62,7 +62,8 @@ def FilterCooked(cooked, packaging):
         identity=queue.pop()
         if identity in visited:continue
         visited.add(identity);row=by_id[identity];source=Local(row['Source'])
-        dependency_file=source if source.suffix.lower() in serialized else Path(str(Local(row['Cache']))+'.reflection.json') if source.suffix.lower() in shaders else None
+        dependency_file=Path(str(Local(row['Cache']))+'.dependencies.yml') if row.get('Importer')=='Bazzalt.Stylesheet' else source if source.suffix.lower() in serialized else Path(str(Local(row['Cache']))+'.reflection.json') if source.suffix.lower() in shaders else None
+        if row.get('Importer')=='Bazzalt.Stylesheet' and not dependency_file.is_file():raise ValueError('Missing stylesheet dependency manifest: '+row['Source'])
         if dependency_file is None or not dependency_file.is_file():continue
         if dependency_file.stat().st_size>64*1024*1024:raise ValueError('Serialized dependency asset exceeds size limit')
         for dependency in References(yaml.safe_load(dependency_file.read_text(encoding='utf-8'))):
@@ -72,6 +73,7 @@ def FilterCooked(cooked, packaging):
     for identity in kept:
         row=by_id[identity];source=Local(row['Source']);cache=Local(row['Cache'])
         allowed.update((source,Path(str(source)+'.meta'),cache))
+        if row.get('Importer')=='Bazzalt.Stylesheet':allowed.add(Path(str(cache)+'.dependencies.yml'))
         if source.suffix.lower() in shaders:allowed.update((Path(str(cache)+'.filamat'),Path(str(cache)+'.reflection.json')))
         if row.get('Importer')=='Bazzalt.Environment':
             allowed.update(p for p in Path(str(cache)+'.environment').rglob('*') if p.is_file())

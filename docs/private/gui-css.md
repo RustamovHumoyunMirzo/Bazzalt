@@ -6,10 +6,7 @@ as an editor/renderer API. `BazzaltGui` links it privately. Root CMake excludes 
 sources from the core recursive glob, so it is never compiled twice. It can be
 configured and tested independently; do not fetch/build Filament or Qt for parser work.
 
-This implements the parser TODO, **not** the next asset/component integration TODO.
-No `.css` file is imported, loaded, applied, fetched or evaluated by gameplay yet.
-The next integration must provide identity/state snapshots, style assets, editor
-pickers and a typed computed-style-to-GUI adapter. Do not advertise those as working.
+The parser is integrated through `GuiStyles.cpp`: imported CSS assets, Frame/subtree scopes, metadata/state snapshots, typed computed copies and editor live invalidation are implemented. See [gui-styles-fonts.md](gui-styles-fonts.md) for the integration and font resource lifecycle.
 
 ## Internal API
 

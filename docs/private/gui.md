@@ -23,7 +23,7 @@ Ship matching binaries/compiler/CRT; this is not a third-party plugin ABI. Keep
 the module resident until process exit because component descriptors retain its
 callbacks. RenderBackend destroys GUI GPU resources before its Filament engine.
 Missing/incompatible modules produce an explicit runtime error, not silent GUI
-fallbacks. Current release manifests declare `gui_abi: 2`; Hub accepts 1 and 2
+fallbacks. Current release manifests declare `gui_abi: 3`; Hub accepts historical 1/2 and current 3
 for complete, internally matching historical/new packages, but never mixes core
 and GUI modules from different builds. The native loader requires ABI 2. Hub
 validates new packages but
@@ -80,7 +80,7 @@ GUI must never use editor layer 0x80 or Qt/editor widgets.
 
 The built-in atlas is generated from small in-source glyph bitmaps. It is a
 foundation fallback, not Unicode typography. Unsupported glyphs render a box;
-UTF-8 values are retained. Add font assets/shaping behind this contract later.
+UTF-8 values are retained. FreeType font assets now provide glyph rasterization, metrics and kerning. Complex-script shaping remains unsupported; see [gui-styles-fonts.md](gui-styles-fonts.md).
 The first texture slot is white for rectangle fills/borders. Images borrow
 textures from RenderAssets; camera feeds borrow the camera's color attachment.
 GuiRenderer must be cleared before those owners retire textures, before scene
@@ -181,11 +181,11 @@ input. Game code can gate its actions using GUI state.
 
 ## Persistence, editor, and regression work
 
-GuiSerialization registers version-2 RectTransform/Rectangle/GuiText/GuiImage
-descriptors; other GUI descriptors remain version 1. Version-1 input defaults
-new fields to absolute layout, zero insets/gap, grow 0, shrink 1, and local styles.
-Only the new fields may be omitted during migration; malformed legacy fields
-still fail. New version-2 records require all fields. Deserialization constructs
+GuiSerialization registers version-2 Frame/RectTransform/Rectangle/GuiImage/
+GuiTextInput, version-3 GuiText and version-1 GuiElement descriptors. Legacy
+records default new layout, stylesheet and font fields to their authored defaults.
+Only new fields may be omitted during migration; malformed legacy fields
+still fail. Current-version records require all fields. Deserialization constructs
 a candidate and commits only after finite numeric/type/range validation.
 Interaction pulses/focus/capture are transient.
 EcsConfig assigns stable component hashes across compiler/module boundaries.
@@ -205,8 +205,8 @@ references, and regression tests together.
 
 ## Layout and inheritance foundation
 
-The next stylesheet foundation is documented in [gui-css.md](gui-css.md). Its
-private parser/cascade library does not yet attach CSS assets to GUI entities.
+The stylesheet parser is documented in [gui-css.md](gui-css.md). Asset/component
+application and FreeType resource ownership are in [gui-styles-fonts.md](gui-styles-fonts.md).
 
 RectTransform.Layout selects Absolute/Row/Column. The container's Padding insets
 the content box; flow children use preferred Size, MinSize/MaxSize, Margin,
@@ -230,7 +230,7 @@ and text foregrounds are distinct sources. Do not multiply opacity when resolvin
 inherit: this is assignment, not group alpha compositing. Content/texture IDs and
 interaction are not inherited. Unset flags skip ancestor traversal.
 
-The future CSS layer should translate explicit inherit declarations into the same
+The CSS layer translates explicit inherit declarations into the same
 resolution contract rather than copying parent values into child components.
 Keep computed state separate from authored data. The editor exposes enum dropdowns
 and per-property inheritance toggles using GuiRegistry; SetGUIProperty passes the

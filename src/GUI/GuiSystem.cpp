@@ -1,5 +1,6 @@
 #include "GUI/GuiSystem.h"
 #include "Bazzalt/Input.h"
+#include "Bazzalt/Console.h"
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Components/CameraRenderTarget.h"
 #include <algorithm>
@@ -31,7 +32,7 @@ std::unordered_map<UUID,GuiBounds> FlowBounds(const std::vector<Entity>& childre
     const float mainSize=row?content.Size.X:content.Size.Y,crossSize=row?content.Size.Y:content.Size.X;
     float used=0;
     for(auto child:children){
-        const auto* r=child.TryGetComponent<RectTransform>();
+        const auto* r=EffectiveGui<RectTransform>(child);
         if(child.HasComponent<Frame>()||!r||!ValidLayout(*r)||r->IgnoreLayout)continue;
         const auto size=r->Size*scale,min=r->MinSize*scale,max=r->MaxSize*scale;
         const auto margin=r->Margin*scale;
@@ -78,9 +79,10 @@ GuiBounds Intersect(GuiBounds a,GuiBounds b){
     return {begin,{std::max(0.f,std::min(a.Position.X+a.Size.X,b.Position.X+b.Size.X)-begin.X),
                   std::max(0.f,std::min(a.Position.Y+a.Size.Y,b.Position.Y+b.Size.Y)-begin.Y)}};
 }
-bool Enabled(Entity e){const auto* b=e.TryGetComponent<GuiButton>();const auto* i=e.TryGetComponent<GuiTextInput>();
+bool PointerEnabled(Entity e){auto& computed=e.GetScene()->GetSystem<GuiSystem>().Computed;auto found=computed.find(e.GetUUID());return found==computed.end()||(found->second.PointerEvents&&!found->second.Hidden);}
+bool Enabled(Entity e){if(!PointerEnabled(e))return false;const auto* b=EffectiveGui<GuiButton>(e);const auto* i=EffectiveGui<GuiTextInput>(e);
     return (b&&b->Enabled&&b->Interactable)||(i&&i->Enabled&&i->Interactable);}
-bool HitTarget(Entity e){const auto* r=e.TryGetComponent<Rectangle>();const auto* i=e.TryGetComponent<GuiImage>();
+bool HitTarget(Entity e){if(!PointerEnabled(e))return false;const auto* r=e.TryGetComponent<Rectangle>();const auto* i=EffectiveGui<GuiImage>(e);
     return Enabled(e)||(r&&r->Enabled&&r->RaycastTarget)||(i&&i->Enabled&&i->RaycastTarget);}
 bool VisibleArea(const GuiItem& item){const auto clipped=Intersect(item.Bounds,item.Clip);return clipped.Size.X>0&&clipped.Size.Y>0;}
 bool DirectInput(const GuiItem& item){const auto& frame=item.Root.GetComponent<Frame>();if(frame.Mode!=FrameMode::CameraBound)return true;const auto camera=item.Root.GetScene()->GetEntity(frame.Camera);const auto* source=camera.TryGetComponent<Camera>();const auto* target=camera.TryGetComponent<CameraRenderTarget>();return (!source||!source->RenderTarget)&&(!target||!target->Enabled);}
@@ -90,16 +92,19 @@ void Backspace(std::string& text){if(text.empty())return;std::size_t start=text.
 void GuiSystem::Descend(Entity parent,Entity root,GuiBounds bounds,GuiBounds clip,GuiBounds surface,float scale,std::size_t depth){
     if(depth>128)return;
     auto children=parent.GetChildren();
-    const auto* group=parent.TryGetComponent<RectTransform>();
+    const auto* group=EffectiveGui<RectTransform>(parent);
+    if(parent==root){auto found=Computed.find(parent.GetUUID());if(found!=Computed.end())group=&found->second.Rect;}
     bounds=ContentBounds(bounds,group,scale);
+    for(auto child:children)if(auto found=Computed.find(child.GetUUID());found!=Computed.end())ApplyGuiLayout(found->second,bounds.Size/scale);
     const auto flow=FlowBounds(children,bounds,group,scale);
     std::stable_sort(children.begin(),children.end(),[](Entity a,Entity b){
-        const auto* x=a.TryGetComponent<RectTransform>();const auto* y=b.TryGetComponent<RectTransform>();
+        const auto* x=EffectiveGui<RectTransform>(a);const auto* y=EffectiveGui<RectTransform>(b);
         return (x?x->ZIndex:0)<(y?y->ZIndex:0);
     });
     for(auto child:children){
         if(child.HasComponent<Frame>())continue; // A nested Frame is an independent render root.
-        const auto* layout=child.TryGetComponent<RectTransform>();
+        if(auto found=Computed.find(child.GetUUID());found!=Computed.end()&&found->second.Hidden)continue;
+        const auto* layout=EffectiveGui<RectTransform>(child);
         if(!layout){Descend(child,root,bounds,clip,surface,scale,depth+1);continue;}
         if(!ValidLayout(*layout))continue;
         const auto& v=*layout;
@@ -115,7 +120,7 @@ void GuiSystem::Descend(Entity parent,Entity root,GuiBounds bounds,GuiBounds cli
     }
 }
 void GuiSystem::ModuleLayout(Scene& scene,Vec2 size){
-    Items.clear();
+    Items.clear();Computed.clear();StyleDiagnostics.clear();
     if(!Finite(size)||size.X<=0||size.Y<=0){Interactions.clear();Focused=Hovered=Captured={};return;}
     PresentationSize=size;
     std::vector<Entity> roots;for(auto handle:scene.GetRegistry().view<Frame>())roots.push_back(scene.GetEntity(static_cast<Entity::Id>(handle)));
@@ -136,9 +141,14 @@ void GuiSystem::ModuleLayout(Scene& scene,Vec2 size){
             scale=std::pow(surface.Size.X/frame.ReferenceSize.X,1-match)*std::pow(surface.Size.Y/frame.ReferenceSize.Y,match);
         }
         if(!std::isfinite(scale)||scale<=0)continue;
+        bool styles=bool(frame.Stylesheet);
+        if(!styles)for(auto handle:scene.GetRegistry().view<GuiElement>()){const auto& element=scene.GetRegistry().get<GuiElement>(handle);if(element.Enabled&&element.Stylesheet){styles=true;break;}}
+        if(styles){PrepareStyles(root,surface,scale);auto found=Computed.find(root.GetUUID());if(found!=Computed.end()&&found->second.Hidden)continue;}
         Descend(root,root,surface,surface,surface,scale,0);
     }
     std::unordered_set<UUID> alive;for(const auto& item:Items)alive.insert(item.Owner.GetUUID());
+    std::sort(StyleDiagnostics.begin(),StyleDiagnostics.end());StyleDiagnostics.erase(std::unique(StyleDiagnostics.begin(),StyleDiagnostics.end()),StyleDiagnostics.end());
+    for(const auto& message:StyleDiagnostics)if(std::find(ReportedStyleDiagnostics.begin(),ReportedStyleDiagnostics.end(),message)==ReportedStyleDiagnostics.end())Console::Warning(message,"GUI");ReportedStyleDiagnostics=StyleDiagnostics;
     std::erase_if(Interactions,[&](const auto& pair){return !alive.contains(pair.first);});
     const auto eligible=[&](UUID id){return std::any_of(Items.begin(),Items.end(),[&](const auto& item){return item.Owner.GetUUID()==id&&item.Root.GetComponent<Frame>().Interactable&&Enabled(item.Owner)&&VisibleArea(item)&&DirectInput(item);});};
     if(!alive.contains(Focused)||!eligible(Focused))Focused={};if(!alive.contains(Captured)||!eligible(Captured))Captured={};
@@ -189,7 +199,7 @@ void GuiSystem::ModuleProcessInput(Scene& scene){
         auto& state=Interactions[Focused];state.Focused=true;
         if(Input::GetKeyDown(KeyCode::Enter)){state.Submitted=true;if(focused.HasComponent<GuiButton>())state.Clicked=true;}
         if(focused.HasComponent<GuiButton>()&&Input::GetKeyDown(KeyCode::Space))state.Clicked=true;
-        if(auto* text=focused.TryGetComponent<GuiTextInput>();text&&text->Enabled&&!text->ReadOnly){
+        if(auto* text=focused.TryGetComponent<GuiTextInput>();text&&text->Enabled&&!EffectiveGui<GuiTextInput>(focused)->ReadOnly){
             const auto previousValue=text->Value;
             if(Input::GetKeyDown(KeyCode::Backspace))Backspace(text->Value);
             const auto& input=Input::GetTextInput();std::size_t count=Characters(text->Value);

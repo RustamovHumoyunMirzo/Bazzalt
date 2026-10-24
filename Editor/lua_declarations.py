@@ -68,8 +68,8 @@ def ReadDeclarations(text):
                 if len(values)!=vectors[kind] or not all(re.fullmatch(r'[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?',v) for v in values):raise DeclarationError('Vector defaults require an explicit B.Type.new(...) with literal coordinates')
                 if not all(math.isfinite(float(v)) for v in values):raise DeclarationError('Vector PROPERTY coordinates must be finite')
                 default=','.join(values)
-            elif kind=='AudioClip':
-                if not re.fullmatch(r'(?:[A-Za-z_]\w*\.)?AudioClip\.new\(\)',default):raise DeclarationError('AudioClip defaults must use Bazzalt.AudioClip.new()')
+            elif kind in ('AudioClip','Font'):
+                if not re.fullmatch(r'(?:[A-Za-z_]\w*\.)?'+kind+r'\.new\(\)',default):raise DeclarationError(kind+' defaults must use Bazzalt.'+kind+'.new()')
             else:raise DeclarationError('Unsupported declarative Lua property type: '+kind)
             properties.append((tokens[i-4],kind,tokens[i-2],default,rules))
     if not components:

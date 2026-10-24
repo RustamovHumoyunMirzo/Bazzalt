@@ -224,7 +224,7 @@ class ScriptCompiler:
                 body=f'{{Bazzalt::UUID id;if(std::strcmp(value,"0")!=0&&std::strcmp(value,"")!=0&&!Bazzalt::UUID::TryParse(value,id))return false;self->{prop.name}=Bazzalt::EntityReference(id);return true;}}'
             elif kind in ("Entity","Bazzalt::Entity"):
                 body=f'{{Bazzalt::UUID id;if(std::strcmp(value,"0")!=0&&std::strcmp(value,"")!=0&&!Bazzalt::UUID::TryParse(value,id))return false;auto* scene=Bazzalt::SceneManager::GetActiveScene();self->{prop.name}=id&&scene?scene->GetEntity(id):Bazzalt::Entity{{}};return true;}}'
-            elif kind in ("Material","Bazzalt::Material","Shader","Bazzalt::Shader","Texture","Bazzalt::Texture","AudioClip","Bazzalt::AudioClip"):
+            elif kind in ("Material","Bazzalt::Material","Shader","Bazzalt::Shader","Texture","Bazzalt::Texture","AudioClip","Bazzalt::AudioClip","Font","Bazzalt::Font"):
                 type_name=kind.split("::")[-1];body=f'{{Bazzalt::UUID id;if(std::strcmp(value,"0")!=0&&!Bazzalt::UUID::TryParse(value,id))return false;self->{prop.name}=Bazzalt::{type_name}::Load(id);return !id||self->{prop.name}.IsValid();}}'
             elif kind in ("Vec2","Bazzalt::Vec2"):body=f'return std::sscanf(value,"%f,%f",&self->{prop.name}.X,&self->{prop.name}.Y)==2;'
             elif kind in ("Vec3","Bazzalt::Vec3"):body=f'return std::sscanf(value,"%f,%f,%f",&self->{prop.name}.X,&self->{prop.name}.Y,&self->{prop.name}.Z)==3;'
@@ -236,7 +236,7 @@ class ScriptCompiler:
         wrapper=f'''#include <Bazzalt/Script.h>\n#include <cstdio>\n#include <cstring>\n#include <sstream>\n#include <string>\n#include "{source}"\n#if defined(_WIN32)\n#define BAZZALT_SCRIPT_EXPORT __declspec(dllexport)\n#else\n#define BAZZALT_SCRIPT_EXPORT __attribute__((visibility("default")))\n#endif\nnamespace {{\nvoid* Create(){{return new {name}();}}\nvoid Destroy(void* p){{delete static_cast<{name}*>(p);}}\nvoid OnCreate(void* p){{static_cast<{name}*>(p)->OnCreate();}}\nvoid OnUpdate(void* p,float dt){{static_cast<{name}*>(p)->OnUpdate(dt);}}\nvoid OnDestroy(void* p){{static_cast<{name}*>(p)->OnDestroy();}}\nbool SetProperty(void* p,const char* name,const char* value){{auto* self=static_cast<{name}*>(p);{setter}return false;}}\nconst Bazzalt::ScriptModuleApi Api{{Bazzalt::ScriptAbiVersion,"{name}",&Create,&Destroy,&OnCreate,&OnUpdate,&OnDestroy,&SetProperty}};\n}}\nextern "C" BAZZALT_SCRIPT_EXPORT const Bazzalt::ScriptModuleApi* BazzaltGetScriptModuleV1(){{return &Api;}}\n'''
         wrapper += '\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltBindTimeV1(Bazzalt::Detail::TimeState* state){Bazzalt::ScriptRuntimeAccess::BindTime(state);}\n'
         wrapper += '\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltBindInputV1(Bazzalt::Detail::InputState* state){Bazzalt::ScriptRuntimeAccess::BindInput(state);}\n'
-        wrapper = '#include <Bazzalt/Material.h>\n#include <Bazzalt/AudioClip.h>\n'+wrapper
+        wrapper = '#include <Bazzalt/Material.h>\n#include <Bazzalt/AudioClip.h>\n#include <Bazzalt/Font.h>\n'+wrapper
         wrapper = '#include <Bazzalt/EntityReference.h>\n'+wrapper
         wrapper += '\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltBindEntitiesV1(Bazzalt::Detail::EntityServices* services){Bazzalt::Detail::BoundEntityServices=services;}\n'
         wrapper += '\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltBindMaterialsV1(Bazzalt::Detail::MaterialServices* services){Bazzalt::Detail::BoundMaterialServices=services;}\n'
@@ -345,7 +345,7 @@ def _PropertyDefault(prop):
     if kind in ("float","double"):
         value=_Literal(prop.default)
         if isinstance(value,(int,float)):return float(value)
-    if kind in ("Material","Shader","Texture","AudioClip","EntityReference","Entity"):return "00000000-0000-0000-0000-000000000000"
+    if kind in ("Material","Shader","Texture","AudioClip","Font","EntityReference","Entity"):return "00000000-0000-0000-0000-000000000000"
     if kind in ("Vec2","Vec3","Vec4","Quaternion"):
         values=prop.default.split(',')
         if len(values)=={"Vec2":2,"Vec3":3,"Vec4":4,"Quaternion":4}[kind]:

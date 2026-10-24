@@ -28,6 +28,8 @@ mkdir -p "$TARGET/Editor"
 cp "$NATIVE" "$TARGET/Editor/"
 cp -R "$BUILD/ScriptSDK" "$TARGET/"
 mkdir -p "$TARGET/licenses"
+cp "$ROOT/deps/freetype/docs/FTL.TXT" "$TARGET/licenses/FreeType.txt"
+cp "$ROOT/deps/freetype/src/gzip/zlib.h" "$TARGET/licenses/FreeType-zlib.txt"
 cp "$ROOT/deps/miniaudio/LICENSE" "$TARGET/licenses/miniaudio.txt"
 cp "$ROOT/deps/miniaudio/extras/stb_vorbis.c" "$TARGET/licenses/stb_vorbis-source.txt"
 for LIBRARY in "$BUILD/Editor/libBazzalt.so" "$BUILD/Editor/libBazzalt.dylib"; do

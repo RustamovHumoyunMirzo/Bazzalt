@@ -35,6 +35,11 @@ Vec4 Color{1,1,1,1};
 float FontSize=16;
 bool Wrap=true;
 bool InheritColor=false,InheritFontSize=false,InheritWrap=false;
+UUID Font{};
+std::uint32_t FontFace=0;
+float LetterSpacing=0,LineSpacing=1;
+bool Kerning=true,InheritFont=false;
+void SetFont(Bazzalt::Font font);
 };</code></pre>
 <!-- API-SOURCE-END --></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../GuiStyle/en.html"><small>Previous</small>GuiStyle</a>

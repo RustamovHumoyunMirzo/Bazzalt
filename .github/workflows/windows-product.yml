@@ -36,6 +36,7 @@ jobs:
           & scripts/get_rapidyaml.ps1
           & scripts/get_sdl3.ps1
           & scripts/get_miniaudio.ps1
+          & scripts/get_freetype.ps1
           & scripts/get_lua.ps1
           & scripts/get_sol2.ps1
           & scripts/get_filament.ps1
@@ -176,6 +177,7 @@ jobs:
           & scripts/get_rapidyaml.ps1
           & scripts/get_sdl3.ps1
           & scripts/get_miniaudio.ps1
+          & scripts/get_freetype.ps1
           & scripts/get_lua.ps1
           & scripts/get_sol2.ps1
       - name: Configure and test the Win32 runtime

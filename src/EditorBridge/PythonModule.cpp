@@ -24,6 +24,8 @@
 #include <pybind11/stl.h>
 
 #include "Runtime/Engine.h"
+#include "GUI/GuiAssetImport.h"
+#include "GUI/GuiSystem.h"
 #include "Runtime/ApplicationEventsAccess.h"
 #include "Runtime/ApplicationAccess.h"
 #include "Runtime/TextureLibrary.h"
@@ -142,6 +144,18 @@ public:
     void ConsoleAdd(const std::string& text,unsigned level,const std::string& source,bool icon){Console::Log(text,static_cast<ConsoleLevel>(level),source,icon);}
     void ConsoleClear(){Console::Clear();}
     void ConsoleRemove(const std::vector<std::uint64_t>& ids){Console::ClearMessages(ids);}
+    py::dict FontPreview(const std::string& path,std::uint32_t face,const std::string& text,float size,std::uint32_t width){
+        UUID id;auto asset=UUID::TryParse(path,id)?AssetManager::GetAsset(id):AssetManager::GetAsset(std::filesystem::u8path(path));py::dict result;
+        if(!asset||asset->Importer!="Bazzalt.Font"||asset->State!=AssetState::Ready)return result;
+        auto image=Runtime::GetFontPreview(asset->Id,face,text,size,width);if(!image.Width)return result;
+        result["width"]=image.Width;result["height"]=image.Height;result["pixels"]=py::bytes(reinterpret_cast<const char*>(image.Pixels.data()),image.Pixels.size());return result;
+    }
+    py::dict FontDetails(const std::string& path,std::uint32_t face){
+        UUID id;auto asset=UUID::TryParse(path,id)?AssetManager::GetAsset(id):AssetManager::GetAsset(std::filesystem::u8path(path));py::dict result;
+        if(!asset||asset->Importer!="Bazzalt.Font"||asset->State!=AssetState::Ready)return result;
+        auto info=Font::Load(asset->Id,face).GetInfo();if(!info.Valid)return result;
+        result["family"]=info.Family;result["style"]=info.Style;result["faces"]=info.FaceCount;result["glyphs"]=info.GlyphCount;result["scalable"]=info.Scalable;result["kerning"]=info.Kerning;return result;
+    }
     py::dict AudioClipDetails(const std::string& path){
         UUID id;auto asset=UUID::TryParse(path,id)?AssetManager::GetAsset(id):AssetManager::GetAsset(std::filesystem::u8path(path));py::dict result;
         if(!asset||asset->Importer!="Bazzalt.AudioClip"||asset->State!=AssetState::Ready)return result;
@@ -265,6 +279,15 @@ public:
         project.Name=name;project.Properties=properties;
         if(!m_engine->SaveProject(m_projectPath)){project=previous;return false;}
         return true;
+    }
+    std::vector<std::string> GuiAssetSources(){
+        std::set<UUID> ids;auto& scene=m_engine->GetScene();auto& registry=scene.GetRegistry();
+        for(auto handle:registry.view<Frame>())ids.insert(registry.get<Frame>(handle).Stylesheet);
+        for(auto handle:registry.view<GuiElement>())ids.insert(registry.get<GuiElement>(handle).Stylesheet);
+        for(auto handle:registry.view<GuiText>())ids.insert(registry.get<GuiText>(handle).Font);
+        for(auto handle:registry.view<GuiTextInput>())ids.insert(registry.get<GuiTextInput>(handle).Font);
+        for(const auto& [id,value]:scene.GetSystem<Runtime::GuiSystem>().Computed)ids.insert(value.Text.Font);
+        std::vector<std::string> result;for(auto id:ids)if(id){auto asset=AssetManager::GetAsset(id);if(asset)result.push_back(PathText(asset->SourcePath));}return result;
     }
     bool RefreshAssets() { return m_engine && m_engine->RefreshAssets(); }
     bool RefreshAsset(const std::string& path){return m_engine&&m_engine->RefreshTextureAsset(std::filesystem::u8path(path));}
@@ -773,6 +796,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("asset_info", &Bazzalt::EditorBridge::EditorHost::AssetInfo)
         .def("asset_status", &Bazzalt::EditorBridge::EditorHost::AssetStatus)
         .def("refresh_assets", &Bazzalt::EditorBridge::EditorHost::RefreshAssets)
+        .def("gui_asset_sources", &Bazzalt::EditorBridge::EditorHost::GuiAssetSources)
         .def("refresh_asset", &Bazzalt::EditorBridge::EditorHost::RefreshAsset)
         .def("texture_asset_info", &Bazzalt::EditorBridge::EditorHost::TextureAssetInfo)
         .def("save_texture_asset", &Bazzalt::EditorBridge::EditorHost::SaveTextureAsset)
@@ -817,6 +841,8 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("destroy_viewport", &Bazzalt::EditorBridge::EditorHost::DestroyViewport)
         .def("set_scene_camera", &Bazzalt::EditorBridge::EditorHost::SetSceneCamera)
         .def("audio_clip_info", &Bazzalt::EditorBridge::EditorHost::AudioClipDetails)
+        .def("font_info", &Bazzalt::EditorBridge::EditorHost::FontDetails,py::arg("path"),py::arg("face")=0)
+        .def("font_preview", &Bazzalt::EditorBridge::EditorHost::FontPreview)
         .def("audio_preview", &Bazzalt::EditorBridge::EditorHost::PreviewAudio)
         .def("audio_stop_preview", &Bazzalt::EditorBridge::EditorHost::StopAudioPreview)
         .def("audio_status", &Bazzalt::EditorBridge::EditorHost::AudioStatus)

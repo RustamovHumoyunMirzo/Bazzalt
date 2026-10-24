@@ -125,12 +125,12 @@ class DownloadTests(unittest.TestCase):
         archive=self.EditorZip()
         with zipfile.ZipFile(archive) as source:files={name:source.read(name) for name in source.namelist()}
         files.update({"Editor/bazzalt_gui.dll":PE(),"ScriptSDK/lib/bazzalt_gui.dll":PE()})
-        for abi in (2,99,"2"):
+        for abi in (2,3,99,"2"):
             with self.subTest(abi=abi):
                 files["editor.json"]=json.dumps({"version":"0.5.0","architecture":"x64","executable":"Bazzalt.exe","gui_abi":abi})
                 archive=self.Zip(files)
-                if abi==2:
-                    target=Install(self.MakeEntry(archive.read_bytes()),archive,self.Root/"versions-new-gui")
+                if abi in (2,3):
+                    target=Install(self.MakeEntry(archive.read_bytes()),archive,self.Root/f"versions-new-gui-{abi}")
                     self.assertTrue((target/"Editor/bazzalt_gui.dll").is_file())
                 else:
                     with self.assertRaisesRegex(ValueError,"Unsupported GUI runtime ABI"):

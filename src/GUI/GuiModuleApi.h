@@ -2,9 +2,10 @@
 #include <cstdint>
 #include "GUI/GuiSystem.h"
 #include "GUI/GuiRenderer.h"
+#include "GUI/FontFace.h"
 namespace Bazzalt { class ComponentSerializationRegistry; }
 namespace Bazzalt::Runtime {
-inline constexpr std::uint32_t GuiModuleVersion=2;
+inline constexpr std::uint32_t GuiModuleVersion=3;
 // Private, versioned interface. Modules are built with the matching core/toolchain.
 struct GuiModuleApi {
     std::uint32_t Version,Size;
@@ -20,6 +21,11 @@ struct GuiModuleApi {
     void (*PrepareOverlay)(void*,Scene&,Vec2,UUID,filament::RenderTarget*);
     void (*RenderOverlay)(void*,Scene&,Vec2);
     void (*RenderCameraOverlay)(void*,Scene&,UUID,Vec2,filament::RenderTarget*);
+    bool (*ValidateAsset)(const std::filesystem::path&,const std::string&,std::string&);
+    FontInfo (*InspectFont)(UUID,std::uint32_t);
+    Vec2 (*MeasureFont)(UUID,std::uint32_t,const std::string&,float,float);
+    std::vector<UUID> (*StylesheetReferences)(const std::filesystem::path&);
+    FontPreviewImage (*PreviewFont)(UUID,std::uint32_t,const std::string&,float,std::uint32_t);
 };
 using GetGuiModuleApi=const GuiModuleApi* (*)(std::uint32_t,std::uint32_t);
 const GuiModuleApi& GuiModule();

@@ -7,10 +7,11 @@
 #include <sstream>
 namespace Bazzalt::EditorBridge {
 namespace py=pybind11;
-inline constexpr const char* GuiNames[]={"Frame","RectTransform","Rectangle","GuiImage","GuiText","GuiButton","GuiTextInput","CameraRenderTarget"};
+inline constexpr const char* GuiNames[]={"Frame","GuiElement","RectTransform","Rectangle","GuiImage","GuiText","GuiButton","GuiTextInput","CameraRenderTarget"};
 inline ComponentSerializationRegistry& GuiRegistry(){static ComponentSerializationRegistry registry;static bool initialized=(Runtime::RegisterGuiComponents(registry),true);(void)initialized;return registry;}
 template<class F> bool GuiDispatch(Entity e,const std::string& name,F function){
     if(name=="Frame")function.template operator()<Frame>(e);
+    else if(name=="GuiElement")function.template operator()<GuiElement>(e);
     else if(name=="RectTransform")function.template operator()<RectTransform>(e);
     else if(name=="Rectangle")function.template operator()<Rectangle>(e);
     else if(name=="GuiImage")function.template operator()<GuiImage>(e);
@@ -25,10 +26,10 @@ inline void InspectGUI(Entity entity,py::list components,py::dict enabled,py::di
     for(auto name:GuiNames){PropertyMap values;auto* descriptor=GuiRegistry().Find("Bazzalt."+std::string(name));if(!descriptor->Serialize(entity,values))continue;
         components.append(name);enabled[name]=values["Enabled"]=="true";py::dict fields;
         for(const auto& [key,text]:values){if(key=="Enabled")continue;
-            if(key=="Value"||key=="Placeholder"||key=="Texture"||key=="Camera")fields[py::str(key)]=text;
+            if(key=="Value"||key=="Placeholder"||key=="Texture"||key=="Camera"||key=="Stylesheet"||key=="Font"||key=="ID"||key=="Classes"||key=="Tags"||key=="Attributes")fields[py::str(key)]=text;
             else if(text=="true"||text=="false")fields[py::str(key)]=text=="true";
             else if(text.find(',')!=std::string::npos){py::list vector;std::stringstream input(text);std::string part;while(std::getline(input,part,','))vector.append(std::stof(part));fields[py::str(key)]=py::tuple(vector);}
-            else if(key=="Mode"||key=="ScaleMode"||key=="Layout"||key=="Align"||key=="Justify"||key=="ZIndex"||key=="TabIndex"||key=="MaxLength"||key=="Width"||key=="Height")fields[py::str(key)]=std::stoll(text);
+            else if(key=="Mode"||key=="ScaleMode"||key=="Layout"||key=="Align"||key=="Justify"||key=="ZIndex"||key=="TabIndex"||key=="MaxLength"||key=="Width"||key=="Height"||key=="FontFace")fields[py::str(key)]=std::stoll(text);
             else fields[py::str(key)]=std::stof(text);
         }
         data[name]=fields;

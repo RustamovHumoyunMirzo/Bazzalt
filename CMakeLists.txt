@@ -11,6 +11,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 include(cmake/Lua.cmake)
+include(cmake/FreeType.cmake)
 set(BAZZALT_MINIAUDIO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/miniaudio" CACHE PATH "miniaudio source tree")
 if(NOT EXISTS "${BAZZALT_MINIAUDIO_DIR}/miniaudio.h")
     message(FATAL_ERROR "miniaudio is missing. Run scripts/get_miniaudio.ps1 or scripts/get_miniaudio.sh.")
@@ -163,6 +164,7 @@ file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS
 )
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/EditorBridge/")
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/GUI/CSS/")
+list(FILTER LIB_SOURCES EXCLUDE REGEX "/GUI/(FontFace|GuiStyles)\\.cpp$")
 add_subdirectory(src/GUI/CSS)
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/GUI/(GuiSystem|GuiRenderer|GuiSerialization|GuiModule)\\.cpp$")
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/Script/Lua[^/]*\\.cpp$|/Runtime/LuaRuntime\\.cpp$")
@@ -229,10 +231,10 @@ target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE BazzaltMiniaudio Bazzalt
 
 # One-way link: GUI imports core; core loads the sibling module through a private
 # versioned table. This avoids circular DLL dependencies/import libraries.
-add_library(BazzaltGui SHARED src/GUI/GuiModule.cpp src/GUI/GuiSystem.cpp
+add_library(BazzaltGui SHARED src/GUI/FontFace.cpp src/GUI/GuiStyles.cpp src/GUI/GuiModule.cpp src/GUI/GuiSystem.cpp
     src/GUI/GuiRenderer.cpp src/GUI/GuiSerialization.cpp ${BAZZALT_EMBEDDED_HEADERS})
 target_include_directories(BazzaltGui PRIVATE include src "${_bazzalt_generated_dir}")
-target_link_libraries(BazzaltGui PRIVATE Bazzalt Filament::Filament BazzaltCSS)
+target_link_libraries(BazzaltGui PRIVATE Bazzalt Filament::Filament BazzaltCSS freetype)
 target_compile_features(BazzaltGui PRIVATE cxx_std_20)
 set_target_properties(BazzaltGui PROPERTIES OUTPUT_NAME bazzalt_gui
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"

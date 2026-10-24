@@ -18,6 +18,12 @@ sources/listeners, distance curves, streaming, playback controls, and mixer
 buses. C++ and Lua share the same audio API. See the
 [audio guide](docs/public/0.6.0/manual/audio/en.html).
 
+Runtime GUI supports responsive layouts, CSS stylesheet assets and FreeType font
+assets, with C++/Lua access and editor authoring/preview. See the
+[GUI guide](docs/public/0.6.0/native/gui/en.html). Source builds also require the
+pinned FreeType source (`scripts/get_freetype.ps1` / `scripts/get_freetype.sh`);
+large renderer dependencies remain supplied by the existing CI workflows.
+
 Build standalone Windows x86/x64 games from **Build → Build Settings**. The
 separate content compiler packages saved scenes, scripts, and assets with a
 prebuilt native runtime; games do not include Python or the editor. See
@@ -46,6 +52,11 @@ bytecode assets, and DLL deployment rules.
 ## License
 
 This project uses a modular multi-license structure:
+
+Portions of this software use the FreeType Project (www.freetype.org), under the
+FreeType License. Packaged runtimes include its license and bundled zlib notice
+in `licenses/`. No system font is redistributed by default; projects must use
+fonts they have permission to ship.
 
 * **Core Engine:** Licensed under the **Apache License 2.0**. You can find the full terms in the root [LICENSE](LICENSE) file.
 * **Editor (`/Editor`) and Launcher (`/Launcher`):** Licensed under the **GNU Lesser General Public License v3 (LGPLv3)**. The specific terms for the editor are located in the [Editor/LICENSE](Editor/LICENSE) and [Launcher/LICENSE](Launcher/LICENSE) files.

@@ -25,6 +25,20 @@ class ContentFilterTests(unittest.TestCase):
             source.write_bytes(payload);cache.write_bytes(payload);records.append(dict(UUID=identity,Source=name,Cache=cache.relative_to(root).as_posix(),Importer='Bazzalt.Raw'))
         (root/'Game.bproject').write_text('StartupScene: Assets/Main.bscene\n')
         (root/'.bazzalt/CookedAssets.yaml').write_text(yaml.safe_dump(dict(FormatVersion=1,Assets=records)))
+    def test_stylesheet_references_keep_fonts_and_manifest(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);self.Fixture(root)
+            (root/'Assets/Main.bscene').write_text('Stylesheet: style\n')
+            index=root/'.bazzalt/CookedAssets.yaml';data=yaml.safe_load(index.read_text())
+            for identity,name,importer in (('style','Assets/UI.css','Bazzalt.Stylesheet'),('font','Assets/UI.ttf','Bazzalt.Font')):
+                source=root/name;source.write_bytes(b'content');cache=root/'.bazzalt/Cache'/identity/'current.bin';cache.parent.mkdir(parents=True);cache.write_bytes(b'cache')
+                data['Assets'].append(dict(UUID=identity,Source=name,Cache=cache.relative_to(root).as_posix(),Importer=importer))
+                if identity=='style':manifest=Path(str(cache)+'.dependencies.yml');manifest.write_text('- font\n')
+            index.write_text(yaml.safe_dump(data));settings=copy.deepcopy(DEFAULTS['packaging']);settings['include_assets']='Assets/Main.bscene';settings['exclude_assets']='Assets/UI.ttf'
+            with self.assertRaisesRegex(ValueError,'required'):FilterCooked(root,settings)
+            settings['exclude_assets']='';FilterCooked(root,settings)
+            self.assertTrue((root/'Assets/UI.ttf').is_file());self.assertTrue(manifest.is_file())
+
     def test_retains_serialized_dependencies_and_strips_unselected_assets(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);self.Fixture(root);settings=copy.deepcopy(DEFAULTS['packaging']);settings['include_assets']='Assets/Main.bscene'

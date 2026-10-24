@@ -152,6 +152,10 @@ class RuntimeService(QObject):
         return dict(self._host.statistics()) if self._host and hasattr(self._host,"statistics") else {}
     def AudioClipInfo(self,path)->dict:
         return dict(self._host.audio_clip_info(str(path))) if self._host and hasattr(self._host,"audio_clip_info") else {}
+    def FontInfo(self,path,face=0)->dict:
+        return dict(self._host.font_info(str(path),int(face))) if self._host and hasattr(self._host,"font_info") else {}
+    def FontPreview(self,path,text,size=32,face=0,width=640)->dict:
+        return dict(self._host.font_preview(str(path),int(face),str(text),float(size),max(64,min(1024,int(width))))) if self._host and hasattr(self._host,"font_preview") else {}
     def AudioWaveform(self,path,bins=512):
         return self.WaveformBuilder(str(path),bins) if self.WaveformBuilder else []
     def PreviewAudio(self,clip:str)->int:
@@ -222,6 +226,8 @@ class RuntimeService(QObject):
         return bool(self._host and self._host.refresh_assets())
     def RefreshAsset(self,path)->bool:
         return bool(self._host and hasattr(self._host,'refresh_asset') and self._host.refresh_asset(str(path)))
+    def GuiAssetSources(self):
+        return list(self._host.gui_asset_sources()) if self._host and hasattr(self._host,'gui_asset_sources') else []
     def ResolveAssetRecord(self,value):
         info=self.AssetInfo(str(value))
         if not info or info.get('importer')=='Bazzalt.Raw':

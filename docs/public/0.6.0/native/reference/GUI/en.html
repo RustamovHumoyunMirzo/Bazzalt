@@ -38,6 +38,7 @@ GUI()=delete;
     [[nodiscard]] static GuiStyle ResolveStyle(Entity entity);
 [[nodiscard]] static GuiText ResolveText(Entity entity);
 [[nodiscard]] static GuiImage ResolveImage(Entity entity);
+[[nodiscard]] static std::vector&lt;std::string&gt; GetStyleDiagnostics(Entity entity);
 static bool Focus(Entity entity);
 static void ClearFocus(Scene&amp; scene);
 [[nodiscard]] static bool IsPointerOverUI(Scene&amp; scene);
