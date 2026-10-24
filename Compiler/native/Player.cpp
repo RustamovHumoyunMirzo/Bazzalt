@@ -3,6 +3,7 @@
 #include "StartupCover.h"
 #include "Runtime/Engine.h"
 #include "Runtime/InputAccess.h"
+#include "Runtime/ApplicationEventsAccess.h"
 #include <shellapi.h>
 #include <sddl.h>
 #include <objbase.h>
@@ -30,11 +31,11 @@ LRESULT CALLBACK WindowProcedure(HWND window,UINT message,WPARAM w,LPARAM l){
     case WM_ERASEBKGND:if(!Startup::Ready){RECT bounds{};GetClientRect(window,&bounds);FillRect(reinterpret_cast<HDC>(w),&bounds,static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));}return 1;
     case WM_PAINT:{PAINTSTRUCT paint;auto dc=BeginPaint(window,&paint);if(!Startup::Ready){RECT bounds{};GetClientRect(window,&bounds);FillRect(dc,&bounds,static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));}EndPaint(window,&paint);return 0;}
     case WM_MOVE:Startup::Position(window);return 0;
-    case WM_CLOSE:DestroyWindow(window);return 0;
+    case WM_CLOSE:Bazzalt::Runtime::ApplicationEventsAccess::Emit({Bazzalt::ApplicationEventType::OnWindowCloseRequested});if(Engine){Engine->RequestClose();return 0;}DestroyWindow(window);return 0;
     case WM_DESTROY:PostQuitMessage(0);return 0;
-    case WM_SIZE:Startup::Position(window);if(Engine&&Engine->IsInitialized()&&w!=SIZE_MINIMIZED)Engine->ResizeEditorViewport(1,LOWORD(l),HIWORD(l));return 0;
-    case WM_SETFOCUS:InputAccess::SetActive(true);hasPosition=false;return 0;
-    case WM_KILLFOCUS:InputAccess::SetActive(false);hasPosition=false;surrogate=0;return 0;
+    case WM_SIZE:Startup::Position(window);if(Engine&&Engine->IsInitialized()&&w!=SIZE_MINIMIZED){Engine->ResizeEditorViewport(1,LOWORD(l),HIWORD(l));Bazzalt::ApplicationEvent event{Bazzalt::ApplicationEventType::OnWindowResize};event.Width=LOWORD(l);event.Height=HIWORD(l);Bazzalt::Runtime::ApplicationEventsAccess::Emit(event);}return 0;
+    case WM_SETFOCUS:{InputAccess::SetActive(true);hasPosition=false;Bazzalt::ApplicationEvent event{Bazzalt::ApplicationEventType::OnWindowFocusChanged};event.IsFocused=true;Bazzalt::Runtime::ApplicationEventsAccess::Emit(event);return 0;}
+    case WM_KILLFOCUS:InputAccess::SetActive(false);hasPosition=false;surrogate=0;Bazzalt::Runtime::ApplicationEventsAccess::Emit({Bazzalt::ApplicationEventType::OnWindowFocusChanged});return 0;
     case WM_KEYDOWN:case WM_SYSKEYDOWN:case WM_KEYUP:case WM_SYSKEYUP:
         if(Startup::Cover&&Startup::AllowSkip&&(message==WM_KEYDOWN||message==WM_SYSKEYDOWN))Startup::Skip=true;
         InputAccess::KeyEvent(PhysicalKey(w,l),message==WM_KEYDOWN||message==WM_SYSKEYDOWN,(message==WM_KEYDOWN||message==WM_SYSKEYDOWN)&&bool(l&(1u<<30)));break;
@@ -108,7 +109,8 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,LPWSTR,int){
         if(config.has_child("intro")){auto intro=config["intro"];introEnabled=Text(intro["enabled"])=="true";duration=std::stoi(Text(intro["duration_ms"]));logoSize=std::stoi(Text(intro["logo_size"]));allowSkip=Text(intro["allow_skip"])=="true";}
         Require(duration>=0&&duration<=30000&&logoSize>=48&&logoSize<=512,"Invalid intro settings");
         const auto started=std::chrono::steady_clock::now();
-        if(!verify){
+        auto createWindow=[&](){
+            Bazzalt::Runtime::ApplicationEventsAccess::Emit({Bazzalt::ApplicationEventType::OnBeforeWindowCreate});
             DisableProcessWindowsGhosting();auto settings=config["window"];auto width=std::stoi(Text(settings["width"])),height=std::stoi(Text(settings["height"]));Require(width>=320&&width<=16384&&height>=200&&height<=16384,"Invalid window size");
             WNDCLASSW cls{};cls.hInstance=instance;cls.lpfnWndProc=WindowProcedure;cls.lpszClassName=L"BazzaltGameWindow";cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);cls.hbrBackground=static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));Require(RegisterClassW(&cls)!=0,"Could not register game window");
             const auto mode=Text(settings["mode"]);Require(mode=="windowed"||mode=="maximized"||mode=="borderless"||mode=="fullscreen","Unsupported window mode");
@@ -121,7 +123,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,LPWSTR,int){
             // Show a black native surface before extraction, engine init, or shader work.
             if(!smoke){ShowWindow(window,mode=="maximized"?SW_SHOWMAXIMIZED:SW_SHOW);UpdateWindow(window);}
             Startup::Create(window,instance,introEnabled,logoSize,allowSkip&&!smoke,!smoke);
-        }
+        };
         TemporaryContent content;auto data=folder/"Data";
         if(Text(config["format"])=="pak"){
             TemporaryContent::ReclaimAbandoned();
@@ -131,12 +133,16 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,LPWSTR,int){
             Extract(folder,content.Path,packages,verified.PackageKey);content.Leases=&verified.ExtractedLeases;VerifyExtracted(verified,content.Path);data=content.Path;
             if(!verified.PackageKey.empty()){SecureZeroMemory(verified.PackageKey.data(),verified.PackageKey.size());verified.PackageKey.clear();}
         }
-        Bazzalt::Runtime::Engine engine;Engine=&engine;Require(engine.LoadProject(data/"Game.bproject"),engine.GetLastError().c_str());
+        Bazzalt::Runtime::Engine engine;Engine=&engine;Require(engine.LoadProject(data/"Game.bproject",false),engine.GetLastError().c_str());
         const auto startup=engine.GetProject().StartupScene.generic_u8string();
         Require(!startup.empty()&&std::filesystem::is_regular_file(data/SafePath(std::string(reinterpret_cast<const char*>(startup.data()),startup.size()))),"The packaged startup scene is missing");
         if(verify){Engine=nullptr;return 0;}
+        Require(engine.PrepareApplication(),engine.GetLastError().c_str());createWindow();
         Require(engine.ConfigureRenderingBackend(Text(config["window"]["backend"])),"Unsupported rendering backend");Require(engine.Init(false,false),engine.GetLastError().c_str());
+        Require(engine.LoadScene(data/engine.GetProject().StartupScene),engine.GetLastError().c_str());
         RECT client{};GetClientRect(window,&client);Require(engine.CreateEditorViewport(1,reinterpret_cast<std::uintptr_t>(window),false,client.right,client.bottom),"Could not create game surface");
+        Bazzalt::Runtime::ApplicationEventsAccess::Emit({Bazzalt::ApplicationEventType::OnPostWindowCreate});
+        Bazzalt::ApplicationEvent initialSize{Bazzalt::ApplicationEventType::OnWindowResize};initialSize.Width=client.right;initialSize.Height=client.bottom;Bazzalt::Runtime::ApplicationEventsAccess::Emit(initialSize);
         bool running=true,playing=false,frameReady=false;int frames=0;while(running&&!engine.ShouldClose()){
             const auto start=std::chrono::steady_clock::now();MSG message;while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)){if(message.message==WM_QUIT){running=false;break;}TranslateMessage(&message);DispatchMessageW(&message);}
             if(!running)break;if(!IsIconic(window)){
@@ -152,6 +158,6 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,LPWSTR,int){
             }
             std::this_thread::sleep_until(start+std::chrono::milliseconds(IsIconic(window)?50:16));
         }
-        engine.DestroyEditorViewport(1);engine.Shutdown();Engine=nullptr;if(IsWindow(window))DestroyWindow(window);return 0;
+        engine.BeginShutdown();engine.Shutdown(true);Engine=nullptr;if(IsWindow(window))DestroyWindow(window);window=nullptr;engine.EndApplication();return 0;
     }catch(const std::exception& error){Engine=nullptr;if(window&&IsWindow(window))DestroyWindow(window);std::cerr<<error.what()<<'\n';if(!verify&&!smoke){auto n=MultiByteToWideChar(CP_UTF8,0,error.what(),-1,nullptr,0);std::wstring text(std::max(1,n),L'\0');MultiByteToWideChar(CP_UTF8,0,error.what(),-1,text.data(),int(text.size()));MessageBoxW(nullptr,text.c_str(),L"Game failed to start",MB_OK|MB_ICONERROR);}return 1;}
 }

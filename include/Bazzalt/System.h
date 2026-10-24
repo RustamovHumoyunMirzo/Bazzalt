@@ -21,6 +21,7 @@ protected:
     virtual void OnCreate(Scene&) {}
     virtual void OnUpdate(Scene&, float deltaTime) = 0;
     virtual void OnFixedUpdate(Scene&, float fixedDeltaTime) { (void)fixedDeltaTime; }
+    virtual void OnLateUpdate(Scene&, float deltaTime) { (void)deltaTime; }
     virtual void OnDestroy(Scene&) {}
 
 private:

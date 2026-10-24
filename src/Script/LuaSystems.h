@@ -22,6 +22,7 @@ protected:
     }
     void OnUpdate(Scene& scene,float dt) override { Run(scene,dt,"OnUpdate"); }
     void OnFixedUpdate(Scene& scene,float dt) override { Run(scene,dt,"OnFixedUpdate"); }
+    void OnLateUpdate(Scene& scene,float dt) override { Run(scene,dt,"OnLateUpdate"); }
     void OnDestroy(Scene& scene) override {
         for(auto& [_,entry]:Entries)try{Invoke(entry.Object,"OnDestroy",scene,0,false);}catch(const std::exception& error){std::cerr<<"[Lua System] "<<error.what()<<'\n';}
         Entries.clear();

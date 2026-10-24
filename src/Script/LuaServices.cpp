@@ -4,9 +4,11 @@ void BindLuaScene(sol::table api);
 void BindLuaAssets(sol::table api);
 void BindLuaConsole(sol::table api);
 void BindLuaAudio(sol::table api);
+void BindLuaApplicationEvents(sol::table api);
 void BindLuaServices(sol::table api){
     BindLuaScene(api);BindLuaAssets(api);BindLuaConsole(api);
     BindLuaAudio(api);
+    BindLuaApplicationEvents(api);
     {auto type=api.create_named("Time");
      type["GetDeltaTime"]=&Time::GetDeltaTime;
      type["GetUnscaledDeltaTime"]=&Time::GetUnscaledDeltaTime;

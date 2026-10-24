@@ -54,7 +54,7 @@ public:
     void RenderEditorFrame();
     std::unordered_map<std::string,double> GetEditorStatistics() const;
     void SetEditorStatisticsText(std::string text,bool visible);
-    void Shutdown();
+    void Shutdown(bool unloadScene = false);
     [[nodiscard]] bool ShouldClose() const;
     void RequestClose();
     [[nodiscard]] float GetDeltaTime() const { return m_deltaTime; }
@@ -101,6 +101,9 @@ public:
     bool ConfigureScripts(std::vector<ScriptBinding> bindings);
     bool StartScripts(bool resetTime = true);
     void StopScripts();
+    bool PrepareApplication();
+    void BeginShutdown();
+    void EndApplication();
     AudioRuntime& GetAudioRuntime() { return *m_audioRuntime; }
 
 private:
@@ -136,6 +139,10 @@ private:
     std::unique_ptr<NativeScriptRuntime> m_scriptRuntime;
     std::unique_ptr<LuaRuntime> m_luaRuntime;
     std::unique_ptr<AudioRuntime> m_audioRuntime;
+    std::unique_ptr<NativeScriptRuntime> m_applicationNative;
+    std::unique_ptr<LuaRuntime> m_applicationLua;
+    bool m_applicationPrepared=false,m_preShutdown=false,m_scriptsRunning=false;
+    std::filesystem::path m_applicationModule;
     bool m_headlessAudio=false;
     bool m_luaConfigured=false;
     bool m_editorIconsVisible=true;

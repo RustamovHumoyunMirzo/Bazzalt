@@ -38,6 +38,10 @@ def FilterCooked(cooked, packaging):
     startup=by_path.get(str(project['StartupScene']).replace('\\','/').casefold())
     if startup is None or startup in denied:raise ValueError('Startup scene is excluded from the game build')
     kept.add(startup);queue=list(kept);visited=set()
+    application=str((project.get('Properties') or {}).get('application.script','')).casefold()
+    if application:
+        if application not in by_id or application in denied:raise ValueError('Application script is missing or excluded from the game build')
+        kept.add(application);queue.append(application)
     serialized={'.bscene','.matinst','.bmixer','.btexture'}
     def References(value):
         visited=set();steps=0

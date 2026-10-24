@@ -181,6 +181,7 @@ private:
 
     void Update(float deltaTime);
     void FixedUpdate(float deltaTime);
+    void LateUpdate(float deltaTime);
     Entity CreateRootEntity();
     void DestroySystems();
     void DestroyEntityRecursive(Entity entity);

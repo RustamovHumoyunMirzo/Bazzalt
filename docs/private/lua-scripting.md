@@ -81,7 +81,7 @@ tables remain supported (filename fallback); functions take precedence.
 An explicit name must be unique across Lua and C++ behaviors. Duplicate
 properties and duplicate attachments are rejected. The runtime supplies
 `self.Entity` and applies inspector overrides before OnCreate. Optional methods
-are OnCreate, OnUpdate(deltaTime), OnFixedUpdate(fixedDeltaTime), OnDestroy.
+are OnCreate, OnUpdate(deltaTime), OnFixedUpdate(fixedDeltaTime), OnLateUpdate(deltaTime), OnDestroy.
 Each attachment has an isolated VM and private table state. Disabled attachments
 do not update. Stop destroys runtime state, leaving authoring values unchanged.
 See `examples/Walk.lua` for actual WASD movement through Input and world transforms.
@@ -149,7 +149,10 @@ requires a native binding and operation registration before Lua can access it.
 ## Lua systems
 
 `scene:AddSystem(name, table)` registers a Lua system with optional
-OnCreate(scene), OnUpdate(scene, dt), OnFixedUpdate(scene, dt), OnDestroy(scene).
+OnCreate(scene), OnUpdate(scene, dt), OnFixedUpdate(scene, dt), OnLateUpdate(scene, dt), OnDestroy(scene).
+
+Project-level application entry scripts and global subscriptions are described in
+[application-events.md](application-events.md). They use a separate VM from entity behaviors.
 HasSystem/GetSystem/RemoveSystem and SetSystemEnabled/IsSystemEnabled use that
 name. Implement component iteration with `scene:GetEntities("Light")`, then
 GetComponent/SetComponent. Runtime-owned dispatch runs through the normal Scene

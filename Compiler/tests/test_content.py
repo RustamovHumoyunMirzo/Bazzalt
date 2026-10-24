@@ -6,6 +6,14 @@ from Compiler.settings import DEFAULTS,Validate
 
 
 class ContentFilterTests(unittest.TestCase):
+    def test_application_entry_is_retained_and_cannot_be_excluded(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);self.Fixture(root)
+            (root/'Game.bproject').write_text('StartupScene: Assets/Main.bscene\nProperties:\n  application.script: unused\n')
+            settings=copy.deepcopy(DEFAULTS['packaging']);settings['include_assets']='Assets/Main.bscene'
+            FilterCooked(root,settings);self.assertTrue((root/'Assets/Unused.bin').exists())
+            settings['exclude_assets']='Assets/Unused.bin'
+            with self.assertRaisesRegex(ValueError,'Application'):FilterCooked(root,settings)
     def Fixture(self,root):
         records=[]
         for identity,name,contents in (('scene','Assets/Main.bscene',{'Mesh':'model'}),('model','Assets/Model.bin',None),('unused','Assets/Unused.bin',None)):

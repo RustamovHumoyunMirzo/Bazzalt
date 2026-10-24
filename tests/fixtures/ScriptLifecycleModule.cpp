@@ -13,6 +13,8 @@ public:
     void OnUpdate(float delta) override { if(Bazzalt::Time::GetDeltaTime()!=delta)throw std::runtime_error("Module clock was not shared");Write("update");if(Bazzalt::Input::GetKeyDown(Bazzalt::KeyCode::W))Write("input_w"); }
     void OnFixedUpdate(float delta) override { if(!Bazzalt::Time::IsInFixedTimeStep()||Bazzalt::Time::GetDeltaTime()!=delta)throw std::runtime_error("Module fixed clock was not shared");Write("fixed"); }
     void OnDestroy() override { Write("destroy"); }
+    void OnLateUpdate(float) override { Write("late"); }
+    void OnApplicationEvent(const Bazzalt::ApplicationEvent& event) override { Write(Bazzalt::ApplicationEvents::GetName(event.Type)); }
 };
 
 namespace {
@@ -34,3 +36,5 @@ extern "C" SCRIPT_EXPORT void BazzaltBindTimeV1(Bazzalt::Detail::TimeState* stat
 extern "C" SCRIPT_EXPORT void BazzaltBindInputV1(Bazzalt::Detail::InputState* state){Bazzalt::ScriptRuntimeAccess::BindInput(state);}
 extern "C" SCRIPT_EXPORT void BazzaltBindMaterialsV1(Bazzalt::Detail::MaterialServices* services){Bazzalt::Detail::BoundMaterialServices=services;}
 extern "C" SCRIPT_EXPORT void BazzaltFixedUpdateV1(void* value,float delta){static_cast<LifecycleProbe*>(value)->OnFixedUpdate(delta);}
+extern "C" SCRIPT_EXPORT void BazzaltLateUpdateV1(void* value,float delta){static_cast<LifecycleProbe*>(value)->OnLateUpdate(delta);}
+extern "C" SCRIPT_EXPORT void BazzaltApplicationEventV1(void* value,const Bazzalt::ApplicationEvent* event){static_cast<LifecycleProbe*>(value)->OnApplicationEvent(*event);}

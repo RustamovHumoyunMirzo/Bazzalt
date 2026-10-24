@@ -16,6 +16,8 @@ int main(int argc,char** argv){
     assert(Bazzalt::Time::GetTimeScale()==0.25f);
     Bazzalt::Runtime::TimeAccess::Advance(0.064);
     {Bazzalt::Runtime::TimeAccess::FixedScope fixed;runtime.FixedUpdate(Bazzalt::Time::GetDeltaTime());}
-    runtime.Update(Bazzalt::Time::GetDeltaTime());runtime.Stop();
-    std::ifstream stream(log);std::string contents((std::istreambuf_iterator<char>(stream)),{});assert(contents=="create:entity-uuid\nfixed:entity-uuid\nupdate:entity-uuid\ndestroy:entity-uuid\n");std::filesystem::remove(log,error);return 0;
+    runtime.Update(Bazzalt::Time::GetDeltaTime());runtime.LateUpdate(Bazzalt::Time::GetDeltaTime());runtime.Stop();
+    std::ifstream stream(log);std::string contents((std::istreambuf_iterator<char>(stream)),{});stream.close();assert(contents=="create:entity-uuid\nfixed:entity-uuid\nupdate:entity-uuid\nlate:entity-uuid\ndestroy:entity-uuid\n");
+    assert(runtime.Start(message,true));runtime.ApplicationEvent({Bazzalt::ApplicationEventType::OnBoot});runtime.ApplicationEvent({Bazzalt::ApplicationEventType::OnShutdown});runtime.Stop();
+    std::ifstream applicationLog(log);contents.assign(std::istreambuf_iterator<char>(applicationLog),{});applicationLog.close();assert(contents.ends_with("OnBoot:entity-uuid\nOnShutdown:entity-uuid\n"));std::filesystem::remove(log,error);return 0;
 }

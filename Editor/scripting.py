@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import ast, hashlib, json, os, re, subprocess
 from pathlib import Path
 
-_COMPONENT=re.compile(r"\bCOMPONENT\s*\(\s*([A-Za-z_]\w*)\s*\)")
+_COMPONENT=re.compile(r"\b(?:COMPONENT|APPLICATION)\s*\(\s*([A-Za-z_]\w*)\s*\)")
 _PROPERTY=re.compile(r"\bPROPERTY\s*\(\s*([^,]+?)\s*,\s*([A-Za-z_]\w*)\s*,\s*([^,\)]+)(?:,([^\)]*))?\)")
 
 class ScriptValidationError(ValueError):pass
@@ -20,6 +20,7 @@ class ScriptProperty:
 @dataclass(frozen=True)
 class ScriptDescriptor:
     path: Path; name: str; properties: tuple[ScriptProperty,...]=field(default_factory=tuple)
+    is_application: bool=False
 @dataclass(frozen=True)
 class Diagnostic:
     level: str; message: str; source: str="Compiler";localization_key: str=""
@@ -86,7 +87,7 @@ class ScriptCompiler:
             try:CheckTypeRules(prop.type,rules)
             except RuleError as error:raise ScriptValidationError(f"{path}: {error}") from error
             decorated.append(ScriptProperty(prop.type,prop.name,prop.default,prop.attributes,rules))
-        return ScriptDescriptor(path.resolve(),match.group(1),tuple(decorated))
+        return ScriptDescriptor(path.resolve(),match.group(1),tuple(decorated),mask[match.start():].startswith('APPLICATION'))
     def Discover(self)->list[ScriptDescriptor]:
         assets=self.project/"Assets"
         paths=sorted((path for path in assets.rglob("*") if path.is_file() and path.suffix.lower() in {".cpp",".lua"}),key=str) if assets.is_dir() else []
@@ -206,6 +207,8 @@ class ScriptCompiler:
         wrapper += '\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltBindEntitiesV1(Bazzalt::Detail::EntityServices* services){Bazzalt::Detail::BoundEntityServices=services;}\n'
         wrapper += '\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltBindMaterialsV1(Bazzalt::Detail::MaterialServices* services){Bazzalt::Detail::BoundMaterialServices=services;}\n'
         wrapper += f'\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltFixedUpdateV1(void* p,float dt){{static_cast<{name}*>(p)->OnFixedUpdate(dt);}}\n'
+        wrapper += f'\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltLateUpdateV1(void* p,float dt){{static_cast<{name}*>(p)->OnLateUpdate(dt);}}\n'
+        wrapper += f'\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltApplicationEventV1(void* p,const Bazzalt::ApplicationEvent* e){{static_cast<{name}*>(p)->OnApplicationEvent(*e);}}\n'
         return wrapper.replace(f"void* Create(){{return new {name}();}}",f"void* Create(const char* entity){{auto* value=new {name}();Bazzalt::ScriptRuntimeAccess::Bind(*value,entity);return value;}}")
 
 class ScriptAttachments:
@@ -236,6 +239,15 @@ class ScriptAttachments:
         if len(remaining)==len(entries):return False
         self.values["entities"][entity]=remaining;self.Save();return True
     def UsedSources(self)->list[str]:return list(dict.fromkeys(v.get("source","") for entries in self.values.get("entities",{}).values() for v in entries if v.get("enabled",True) and v.get("source")))
+    def WithApplicationSource(self,source):
+        import copy
+        result=copy.copy(self);result.values=copy.deepcopy(self.values)
+        result.values.setdefault('entities',{}).pop('@application',None)
+        if source and Path(source).suffix.lower()=='.cpp':
+            descriptor=ScriptCompiler.Inspect(source)
+            if descriptor is None:raise ScriptValidationError('Application script must declare APPLICATION or COMPONENT')
+            result.values['entities']['@application']=[dict(source=str(Path(source).resolve()),type=descriptor.name,enabled=True,properties={})]
+        return result
     def RuntimeBindings(self,outputs: tuple[Path,...])->list[dict]:
         for entity,entries in self.values.get("entities",{}).items():
             names=[value.get("type") for value in entries]

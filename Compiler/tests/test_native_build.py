@@ -122,9 +122,16 @@ class NativeBuildTests(unittest.TestCase):
             (assets/'Main.bscene').write_text('FormatVersion: 1\nSceneUUID: "12345678-1234-4234-8234-123456789abc"\nEntities:\n  - UUID: "'+entity+'"\n    Parent: "00000000-0000-0000-0000-000000000000"\n    Name: Probe\n    Components: []\n',encoding='utf-8')
             project.write_text('FormatVersion: 1\nProjectUUID: "23456789-1234-4234-8234-123456789abc"\nName: Test\nAssetDirectory: Assets\nStartupScene: Assets/Main.bscene\nProperties: {}\n',encoding='utf-8')
             log=root/'lifecycle.txt'
+            application_id='45678901-1234-4234-8234-123456789abc'
+            (assets/'Application.lua').write_text('local App={}\n'+''.join(f'function App:{name}(...) print("APP:{name}") end\n' for name in ('OnBoot','OnBeforeWindowCreate','OnInit','OnLoad','OnPostWindowCreate','OnPlay','OnPreUpdate','OnLateUpdate','OnPreRender','OnRender','OnPostRender','OnSceneLoaded','OnPreShutdown','OnShutdown'))+'return App\n',encoding='utf-8')
+            (assets/'Application.lua.meta').write_text(f'FormatVersion: 1\nUUID: "{application_id}"\nImporter: Bazzalt.Lua\nImporterVersion: 1\n',encoding='utf-8')
+            project.write_text(project.read_text(encoding='utf-8').replace('Properties: {}',f'Properties:\n  application.script: "{application_id}"'),encoding='utf-8')
             bindings=[dict(module=str(ROOT/'build/Release/BazzaltScriptLifecycleModule.dll'),entity=entity,type='LifecycleProbe',properties={'LogPath':str(log)})]
             for mode in ('windowed','maximized','borderless','fullscreen'):
                 settings=ApplyPreset(DEFAULTS,'medium');settings['window']['mode']=mode;settings['intro']['enabled']=mode!='windowed';Save(project,settings)
                 with patch('Compiler.build.CompileScripts',return_value=bindings):output=Build(project,runtime,ROOT/'build/Editor/Release/BazzaltCooker.exe')
-                result=subprocess.run([str(output/'Game.exe'),'--smoke-test'],timeout=60);self.assertEqual(result.returncode,0,mode)
+                result=subprocess.run([str(output/'Game.exe'),'--smoke-test'],timeout=60,capture_output=True);self.assertEqual(result.returncode,0,(mode,result.stderr))
+                events=result.stdout.decode('utf-8',errors='replace')
+                sequence=('OnBoot','OnBeforeWindowCreate','OnInit','OnLoad','OnSceneLoaded','OnPostWindowCreate','OnPlay','OnPreUpdate','OnLateUpdate','OnPreRender','OnRender','OnPostRender','OnPreShutdown','OnShutdown')
+                positions=[events.index('APP:'+name) for name in sequence];self.assertEqual(positions,sorted(positions),events)
             text=log.read_text();self.assertIn('create:'+entity,text);self.assertIn('update:'+entity,text);self.assertIn('destroy:'+entity,text)

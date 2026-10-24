@@ -58,6 +58,10 @@ return Example</code></pre>
 <tr><td><code>float fixedDeltaTime</code></td><td>Scaled fixed-step duration in seconds.</td></tr>
 </tbody></table>
 <p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<h2 id="OnLateUpdate">OnLateUpdate</h2>
+<pre><code>function Behavior:OnLateUpdate(deltaTime)</code></pre>
+<p>Optional callback after normal systems and behavior updates, before camera synchronization and rendering. Useful for following a moving entity with a camera.</p>
+<p>For project-wide startup, window, rendering, and shutdown events, use an <a href="../../../manual/application-events/en.html">application script or ApplicationEvents subscription</a>.</p>
 <h2 id="OnDestroy">OnDestroy</h2>
 <pre><code>function Behavior:OnDestroy()</code></pre>
 <p>Host cleanup callback. Release owned transient resources; do not destroy shared assets or take over host shutdown.</p>
@@ -69,7 +73,7 @@ return Example</code></pre>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../Audio/en.html"><small>Previous</small>Lua audio API reference</a>
 <a class="next" href="../Camera/en.html"><small>Next</small>Camera</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#OnCreate">OnCreate</a><a class="toc-link" href="#OnUpdate">OnUpdate</a><a class="toc-link" href="#OnFixedUpdate">OnFixedUpdate</a><a class="toc-link" href="#OnDestroy">OnDestroy</a><a class="toc-link" href="#Entity">Entity</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#OnCreate">OnCreate</a><a class="toc-link" href="#OnUpdate">OnUpdate</a><a class="toc-link" href="#OnFixedUpdate">OnFixedUpdate</a><a class="toc-link" href="#OnLateUpdate">OnLateUpdate</a><a class="toc-link" href="#OnDestroy">OnDestroy</a><a class="toc-link" href="#Entity">Entity</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

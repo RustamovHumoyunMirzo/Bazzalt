@@ -21,11 +21,14 @@ class ProjectSettingsTests(unittest.TestCase):
         dialog = ProjectSettingsDialog(parent)
         dialog.Name.setText("  Renamed  ")
         dialog.Fields["company"].setText("Studio")
+        dialog.ApplicationScript.AssetResolver=lambda _:None
+        dialog.ApplicationScript.SetValue('12345678-1234-4234-8234-123456789abc','Game.lua')
         dialog._Apply()
         name, properties = parent.Runtime.UpdateProjectInfo.call_args.args
         self.assertEqual(name, "Renamed")
         self.assertEqual(properties["custom.key"], "keep")
         self.assertEqual(properties["project.company"], "Studio")
+        self.assertEqual(properties['application.script'],'12345678-1234-4234-8234-123456789abc')
         self.assertEqual(dialog.result(), dialog.DialogCode.Accepted)
         parent.close()
 

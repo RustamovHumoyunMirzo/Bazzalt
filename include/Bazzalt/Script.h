@@ -7,6 +7,7 @@
 #include "Bazzalt/Input.h"
 #include "Bazzalt/Scene.h"
 #include "Bazzalt/SceneManager.h"
+#include "Bazzalt/ApplicationEvents.h"
 
 namespace Bazzalt {
 class ScriptRuntimeAccess;
@@ -19,6 +20,10 @@ public:
     virtual void OnCreate() {}
     virtual void OnUpdate(float deltaTime) { (void)deltaTime; }
     virtual void OnFixedUpdate(float fixedDeltaTime) { (void)fixedDeltaTime; }
+    virtual void OnLateUpdate(float deltaTime) { (void)deltaTime; }
+    // Application entry scripts receive global events through this hook. Scene
+    // behaviors can instead subscribe to ApplicationEvents during OnCreate.
+    virtual void OnApplicationEvent(const ApplicationEvent&) {}
     virtual void OnDestroy() {}
     [[nodiscard]] const std::string& GetEntityUUID() const { return m_entityUUID; }
     [[nodiscard]] Entity GetEntity() const {

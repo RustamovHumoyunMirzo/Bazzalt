@@ -78,6 +78,9 @@ protected:
 <table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
 <tr><td><code>float fixedDeltaTime</code></td><td>Scaled fixed-step duration in seconds.</td></tr>
 </tbody></table>
+<h2 id="OnLateUpdate">OnLateUpdate</h2>
+<pre><code>virtual void OnLateUpdate(Scene&amp; scene, float deltaTime)</code></pre>
+<p>Optional late system phase after normal gameplay updates. Lua systems use OnLateUpdate(scene, deltaTime).</p>
 <h2 id="OnDestroy">OnDestroy</h2>
 <pre><code>virtual void OnDestroy(Scene &amp;)</code></pre>
 <p>Host cleanup callback. Release owned transient resources; do not destroy shared assets or take over host shutdown.</p>
@@ -85,7 +88,7 @@ protected:
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../ShaderPreset/en.html"><small>Previous</small>ShaderPreset</a>
 <a class="next" href="../Texture/en.html"><small>Next</small>Texture</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#destructor-System">~System</a><a class="toc-link" href="#IsEnabled">IsEnabled</a><a class="toc-link" href="#SetEnabled">SetEnabled</a><a class="toc-link" href="#OnCreate">OnCreate</a><a class="toc-link" href="#OnUpdate">OnUpdate</a><a class="toc-link" href="#OnFixedUpdate">OnFixedUpdate</a><a class="toc-link" href="#OnDestroy">OnDestroy</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#destructor-System">~System</a><a class="toc-link" href="#IsEnabled">IsEnabled</a><a class="toc-link" href="#SetEnabled">SetEnabled</a><a class="toc-link" href="#OnCreate">OnCreate</a><a class="toc-link" href="#OnUpdate">OnUpdate</a><a class="toc-link" href="#OnFixedUpdate">OnFixedUpdate</a><a class="toc-link" href="#OnLateUpdate">OnLateUpdate</a><a class="toc-link" href="#OnDestroy">OnDestroy</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

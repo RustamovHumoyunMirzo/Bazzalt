@@ -60,6 +60,12 @@ public:
 <table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
 <tr><td><code>float fixedDeltaTime</code></td><td>Scaled fixed-step duration in seconds.</td></tr>
 </tbody></table>
+<h2 id="OnLateUpdate">OnLateUpdate</h2>
+<pre><code>virtual void OnLateUpdate(float deltaTime)</code></pre>
+<p>Runs after normal gameplay updates and before camera synchronization. Override it for camera following and other final transform adjustments.</p>
+<h2 id="OnApplicationEvent">OnApplicationEvent</h2>
+<pre><code>virtual void OnApplicationEvent(const ApplicationEvent&amp; event)</code></pre>
+<p>Project-level entry dispatch hook. Prefer the named hooks on Bazzalt::Application; ordinary behaviors use <a href="../../../manual/application-events/en.html">ApplicationEvents subscriptions</a>.</p>
 <h2 id="OnDestroy">OnDestroy</h2>
 <pre><code>virtual void OnDestroy()</code></pre>
 <p>Host cleanup callback. Release owned transient resources; do not destroy shared assets or take over host shutdown.</p>
@@ -75,7 +81,7 @@ public:
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../Audio/en.html"><small>Previous</small>Audio API reference</a>
 <a class="next" href="../Camera/en.html"><small>Next</small>Camera</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#destructor-Behavior">~Behavior</a><a class="toc-link" href="#OnCreate">OnCreate</a><a class="toc-link" href="#OnUpdate">OnUpdate</a><a class="toc-link" href="#OnFixedUpdate">OnFixedUpdate</a><a class="toc-link" href="#OnDestroy">OnDestroy</a><a class="toc-link" href="#GetEntityUUID">GetEntityUUID</a><a class="toc-link" href="#GetEntity">GetEntity</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#destructor-Behavior">~Behavior</a><a class="toc-link" href="#OnCreate">OnCreate</a><a class="toc-link" href="#OnUpdate">OnUpdate</a><a class="toc-link" href="#OnFixedUpdate">OnFixedUpdate</a><a class="toc-link" href="#OnLateUpdate">OnLateUpdate</a><a class="toc-link" href="#OnApplicationEvent">OnApplicationEvent</a><a class="toc-link" href="#OnDestroy">OnDestroy</a><a class="toc-link" href="#GetEntityUUID">GetEntityUUID</a><a class="toc-link" href="#GetEntity">GetEntity</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

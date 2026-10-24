@@ -24,6 +24,7 @@
 #include <pybind11/stl.h>
 
 #include "Runtime/Engine.h"
+#include "Runtime/ApplicationEventsAccess.h"
 #include "Runtime/TextureLibrary.h"
 #include "Runtime/ConsoleStore.h"
 #include "Bazzalt/Material.h"
@@ -570,13 +571,15 @@ public:
     bool SetSceneRenderMode(const std::string& mode){return m_engine->SetSceneRenderMode(mode);}
     bool CreateViewport(std::uint64_t id, std::uintptr_t handle, bool scene,
                         std::uint32_t width, std::uint32_t height, float pixelRatio) {
-        return m_engine->CreateEditorViewport(id, handle, scene, width, height, pixelRatio);
+        const bool created=m_engine->CreateEditorViewport(id, handle, scene, width, height, pixelRatio);
+        if(created&&!scene)m_gameViewports.insert(id);return created;
     }
     void ResizeViewport(std::uint64_t id, std::uint32_t width, std::uint32_t height,
                         float pixelRatio) {
         m_engine->ResizeEditorViewport(id, width, height, pixelRatio);
+        if(m_playing&&m_gameViewports.contains(id)){ApplicationEvent event{ApplicationEventType::OnWindowResize};event.Width=width;event.Height=height;Runtime::ApplicationEventsAccess::Emit(event);}
     }
-    void DestroyViewport(std::uint64_t id) { m_engine->DestroyEditorViewport(id); }
+    void DestroyViewport(std::uint64_t id) { m_gameViewports.erase(id);m_engine->DestroyEditorViewport(id); }
     void SetSceneCamera(std::uint64_t id, const std::array<float, 3>& eye,
                         const std::array<float, 3>& target) {
         m_engine->SetEditorCamera(id, eye[0], eye[1], eye[2], target[0], target[1], target[2]);
@@ -594,11 +597,11 @@ public:
             m_extraSnapshots.emplace_back(SceneAt(i).GetUUID(),path);
         }
         // Initialize rendering without gameplay, then start exactly once per Play.
-        if (!m_engine->Init(false, false)||!m_engine->StartScripts()) {m_engine->StopScripts();m_engine->LoadScene(m_snapshot);CleanupSnapshot();return false;}
+        if (!m_engine->Init(false, false)||!m_engine->StartScripts()) {m_engine->BeginShutdown();m_engine->StopScripts();m_engine->EndApplication();m_engine->LoadScene(m_snapshot);CleanupSnapshot();return false;}
         m_playing = true; m_paused = false; return true;
     }
     void Pause(bool paused) { if (m_playing) {m_paused = paused;if(paused)Runtime::InputAccess::SetActive(false);} }
-    void SetGameInputActive(bool focused){Runtime::InputAccess::SetActive(m_playing&&!m_paused&&focused);}
+    void SetGameInputActive(bool focused){const bool changed=m_gameFocused!=focused;m_gameFocused=focused;Runtime::InputAccess::SetActive(m_playing&&!m_paused&&focused);if(m_playing&&changed){ApplicationEvent event{ApplicationEventType::OnWindowFocusChanged};event.IsFocused=focused;Runtime::ApplicationEventsAccess::Emit(event);}}
     void GameKey(int key,bool down,bool repeat){if(m_playing&&!m_paused)Runtime::InputAccess::KeyEvent(key,down,repeat);}
     void GameButton(int button,bool down){if(m_playing&&!m_paused)Runtime::InputAccess::ButtonEvent(button,down);}
     void GameMotion(float x,float y,float dx,float dy){if(m_playing&&!m_paused)Runtime::InputAccess::MotionEvent(x,y,dx,dy);}
@@ -613,9 +616,11 @@ public:
     void Stop() {
         m_engine->GetAudioRuntime().StopPreview();
         if (!m_playing) return;
+        m_engine->BeginShutdown();
         m_playing = false; m_paused = false;
         Runtime::InputAccess::SetActive(false);
         m_engine->StopScripts();
+        m_engine->EndApplication();
         if (!m_snapshot.empty()) m_engine->LoadScene(m_snapshot);
         for(const auto& [id,path]:m_extraSnapshots)for(std::size_t i=0;i<m_loadedScenes.size();++i)if(i!=m_activeScene&&SceneAt(i).GetUUID()==id){auto restored=m_engine->LoadSceneAsset(path);if(restored)m_loadedScenes[i].Data=std::move(restored);break;}
         CleanupSnapshot();
@@ -726,6 +731,8 @@ private:
     std::vector<LoadedScene> m_loadedScenes;
     std::size_t m_activeScene = 0;
     bool m_playing = false;
+    bool m_gameFocused=false;
+    std::unordered_set<std::uint64_t> m_gameViewports;
     bool m_paused = false;
 };
 

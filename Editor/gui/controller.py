@@ -1054,6 +1054,7 @@ class EditorController(QObject):
         if scripts:
             menu.addSeparator();script_menu=menu
             for descriptor in scripts:
+                if getattr(descriptor,'is_application',False):continue
                 action=script_menu.addAction(descriptor.name);action.setToolTip(str(descriptor.path));action.setEnabled(not self.ScriptAttachments or not any(value.get("type")==descriptor.name for value in self.ScriptAttachments.For(self.SelectedEntity)));action.triggered.connect(lambda _=False,d=descriptor:self._AttachScript(d))
         button = self.Window.Properties.AddComponentButton
         search.textChanged.connect(lambda text:[action.setVisible(all(word in action.text().casefold() for word in text.casefold().split())) for action in menu.actions() if action is not search_action and not action.isSeparator()])
@@ -1168,7 +1169,11 @@ class EditorController(QObject):
         if self.Window.PreferenceValue("console","clear_on_play",False):self.Window.Console.Clear()
         if self.ScriptCompiler and self.ScriptAttachments:
             tr=self.Window.Localization.Translate
-            native_sources=[path for path in self.ScriptAttachments.UsedSources() if Path(path).suffix.lower()!=".lua"]
+            application=self.Runtime.ProjectInfo().get('properties',{}).get('application.script','')
+            record=self.Runtime.ResolveAssetRecord(application) if application else None
+            try:attachments=self.ScriptAttachments.WithApplicationSource(record['path'] if record else None)
+            except ScriptValidationError as error:self._ScriptValidationFailed(error);return
+            native_sources=[path for path in attachments.UsedSources() if Path(path).suffix.lower()!=".lua"]
             progress=None
             if native_sources:
                 progress=QProgressDialog(tr("scripting.compiling"),None,0,0,self.Window);progress.setWindowModality(Qt.WindowModality.WindowModal);progress.setCancelButton(None);progress.show();QApplication.processEvents()
@@ -1183,10 +1188,10 @@ class EditorController(QObject):
                 self.Window.Console.AddMessage(message,level,True,tr("scripting.compiler_source"))
             if not result.success:self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
             if result.outputs and self.Window.PreferenceValue("scripting","show_compile_success",True):self.Window.Console.AddMessage(tr("scripting.compile_success",count=len(result.outputs)),ConsoleLevel.Info,True,tr("scripting.compiler_source"))
-            try:bindings=self.ScriptAttachments.RuntimeBindings(result.outputs)
+            try:bindings=attachments.RuntimeBindings(result.outputs)
             except ScriptValidationError as error:self._ScriptValidationFailed(error);self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
             active_entities={str(entity["uuid"]) for entity in self.Runtime.Entities()}
-            bindings=[binding for binding in bindings if binding["entity"] in active_entities]
+            bindings=[binding for binding in bindings if binding["entity"] in active_entities or binding["entity"]=="@application"]
             if not self.Runtime.ConfigureScripts(bindings):
                 self.Window.Console.AddMessage(self.Runtime.LastError(),ConsoleLevel.Error,True,tr("scripting.runtime_source"));self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
         authoring=(set(self._dirty_scenes),self.History.Checkpoint())
@@ -1197,6 +1202,7 @@ class EditorController(QObject):
             self.Window.Docking.activate_panel("output");self.GameInput.FocusGame()
 
     def _AttachScript(self,descriptor,entity_id:str|None=None)->None:
+        if getattr(descriptor,'is_application',False):return
         entity_id=entity_id or self.SelectedEntity
         if self.Runtime.IsEditorLocked(entity_id):return
         if not entity_id or not self.ScriptAttachments:return

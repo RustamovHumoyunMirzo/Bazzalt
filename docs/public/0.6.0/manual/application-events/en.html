@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="An application event is a notification from the running game, such as a window resize or the start of shutdown. These notifications do not give scripts ownership of the engine loop. Use a project-level application script for startup events; use a scene behavior for the lifetime of one entity.">
+  <title>Application events | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Editor manual / Application events</nav>
+      <article class="doc"><h1>Application events</h1>
+<p>An application event is a notification from the running game, such as a window resize or the start of shutdown. These notifications do not give scripts ownership of the engine loop. Use a project-level application script for startup events; use a scene behavior for the lifetime of one entity.</p>
+<h2 id="entry">Choose an application script</h2>
+<p>Open File &gt; Project Settings and choose Application Script. This stores the script asset UUID under <code>application.script</code>. Do not attach this script to an entity. It has no owning entity, survives scene changes, and is loaded once per game session. Native application scripts use the existing C++ compiler; Lua application scripts are imported to bytecode like other Lua assets.</p>
+<pre><code>#include &lt;Bazzalt/Application.h&gt;
+APPLICATION(Game) {
+public:
+    void OnBoot() override { /* No scene or initialized drivers yet. */ }
+    void OnWindowResize(std::uint32_t width, std::uint32_t height) override {}
+    void OnWindowFocusChanged(bool focused) override {}
+    void OnLateUpdate(float deltaTime) override {}
+    void OnPreShutdown() override { /* Save gameplay state here. */ }
+};</code></pre>
+<p>Lua application scripts return an ordinary table. Named methods receive the same arguments as the C++ hooks, with the table passed as <code>self</code> by Lua's colon syntax.</p>
+<pre><code>local Game = {}
+function Game:OnBoot() end
+function Game:OnWindowResize(width, height) end
+function Game:OnWindowFocusChanged(isFocused) end
+function Game:OnLateUpdate(deltaTime) end
+function Game:OnPreShutdown() end
+return Game</code></pre>
+<h2 id="startup">Startup and shutdown</h2>
+<table><thead><tr><th>Hook</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>OnBoot()</td><td>First trusted gameplay lifecycle notification, before the native window and game subsystems.</td></tr>
+<tr><td>OnBeforeWindowCreate()</td><td>Immediately before native window creation.</td></tr>
+<tr><td>OnInit()</td><td>Beginning of subsystem initialization. Drivers are not necessarily ready inside this callback.</td></tr>
+<tr><td>OnLoad()</td><td>Beginning of scene loading, including later scene loads.</td></tr>
+<tr><td>OnPostWindowCreate()</td><td>Window and rendering surface/context are available.</td></tr>
+<tr><td>OnPlay() / OnStop()</td><td>Scene scripts have started / are about to stop.</td></tr>
+<tr><td>OnPreShutdown()</td><td>Before scene/services are destroyed; save persistent gameplay data here.</td></tr>
+<tr><td>OnShutdown()</td><td>Final notification after normal player window and context teardown.</td></tr>
+</tbody></table>
+<p>Package authentication, project metadata, the Lua interpreter or native module loader, and entry declarations must exist before any game callback can run. OnBoot does not bypass these security requirements. Editor Play creates a game session inside an already-running editor: completed editor initialization/window events are not replayed. Stop ends that application session. A force-killed process cannot deliver shutdown notifications.</p>
+<h2 id="frames">Frame callbacks</h2>
+<p><code>OnPreUpdate(float deltaTime)</code> runs after input preparation. <code>OnFixedUpdate(float fixedDeltaTime)</code> runs in each fixed simulation step. <code>OnUpdate(float deltaTime)</code> follows normal scene logic; <code>OnLateUpdate(float deltaTime)</code> follows normal updates and is suitable for camera tracking. Scene behaviors and custom systems also support OnLateUpdate. C++ systems receive <code>Scene&amp;</code> before the delta; Lua system methods receive <code>scene, deltaTime</code>.</p>
+<p><code>OnPreRender()</code> and <code>OnRender()</code> run immediately before backend rendering. <code>OnPostRender()</code> runs after the backend call returns, not after GPU completion. These are notifications for preparing data, not access to Filament or permission to submit rendering yourself. Paused editor redraws do not run gameplay callbacks.</p>
+<h2 id="window-scenes">Window and scene callbacks</h2>
+<p><code>OnWindowResize(width, height)</code> reports drawable pixel dimensions after the resize is applied. <code>OnWindowFocusChanged(isFocused)</code> reports focus gain/loss. Focus notifications do not automatically pause gameplay or mute audio. <code>OnWindowCloseRequested()</code> reports a close request; it is not cancellable.</p>
+<p><code>OnSceneLoad(path)</code> runs before deserialization. <code>OnSceneLoaded(sceneUUID)</code> runs after successful scene replacement. <code>OnSceneUnload(sceneUUID)</code> runs before old scene teardown, and <code>OnSceneUnloaded(sceneUUID)</code> follows replacement. Failed deserialization leaves the current scene alive and does not send OnSceneLoaded.</p>
+<h2 id="subscribe">Subscribe from ordinary scripts</h2>
+<p>Any running script can subscribe to future notifications. Events are not replayed: a scene script subscribing in OnCreate has already missed OnBoot. Generic subscribers receive one ApplicationEvent value, rather than the named method arguments.</p>
+<pre><code>local B = Bazzalt
+local token = B.ApplicationEvents.Subscribe(
+    B.ApplicationEventType.OnWindowResize,
+    function(event) print(event.Width, event.Height) end)
+B.ApplicationEvents.Unsubscribe(token)</code></pre>
+<pre><code>#include &lt;Bazzalt/ApplicationEvents.h&gt;
+auto token = Bazzalt::ApplicationEvents::Subscribe(
+    Bazzalt::ApplicationEventType::OnWindowResize,
+    [](const Bazzalt::ApplicationEvent&amp; event) { /* event.Width, event.Height */ });
+Bazzalt::ApplicationEvents::Unsubscribe(token);</code></pre>
+<p>ApplicationEvent contains Type, DeltaTime, Width, Height, IsFocused, SceneUUID, and ScenePath. Only fields relevant to the event are populated. GetName(type) returns the callback name. Unsubscribe(token) returns whether a registration existed. Use subscriptions only on the game thread. Subscriptions created inside native behavior lifecycle callbacks are cleaned up when that instance stops; Lua VM subscriptions are cleaned up before the VM closes. Explicitly unsubscribe earlier when a listener is no longer needed. Exceptions are logged without stopping other listeners.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../glossary/en.html"><small>Previous</small>Terms used in these guides</a>
+<a class="next" href="../building-games/en.html"><small>Next</small>Building a game</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#entry">Choose an application script</a><a class="toc-link" href="#startup">Startup and shutdown</a><a class="toc-link" href="#frames">Frame callbacks</a><a class="toc-link" href="#window-scenes">Window and scene callbacks</a><a class="toc-link" href="#subscribe">Subscribe from ordinary scripts</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>
