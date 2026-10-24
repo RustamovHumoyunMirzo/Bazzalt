@@ -82,7 +82,6 @@ struct LuaRuntime::Impl {
     };
     std::vector<ScriptBinding> Bindings;
     std::vector<std::unique_ptr<Instance>> Instances;
-    std::unique_ptr<Instance> Application;
 };
 LuaRuntime::LuaRuntime():m_impl(std::make_unique<Impl>()){}
 LuaRuntime::~LuaRuntime(){Stop();}
@@ -149,39 +148,7 @@ bool LuaRuntime::Start(std::string& error){
 void LuaRuntime::Update(float dt){for(auto& instance:m_impl->Instances)try{instance->Call("OnUpdate",dt,true);}catch(const std::exception& error){instance->Failed=true;std::cerr<<"[Lua] "<<error.what()<<'\n';}}
 void LuaRuntime::FixedUpdate(float dt){for(auto& instance:m_impl->Instances)try{instance->Call("OnFixedUpdate",dt,true);}catch(const std::exception& error){instance->Failed=true;std::cerr<<"[Lua] "<<error.what()<<'\n';}}
 void LuaRuntime::LateUpdate(float dt){for(auto& instance:m_impl->Instances)try{instance->Call("OnLateUpdate",dt,true);}catch(const std::exception& error){instance->Failed=true;std::cerr<<"[Lua] "<<error.what()<<'\n';}}
-bool LuaRuntime::StartApplication(const std::filesystem::path& path,std::string& error){
-    m_impl->Application.reset();
-    try{
-        auto instance=std::make_unique<Impl::Instance>();instance->Vm=std::make_unique<VM>();
-        sol::state_view lua(instance->Vm->State);lua.open_libraries(sol::lib::base,sol::lib::math,sol::lib::string,sol::lib::table,sol::lib::utf8);
-        for(const char* key:{"dofile","loadfile","load","collectgarbage"})lua[key]=sol::nil;
-        auto api=lua.create_named_table("Bazzalt");BindLuaMath(api);BindLuaComponents(api);BindLuaGUI(api);BindLuaServices(api);
-        const auto bytes=Read(path);lua_sethook(lua.lua_state(),Budget,LUA_MASKCOUNT,1000000);
-        auto result=lua.safe_script(bytes,sol::script_pass_on_error,"@Application",sol::load_mode::binary);lua_sethook(lua.lua_state(),nullptr,0,0);
-        if(!result.valid()){sol::error failure=result;throw std::runtime_error(failure.what());}
-        if(result.get_type()!=sol::type::table)throw std::runtime_error("Application Lua asset must return a table");
-        instance->Object=result.get<sol::table>();m_impl->Application=std::move(instance);error.clear();return true;
-    }catch(const std::exception& failure){error=failure.what();return false;}
-}
-void LuaRuntime::ApplicationEvent(const Bazzalt::ApplicationEvent& event){
-    if(!m_impl->Application)return;auto& instance=*m_impl->Application;
-    sol::object member=instance.Object[ApplicationEvents::GetName(event.Type)];if(!member.valid()||member==sol::nil)return;
-    if(member.get_type()!=sol::type::function)throw std::runtime_error("Application event handler must be a function");
-    sol::protected_function function=member;lua_sethook(instance.Vm->State,Budget,LUA_MASKCOUNT,1000000);
-    auto result=[&](){
-        switch(event.Type){
-        case ApplicationEventType::OnWindowResize:return function(instance.Object,event.Width,event.Height);
-        case ApplicationEventType::OnWindowFocusChanged:return function(instance.Object,event.IsFocused);
-        case ApplicationEventType::OnPreUpdate:case ApplicationEventType::OnUpdate:case ApplicationEventType::OnFixedUpdate:case ApplicationEventType::OnLateUpdate:return function(instance.Object,event.DeltaTime);
-        case ApplicationEventType::OnSceneLoad:return function(instance.Object,event.ScenePath);
-        case ApplicationEventType::OnSceneLoaded:case ApplicationEventType::OnSceneUnload:case ApplicationEventType::OnSceneUnloaded:return function(instance.Object,event.SceneUUID);
-        default:return function(instance.Object);
-        }
-    }();lua_sethook(instance.Vm->State,nullptr,0,0);
-    if(!result.valid()){sol::error failure=result;throw std::runtime_error(failure.what());}
-}
 void LuaRuntime::Stop() noexcept {
-    m_impl->Application.reset();
     if(!m_impl->Instances.empty())if(auto* scene=SceneManager::GetActiveScene())try{scene->RemoveSystem<LuaSystems>();}catch(const std::exception& error){std::cerr<<"[Lua] "<<error.what()<<'\n';}
     for(auto it=m_impl->Instances.rbegin();it!=m_impl->Instances.rend();++it)try{(*it)->Call("OnDestroy");}catch(const std::exception& error){std::cerr<<"[Lua] "<<error.what()<<'\n';}
     if(!m_impl->Instances.empty())if(auto* scene=SceneManager::GetActiveScene())try{scene->RemoveSystem<LuaSystems>();}catch(const std::exception& error){std::cerr<<"[Lua] "<<error.what()<<'\n';}

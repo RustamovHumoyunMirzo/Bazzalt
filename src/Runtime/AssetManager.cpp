@@ -1,4 +1,5 @@
 #include "Bazzalt/AssetManager.h"
+#include "Bazzalt/Detail/SubsystemAccess.h"
 #include "Runtime/TextureLibrary.h"
 
 #include <algorithm>
@@ -23,7 +24,7 @@
 namespace Bazzalt {
 namespace {
 std::vector<Runtime::Engine*> Engines;
-Runtime::Engine* ActiveEngine() { return Engines.empty() ? nullptr : Engines.back(); }
+Runtime::Engine* ActiveEngine() { Detail::RequireSubsystemService(Detail::SubsystemService::Assets,"AssetManager");return Engines.empty() ? nullptr : Engines.back(); }
 std::string PathUtf8(const std::filesystem::path& path) { const auto value=path.u8string();return {reinterpret_cast<const char*>(value.data()),value.size()}; }
 
 std::string NodeText(ryml::ConstNodeRef node) {

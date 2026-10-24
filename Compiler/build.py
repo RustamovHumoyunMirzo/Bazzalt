@@ -134,11 +134,10 @@ def CompileScripts(project,runtime,architecture,cache,compiler_path=''):
                     if not 0<=count_properties<=1024:raise ValueError('Invalid scene property count')
                     properties={str(fields[prefix+f'Property.{i}.Name']):str(fields[prefix+f'Property.{i}.Value']) for i in range(count_properties)}
                     entries.append(dict(source=str(source.resolve()),type=str(fields[prefix+'TypeName']),enabled=str(fields.get(prefix+'Enabled',True)).lower()=='true',properties=properties))
-    application=(project_data.get('Properties') or {}).get('application.script','')
-    if application:
-        if str(application) not in identities:raise ValueError('Application script asset UUID is missing')
-        if identities[str(application)].suffix.lower() not in {'.cpp','.lua'}:raise ValueError('Application script must be a C++ or Lua asset')
-        attachments=attachments.WithApplicationSource(identities[str(application)])
+    from Editor.subsystems import Registrations,Sources,WithSubsystems
+    if (project_data.get('Properties') or {}).get('application.script'):raise ValueError('Application Script was replaced; register C++ scripts in Window > Global Subsystems')
+    subsystem_sources=Sources(project,Registrations(project_data.get('Properties') or {}))
+    attachments=WithSubsystems(attachments,subsystem_sources);compiler.SubsystemSources=list(subsystem_sources.values())
     sources=attachments.UsedSources()
     if any(not Path(path).resolve().is_relative_to(project.parent) for path in sources):raise ValueError('Script attachments must reference sources inside the project')
     result=compiler.Build([p for p in sources if Path(p).suffix.lower()!='.lua'])

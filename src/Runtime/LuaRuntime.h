@@ -13,8 +13,6 @@ public:
     void Update(float deltaTime);
     void FixedUpdate(float deltaTime);
     void LateUpdate(float deltaTime);
-    bool StartApplication(const std::filesystem::path& path,std::string& error);
-    void ApplicationEvent(const Bazzalt::ApplicationEvent& event);
     void Stop() noexcept;
     static bool Import(const std::filesystem::path& source,const std::filesystem::path& output,std::string& error);
 private:

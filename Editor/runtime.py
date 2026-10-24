@@ -443,6 +443,9 @@ class RuntimeService(QObject):
             return False
         return True
 
+    def ApplicationTickInterval(self)->int:
+        return int(self._host.application_tick_interval()) if self._host and hasattr(self._host,'application_tick_interval') else 16
+
     def Stop(self) -> None:
         if self._host is not None: self._host.stop(); self.SceneChanged.emit()
 

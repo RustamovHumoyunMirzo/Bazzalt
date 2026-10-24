@@ -47,11 +47,21 @@
 <p>Importer path identifying a model node across hierarchy changes.</p>
 <h2 id="HasMesh">HasMesh</h2>
 <pre><code>bool HasMesh = false</code></pre>
-<p>Boolean import flag indicating this child contains renderable mesh geometry.</p></article>
+<p>Boolean import flag indicating this child contains renderable mesh geometry.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Public declarations</h2>
+<p>Header: <code>Bazzalt/Components/ModelNode.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
+<pre><code class="language-cpp">struct ModelNode {
+UUID ModelAsset{};
+std::uint32_t SourceIndex = 0;
+std::uint32_t MeshIndex = std::numeric_limits&lt;std::uint32_t&gt;::max();
+std::string StablePath;
+bool HasMesh = false;
+};</code></pre>
+<!-- API-SOURCE-END --></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../ModelInstance/en.html"><small>Previous</small>ModelInstance</a>
 <a class="next" href="../MouseButton/en.html"><small>Next</small>MouseButton</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#ModelAsset">ModelAsset</a><a class="toc-link" href="#SourceIndex">SourceIndex</a><a class="toc-link" href="#MeshIndex">MeshIndex</a><a class="toc-link" href="#StablePath">StablePath</a><a class="toc-link" href="#HasMesh">HasMesh</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#ModelAsset">ModelAsset</a><a class="toc-link" href="#SourceIndex">SourceIndex</a><a class="toc-link" href="#MeshIndex">MeshIndex</a><a class="toc-link" href="#StablePath">StablePath</a><a class="toc-link" href="#HasMesh">HasMesh</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

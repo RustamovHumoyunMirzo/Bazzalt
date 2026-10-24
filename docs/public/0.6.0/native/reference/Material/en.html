@@ -306,11 +306,64 @@ static Material Create(ShaderPreset preset = ShaderPreset::StandardLit)</code></
 <h2 id="SetRenderTexture">SetRenderTexture</h2>
 <p><code>void SetRenderTexture(const std::string&amp; name, RenderTexture value)</code> binds live camera output to a Texture2D parameter. Built-in Unlit/UnlitTransparent expose baseColorTexture. Wrong parameter names/types throw invalid_argument. Empty handles remove the live binding. These are runtime overrides, not asset-file edits. See <a href="../RenderTexture/en.html">RenderTexture</a> for ownership and feedback rules.</p>
 <h2 id="GetRenderTexture">GetRenderTexture</h2>
-<p><code>RenderTexture GetRenderTexture(const std::string&amp; name) const</code> returns a bound camera reference or an empty handle when the parameter uses an asset source. Wrong parameter names/types throw invalid_argument. SetTexture and resets clear camera bindings; compatible cloning/copying preserves them.</p></article>
+<p><code>RenderTexture GetRenderTexture(const std::string&amp; name) const</code> returns a bound camera reference or an empty handle when the parameter uses an asset source. Wrong parameter names/types throw invalid_argument. SetTexture and resets clear camera bindings; compatible cloning/copying preserves them.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Public declarations</h2>
+<p>Header: <code>Bazzalt/Material.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
+<pre><code class="language-cpp">class Material {
+Material() = default;
+[[nodiscard]] static Material Load(UUID id);
+[[nodiscard]] static Material Create(Shader shader);
+[[nodiscard]] BAZZALT_API static Material Create(ShaderPreset preset = ShaderPreset::StandardLit);
+[[nodiscard]] BAZZALT_API bool IsRuntime() const;
+BAZZALT_API bool Destroy();
+// Only transient materials; shared assets are never deleted.
+    BAZZALT_API void SetShader(Shader shader, bool preserveProperties = true);
+BAZZALT_API void CopyPropertiesFrom(Material source, bool copyRenderState = true);
+BAZZALT_API void ResetParameter(const std::string&amp; name);
+BAZZALT_API void ResetProperties();
+[[nodiscard]] BAZZALT_API bool HasOverride(const std::string&amp; name) const;
+[[nodiscard]] BAZZALT_API MaterialRenderState GetRenderState() const;
+BAZZALT_API void SetRenderState(MaterialRenderState state);
+BAZZALT_API void ResetRenderState();
+static constexpr std::size_t AllSlots = std::numeric_limits&lt;std::size_t&gt;::max();
+// Defaults to this entity only; children must be requested explicitly.
+    BAZZALT_API std::size_t ApplyTo(Entity entity, std::size_t slot = AllSlots, bool includeChildren = false) const;
+[[nodiscard]] UUID GetAssetUUID() const;
+[[nodiscard]] bool IsValid() const;
+[[nodiscard]] Material Instantiate() const;
+[[nodiscard]] Shader GetShader() const;
+[[nodiscard]] std::vector&lt;ShaderParameter&gt; GetParameters() const;
+[[nodiscard]] bool HasParameter(const std::string&amp; name) const;
+void SetFloat(const std::string&amp; name,float value);
+void SetVec2(const std::string&amp; name,Vec2 value);
+void SetVec3(const std::string&amp; name,Vec3 value);
+void SetVec4(const std::string&amp; name,Vec4 value);
+void SetColor(const std::string&amp; name,Vec4 value);
+void SetMatrix3(const std::string&amp; name,const Mat3&amp; value);
+void SetMatrix4(const std::string&amp; name,const Mat4&amp; value);
+void SetInteger(const std::string&amp; name,std::int32_t value);
+void SetBoolean(const std::string&amp; name,bool value);
+void SetTexture(const std::string&amp; name,UUID value);
+void SetTexture(const std::string&amp; name,Texture value);
+// Runtime-only sampler binding. ResetParameter or SetTexture restores an asset source.
+    BAZZALT_API void SetRenderTexture(const std::string&amp; name,RenderTexture value);
+[[nodiscard]] BAZZALT_API RenderTexture GetRenderTexture(const std::string&amp; name) const;
+[[nodiscard]] float GetFloat(const std::string&amp; name) const;
+[[nodiscard]] Vec2 GetVec2(const std::string&amp; name) const;
+[[nodiscard]] Vec3 GetVec3(const std::string&amp; name) const;
+[[nodiscard]] Vec4 GetVec4(const std::string&amp; name) const;
+[[nodiscard]] Vec4 GetColor(const std::string&amp; name) const;
+[[nodiscard]] Mat3 GetMatrix3(const std::string&amp; name) const;
+[[nodiscard]] Mat4 GetMatrix4(const std::string&amp; name) const;
+[[nodiscard]] std::int32_t GetInteger(const std::string&amp; name) const;
+[[nodiscard]] bool GetBoolean(const std::string&amp; name) const;
+[[nodiscard]] UUID GetTexture(const std::string&amp; name) const;
+};</code></pre>
+<!-- API-SOURCE-END --></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../Mat4/en.html"><small>Previous</small>Mat4</a>
 <a class="next" href="../MaterialBuilder/en.html"><small>Next</small>MaterialBuilder</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#Material">Material</a><a class="toc-link" href="#Load">Load</a><a class="toc-link" href="#Create">Create</a><a class="toc-link" href="#IsRuntime">IsRuntime</a><a class="toc-link" href="#Destroy">Destroy</a><a class="toc-link" href="#SetShader">SetShader</a><a class="toc-link" href="#CopyPropertiesFrom">CopyPropertiesFrom</a><a class="toc-link" href="#ResetParameter">ResetParameter</a><a class="toc-link" href="#ResetProperties">ResetProperties</a><a class="toc-link" href="#HasOverride">HasOverride</a><a class="toc-link" href="#GetRenderState">GetRenderState</a><a class="toc-link" href="#SetRenderState">SetRenderState</a><a class="toc-link" href="#ResetRenderState">ResetRenderState</a><a class="toc-link" href="#AllSlots">AllSlots</a><a class="toc-link" href="#ApplyTo">ApplyTo</a><a class="toc-link" href="#GetAssetUUID">GetAssetUUID</a><a class="toc-link" href="#IsValid">IsValid</a><a class="toc-link" href="#Instantiate">Instantiate</a><a class="toc-link" href="#GetShader">GetShader</a><a class="toc-link" href="#GetParameters">GetParameters</a><a class="toc-link" href="#HasParameter">HasParameter</a><a class="toc-link" href="#SetFloat">SetFloat</a><a class="toc-link" href="#SetVec2">SetVec2</a><a class="toc-link" href="#SetVec3">SetVec3</a><a class="toc-link" href="#SetVec4">SetVec4</a><a class="toc-link" href="#SetColor">SetColor</a><a class="toc-link" href="#SetMatrix3">SetMatrix3</a><a class="toc-link" href="#SetMatrix4">SetMatrix4</a><a class="toc-link" href="#SetInteger">SetInteger</a><a class="toc-link" href="#SetBoolean">SetBoolean</a><a class="toc-link" href="#SetTexture">SetTexture</a><a class="toc-link" href="#GetFloat">GetFloat</a><a class="toc-link" href="#GetVec2">GetVec2</a><a class="toc-link" href="#GetVec3">GetVec3</a><a class="toc-link" href="#GetVec4">GetVec4</a><a class="toc-link" href="#GetColor">GetColor</a><a class="toc-link" href="#GetMatrix3">GetMatrix3</a><a class="toc-link" href="#GetMatrix4">GetMatrix4</a><a class="toc-link" href="#GetInteger">GetInteger</a><a class="toc-link" href="#GetBoolean">GetBoolean</a><a class="toc-link" href="#GetTexture">GetTexture</a><a class="toc-link" href="#SetRenderTexture">SetRenderTexture</a><a class="toc-link" href="#GetRenderTexture">GetRenderTexture</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#Material">Material</a><a class="toc-link" href="#Load">Load</a><a class="toc-link" href="#Create">Create</a><a class="toc-link" href="#IsRuntime">IsRuntime</a><a class="toc-link" href="#Destroy">Destroy</a><a class="toc-link" href="#SetShader">SetShader</a><a class="toc-link" href="#CopyPropertiesFrom">CopyPropertiesFrom</a><a class="toc-link" href="#ResetParameter">ResetParameter</a><a class="toc-link" href="#ResetProperties">ResetProperties</a><a class="toc-link" href="#HasOverride">HasOverride</a><a class="toc-link" href="#GetRenderState">GetRenderState</a><a class="toc-link" href="#SetRenderState">SetRenderState</a><a class="toc-link" href="#ResetRenderState">ResetRenderState</a><a class="toc-link" href="#AllSlots">AllSlots</a><a class="toc-link" href="#ApplyTo">ApplyTo</a><a class="toc-link" href="#GetAssetUUID">GetAssetUUID</a><a class="toc-link" href="#IsValid">IsValid</a><a class="toc-link" href="#Instantiate">Instantiate</a><a class="toc-link" href="#GetShader">GetShader</a><a class="toc-link" href="#GetParameters">GetParameters</a><a class="toc-link" href="#HasParameter">HasParameter</a><a class="toc-link" href="#SetFloat">SetFloat</a><a class="toc-link" href="#SetVec2">SetVec2</a><a class="toc-link" href="#SetVec3">SetVec3</a><a class="toc-link" href="#SetVec4">SetVec4</a><a class="toc-link" href="#SetColor">SetColor</a><a class="toc-link" href="#SetMatrix3">SetMatrix3</a><a class="toc-link" href="#SetMatrix4">SetMatrix4</a><a class="toc-link" href="#SetInteger">SetInteger</a><a class="toc-link" href="#SetBoolean">SetBoolean</a><a class="toc-link" href="#SetTexture">SetTexture</a><a class="toc-link" href="#GetFloat">GetFloat</a><a class="toc-link" href="#GetVec2">GetVec2</a><a class="toc-link" href="#GetVec3">GetVec3</a><a class="toc-link" href="#GetVec4">GetVec4</a><a class="toc-link" href="#GetColor">GetColor</a><a class="toc-link" href="#GetMatrix3">GetMatrix3</a><a class="toc-link" href="#GetMatrix4">GetMatrix4</a><a class="toc-link" href="#GetInteger">GetInteger</a><a class="toc-link" href="#GetBoolean">GetBoolean</a><a class="toc-link" href="#GetTexture">GetTexture</a><a class="toc-link" href="#SetRenderTexture">SetRenderTexture</a><a class="toc-link" href="#GetRenderTexture">GetRenderTexture</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

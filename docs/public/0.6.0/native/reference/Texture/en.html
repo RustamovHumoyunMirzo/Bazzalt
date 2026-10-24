@@ -62,11 +62,28 @@ material.SetTexture("baseColorTexture", texture);
 <p>Camera.RenderTarget stores the texture UUID; SetRenderTarget(Texture) validates writable type and GetRenderTarget() returns the handle. An empty handle restores normal camera presentation. Camera must be enabled and Active to produce frames. With no producer, a writable texture displays its descriptor ClearColor, not a stale camera frame. Multiple active cameras targeting the same texture are rejected as conflicting captures; neither overwrites the other. Use separate textures or disable one producer.</p>
 <p>GuiImage.Texture, Material.SetTexture and MaterialBuilder.SetTexture accept the same UUID or Texture handle. Viewport, Camera-Bound and Spatial GUI all sample the same resource. Dependencies render producers first; recursive groups sample completed history. Camera-Bound controls rendered into textures remain display-only until texture-space input forwarding is added. Existing Texture2D shader samplers share the centralized loader; no source-specific camera ID is required.</p>
 <h2 id="legacy">Camera Render Target component</h2>
-<p>CameraRenderTarget is retained for old scenes and code that use camera-owned transient outputs. New authoring uses Texture assets and the Camera Render Target picker, so the legacy component is hidden from Add Component. When both are present, Camera.RenderTarget takes precedence. Existing RenderTexture/GuiImage.Camera APIs remain compatible; they are convenience references, not the new resource identity.</p></article>
+<p>CameraRenderTarget is retained for old scenes and code that use camera-owned transient outputs. New authoring uses Texture assets and the Camera Render Target picker, so the legacy component is hidden from Add Component. When both are present, Camera.RenderTarget takes precedence. Existing RenderTexture/GuiImage.Camera APIs remain compatible; they are convenience references, not the new resource identity.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Public declarations</h2>
+<p>Header: <code>Bazzalt/Texture.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
+<pre><code class="language-cpp">class Texture {
+Texture()=default;
+[[nodiscard]] static Texture Load(UUID id);
+[[nodiscard]] static Texture Create(const TextureDescriptor&amp; descriptor={});
+[[nodiscard]] UUID GetAssetUUID() const;
+[[nodiscard]] bool IsValid() const;
+[[nodiscard]] bool IsRenderTarget() const;
+[[nodiscard]] bool IsRuntime() const;
+[[nodiscard]] TextureDescriptor GetDescriptor() const;
+void SetDescriptor(const TextureDescriptor&amp; descriptor);
+void ResetDescriptor();
+void Resize(std::uint32_t width,std::uint32_t height);
+bool Destroy();
+};</code></pre>
+<!-- API-SOURCE-END --></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../System/en.html"><small>Previous</small>System</a>
-<a class="next" href="../TextureDescriptor/en.html"><small>Next</small>TextureDescriptor</a></nav>
+<a class="next" href="../TextureColorFormat/en.html"><small>Next</small>TextureColorFormat</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Camera output as an ordinary texture</a><a class="toc-link" href="#construction">Construction and Load</a><a class="toc-link" href="#Create">Create(descriptor)</a><a class="toc-link" href="#IsValid">IsValid and IsRenderTarget</a><a class="toc-link" href="#IsRuntime">IsRuntime()</a><a class="toc-link" href="#GetDescriptor">GetDescriptor()</a><a class="toc-link" href="#SetDescriptor">SetDescriptor(descriptor)</a><a class="toc-link" href="#ResetDescriptor">ResetDescriptor()</a><a class="toc-link" href="#Resize">Resize(width, height)</a><a class="toc-link" href="#Destroy">Destroy()</a><a class="toc-link" href="#producer">Producer and consumer rules</a><a class="toc-link" href="#legacy">Camera Render Target component</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Camera output as an ordinary texture</a><a class="toc-link" href="#construction">Construction and Load</a><a class="toc-link" href="#Create">Create(descriptor)</a><a class="toc-link" href="#IsValid">IsValid and IsRenderTarget</a><a class="toc-link" href="#IsRuntime">IsRuntime()</a><a class="toc-link" href="#GetDescriptor">GetDescriptor()</a><a class="toc-link" href="#SetDescriptor">SetDescriptor(descriptor)</a><a class="toc-link" href="#ResetDescriptor">ResetDescriptor()</a><a class="toc-link" href="#Resize">Resize(width, height)</a><a class="toc-link" href="#Destroy">Destroy()</a><a class="toc-link" href="#producer">Producer and consumer rules</a><a class="toc-link" href="#legacy">Camera Render Target component</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

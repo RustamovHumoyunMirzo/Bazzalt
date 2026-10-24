@@ -1,7 +1,6 @@
 """Editor-only project metadata editing; never reloads or resets open scenes."""
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QTextEdit, QVBoxLayout
-from .widgets.fields import AssetPickerInput
 
 
 class ProjectSettingsDialog(QDialog):
@@ -23,13 +22,6 @@ class ProjectSettingsDialog(QDialog):
         form.addRow(self.Tr("project_settings.name"), self.Name)
         self.Fields = {}
         properties = dict(self.Info.get("properties", {}))
-        self.ApplicationScript=AssetPickerInput(self.Tr('properties.select_project_asset'),accepted_extensions=('.cpp','.lua'),picker_title=self.Tr('project_settings.application_script'),search_placeholder=self.Tr('properties.search_project_assets'),missing_label=self.Tr('properties.missing_asset'))
-        self.ApplicationScript.AssetResolver=getattr(editor.Runtime,'ResolveAssetRecord',None)
-        controller=getattr(editor,'Controller',None)
-        self.ApplicationScript.ConfigureAssets(controller._ProjectAssets() if controller else [])
-        if properties.get('application.script'):self.ApplicationScript.SetValue(properties['application.script'])
-        self.ApplicationScript.PickRequested.connect(self.ApplicationScript.OpenProjectPicker)
-        form.addRow(self.Tr('project_settings.application_script'),self.ApplicationScript)
         for key in ("company", "version", "description"):
             field = QTextEdit() if key == "description" else QLineEdit()
             value = properties.get("project." + key, "")
@@ -68,7 +60,6 @@ class ProjectSettingsDialog(QDialog):
 
     def _Apply(self):
         properties = dict(self.Info.get("properties", {}))
-        properties['application.script']=str(self.ApplicationScript.GetValue() or '')
         for key, field in self.Fields.items():
             properties["project." + key] = field.toPlainText() if key == "description" else field.text()
         if self.Editor.Runtime.UpdateProjectInfo(self.Name.text().strip(), properties):

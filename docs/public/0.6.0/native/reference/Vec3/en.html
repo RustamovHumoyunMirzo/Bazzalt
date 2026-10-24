@@ -154,11 +154,40 @@ constexpr Vec3 operator *(float scalar) const</code></pre>
 <p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p>
 <table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
 <tr><td><code>float scalar</code></td><td>Operand/value of the type shown in the declaration; see this method&#x27;s behavior and coordinate-space description.</td></tr>
-</tbody></table></article>
+</tbody></table><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Public declarations</h2>
+<p>Header: <code>Bazzalt/Math.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
+<pre><code class="language-cpp">struct Vec3 {
+float X = 0.0f;
+float Y = 0.0f;
+float Z = 0.0f;
+constexpr Vec3() = default;
+constexpr explicit Vec3(float value);
+constexpr Vec3(float x, float y, float z);
+[[nodiscard]] constexpr float LengthSquared() const;
+[[nodiscard]] float Length() const;
+[[nodiscard]] Vec3 Normalized() const;
+void Normalize();
+[[nodiscard]] static constexpr float Dot(Vec3 left, Vec3 right);
+[[nodiscard]] static constexpr Vec3 Cross(Vec3 left, Vec3 right);
+[[nodiscard]] static constexpr Vec3 Lerp(Vec3 from, Vec3 to, float amount);
+constexpr Vec3 operator+() const;
+constexpr Vec3 operator-() const;
+constexpr Vec3 operator+(Vec3 right) const;
+constexpr Vec3 operator-(Vec3 right) const;
+constexpr Vec3 operator*(Vec3 right) const;
+constexpr Vec3 operator*(float scalar) const;
+constexpr Vec3 operator/(float scalar) const;
+constexpr Vec3&amp; operator+=(Vec3 right);
+constexpr Vec3&amp; operator-=(Vec3 right);
+constexpr Vec3&amp; operator*=(float scalar);
+constexpr Vec3&amp; operator/=(float scalar);
+};</code></pre>
+<!-- API-SOURCE-END --></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../Vec2/en.html"><small>Previous</small>Vec2</a>
 <a class="next" href="../Vec4/en.html"><small>Next</small>Vec4</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#X">X</a><a class="toc-link" href="#Y">Y</a><a class="toc-link" href="#Z">Z</a><a class="toc-link" href="#Vec3">Vec3</a><a class="toc-link" href="#LengthSquared">LengthSquared</a><a class="toc-link" href="#Length">Length</a><a class="toc-link" href="#Normalized">Normalized</a><a class="toc-link" href="#Normalize">Normalize</a><a class="toc-link" href="#Dot">Dot</a><a class="toc-link" href="#Cross">Cross</a><a class="toc-link" href="#Lerp">Lerp</a><a class="toc-link" href="#operator-add">operator+</a><a class="toc-link" href="#operator-subtract">operator-</a><a class="toc-link" href="#operator-multiply">operator*</a><a class="toc-link" href="#operator-divide">operator/</a><a class="toc-link" href="#operator-add-assign">operator+=</a><a class="toc-link" href="#operator-subtract-assign">operator-=</a><a class="toc-link" href="#operator-multiply-assign">operator*=</a><a class="toc-link" href="#operator-divide-assign">operator/=</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#X">X</a><a class="toc-link" href="#Y">Y</a><a class="toc-link" href="#Z">Z</a><a class="toc-link" href="#Vec3">Vec3</a><a class="toc-link" href="#LengthSquared">LengthSquared</a><a class="toc-link" href="#Length">Length</a><a class="toc-link" href="#Normalized">Normalized</a><a class="toc-link" href="#Normalize">Normalize</a><a class="toc-link" href="#Dot">Dot</a><a class="toc-link" href="#Cross">Cross</a><a class="toc-link" href="#Lerp">Lerp</a><a class="toc-link" href="#operator-add">operator+</a><a class="toc-link" href="#operator-subtract">operator-</a><a class="toc-link" href="#operator-multiply">operator*</a><a class="toc-link" href="#operator-divide">operator/</a><a class="toc-link" href="#operator-add-assign">operator+=</a><a class="toc-link" href="#operator-subtract-assign">operator-=</a><a class="toc-link" href="#operator-multiply-assign">operator*=</a><a class="toc-link" href="#operator-divide-assign">operator/=</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

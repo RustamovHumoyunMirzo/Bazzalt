@@ -151,8 +151,9 @@ requires a native binding and operation registration before Lua can access it.
 `scene:AddSystem(name, table)` registers a Lua system with optional
 OnCreate(scene), OnUpdate(scene, dt), OnFixedUpdate(scene, dt), OnLateUpdate(scene, dt), OnDestroy(scene).
 
-Project-level application entry scripts and global subscriptions are described in
-[application-events.md](application-events.md). They use a separate VM from entity behaviors.
+Global lifecycle listeners now belong exclusively to C++ subsystem modules;
+see [global-subsystems.md](global-subsystems.md). Lua entity behaviors use the
+global Application controls (dot or colon calls), not lifecycle registration.
 HasSystem/GetSystem/RemoveSystem and SetSystemEnabled/IsSystemEnabled use that
 name. Implement component iteration with `scene:GetEntities("Light")`, then
 GetComponent/SetComponent. Runtime-owned dispatch runs through the normal Scene

@@ -24,6 +24,7 @@ class RenderBackend;
 class NativeScriptRuntime;
 class LuaRuntime;
 class AudioRuntime;
+class SubsystemRuntime;
 struct ScriptBinding;
 
 // Runtime-owned orchestration. Kept outside the public include tree so only
@@ -50,7 +51,9 @@ public:
     bool HasEnvironmentSkybox() const;
     static std::vector<std::string> SupportedRenderingBackends();
     bool ConfigureRenderingBackend(const std::string& backend);
-    void Update();
+    void Update(bool renderFrame = true);
+    void ResetFrameClock(){m_lastFrameTime=std::chrono::steady_clock::now();}
+    void SetEditorHost(bool editor){m_editorHost=editor;}
     void RenderEditorFrame();
     std::unordered_map<std::string,double> GetEditorStatistics() const;
     void SetEditorStatisticsText(std::string text,bool visible);
@@ -139,10 +142,11 @@ private:
     std::unique_ptr<NativeScriptRuntime> m_scriptRuntime;
     std::unique_ptr<LuaRuntime> m_luaRuntime;
     std::unique_ptr<AudioRuntime> m_audioRuntime;
-    std::unique_ptr<NativeScriptRuntime> m_applicationNative;
-    std::unique_ptr<LuaRuntime> m_applicationLua;
     bool m_applicationPrepared=false,m_preShutdown=false,m_scriptsRunning=false;
-    std::filesystem::path m_applicationModule;
+    std::unique_ptr<SubsystemRuntime> m_subsystems;
+    std::unordered_map<UUID,std::filesystem::path> m_subsystemModules;
+    std::unordered_set<UUID> m_subsystemAssets;
+    bool m_editorHost=false;
     bool m_headlessAudio=false;
     bool m_luaConfigured=false;
     bool m_editorIconsVisible=true;

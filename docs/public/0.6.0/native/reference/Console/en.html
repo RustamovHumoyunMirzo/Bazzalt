@@ -42,11 +42,29 @@ Console::Clear(filter);</code></pre>
         if (message.Source == "AI") Console::ClearMessage(message.Id);
     }
 }</code></pre>
-<h2 id="clear">Clear operations</h2><p><code>Clear(filter={})</code> removes matching entries; default removes all. <code>ClearAt(size_t index)</code> removes a zero-based unfiltered entry. <code>ClearMessage(uint64_t id)</code> removes one ID. <code>ClearMessages(const vector&lt;uint64_t&gt;&amp; ids)</code> removes IDs in one batch. Missing indices/IDs are harmless no-ops. These operations affect the same store displayed in the editor, not only script-originated messages.</p></article>
+<h2 id="clear">Clear operations</h2><p><code>Clear(filter={})</code> removes matching entries; default removes all. <code>ClearAt(size_t index)</code> removes a zero-based unfiltered entry. <code>ClearMessage(uint64_t id)</code> removes one ID. <code>ClearMessages(const vector&lt;uint64_t&gt;&amp; ids)</code> removes IDs in one batch. Missing indices/IDs are harmless no-ops. These operations affect the same store displayed in the editor, not only script-originated messages.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Public declarations</h2>
+<p>Header: <code>Bazzalt/Console.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
+<pre><code class="language-cpp">class Console {
+static bool IsAvailable() noexcept;
+static void Log(const std::string&amp; text,ConsoleLevel level=ConsoleLevel::Info,const std::string&amp; source=&quot;Script&quot;,bool showIcon=true) noexcept;
+static void Info(const std::string&amp; text,const std::string&amp; source=&quot;Script&quot;,bool showIcon=true) noexcept;
+static void Warning(const std::string&amp; text,const std::string&amp; source=&quot;Script&quot;,bool showIcon=true) noexcept;
+static void Error(const std::string&amp; text,const std::string&amp; source=&quot;Script&quot;,bool showIcon=true) noexcept;
+static void Clear(const ConsoleFilter&amp; filter={}) noexcept;
+static void ClearAt(std::size_t index) noexcept;
+static void ClearMessage(std::uint64_t id) noexcept;
+static void ClearMessages(const std::vector&lt;std::uint64_t&gt;&amp; ids) noexcept;
+static std::optional&lt;std::size_t&gt; GetCount(const ConsoleFilter&amp; filter={}) noexcept;
+static std::optional&lt;ConsoleMessage&gt; GetMessageAt(std::size_t index) noexcept;
+static std::optional&lt;ConsoleMessage&gt; FindMessage(std::uint64_t id) noexcept;
+static std::optional&lt;std::vector&lt;ConsoleMessage&gt;&gt; GetMessages(const ConsoleFilter&amp; filter={}) noexcept;
+};</code></pre>
+<!-- API-SOURCE-END --></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../ComponentSystem/en.html"><small>Previous</small>ComponentSystem</a>
-<a class="next" href="../CustomPostProcessEffect/en.html"><small>Next</small>CustomPostProcessEffect</a></nav>
+<a class="next" href="../ConsoleFilter/en.html"><small>Next</small>ConsoleFilter</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#availability">Runtime contract</a><a class="toc-link" href="#messages">Write messages</a><a class="toc-link" href="#filter">ConsoleFilter and ConsoleLevel</a><a class="toc-link" href="#read">Read snapshots</a><a class="toc-link" href="#clear">Clear operations</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#availability">Runtime contract</a><a class="toc-link" href="#messages">Write messages</a><a class="toc-link" href="#filter">ConsoleFilter and ConsoleLevel</a><a class="toc-link" href="#read">Read snapshots</a><a class="toc-link" href="#clear">Clear operations</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

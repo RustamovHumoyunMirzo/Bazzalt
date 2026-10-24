@@ -1,5 +1,8 @@
 #include "Runtime/Engine.h"
 #include "Runtime/ApplicationEventsAccess.h"
+#include "Runtime/ApplicationAccess.h"
+#include "Runtime/SubsystemRuntime.h"
+#include <ryml.hpp>
 #include "Audio/AudioRuntime.h"
 #include "Runtime/TextureLibrary.h"
 #include "GUI/GuiSystem.h"
@@ -69,6 +72,7 @@ bool Engine::Init(bool headless, bool startScripts)
     std::cout << "[Engine] Initializing Core Subsystems...\n";
     if(startScripts&&!PrepareApplication())return false;
     ApplicationEventsAccess::Emit({ApplicationEventType::OnInit});
+    try{ApplicationEventsAccess::ThrowIfFailed();}catch(const std::exception& error){m_lastError=error.what();return false;}
 
     if (!m_renderBackend->Initialize(headless))
     {
@@ -82,6 +86,7 @@ bool Engine::Init(bool headless, bool startScripts)
     AttachRenderSystems();
 
     m_isInitialized = true;
+    ApplicationAccess::SetServicesReady(true);
     m_shouldClose = false;
     m_frameCount = 0;
     m_deltaTime = 0.016f;
@@ -94,7 +99,7 @@ bool Engine::Init(bool headless, bool startScripts)
     return true;
 }
 
-void Engine::Update()
+void Engine::Update(bool renderFrame)
 {
     if (!m_isInitialized)
     {
@@ -102,16 +107,25 @@ void Engine::Update()
         return;
     }
 
+    ApplicationEventsAccess::ThrowIfFailed();
     ProcessPendingSceneLoad();
+    if(!m_subsystemAssets.empty())for(auto handle:m_scene->GetRegistry().view<ScriptComponents>())for(const auto& script:m_scene->GetRegistry().get<ScriptComponents>(handle).Values){
+        UUID id;const bool reference=UUID::TryParse(script.Source,id);
+        const auto source=std::filesystem::u8path(script.Source);
+        auto asset=reference?m_assetDatabase->Find(id):m_assetDatabase->Find(source.is_absolute()?source:m_projectPath.parent_path()/source);
+        if((reference&&m_subsystemAssets.contains(id))||(asset&&m_subsystemAssets.contains(asset->Id)))throw std::logic_error("Registered subsystem cannot be attached to an entity: "+script.TypeName);
+    }
 
     const auto currentTime = std::chrono::steady_clock::now();
-    TimeAccess::Advance(std::chrono::duration<double>(currentTime - m_lastFrameTime).count());
+    const double unscaledDelta=std::chrono::duration<double>(currentTime - m_lastFrameTime).count();
+    TimeAccess::Advance(unscaledDelta);ApplicationAccess::Advance(unscaledDelta);
     m_deltaTime = Time::GetDeltaTime();
     m_lastFrameTime = currentTime;
 
     m_frameCount++;
     InputAccess::BeginFrame();
     ApplicationEventsAccess::Emit({ApplicationEventType::OnPreUpdate,m_deltaTime});
+    ApplicationEventsAccess::ThrowIfFailed();
     m_scene->GetSystem<GuiSystem>().PresentationSize={float(m_renderBackend->GetPresentationWidth()),float(m_renderBackend->GetPresentationHeight())};
     m_fixedAccumulator += m_deltaTime;
     // Bound catch-up work even if game code chooses an extremely short step.
@@ -121,6 +135,7 @@ void Engine::Update()
         m_fixedAccumulator -= step;
         TimeAccess::FixedScope fixed;
         ApplicationEventsAccess::Emit({ApplicationEventType::OnFixedUpdate,step});
+        ApplicationEventsAccess::ThrowIfFailed();
         m_scene->FixedUpdate(step);
         m_scriptRuntime->FixedUpdate(step);
         m_luaRuntime->FixedUpdate(step);
@@ -130,19 +145,23 @@ void Engine::Update()
     m_scriptRuntime->Update(m_deltaTime);
     m_luaRuntime->Update(m_deltaTime);
     ApplicationEventsAccess::Emit({ApplicationEventType::OnUpdate,m_deltaTime});
+    ApplicationEventsAccess::ThrowIfFailed();
     m_scene->LateUpdate(m_deltaTime);
     m_scriptRuntime->LateUpdate(m_deltaTime);
     m_luaRuntime->LateUpdate(m_deltaTime);
     ApplicationEventsAccess::Emit({ApplicationEventType::OnLateUpdate,m_deltaTime});
+    ApplicationEventsAccess::ThrowIfFailed();
     m_scene->UpdateSystem<CameraSystem>();
     m_audioRuntime->SetHostPaused(false);
     m_audioRuntime->Update(Time::GetUnscaledDeltaTime());
     UpdateEditorOverlays();
     m_renderBackend->SetEnvironment(m_scene->GetEnvironment());
     ApplicationEventsAccess::Emit({ApplicationEventType::OnPreRender,m_deltaTime});
+    ApplicationEventsAccess::ThrowIfFailed();
     ApplicationEventsAccess::Emit({ApplicationEventType::OnRender,m_deltaTime});
-    m_renderBackend->Render();
-    ApplicationEventsAccess::Emit({ApplicationEventType::OnPostRender,m_deltaTime});
+    ApplicationEventsAccess::ThrowIfFailed();
+    if(renderFrame){m_renderBackend->Render();ApplicationEventsAccess::Emit({ApplicationEventType::OnPostRender,m_deltaTime});}
+    ApplicationEventsAccess::ThrowIfFailed();
 }
 
 std::vector<std::string> Engine::SupportedRenderingBackends(){return RenderBackend::SupportedBackends();}
@@ -338,6 +357,7 @@ void Engine::Shutdown(bool unloadScene)
     if(unloadScene)m_scene=std::make_unique<Scene>();
     m_renderBackend->Shutdown();
     InputAccess::Shutdown();
+    ApplicationAccess::SetServicesReady(false);if(unloadScene)ApplicationAccess::SetSceneReady(false);
     unloading.Type=ApplicationEventType::OnSceneUnloaded;if(unloadScene)ApplicationEventsAccess::Emit(unloading);
 
     m_isInitialized = false;
@@ -346,7 +366,7 @@ void Engine::Shutdown(bool unloadScene)
 
 bool Engine::ShouldClose() const
 {
-    return m_shouldClose;
+    return m_shouldClose||(m_applicationPrepared&&Application::IsQuitting());
 }
 
 void Engine::RequestClose()
@@ -356,9 +376,10 @@ void Engine::RequestClose()
 
 bool Engine::ConfigureScripts(std::vector<ScriptBinding> bindings){
     if(m_scriptsRunning){m_lastError="Cannot configure scripts while playing";return false;}
-    m_applicationModule.clear();
-    for(const auto& binding:bindings)if(binding.Entity=="@application")m_applicationModule=binding.Module;
-    std::erase_if(bindings,[](const auto& binding){return binding.Entity=="@application";});
+    m_subsystemModules.clear();
+    for(const auto& binding:bindings)if(binding.Entity.starts_with("@subsystem:")){UUID id;if(!UUID::TryParse(binding.Entity.substr(11),id)){m_lastError="Invalid subsystem asset binding";return false;}m_subsystemModules[id]=binding.Module;}
+    std::erase_if(bindings,[](const auto& binding){return binding.Entity.starts_with("@subsystem:");});
+    for(const auto& binding:bindings)if(binding.Entity=="@application"){m_lastError="Legacy application binding must be replaced with a C++ subsystem";return false;}
     std::vector<ScriptBinding> native,lua;
     std::set<std::pair<std::string,std::string>> unique;
     for(const auto& binding:bindings)if(!unique.emplace(binding.Entity,binding.TypeName).second){m_lastError="Duplicate script component across Lua/native bindings";return false;}
@@ -381,6 +402,10 @@ bool Engine::RefreshLuaAsset(const std::filesystem::path& source){
 }
 bool Engine::StartScripts(bool resetTime){
     if(!PrepareApplication())return false;
+    for(auto handle:m_scene->GetRegistry().view<ScriptComponents>())for(const auto& script:m_scene->GetRegistry().get<ScriptComponents>(handle).Values){
+        UUID id;auto asset=UUID::TryParse(script.Source,id)?m_assetDatabase->Find(id):m_assetDatabase->Find(std::filesystem::u8path(script.Source).is_absolute()?std::filesystem::u8path(script.Source):m_projectPath.parent_path()/std::filesystem::u8path(script.Source));
+        if(asset&&m_subsystemAssets.contains(asset->Id)){m_lastError="Registered subsystem cannot be attached to an entity: "+script.TypeName;return false;}
+    }
     if(!m_luaConfigured){
         std::vector<ScriptBinding> bindings,native;
         for(auto handle:m_scene->GetRegistry().view<ScriptComponents>()){
@@ -407,36 +432,46 @@ bool Engine::StartScripts(bool resetTime){
     }
     if(resetTime)TimeAccess::Reset();m_fixedAccumulator=0.0;m_lastFrameTime=std::chrono::steady_clock::now();
     m_audioRuntime->Start(*m_scene,m_headlessAudio);
+    ApplicationAccess::SetAudioReady(true);
     if(!m_scriptRuntime->Start(m_lastError)){m_audioRuntime->Stop();return false;}
     if(!m_luaRuntime->Start(m_lastError)){m_scriptRuntime->Stop();m_audioRuntime->Stop();return false;}
     m_scriptsRunning=true;ApplicationEventsAccess::Emit({ApplicationEventType::OnPlay});return true;
 }
-void Engine::StopScripts(){if(m_scriptsRunning){ApplicationEventsAccess::Emit({ApplicationEventType::OnStop});m_scriptsRunning=false;}m_audioRuntime->Stop();m_luaRuntime->Stop();m_scriptRuntime->Stop();ResetRuntimeMaterials();ResetRuntimeTextures();}
+void Engine::StopScripts(){if(m_scriptsRunning){ApplicationEventsAccess::Emit({ApplicationEventType::OnStop});m_scriptsRunning=false;}m_audioRuntime->Stop();ApplicationAccess::SetAudioReady(false);m_luaRuntime->Stop();m_scriptRuntime->Stop();ResetRuntimeMaterials();ResetRuntimeTextures();}
 
 bool Engine::PrepareApplication(){
     if(m_applicationPrepared)return true;
-    auto found=m_project.Properties.find("application.script");
-    if(found!=m_project.Properties.end()&&!found->second.empty()){
-        UUID id;if(!UUID::TryParse(found->second,id)){m_lastError="application.script must be an asset UUID";return false;}
-        auto asset=m_assetDatabase->Find(id);if(!asset||asset->State!=AssetState::Ready){m_lastError="Application script asset is not ready";return false;}
-        auto module=m_applicationModule.empty()?asset->CachePath:m_applicationModule;
-        if(module.extension()==".blua"){
-            m_applicationLua=std::make_unique<LuaRuntime>();if(!m_applicationLua->StartApplication(asset->CachePath,m_lastError)){m_applicationLua.reset();return false;}
-        }else if(module.extension()==".dll"||module.extension()==".so"||module.extension()==".dylib"){
-            m_applicationNative=std::make_unique<NativeScriptRuntime>();ScriptBinding binding;binding.Module=module;
-            if(!m_applicationNative->Configure({binding},m_lastError)||!m_applicationNative->Start(m_lastError,true)){m_applicationNative.reset();return false;}
-        }else{m_lastError="Application script must be compiled Lua or a native script module";return false;}
-    }
-    for(int i=0;i<=int(ApplicationEventType::OnShutdown);++i)ApplicationEventsAccess::Subscribe(ApplicationEventType(i),[this](const ApplicationEvent& event){
-        if(m_applicationNative)m_applicationNative->ApplicationEvent(event);
-        if(m_applicationLua)m_applicationLua->ApplicationEvent(event);
-    },this);
-    m_applicationPrepared=true;m_preShutdown=false;ApplicationEventsAccess::Emit({ApplicationEventType::OnBoot});return true;
+    try{
+        if(auto legacy=m_project.Properties.find("application.script");legacy!=m_project.Properties.end()&&!legacy->second.empty())throw std::runtime_error("Application Script has been replaced: register a C++ script in Window > Global Subsystems");
+        ApplicationAccess::Reset(m_editorHost,m_project);m_subsystemAssets.clear();std::vector<SubsystemBinding> bindings;
+        if(auto found=m_project.Properties.find("application.subsystems");found!=m_project.Properties.end()&&!found->second.empty()){
+            if(found->second.size()>65536)throw std::runtime_error("Subsystem registration exceeds size limit");
+            auto tree=ryml::parse_in_arena(ryml::csubstr(found->second.data(),found->second.size()));auto root=tree.rootref();
+            if(!root.is_seq()||root.num_children()>128)throw std::runtime_error("Invalid subsystem registration list");
+            for(auto node:root.children()){
+                if(!node.is_map()||node.num_children()!=2||!node.has_child("asset")||!node.has_child("level"))throw std::runtime_error("Invalid subsystem registration");
+                auto idText=node["asset"].val();UUID id;if(!UUID::TryParse({idText.str,idText.len},id)||id.IsRoot()||!m_subsystemAssets.insert(id).second)throw std::runtime_error("Duplicate or invalid subsystem asset UUID");
+                auto levelText=node["level"].val();std::string levelValue(levelText.str,levelText.len);std::size_t used=0;int level=std::stoi(levelValue,&used);if(used!=levelValue.size()||level<0||level>4)throw std::runtime_error("Invalid subsystem load level");
+                auto asset=m_assetDatabase->Find(id);if(!asset||asset->State!=AssetState::Ready)throw std::runtime_error("Subsystem asset is not ready: "+id.ToString());
+                auto module=m_subsystemModules.contains(id)?m_subsystemModules.at(id):asset->CachePath;
+                bindings.push_back({id,module,level});
+            }
+        }
+        m_subsystems=std::make_unique<SubsystemRuntime>();m_subsystems->Configure(std::move(bindings));
+        ApplicationEventsAccess::BindStageLoader([this](int level){m_subsystems->ReachLevel(level);});
+        m_applicationPrepared=true;m_preShutdown=false;ApplicationEventsAccess::Emit({ApplicationEventType::OnBoot});ApplicationEventsAccess::ThrowIfFailed();
+        if(m_editorHost){
+            ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforeWindowCreate});ApplicationEventsAccess::Emit({ApplicationEventType::OnInit});
+            ApplicationAccess::SetServicesReady(true);ApplicationEventsAccess::Emit({ApplicationEventType::OnLoad});ApplicationAccess::SetSceneReady(true);
+            ApplicationEventsAccess::Emit({ApplicationEventType::OnPostWindowCreate});ApplicationEventsAccess::ThrowIfFailed();
+        }
+        return true;
+    }catch(const std::exception& error){m_lastError=error.what();if(m_subsystems)m_subsystems->Stop();ApplicationEventsAccess::BindStageLoader({});m_applicationPrepared=false;return false;}
 }
-void Engine::BeginShutdown(){if(m_applicationPrepared&&!m_preShutdown){m_preShutdown=true;ApplicationEventsAccess::Emit({ApplicationEventType::OnPreShutdown});}}
+void Engine::BeginShutdown(){if(m_applicationPrepared&&!m_preShutdown){m_preShutdown=true;Application::Quit(Application::GetExitCode());ApplicationEventsAccess::Emit({ApplicationEventType::OnPreShutdown});}}
 void Engine::EndApplication(){
-    if(!m_applicationPrepared)return;BeginShutdown();ApplicationEventsAccess::Emit({ApplicationEventType::OnShutdown});
-    ApplicationEventsAccess::DisconnectOwner(this);m_applicationLua.reset();m_applicationNative.reset();m_applicationPrepared=false;
+    if(!m_applicationPrepared)return;BeginShutdown();ApplicationAccess::SetServicesReady(false);ApplicationAccess::SetSceneReady(false);ApplicationAccess::SetAudioReady(false);ApplicationEventsAccess::Emit({ApplicationEventType::OnShutdown});
+    ApplicationEventsAccess::DisconnectOwner(this);if(m_subsystems)m_subsystems->Stop();ApplicationEventsAccess::BindStageLoader({});m_applicationPrepared=false;
 }
 bool Engine::RefreshTextureAsset(const std::filesystem::path& source){if(!m_assetDatabase)return false;const bool result=m_assetDatabase->RefreshSource(source);if(!result)m_lastError=m_assetDatabase->GetLastError();return result;}
 
@@ -455,6 +490,7 @@ void Engine::SetScene(std::unique_ptr<Scene> scene)
     StopScripts();m_luaConfigured=false;
     DetachRenderSystems();
     m_scene = std::move(scene);
+    ApplicationAccess::SetSceneReady(true);
     event.Type=ApplicationEventType::OnSceneUnloaded;ApplicationEventsAccess::Emit(event);
     AttachRenderSystems();
     event.Type=ApplicationEventType::OnSceneLoaded;event.SceneUUID=m_scene->GetUUID().ToString();ApplicationEventsAccess::Emit(event);
@@ -617,11 +653,22 @@ bool Engine::ExportCookedProject(const std::filesystem::path& destination,const 
             std::filesystem::copy_file(binding.Module,destination/relative,std::filesystem::copy_options::overwrite_existing);
             index<<"  - UUID: "<<std::quoted(id.ToString())<<"\n    Source: "<<std::quoted(utf8(project.AssetDirectory/"__Scripts"/(binding.TypeName+".cpp")))<<"\n    Cache: "<<std::quoted(utf8(relative))<<"\n    Importer: Bazzalt.NativeScript\n";
         }
-        for(const auto& binding:bindings)if(binding.Entity=="@application")project.Properties["application.script"]=modules.at(binding.TypeName).ToString();
+        if(auto registrations=project.Properties.find("application.subsystems");registrations!=project.Properties.end()){
+            auto tree=ryml::parse_in_arena(ryml::csubstr(registrations->second.data(),registrations->second.size()));
+            std::ostringstream json;json<<'[';bool first=true;
+            for(auto node:tree.rootref().children()){
+                auto text=node["asset"].val();std::string id(text.str,text.len);
+                auto binding=std::find_if(bindings.begin(),bindings.end(),[&](const auto& value){return value.Entity=="@subsystem:"+id;});
+                if(binding==bindings.end())throw std::runtime_error("Missing compiled subsystem module");
+                const auto replacement=modules.at(binding->TypeName).ToString();auto level=node["level"].val();
+                if(!first)json<<',';first=false;json<<"{\"asset\":"<<std::quoted(replacement)<<",\"level\":"<<std::string(level.str,level.len)<<'}';
+            }
+            json<<']';registrations->second=json.str();
+        }
         ProjectSerializer serializer;if(!serializer.Save(project,destination/"Game.bproject"))throw std::runtime_error("Could not write game project");
         for(const auto& [id,asset]:m_assetDatabase->GetRecords())if(asset.SourcePath.extension()==".bscene"){
             auto scene=LoadSceneAsset(asset.SourcePath);if(!scene)throw std::runtime_error("Could not cook scene");
-            for(const auto& binding:bindings){if(binding.Entity=="@application")continue;UUID entityId;if(!UUID::TryParse(binding.Entity,entityId))throw std::runtime_error("Invalid script entity UUID");auto entity=scene->GetEntity(entityId);if(!entity)continue;
+            for(const auto& binding:bindings){if(binding.Entity.starts_with("@subsystem:"))continue;UUID entityId;if(!UUID::TryParse(binding.Entity,entityId))throw std::runtime_error("Invalid script entity UUID");auto entity=scene->GetEntity(entityId);if(!entity)continue;
                 auto* scripts=entity.TryGetComponent<ScriptComponents>();if(!scripts)scripts=&entity.AddComponent<ScriptComponents>();
                 ScriptAttachment value;value.Source=modules.at(binding.TypeName).ToString();value.TypeName=binding.TypeName;
                 for(const auto& [key,property]:binding.Properties)value.Properties.push_back({key,"",property});

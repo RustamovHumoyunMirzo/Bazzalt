@@ -51,15 +51,13 @@ class ScriptingTests(unittest.TestCase):
         self.assertIn("BazzaltBindInputV1",wrapper)
         self.assertIn("BazzaltFixedUpdateV1",wrapper)
         self.assertIn("BazzaltLateUpdateV1",wrapper)
-        self.assertIn("BazzaltApplicationEventV1",wrapper)
+        self.assertNotIn("BazzaltApplicationEventV1",wrapper)
 
     def test_application_entry_is_compiled_without_attaching_to_an_entity(self):
         with tempfile.TemporaryDirectory() as folder:
             path=Path(folder)/'Game.cpp';path.write_text('#include <Bazzalt/Application.h>\nAPPLICATION(Game) { public: void OnBoot() override {} };',encoding='utf-8')
-            descriptor=ScriptCompiler.Inspect(path);self.assertEqual(descriptor.name,'Game')
-            store=ScriptAttachments(folder);application=store.WithApplicationSource(path)
-            self.assertEqual(store.UsedSources(),[])
-            self.assertEqual(application.RuntimeBindings((Path(folder)/'Game.dll',))[0]['entity'],'@application')
+            from Editor.scripting import ScriptValidationError
+            with self.assertRaises(ScriptValidationError):ScriptCompiler.Inspect(path)
 
     def test_compilation_ui_text_is_localized(self):
         localization=LocalizationManager(ResourceManager())

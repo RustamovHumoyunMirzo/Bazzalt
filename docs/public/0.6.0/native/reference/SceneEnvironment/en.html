@@ -65,11 +65,28 @@ scene-&gt;SetEnvironment(environment);</code></pre>
 <h2 id="IsValid">IsValid</h2>
 <pre><code>bool IsValid() const</code></pre>
 <p>Validates supported mode, finite nonnegative intensity, finite rotations/colors, nonnegative color channels and alpha in [0,1]. Does not validate asset import readiness.</p>
-<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p></article>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Public declarations</h2>
+<p>Header: <code>Bazzalt/SceneEnvironment.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
+<pre><code class="language-cpp">struct SceneEnvironment {
+SceneEnvironmentMode Mode=SceneEnvironmentMode::Map;
+UUID SourceAsset{};
+UUID MaterialAsset{};
+Vec4 ClearColor{0.055f,0.065f,0.085f,1.0f};
+Vec3 Rotation{};
+// Radians; rotates image-based lighting.
+    float Intensity=30000.0f;
+// Filament environment intensity, lux.
+    bool ImageBasedLighting=true;
+bool SkyboxVisible=true;
+bool ShowSun=false;
+[[nodiscard]] bool IsValid() const;
+};</code></pre>
+<!-- API-SOURCE-END --></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../Scene/en.html"><small>Previous</small>Scene</a>
 <a class="next" href="../SceneEnvironmentMode/en.html"><small>Next</small>SceneEnvironmentMode</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#Mode">Mode</a><a class="toc-link" href="#SourceAsset">SourceAsset</a><a class="toc-link" href="#MaterialAsset">MaterialAsset</a><a class="toc-link" href="#ClearColor">ClearColor</a><a class="toc-link" href="#Rotation">Rotation</a><a class="toc-link" href="#Intensity">Intensity</a><a class="toc-link" href="#ImageBasedLighting">ImageBasedLighting</a><a class="toc-link" href="#SkyboxVisible">SkyboxVisible</a><a class="toc-link" href="#ShowSun">ShowSun</a><a class="toc-link" href="#IsValid">IsValid</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#Mode">Mode</a><a class="toc-link" href="#SourceAsset">SourceAsset</a><a class="toc-link" href="#MaterialAsset">MaterialAsset</a><a class="toc-link" href="#ClearColor">ClearColor</a><a class="toc-link" href="#Rotation">Rotation</a><a class="toc-link" href="#Intensity">Intensity</a><a class="toc-link" href="#ImageBasedLighting">ImageBasedLighting</a><a class="toc-link" href="#SkyboxVisible">SkyboxVisible</a><a class="toc-link" href="#ShowSun">ShowSun</a><a class="toc-link" href="#IsValid">IsValid</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

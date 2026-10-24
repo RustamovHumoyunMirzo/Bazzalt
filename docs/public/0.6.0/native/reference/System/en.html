@@ -84,11 +84,19 @@ protected:
 <h2 id="OnDestroy">OnDestroy</h2>
 <pre><code>virtual void OnDestroy(Scene &amp;)</code></pre>
 <p>Host cleanup callback. Release owned transient resources; do not destroy shared assets or take over host shutdown.</p>
-<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p></article>
-      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../ShaderPreset/en.html"><small>Previous</small>ShaderPreset</a>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Public declarations</h2>
+<p>Header: <code>Bazzalt/System.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
+<pre><code class="language-cpp">class System {
+virtual ~System() = default;
+[[nodiscard]] bool IsEnabled() const;
+void SetEnabled(bool enabled);
+};</code></pre>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../Subsystems/en.html"><small>Previous</small>Subsystems</a>
 <a class="next" href="../Texture/en.html"><small>Next</small>Texture</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#destructor-System">~System</a><a class="toc-link" href="#IsEnabled">IsEnabled</a><a class="toc-link" href="#SetEnabled">SetEnabled</a><a class="toc-link" href="#OnCreate">OnCreate</a><a class="toc-link" href="#OnUpdate">OnUpdate</a><a class="toc-link" href="#OnFixedUpdate">OnFixedUpdate</a><a class="toc-link" href="#OnLateUpdate">OnLateUpdate</a><a class="toc-link" href="#OnDestroy">OnDestroy</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#destructor-System">~System</a><a class="toc-link" href="#IsEnabled">IsEnabled</a><a class="toc-link" href="#SetEnabled">SetEnabled</a><a class="toc-link" href="#OnCreate">OnCreate</a><a class="toc-link" href="#OnUpdate">OnUpdate</a><a class="toc-link" href="#OnFixedUpdate">OnFixedUpdate</a><a class="toc-link" href="#OnLateUpdate">OnLateUpdate</a><a class="toc-link" href="#OnDestroy">OnDestroy</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

@@ -75,11 +75,25 @@ GetEntity().SetWorldTransform(world);</code></pre>
 <table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
 <tr><td><code>Vec3 axis</code></td><td>Rotation axis; use a nonzero direction.</td></tr>
 <tr><td><code>float radians</code></td><td>Angle in radians, not degrees.</td></tr>
-</tbody></table></article>
+</tbody></table><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Public declarations</h2>
+<p>Header: <code>Bazzalt/Components/Transform.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
+<pre><code class="language-cpp">struct Transform {
+Vec3 Position{};
+Quaternion Rotation{};
+Vec3 Scale{1.0f};
+[[nodiscard]] Mat4 GetMatrix() const;
+[[nodiscard]] Vec3 GetForward() const;
+[[nodiscard]] Vec3 GetRight() const;
+[[nodiscard]] Vec3 GetUp() const;
+void Translate(Vec3 translation);
+void Rotate(Vec3 axis, float radians);
+};</code></pre>
+<!-- API-SOURCE-END --></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../ToneMapping/en.html"><small>Previous</small>ToneMapping</a>
 <a class="next" href="../UnresolvedComponents/en.html"><small>Next</small>UnresolvedComponents</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#Position">Position</a><a class="toc-link" href="#Rotation">Rotation</a><a class="toc-link" href="#Scale">Scale</a><a class="toc-link" href="#GetMatrix">GetMatrix</a><a class="toc-link" href="#GetForward">GetForward</a><a class="toc-link" href="#GetRight">GetRight</a><a class="toc-link" href="#GetUp">GetUp</a><a class="toc-link" href="#Translate">Translate</a><a class="toc-link" href="#Rotate">Rotate</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#Position">Position</a><a class="toc-link" href="#Rotation">Rotation</a><a class="toc-link" href="#Scale">Scale</a><a class="toc-link" href="#GetMatrix">GetMatrix</a><a class="toc-link" href="#GetForward">GetForward</a><a class="toc-link" href="#GetRight">GetRight</a><a class="toc-link" href="#GetUp">GetUp</a><a class="toc-link" href="#Translate">Translate</a><a class="toc-link" href="#Rotate">Rotate</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

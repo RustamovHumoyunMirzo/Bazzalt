@@ -73,6 +73,7 @@ class EditorMenuBar(QMenuBar):
     RedoRequested = Signal()
     PreferencesRequested = Signal()
     ProjectSettingsRequested = Signal()
+    GlobalSubsystemsRequested = Signal()
     BuildSettingsRequested = Signal()
     BuildRequested = Signal()
     BuildLaunchRequested = Signal()
@@ -219,6 +220,7 @@ class EditorMenuBar(QMenuBar):
         self.WindowMenu.clear()
         reset = self.WindowMenu.addAction(self._localization.Translate("action.reset_workspace"))
         reset.triggered.connect(self.ResetWorkspaceRequested)
+        subsystems=self.WindowMenu.addAction(self._localization.Translate('subsystems.title'));subsystems.triggered.connect(self.GlobalSubsystemsRequested)
 
         if self._docking is None or not self._docking.panels():
             self.WindowMenu.addSeparator()

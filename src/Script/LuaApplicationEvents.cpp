@@ -1,24 +1,20 @@
 #include "Script/LuaBindings.h"
-#include "Runtime/ApplicationEventsAccess.h"
+#include "Bazzalt/ApplicationControl.h"
 namespace Bazzalt::Runtime {
 void BindLuaApplicationEvents(sol::table api){
-    auto kinds=api.create_named("ApplicationEventType");
-    for(int i=0;i<=int(ApplicationEventType::OnShutdown);++i){auto type=ApplicationEventType(i);kinds[ApplicationEvents::GetName(type)]=type;}
-    auto event=api.new_usertype<ApplicationEvent>("ApplicationEvent",sol::no_constructor);
-    event["Type"]=&ApplicationEvent::Type;event["DeltaTime"]=&ApplicationEvent::DeltaTime;
-    event["Width"]=&ApplicationEvent::Width;event["Height"]=&ApplicationEvent::Height;
-    event["IsFocused"]=&ApplicationEvent::IsFocused;event["SceneUUID"]=&ApplicationEvent::SceneUUID;
-    event["ScenePath"]=&ApplicationEvent::ScenePath;
-    auto events=api.create_named("ApplicationEvents");
-    events["Unsubscribe"]=&ApplicationEvents::Unsubscribe;
-    events["GetName"]=&ApplicationEvents::GetName;
-    events["Subscribe"]=[](ApplicationEventType type,sol::protected_function callback){
-        auto* owner=callback.lua_state();
-        return ApplicationEventsAccess::Subscribe(type,[callback](const ApplicationEvent& value) mutable {
-            lua_sethook(callback.lua_state(),[](lua_State* state,lua_Debug*){luaL_error(state,"Application callback instruction budget exceeded");},LUA_MASKCOUNT,1000000);
-            auto result=callback(value);lua_sethook(callback.lua_state(),nullptr,0,0);
-            if(!result.valid()){sol::error error=result;throw std::runtime_error(error.what());}
-        },owner);
-    };
+    auto app=api.create_named("Application");
+#define APP_GET(Name) app[#Name]=sol::overload(&Application::Name,[](sol::table){return Application::Name();});
+    APP_GET(GetTargetFrameRate) APP_GET(GetBackgroundFrameRate) APP_GET(GetRunInBackground)
+    APP_GET(GetFrameRate) APP_GET(GetFrameCount) APP_GET(IsFocused) APP_GET(IsPlaying)
+    APP_GET(IsEditor) APP_GET(IsQuitting) APP_GET(GetExitCode) APP_GET(GetWindowWidth)
+    APP_GET(GetWindowHeight) APP_GET(GetName) APP_GET(GetCompanyName) APP_GET(GetVersion) APP_GET(GetPlatform)
+#undef APP_GET
+    app["SetTargetFrameRate"]=sol::overload(&Application::SetTargetFrameRate,[](sol::table,int value){Application::SetTargetFrameRate(value);});
+    app["SetBackgroundFrameRate"]=sol::overload(&Application::SetBackgroundFrameRate,[](sol::table,int value){Application::SetBackgroundFrameRate(value);});
+    app["SetRunInBackground"]=sol::overload(&Application::SetRunInBackground,[](sol::table,bool value){Application::SetRunInBackground(value);});
+    app["Quit"]=sol::overload([](sol::optional<int> code){Application::Quit(code.value_or(0));},[](sol::table,sol::optional<int> code){Application::Quit(code.value_or(0));});
+    auto denied=[](sol::variadic_args){throw std::logic_error("Application event listeners require a registered C++ Subsystem Script");};
+    for(int i=0;i<=int(ApplicationEventType::OnShutdown);++i)app[ApplicationEvents::GetName(ApplicationEventType(i))]=denied;
+    auto legacy=api.create_named("ApplicationEvents");legacy["Subscribe"]=denied;legacy["Unsubscribe"]=denied;
 }
 }

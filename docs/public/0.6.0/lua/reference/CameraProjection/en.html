@@ -40,11 +40,14 @@
 <h2 id="Perspective">Perspective</h2>
 <pre><code>Bazzalt.CameraProjection.Perspective</code></pre>
 <p>Perspective projection: distant objects appear smaller.</p>
-<details><summary>Underlying C++ declaration / default values</summary><pre><code>Perspective</code></pre></details></article>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>Perspective</code></pre></details><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Lua members and signatures</h2>
+<p>Use <code>Bazzalt.CameraProjection</code>. Each member below is actually registered in Lua. The adapter declarations are C++ binding notation, not Lua example code. <code>sol::property</code> exposes a field, <code>sol::overload</code> lists alternatives, <code>sol::optional</code> accepts an omitted/nil argument, and <code>std::make_tuple</code> returns multiple Lua values. <code>sol::as_table</code> returns a Lua table. Instance methods use <code>value:Method(...)</code>; service/static calls use <code>Bazzalt.CameraProjection.Method(...)</code> unless a colon overload is explicitly registered. An engine exception becomes a Lua script error. See the examples and behavior notes above for usage.</p><h3 id="lua-Orthographic">Orthographic</h3><pre><code class="language-lua">value:Orthographic()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>Perspective, Orthographic;</code></pre><pre><code>CameraProjection::Orthographic</code></pre></details><h3 id="lua-Perspective">Perspective</h3><pre><code class="language-lua">value:Perspective()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>Perspective, Orthographic;</code></pre><pre><code>CameraProjection::Perspective</code></pre></details><h3 id="lua-construction">Construction / enum values</h3><p>Global service table; do not construct an instance.</p><details><summary>Native declaration and binding adapter</summary><pre><code>api.create_named(&quot;CameraProjection&quot;);</code></pre></details><p>Binding source: <code>src/Script/LuaServices.cpp</code>. Inherited component operations use the Entity component APIs.</p>
+<!-- API-SOURCE-END --></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../CameraPostProcessing/en.html"><small>Previous</small>CameraPostProcessing</a>
-<a class="next" href="../CameraViewport/en.html"><small>Next</small>CameraViewport</a></nav>
+<a class="next" href="../CameraRenderTarget/en.html"><small>Next</small>CameraRenderTarget</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#Orthographic">Orthographic</a><a class="toc-link" href="#Perspective">Perspective</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#Orthographic">Orthographic</a><a class="toc-link" href="#Perspective">Perspective</a><a class="toc-link" href="#source-contract">Lua members and signatures</a><a class="toc-link sub" href="#lua-Orthographic">Orthographic</a><a class="toc-link sub" href="#lua-Perspective">Perspective</a><a class="toc-link sub" href="#lua-construction">Construction / enum values</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

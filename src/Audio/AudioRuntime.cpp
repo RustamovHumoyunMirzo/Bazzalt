@@ -1,4 +1,5 @@
 #include "Audio/AudioRuntime.h"
+#include "Bazzalt/Detail/SubsystemAccess.h"
 #include "Audio/AudioEffects.h"
 #include "Bazzalt/AssetManager.h"
 #include "Bazzalt/Console.h"
@@ -329,7 +330,7 @@ void AudioRuntime::Update(float dt){
 }
 }
 namespace {
-Runtime::AudioRuntime::Impl* Data(){auto current=Runtime::AudioRuntime::Current();return current?current->Data.get():nullptr;}
+Runtime::AudioRuntime::Impl* Data(){Detail::RequireSubsystemService(Detail::SubsystemService::Audio,"Audio");auto current=Runtime::AudioRuntime::Current();return current?current->Data.get():nullptr;}
 Runtime::AudioRuntime::Impl::Voice* Voice(std::uint64_t id){auto d=Data();return d?d->Find(id):nullptr;}
 }
 bool AudioClip::IsValid() const{return ClipPath(m_id).has_value();}

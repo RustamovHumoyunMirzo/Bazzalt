@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import ast, hashlib, json, os, re, subprocess
 from pathlib import Path
 
-_COMPONENT=re.compile(r"\b(?:COMPONENT|APPLICATION)\s*\(\s*([A-Za-z_]\w*)\s*\)")
+_COMPONENT=re.compile(r"\b(?:COMPONENT|APPLICATION|SUBSYSTEM)\s*\(\s*([A-Za-z_]\w*)\s*\)")
 _PROPERTY=re.compile(r"\bPROPERTY\s*\(\s*([^,]+?)\s*,\s*([A-Za-z_]\w*)\s*,\s*([^,\)]+)(?:,([^\)]*))?\)")
 
 class ScriptValidationError(ValueError):pass
@@ -21,6 +21,7 @@ class ScriptProperty:
 class ScriptDescriptor:
     path: Path; name: str; properties: tuple[ScriptProperty,...]=field(default_factory=tuple)
     is_application: bool=False
+    is_subsystem: bool=False
 @dataclass(frozen=True)
 class Diagnostic:
     level: str; message: str; source: str="Compiler";localization_key: str=""
@@ -64,6 +65,7 @@ class ScriptCompiler:
         if not matches:return None
         if len(matches)!=1:raise ScriptValidationError(f"{path}: declare exactly one COMPONENT per source file")
         match=matches[0];start=mask.find("{",match.end());end=start;depth=0
+        if mask[match.start():].startswith('APPLICATION'):raise ScriptValidationError('APPLICATION scripts have been replaced by C++ SUBSYSTEM scripts')
         if start<0:raise ScriptValidationError(f"{path}: component {match.group(1)} has no body")
         for end in range(start,len(mask)):
             if mask[end]=="{":depth+=1
@@ -87,7 +89,7 @@ class ScriptCompiler:
             try:CheckTypeRules(prop.type,rules)
             except RuleError as error:raise ScriptValidationError(f"{path}: {error}") from error
             decorated.append(ScriptProperty(prop.type,prop.name,prop.default,prop.attributes,rules))
-        return ScriptDescriptor(path.resolve(),match.group(1),tuple(decorated),mask[match.start():].startswith('APPLICATION'))
+        return ScriptDescriptor(path.resolve(),match.group(1),tuple(decorated),mask[match.start():].startswith('APPLICATION'),mask[match.start():].startswith('SUBSYSTEM'))
     def Discover(self)->list[ScriptDescriptor]:
         assets=self.project/"Assets"
         paths=sorted((path for path in assets.rglob("*") if path.is_file() and path.suffix.lower() in {".cpp",".lua"}),key=str) if assets.is_dir() else []
@@ -141,6 +143,12 @@ class ScriptCompiler:
         missing=[str(path) for path in used if path not in by_path]
         if missing:return BuildResult(False,diagnostics=(Diagnostic("error","Invalid or missing component sources: "+", ".join(missing)),))
         descriptors=[by_path[path] for path in used]
+        try:
+            dependencies={value.path:self._ValidateIncludes(value.path) for value in descriptors}
+        except (ScriptValidationError,OSError,UnicodeError) as error:return BuildResult(False,diagnostics=(Diagnostic('error',str(error)),))
+        from dataclasses import replace
+        subsystem_sources={str(Path(path).resolve()) for path in getattr(self,'SubsystemSources',())}
+        descriptors=[replace(value,is_subsystem=True) if str(value.path) in subsystem_sources else value for value in descriptors]
         if not descriptors:return BuildResult(True)
         compiler=self._compiler()
         if compiler is None:return BuildResult(False,diagnostics=(Diagnostic("error","Build tools are missing. Install them in Hub or set a compiler path in Preferences.",localization_key="scripting.toolchain_missing"),))
@@ -157,12 +165,14 @@ class ScriptCompiler:
         compiler_identity=f"{compiler.resolve()}:{compiler_stat.st_size}:{compiler_stat.st_mtime_ns}:{self.Architecture or struct.calcsize('P')}".encode("utf-8")
         sdk_digest=hashlib.sha256(headers+library.read_bytes()+compiler_identity).digest()
         for descriptor in descriptors:
-            digest=hashlib.sha256(descriptor.path.read_bytes()+b"\0bazzalt-script-linked-sdk-1"+sdk_digest).hexdigest()
+            wrapper_source=self._Wrapper(descriptor)
+            project_headers=b''.join(str(path).encode('utf-8')+path.read_bytes() for path in sorted(dependencies[descriptor.path]))
+            digest=hashlib.sha256(descriptor.path.read_bytes()+project_headers+wrapper_source.encode('utf-8')+str(descriptor.is_subsystem).encode()+b"\0bazzalt-script-linked-sdk-2"+sdk_digest).hexdigest()
             suffix=".dll" if os.name=="nt" else ".dylib" if os.sys.platform=="darwin" else ".so"
             output=self.cache/f"{descriptor.name}-{digest[:12]}{suffix}";outputs.append(output)
             if state.get(str(descriptor.path))==digest and output.exists():continue
             wrapper=self.cache/f"{descriptor.name}-{digest[:12]}.module.cpp"
-            wrapper.write_text(self._Wrapper(descriptor),encoding="utf-8")
+            wrapper.write_text(wrapper_source,encoding="utf-8")
             command=[str(compiler),"-std=c++20","-shared","-fvisibility=hidden",f"-I{sdk/'include'}",str(wrapper),str(library),"-o",str(output)]
             if os.name=="nt":
                 import struct
@@ -179,8 +189,32 @@ class ScriptCompiler:
         self.state_file.write_text(json.dumps(state,indent=2),encoding="utf-8")
         return BuildResult(True,tuple(outputs),tuple(diagnostics))
 
+    def _ValidateIncludes(self,source):
+        visited=set();dependencies=set();project=self.project.resolve();pending=[Path(source).resolve()]
+        while pending:
+            path=pending.pop()
+            if path in visited:continue
+            visited.add(path)
+            if len(visited)>1024 or path.stat().st_size>8*1024*1024:raise ScriptValidationError('Script/header include graph exceeds limits')
+            text=_CodeMask(path.read_text(encoding='utf-8'),False)
+            for directive in re.finditer(r'^\s*#\s*include\s+([^\n]+)',text,re.M):
+                literal=re.match(r'[<"]([^>"]+)[>"]',directive[1].strip())
+                if not literal:raise ScriptValidationError(f'{path}: include directives must name a literal public or project header')
+                name=literal[1].replace('\\','/')
+                if Path(name).is_absolute() or ':' in name or name.startswith('/') or any(part.casefold() in {'runtime','editorbridge','rendering'} for part in name.split('/')):raise ScriptValidationError(f'{path}: internal/absolute includes are not allowed: {name}')
+                if name.startswith('Bazzalt/'):
+                    if '..' in name.split('/'):raise ScriptValidationError('SDK include traversal is forbidden')
+                    continue
+                if directive[1].lstrip().startswith('<'):continue # Compiler/standard-library include roots only.
+                candidates=((path.parent/name).resolve(),(project/'Assets'/name).resolve(),(project/name).resolve())
+                target=next((value for value in candidates if value.is_file() and value.is_relative_to(project)),None)
+                if target is None:raise ScriptValidationError(f'{path}: project header is missing or outside the project: {name}')
+                dependencies.add(target);pending.append(target)
+        return dependencies
+
     @staticmethod
     def _Wrapper(descriptor: ScriptDescriptor)->str:
+        if descriptor.is_subsystem:return ScriptCompiler._SubsystemWrapper(descriptor)
         setters=[]
         for prop in descriptor.properties:
             kind=prop.type.replace("const","").replace("&","").strip()
@@ -208,8 +242,31 @@ class ScriptCompiler:
         wrapper += '\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltBindMaterialsV1(Bazzalt::Detail::MaterialServices* services){Bazzalt::Detail::BoundMaterialServices=services;}\n'
         wrapper += f'\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltFixedUpdateV1(void* p,float dt){{static_cast<{name}*>(p)->OnFixedUpdate(dt);}}\n'
         wrapper += f'\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltLateUpdateV1(void* p,float dt){{static_cast<{name}*>(p)->OnLateUpdate(dt);}}\n'
-        wrapper += f'\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltApplicationEventV1(void* p,const Bazzalt::ApplicationEvent* e){{static_cast<{name}*>(p)->OnApplicationEvent(*e);}}\n'
+        wrapper += f'\nextern "C" BAZZALT_SCRIPT_EXPORT Bazzalt::Behavior* BazzaltGetBehaviorV1(void* p){{return static_cast<{name}*>(p);}}\n'
         return wrapper.replace(f"void* Create(){{return new {name}();}}",f"void* Create(const char* entity){{auto* value=new {name}();Bazzalt::ScriptRuntimeAccess::Bind(*value,entity);return value;}}")
+
+    @staticmethod
+    def _SubsystemWrapper(descriptor):
+        source=str(descriptor.path).replace('\\','/').replace('"','\\"');name=descriptor.name
+        return f'''#include <Bazzalt/Script.h>
+#include <Bazzalt/Subsystem.h>
+#undef COMPONENT
+#define COMPONENT(Name) class Name final : public Bazzalt::Subsystem
+#include "{source}"
+#if defined(_WIN32)
+#define BAZZALT_SUBSYSTEM_EXPORT __declspec(dllexport)
+#else
+#define BAZZALT_SUBSYSTEM_EXPORT __attribute__((visibility("default")))
+#endif
+namespace {{
+void* Create(){{return static_cast<Bazzalt::Subsystem*>(new {name}());}}
+void Destroy(void* p){{delete static_cast<Bazzalt::Subsystem*>(p);}}
+void Register(void* p){{static_cast<Bazzalt::Subsystem*>(p)->OnRegister();}}
+void Unregister(void* p){{static_cast<Bazzalt::Subsystem*>(p)->OnUnregister();}}
+const Bazzalt::SubsystemModuleApi Api{{Bazzalt::SubsystemAbiVersion,"{name}",Create,Destroy,Register,Unregister}};
+}}
+extern "C" BAZZALT_SUBSYSTEM_EXPORT const Bazzalt::SubsystemModuleApi* BazzaltGetSubsystemModuleV1(){{return &Api;}}
+'''
 
 class ScriptAttachments:
     """Project-side attachment manifest, keyed by stable scene/entity UUIDs."""
@@ -229,6 +286,15 @@ class ScriptAttachments:
             names.add(name);sources.add(source);result.append(value)
         return result
     def Attach(self,entity: str,descriptor: ScriptDescriptor)->bool:
+        if descriptor.is_subsystem:raise ScriptValidationError('Subsystem Scripts cannot be attached to entities')
+        from .subsystems import Registrations
+        import yaml
+        for project in self.path.parent.parent.glob('*.bproject'):
+            data=yaml.safe_load(project.read_text(encoding='utf-8-sig')) or {}
+            registrations=Registrations(data.get('Properties') or {})
+            meta=descriptor.path.with_name(descriptor.path.name+'.meta')
+            identity=str((yaml.safe_load(meta.read_text(encoding='utf-8-sig')) or {}).get('UUID','')).lower() if meta.is_file() else ''
+            if any(value['asset']==identity for value in registrations):raise ScriptValidationError('Registered subsystem cannot be attached to an entity')
         entries=self.values.setdefault("entities",{}).setdefault(entity,[])
         if any(v.get("type")==descriptor.name or Path(v["source"]).resolve()==descriptor.path.resolve() for v in entries):return False
         names=[p.name for p in descriptor.properties]

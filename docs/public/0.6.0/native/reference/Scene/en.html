@@ -284,11 +284,75 @@ template&lt;typename SystemType&gt; const SystemType &amp; GetSystem() const</co
 <pre><code>entt::registry &amp; GetRegistry()
 const entt::registry &amp; GetRegistry() const</code></pre>
 <p>Advanced C++ access to EnTT storage. Prefer entity/scene operations for hierarchy invariants; never rewrite Identity/Hierarchy pools as ordinary user data.</p>
-<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p></article>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Public declarations</h2>
+<p>Header: <code>Bazzalt/Scene.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
+<pre><code class="language-cpp">class Scene {
+Scene();
+~Scene();
+Scene(const Scene&amp;) = delete;
+Scene&amp; operator=(const Scene&amp;) = delete;
+Scene(Scene&amp;&amp;) = delete;
+Scene&amp; operator=(Scene&amp;&amp;) = delete;
+Entity CreateEntity(std::string name = {});
+Entity CreateEntity(UUID uuid, std::string name = {});
+void DestroyEntity(Entity entity);
+void Clear();
+[[nodiscard]] Entity FindEntityByName(const std::string&amp; name);
+[[nodiscard]] Entity GetEntity(Entity::Id id);
+[[nodiscard]] Entity GetEntity(UUID uuid);
+[[nodiscard]] Entity GetRootEntity();
+[[nodiscard]] UUID GetUUID() const;
+[[nodiscard]] const SceneEnvironment&amp; GetEnvironment() const;
+bool SetEnvironment(const SceneEnvironment&amp; value);
+[[nodiscard]] std::size_t GetEntityCount() const;
+bool SetParent(Entity child, Entity parent, bool worldPositionStays = true);
+bool RemoveParent(Entity child, bool worldPositionStays = true);
+[[nodiscard]] Entity GetParent(Entity child);
+[[nodiscard]] std::vector&lt;Entity&gt; GetChildren(Entity parent);
+[[nodiscard]] bool IsAncestor(Entity ancestor, Entity descendant) const;
+[[nodiscard]] Mat4 GetWorldMatrix(Entity entity) const;
+[[nodiscard]] Transform GetWorldTransform(Entity entity) const;
+bool SetWorldTransform(Entity entity, const Transform&amp; transform);
+Entity InstantiateModel(const ModelAsset&amp; model, Entity parent = {},
+                            std::string name = {});
+Entity InstantiateModel(UUID modelAsset, Entity parent = {}, std::string name = {});
+template&lt;typename ComponentType&gt;
+    [[nodiscard]] const ComponentType* TryGetInheritedComponent(Entity entity) const;
+[[nodiscard]] SceneRay ScreenPointToRay(Entity camera, Vec2 screenPoint,
+                                            Vec2 presentationSize) const;
+[[nodiscard]] SceneQueryHit Pick(Entity camera, Vec2 screenPoint,
+                                     Vec2 presentationSize,
+                                     const SceneQueryOptions&amp; options = {});
+[[nodiscard]] std::vector&lt;SceneQueryHit&gt; PickAll(
+        Entity camera, Vec2 screenPoint, Vec2 presentationSize,
+        const SceneQueryOptions&amp; options = {});
+[[nodiscard]] SceneQueryHit Raycast(const SceneRay&amp; ray,
+                                        const SceneQueryOptions&amp; options = {});
+[[nodiscard]] std::vector&lt;SceneQueryHit&gt; RaycastAll(
+        const SceneRay&amp; ray, const SceneQueryOptions&amp; options = {});
+[[nodiscard]] std::vector&lt;Entity&gt; OverlapSphere(
+        Vec3 center, float radius, const SceneQueryOptions&amp; options = {});
+[[nodiscard]] std::vector&lt;Entity&gt; OverlapBox(
+        Vec3 center, Vec3 extents, const SceneQueryOptions&amp; options = {});
+template&lt;typename SystemType, typename... Args&gt;
+    SystemType&amp; AddSystem(Args&amp;&amp;... args);
+template&lt;typename SystemType&gt;
+    [[nodiscard]] bool HasSystem() const;
+template&lt;typename SystemType&gt;
+    SystemType&amp; GetSystem();
+template&lt;typename SystemType&gt;
+    const SystemType&amp; GetSystem() const;
+template&lt;typename SystemType&gt;
+    bool RemoveSystem();
+[[nodiscard]] entt::registry&amp; GetRegistry();
+[[nodiscard]] const entt::registry&amp; GetRegistry() const;
+};</code></pre>
+<!-- API-SOURCE-END --></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../RenderTexture/en.html"><small>Previous</small>RenderTexture</a>
 <a class="next" href="../SceneEnvironment/en.html"><small>Next</small>SceneEnvironment</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#Scene">Scene</a><a class="toc-link" href="#destructor-Scene">~Scene</a><a class="toc-link" href="#operator-assign">operator=</a><a class="toc-link" href="#CreateEntity">CreateEntity</a><a class="toc-link" href="#DestroyEntity">DestroyEntity</a><a class="toc-link" href="#Clear">Clear</a><a class="toc-link" href="#FindEntityByName">FindEntityByName</a><a class="toc-link" href="#GetEntity">GetEntity</a><a class="toc-link" href="#GetRootEntity">GetRootEntity</a><a class="toc-link" href="#GetUUID">GetUUID</a><a class="toc-link" href="#GetEnvironment">GetEnvironment</a><a class="toc-link" href="#SetEnvironment">SetEnvironment</a><a class="toc-link" href="#GetEntityCount">GetEntityCount</a><a class="toc-link" href="#SetParent">SetParent</a><a class="toc-link" href="#RemoveParent">RemoveParent</a><a class="toc-link" href="#GetParent">GetParent</a><a class="toc-link" href="#GetChildren">GetChildren</a><a class="toc-link" href="#IsAncestor">IsAncestor</a><a class="toc-link" href="#GetWorldMatrix">GetWorldMatrix</a><a class="toc-link" href="#GetWorldTransform">GetWorldTransform</a><a class="toc-link" href="#SetWorldTransform">SetWorldTransform</a><a class="toc-link" href="#InstantiateModel">InstantiateModel</a><a class="toc-link" href="#TryGetInheritedComponent">TryGetInheritedComponent</a><a class="toc-link" href="#ScreenPointToRay">ScreenPointToRay</a><a class="toc-link" href="#Pick">Pick</a><a class="toc-link" href="#PickAll">PickAll</a><a class="toc-link" href="#Raycast">Raycast</a><a class="toc-link" href="#RaycastAll">RaycastAll</a><a class="toc-link" href="#OverlapSphere">OverlapSphere</a><a class="toc-link" href="#OverlapBox">OverlapBox</a><a class="toc-link" href="#AddSystem">AddSystem</a><a class="toc-link" href="#HasSystem">HasSystem</a><a class="toc-link" href="#GetSystem">GetSystem</a><a class="toc-link" href="#RemoveSystem">RemoveSystem</a><a class="toc-link" href="#GetRegistry">GetRegistry</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#Scene">Scene</a><a class="toc-link" href="#destructor-Scene">~Scene</a><a class="toc-link" href="#operator-assign">operator=</a><a class="toc-link" href="#CreateEntity">CreateEntity</a><a class="toc-link" href="#DestroyEntity">DestroyEntity</a><a class="toc-link" href="#Clear">Clear</a><a class="toc-link" href="#FindEntityByName">FindEntityByName</a><a class="toc-link" href="#GetEntity">GetEntity</a><a class="toc-link" href="#GetRootEntity">GetRootEntity</a><a class="toc-link" href="#GetUUID">GetUUID</a><a class="toc-link" href="#GetEnvironment">GetEnvironment</a><a class="toc-link" href="#SetEnvironment">SetEnvironment</a><a class="toc-link" href="#GetEntityCount">GetEntityCount</a><a class="toc-link" href="#SetParent">SetParent</a><a class="toc-link" href="#RemoveParent">RemoveParent</a><a class="toc-link" href="#GetParent">GetParent</a><a class="toc-link" href="#GetChildren">GetChildren</a><a class="toc-link" href="#IsAncestor">IsAncestor</a><a class="toc-link" href="#GetWorldMatrix">GetWorldMatrix</a><a class="toc-link" href="#GetWorldTransform">GetWorldTransform</a><a class="toc-link" href="#SetWorldTransform">SetWorldTransform</a><a class="toc-link" href="#InstantiateModel">InstantiateModel</a><a class="toc-link" href="#TryGetInheritedComponent">TryGetInheritedComponent</a><a class="toc-link" href="#ScreenPointToRay">ScreenPointToRay</a><a class="toc-link" href="#Pick">Pick</a><a class="toc-link" href="#PickAll">PickAll</a><a class="toc-link" href="#Raycast">Raycast</a><a class="toc-link" href="#RaycastAll">RaycastAll</a><a class="toc-link" href="#OverlapSphere">OverlapSphere</a><a class="toc-link" href="#OverlapBox">OverlapBox</a><a class="toc-link" href="#AddSystem">AddSystem</a><a class="toc-link" href="#HasSystem">HasSystem</a><a class="toc-link" href="#GetSystem">GetSystem</a><a class="toc-link" href="#RemoveSystem">RemoveSystem</a><a class="toc-link" href="#GetRegistry">GetRegistry</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

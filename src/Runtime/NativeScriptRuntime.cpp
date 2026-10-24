@@ -1,5 +1,6 @@
 #include "Runtime/NativeScriptRuntime.h"
 #include "Runtime/ApplicationEventsAccess.h"
+#include "Runtime/BehaviorAccess.h"
 #include "Bazzalt/Script.h"
 #include "Bazzalt/EntityReference.h"
 #include "Bazzalt/SceneManager.h"
@@ -54,6 +55,7 @@ struct NativeScriptRuntime::Instance {
     void (*OnLateUpdate)(void*,float) = nullptr;
     void (*OnApplicationEvent)(void*,const Bazzalt::ApplicationEvent*) = nullptr;
     bool Application=false;
+    Behavior* BehaviorObject=nullptr;
 };
 NativeScriptRuntime::NativeScriptRuntime()=default;
 NativeScriptRuntime::~NativeScriptRuntime(){Stop();}
@@ -129,15 +131,22 @@ bool NativeScriptRuntime::Start(std::string& error,bool application){
 #endif
         try{instance.Object=instance.Api->Create(binding.Entity.c_str());}catch(...){instance.Object=nullptr;}
         if(!instance.Object){error="Could not create script component: "+binding.TypeName;m_instances.push_back(instance);Stop();return false;}
+#ifdef _WIN32
+        auto asBehavior=reinterpret_cast<Behavior*(*)(void*)>(GetProcAddress(instance.Library,"BazzaltGetBehaviorV1"));
+#else
+        auto asBehavior=reinterpret_cast<Behavior*(*)(void*)>(dlsym(instance.Library,"BazzaltGetBehaviorV1"));
+#endif
+        if(asBehavior)instance.BehaviorObject=asBehavior(instance.Object);
         for(const auto& [name,value]:binding.Properties)if(instance.Api->SetProperty&&!instance.Api->SetProperty(instance.Object,name.c_str(),value.c_str())){error="Invalid property '"+name+"' on "+binding.TypeName;m_instances.push_back(instance);Stop();return false;}
         m_instances.push_back(instance);
+        try{BehaviorAccess::Register(binding.Entity,binding.TypeName,instance.BehaviorObject);}catch(const std::exception& failure){error=failure.what();Stop();return false;}
     }
     if(application)for(auto& instance:m_instances)if(!instance.OnApplicationEvent){error="Application script must be rebuilt with application event support";Stop();return false;}
     try{if(!application)for(auto& instance:m_instances){ModuleScope scope(instance.Lease,instance.Object);instance.Api->OnCreate(instance.Object);}}catch(const std::exception& e){error=std::string("Script OnCreate failed: ")+e.what();Stop();return false;}catch(...){error="Script OnCreate failed";Stop();return false;}return true;
 }
-void NativeScriptRuntime::Update(float deltaTime){for(auto& instance:m_instances)try{ModuleScope scope(instance.Lease,instance.Object);instance.Api->OnUpdate(instance.Object,deltaTime);}catch(...) {}}
-void NativeScriptRuntime::FixedUpdate(float deltaTime){for(auto& instance:m_instances)if(instance.OnFixedUpdate)try{ModuleScope scope(instance.Lease,instance.Object);instance.OnFixedUpdate(instance.Object,deltaTime);}catch(...) {}}
-void NativeScriptRuntime::LateUpdate(float deltaTime){for(auto& instance:m_instances)if(instance.OnLateUpdate)try{ModuleScope scope(instance.Lease,instance.Object);instance.OnLateUpdate(instance.Object,deltaTime);}catch(...) {}}
+void NativeScriptRuntime::Update(float deltaTime){for(auto& instance:m_instances){ModuleScope scope(instance.Lease,instance.Object);instance.Api->OnUpdate(instance.Object,deltaTime);}}
+void NativeScriptRuntime::FixedUpdate(float deltaTime){for(auto& instance:m_instances)if(instance.OnFixedUpdate){ModuleScope scope(instance.Lease,instance.Object);instance.OnFixedUpdate(instance.Object,deltaTime);}}
+void NativeScriptRuntime::LateUpdate(float deltaTime){for(auto& instance:m_instances)if(instance.OnLateUpdate){ModuleScope scope(instance.Lease,instance.Object);instance.OnLateUpdate(instance.Object,deltaTime);}}
 void NativeScriptRuntime::ApplicationEvent(const Bazzalt::ApplicationEvent& event){for(auto& instance:m_instances)if(instance.OnApplicationEvent){ModuleScope scope(instance.Lease,instance.Object);instance.OnApplicationEvent(instance.Object,&event);}}
-void NativeScriptRuntime::Stop() noexcept{for(auto it=m_instances.rbegin();it!=m_instances.rend();++it)if(it->Object&&it->Api){ModuleScope scope(it->Lease,it->Object);try{if(!it->Application)it->Api->OnDestroy(it->Object);}catch(...){}ApplicationEventsAccess::DisconnectOwner(it->Object);try{it->Api->Destroy(it->Object);}catch(...){}}m_instances.clear();}
+void NativeScriptRuntime::Stop() noexcept{for(auto it=m_instances.rbegin();it!=m_instances.rend();++it)if(it->Object&&it->Api){ModuleScope scope(it->Lease,it->Object);BehaviorAccess::Remove(it->BehaviorObject);try{if(!it->Application)it->Api->OnDestroy(it->Object);}catch(...){}ApplicationEventsAccess::DisconnectOwner(it->Object);try{it->Api->Destroy(it->Object);}catch(...){}}m_instances.clear();}
 }

@@ -106,6 +106,7 @@ class Editor(QMainWindow):
         self.MenuBar.ResetWorkspaceRequested.connect(self._ResetWorkspace)
         self.MenuBar.PreferencesRequested.connect(self.OpenPreferences)
         self.MenuBar.ProjectSettingsRequested.connect(self.OpenProjectSettings)
+        self.MenuBar.GlobalSubsystemsRequested.connect(self.OpenGlobalSubsystems)
         self.MenuBar.MaximizeViewportRequested.connect(self.SetViewportMaximized)
         self.Scene.GridToggle.toggled.connect(self.MenuBar.GridAction.setChecked)
         self.ThemeManager.ThemeChanged.connect(
@@ -168,6 +169,10 @@ class Editor(QMainWindow):
         previous=self.Runtime.ProjectInfo().get("name")
         if ProjectSettingsDialog(self).exec() and previous!=self.Runtime.ProjectInfo().get("name"):
             self.RequestRestart()
+
+    def OpenGlobalSubsystems(self)->None:
+        from .global_subsystems import GlobalSubsystemsDialog
+        GlobalSubsystemsDialog(self).exec()
 
     def RequestRestart(self)->None:
         tr=self.Localization.Translate;dialog=QMessageBox(self)

@@ -124,7 +124,7 @@ class AssetBrowserPanel(QWidget):
             pixmap=QPixmap(64,64);pixmap.fill(Qt.GlobalColor.transparent);painter=QPainter(pixmap);gradient=QRadialGradient(25,20,35);gradient.setColorAt(0,QColor("#f4f4f4"));gradient.setColorAt(.35,QColor("#9aa5b5"));gradient.setColorAt(1,QColor("#1d222a"));painter.setBrush(gradient);painter.setPen(QColor("#59616d"));painter.drawEllipse(7,7,50,50);painter.end();return QIcon(pixmap)
         if ext in ENVIRONMENT_EXTENSIONS:
             pixmap=QPixmap(64,64);gradient=QLinearGradient(0,0,0,64);gradient.setColorAt(0,QColor("#456f9b"));gradient.setColorAt(.55,QColor("#d4b678"));gradient.setColorAt(1,QColor("#252d25"));painter=QPainter(pixmap);painter.fillRect(pixmap.rect(),gradient);painter.end();return QIcon(pixmap)
-        name="dir.svg" if path.is_dir() else "texture.svg" if ext==".btexture" else "scene.svg" if ext==".bscene" else "nativecpp.svg" if ext in {".h",".hpp",".c",".cc",".cpp"} else "3dfiles.svg" if ext in MODEL_EXTENSIONS else "shader.svg" if ext in SHADER_EXTENSIONS else "file.svg"
+        name="dir.svg" if path.is_dir() else "texture.svg" if ext==".btexture" else "scene.svg" if ext==".bscene" else "header.svg" if ext in {".h",".hpp"} else "nativecpp.svg" if ext in {".c",".cc",".cpp"} else "3dfiles.svg" if ext in MODEL_EXTENSIONS else "shader.svg" if ext in SHADER_EXTENSIONS else "file.svg"
         return self._resources.Icon(f"icons/abrowser/{name}") if self._resources else QIcon()
     def _ThumbnailReady(self,path,image):
         self._thumbnail_timer.start(0)
@@ -252,6 +252,11 @@ class AssetBrowserPanel(QWidget):
         while candidate.exists():candidate=candidate.with_name(f"{stem} {number}{suffix}");number+=1
         return candidate
     def _Create(self,kind)->None:
+        if kind in {'subsystem','header'}:
+            import re
+            path=self._Unique('NewSubsystem.cpp' if kind=='subsystem' else 'NewHeader.h');name=re.sub(r'\W','_',path.stem)
+            path.write_text('#pragma once\n' if kind=='header' else f'#include <Bazzalt/Subsystem.h>\n\nSUBSYSTEM({name}) {{\npublic:\n    void OnRegister() override {{\n        Bazzalt::Application::OnLateUpdate([this](float deltaTime) {{\n            (void)deltaTime;\n        }});\n    }}\n}};\n',encoding='utf-8')
+            self.Refresh(path);self.Browser.editItem(self.Browser.currentItem());return
         names={"folder":"New Folder","scene":"New Scene.bscene","texture":"New Texture.btexture","audio_mixer":"New Audio Mixer.bmixer","cpp":"NewComponent.cpp","lua":"NewBehavior.lua","shader":"NewShader.shad","filament_shader":"NewShader.mat","material":"NewMaterial.matinst"};path=self._Unique(names[kind])
         if kind=="audio_mixer":
             path.write_text('Version: 1\nBuses:\n  - Id: "00000000-0000-0000-0000-000000000000"\n    Parent: "00000000-0000-0000-0000-000000000000"\n    Name: "Master"\n    Volume: 1\n  - Id: "42415a5a-414c-5400-0000-000000000001"\n    Parent: "00000000-0000-0000-0000-000000000000"\n    Name: "SFX"\n    Volume: 1\n  - Id: "42415a5a-414c-5400-0000-000000000002"\n    Parent: "00000000-0000-0000-0000-000000000000"\n    Name: "Music"\n    Volume: 1\n',encoding="utf-8")
@@ -360,7 +365,7 @@ class AssetBrowserPanel(QWidget):
         if target is not None and widget is self.Browser and not target.isSelected():self.Browser.setCurrentItem(target)
         reveal_paths=[Path(target.data(0,Qt.ItemDataRole.UserRole))] if widget is self.Tree and target is not None else [Path(item.data(Qt.ItemDataRole.UserRole)) for item in self.Browser.selectedItems()]
         tr=self._localization.Translate;menu=QMenu(self);create=menu.addMenu(tr("assets.create"))
-        for key,label in (("folder","assets.folder"),("scene","assets.scene"),("texture","assets.texture"),("audio_mixer","audio.mixer"),("cpp","assets.native_cpp"),("lua","assets.lua"),("shader","assets.shader"),("material","assets.material")):
+        for key,label in (("folder","assets.folder"),("scene","assets.scene"),("texture","assets.texture"),("audio_mixer","audio.mixer"),("cpp","assets.native_cpp"),("subsystem","subsystems.script"),("header","assets.header"),("lua","assets.lua"),("shader","assets.shader"),("material","assets.material")):
             action=create.addAction(tr(label));action.triggered.connect(lambda _=False,k=key:self._Create(k))
         menu.addAction(tr("assets.import"),self._Import);menu.addSeparator();selected=bool(self.Browser.selectedItems()) if widget is self.Browser else False
         current=Path(self.Browser.currentItem().data(Qt.ItemDataRole.UserRole)) if widget is self.Browser and self.Browser.currentItem() else None

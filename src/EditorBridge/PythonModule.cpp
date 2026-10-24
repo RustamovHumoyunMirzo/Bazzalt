@@ -25,6 +25,7 @@
 
 #include "Runtime/Engine.h"
 #include "Runtime/ApplicationEventsAccess.h"
+#include "Runtime/ApplicationAccess.h"
 #include "Runtime/TextureLibrary.h"
 #include "Runtime/ConsoleStore.h"
 #include "Bazzalt/Material.h"
@@ -129,7 +130,7 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
 
 class EditorHost final {
 public:
-    EditorHost() : m_engine(std::make_unique<Runtime::Engine>()) { m_loadedScenes.push_back({{},nullptr});Runtime::ConsoleAccess::Acquire(); }
+    EditorHost() : m_engine(std::make_unique<Runtime::Engine>()) { m_engine->SetEditorHost(true);m_loadedScenes.push_back({{},nullptr});Runtime::ConsoleAccess::Acquire(); }
     ~EditorHost() { Stop(); ClearLoadedScenes(); m_engine->Shutdown(); CleanupSnapshot();Runtime::ConsoleAccess::Release(); }
     py::object ConsoleSnapshot(std::uint64_t revision){
         auto snapshot=Runtime::ConsoleAccess::Snapshot(revision);if(!snapshot)return py::none();
@@ -572,11 +573,12 @@ public:
     bool CreateViewport(std::uint64_t id, std::uintptr_t handle, bool scene,
                         std::uint32_t width, std::uint32_t height, float pixelRatio) {
         const bool created=m_engine->CreateEditorViewport(id, handle, scene, width, height, pixelRatio);
-        if(created&&!scene)m_gameViewports.insert(id);return created;
+        if(created&&!scene){m_gameViewports.insert(id);m_gameWidth=width;m_gameHeight=height;}return created;
     }
     void ResizeViewport(std::uint64_t id, std::uint32_t width, std::uint32_t height,
                         float pixelRatio) {
         m_engine->ResizeEditorViewport(id, width, height, pixelRatio);
+        if(m_gameViewports.contains(id)){m_gameWidth=width;m_gameHeight=height;}
         if(m_playing&&m_gameViewports.contains(id)){ApplicationEvent event{ApplicationEventType::OnWindowResize};event.Width=width;event.Height=height;Runtime::ApplicationEventsAccess::Emit(event);}
     }
     void DestroyViewport(std::uint64_t id) { m_gameViewports.erase(id);m_engine->DestroyEditorViewport(id); }
@@ -598,7 +600,9 @@ public:
         }
         // Initialize rendering without gameplay, then start exactly once per Play.
         if (!m_engine->Init(false, false)||!m_engine->StartScripts()) {m_engine->BeginShutdown();m_engine->StopScripts();m_engine->EndApplication();m_engine->LoadScene(m_snapshot);CleanupSnapshot();return false;}
-        m_playing = true; m_paused = false; return true;
+        m_playing = true; m_paused = false;
+        ApplicationEvent size{ApplicationEventType::OnWindowResize};size.Width=m_gameWidth;size.Height=m_gameHeight;Runtime::ApplicationEventsAccess::Emit(size);
+        return true;
     }
     void Pause(bool paused) { if (m_playing) {m_paused = paused;if(paused)Runtime::InputAccess::SetActive(false);} }
     void SetGameInputActive(bool focused){const bool changed=m_gameFocused!=focused;m_gameFocused=focused;Runtime::InputAccess::SetActive(m_playing&&!m_paused&&focused);if(m_playing&&changed){ApplicationEvent event{ApplicationEventType::OnWindowFocusChanged};event.IsFocused=focused;Runtime::ApplicationEventsAccess::Emit(event);}}
@@ -610,9 +614,15 @@ public:
     py::dict InputSnapshot(){const auto& state=*Runtime::InputAccess::GetState();py::dict out;out["active"]=state.Active;py::list keys,down,up;for(int i=1;i<512;++i){if(state.Keys[i])keys.append(i);if(state.KeysDown[i])down.append(i);if(state.KeysUp[i])up.append(i);}out["keys"]=keys;out["down"]=down;out["up"]=up;return out;}
     void Step() { if (m_playing) m_engine->Update(); }
     void Tick() {
-        if (m_playing && !m_paused) m_engine->Update();
+        if(m_playing&&Application::IsQuitting()){Stop();return;}
+        if (m_playing && !m_paused) {
+            try{if(Application::IsFocused()||Application::GetRunInBackground())m_engine->Update();else m_engine->ResetFrameClock();}
+            catch(const std::exception& error){Console::Error(error.what(),"Subsystem");Stop();}
+            if(Application::IsQuitting())Stop();
+        }
         else m_engine->RenderEditorFrame();
     }
+    int ApplicationTickInterval() const {const int rate=m_playing?Runtime::ApplicationAccess::GetEffectiveFrameRate():60;return rate?std::max(1,(1000+rate-1)/rate):0;}
     void Stop() {
         m_engine->GetAudioRuntime().StopPreview();
         if (!m_playing) return;
@@ -732,6 +742,7 @@ private:
     std::size_t m_activeScene = 0;
     bool m_playing = false;
     bool m_gameFocused=false;
+    std::uint32_t m_gameWidth=0,m_gameHeight=0;
     std::unordered_set<std::uint64_t> m_gameViewports;
     bool m_paused = false;
 };
@@ -838,6 +849,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("pause", &Bazzalt::EditorBridge::EditorHost::Pause)
         .def("step", &Bazzalt::EditorBridge::EditorHost::Step)
         .def("tick", &Bazzalt::EditorBridge::EditorHost::Tick)
+        .def("application_tick_interval", &Bazzalt::EditorBridge::EditorHost::ApplicationTickInterval)
         .def("stop", &Bazzalt::EditorBridge::EditorHost::Stop)
         .def("is_playing", &Bazzalt::EditorBridge::EditorHost::IsPlaying)
         .def("is_paused", &Bazzalt::EditorBridge::EditorHost::IsPaused)

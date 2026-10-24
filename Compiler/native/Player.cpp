@@ -4,6 +4,7 @@
 #include "Runtime/Engine.h"
 #include "Runtime/InputAccess.h"
 #include "Runtime/ApplicationEventsAccess.h"
+#include "Runtime/ApplicationAccess.h"
 #include <shellapi.h>
 #include <sddl.h>
 #include <objbase.h>
@@ -111,6 +112,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,LPWSTR,int){
         const auto started=std::chrono::steady_clock::now();
         auto createWindow=[&](){
             Bazzalt::Runtime::ApplicationEventsAccess::Emit({Bazzalt::ApplicationEventType::OnBeforeWindowCreate});
+            Bazzalt::Runtime::ApplicationEventsAccess::ThrowIfFailed();
             DisableProcessWindowsGhosting();auto settings=config["window"];auto width=std::stoi(Text(settings["width"])),height=std::stoi(Text(settings["height"]));Require(width>=320&&width<=16384&&height>=200&&height<=16384,"Invalid window size");
             WNDCLASSW cls{};cls.hInstance=instance;cls.lpfnWndProc=WindowProcedure;cls.lpszClassName=L"BazzaltGameWindow";cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);cls.hbrBackground=static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));Require(RegisterClassW(&cls)!=0,"Could not register game window");
             const auto mode=Text(settings["mode"]);Require(mode=="windowed"||mode=="maximized"||mode=="borderless"||mode=="fullscreen","Unsupported window mode");
@@ -133,31 +135,35 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,LPWSTR,int){
             Extract(folder,content.Path,packages,verified.PackageKey);content.Leases=&verified.ExtractedLeases;VerifyExtracted(verified,content.Path);data=content.Path;
             if(!verified.PackageKey.empty()){SecureZeroMemory(verified.PackageKey.data(),verified.PackageKey.size());verified.PackageKey.clear();}
         }
-        Bazzalt::Runtime::Engine engine;Engine=&engine;Require(engine.LoadProject(data/"Game.bproject",false),engine.GetLastError().c_str());
+        Bazzalt::Runtime::Engine engine;Engine=&engine;if(!engine.LoadProject(data/"Game.bproject",false))throw std::runtime_error(engine.GetLastError());
         const auto startup=engine.GetProject().StartupScene.generic_u8string();
         Require(!startup.empty()&&std::filesystem::is_regular_file(data/SafePath(std::string(reinterpret_cast<const char*>(startup.data()),startup.size()))),"The packaged startup scene is missing");
         if(verify){Engine=nullptr;return 0;}
-        Require(engine.PrepareApplication(),engine.GetLastError().c_str());createWindow();
-        Require(engine.ConfigureRenderingBackend(Text(config["window"]["backend"])),"Unsupported rendering backend");Require(engine.Init(false,false),engine.GetLastError().c_str());
-        Require(engine.LoadScene(data/engine.GetProject().StartupScene),engine.GetLastError().c_str());
+        if(!engine.PrepareApplication())throw std::runtime_error(engine.GetLastError());createWindow();
+        Require(engine.ConfigureRenderingBackend(Text(config["window"]["backend"])),"Unsupported rendering backend");if(!engine.Init(false,false))throw std::runtime_error(engine.GetLastError());
+        if(!engine.LoadScene(data/engine.GetProject().StartupScene))throw std::runtime_error(engine.GetLastError());
         RECT client{};GetClientRect(window,&client);Require(engine.CreateEditorViewport(1,reinterpret_cast<std::uintptr_t>(window),false,client.right,client.bottom),"Could not create game surface");
         Bazzalt::Runtime::ApplicationEventsAccess::Emit({Bazzalt::ApplicationEventType::OnPostWindowCreate});
         Bazzalt::ApplicationEvent initialSize{Bazzalt::ApplicationEventType::OnWindowResize};initialSize.Width=client.right;initialSize.Height=client.bottom;Bazzalt::Runtime::ApplicationEventsAccess::Emit(initialSize);
+        Bazzalt::ApplicationEvent initialFocus{Bazzalt::ApplicationEventType::OnWindowFocusChanged};initialFocus.IsFocused=GetForegroundWindow()==window;Bazzalt::Runtime::ApplicationEventsAccess::Emit(initialFocus);
+        Bazzalt::Runtime::ApplicationEventsAccess::ThrowIfFailed();
         bool running=true,playing=false,frameReady=false;int frames=0;while(running&&!engine.ShouldClose()){
             const auto start=std::chrono::steady_clock::now();MSG message;while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)){if(message.message==WM_QUIT){running=false;break;}TranslateMessage(&message);DispatchMessageW(&message);}
-            if(!running)break;if(!IsIconic(window)){
+            if(!running)break;if((!playing&&!IsIconic(window))||(playing&&(Bazzalt::Application::IsFocused()||Bazzalt::Application::GetRunInBackground()))){
                 if(!playing){
                     engine.RenderEditorFrame();frameReady=engine.WaitForViewportFrame(1);
                     const auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-started).count();
                     if(!frameReady&&elapsed>60000)throw std::runtime_error("The game renderer did not present a startup frame");
                     if(frameReady&&(smoke||!introEnabled||Startup::Skip||elapsed>=duration)){
-                        Require(engine.StartScripts(),engine.GetLastError().c_str());engine.Update();Require(engine.WaitForViewportFrame(1),"The first gameplay frame did not finish");
+                        if(!engine.StartScripts())throw std::runtime_error(engine.GetLastError());engine.Update();Require(engine.WaitForViewportFrame(1),"The first gameplay frame did not finish");
                         Startup::Finish();Bazzalt::Runtime::InputAccess::SetActive(!smoke&&GetForegroundWindow()==window);playing=true;
                     }
-                }else{engine.Update();if(smoke&&++frames>=3)break;}
-            }
-            std::this_thread::sleep_until(start+std::chrono::milliseconds(IsIconic(window)?50:16));
+                }else{engine.Update(!IsIconic(window));if(smoke&&++frames>=3)break;}
+            }else engine.ResetFrameClock();
+            const int rate=Bazzalt::Runtime::ApplicationAccess::GetEffectiveFrameRate();
+            if(rate>0)std::this_thread::sleep_until(start+std::chrono::duration<double>(1.0/rate));
+            else if(IsIconic(window)&&!Bazzalt::Application::GetRunInBackground())std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
-        engine.BeginShutdown();engine.Shutdown(true);Engine=nullptr;if(IsWindow(window))DestroyWindow(window);window=nullptr;engine.EndApplication();return 0;
+        Bazzalt::Runtime::ApplicationEventsAccess::ThrowIfFailed();engine.BeginShutdown();engine.Shutdown(true);Engine=nullptr;if(IsWindow(window))DestroyWindow(window);window=nullptr;engine.EndApplication();Bazzalt::Runtime::ApplicationEventsAccess::ThrowIfFailed();return Bazzalt::Application::GetExitCode();
     }catch(const std::exception& error){Engine=nullptr;if(window&&IsWindow(window))DestroyWindow(window);std::cerr<<error.what()<<'\n';if(!verify&&!smoke){auto n=MultiByteToWideChar(CP_UTF8,0,error.what(),-1,nullptr,0);std::wstring text(std::max(1,n),L'\0');MultiByteToWideChar(CP_UTF8,0,error.what(),-1,text.data(),int(text.size()));MessageBoxW(nullptr,text.c_str(),L"Game failed to start",MB_OK|MB_ICONERROR);}return 1;}
 }

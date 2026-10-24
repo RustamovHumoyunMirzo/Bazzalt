@@ -39,11 +39,14 @@
 <h2 id="Material">Material</h2>
 <pre><code>Bazzalt.SceneEnvironmentMode.Material</code></pre>
 <p>Use the MaterialAsset for the background; not a hidden direct light.</p>
-<details><summary>Underlying C++ declaration / default values</summary><pre><code>Material = 1</code></pre></details></article>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>Material = 1</code></pre></details><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Lua members and signatures</h2>
+<p>Use <code>Bazzalt.SceneEnvironmentMode</code>. Each member below is actually registered in Lua. The adapter declarations are C++ binding notation, not Lua example code. <code>sol::property</code> exposes a field, <code>sol::overload</code> lists alternatives, <code>sol::optional</code> accepts an omitted/nil argument, and <code>std::make_tuple</code> returns multiple Lua values. <code>sol::as_table</code> returns a Lua table. Instance methods use <code>value:Method(...)</code>; service/static calls use <code>Bazzalt.SceneEnvironmentMode.Method(...)</code> unless a colon overload is explicitly registered. An engine exception becomes a Lua script error. See the examples and behavior notes above for usage.</p><h3 id="lua-Map">Map</h3><pre><code class="language-lua">value:Map()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>Map=0, Material=1;</code></pre><pre><code>SceneEnvironmentMode::Map</code></pre></details><h3 id="lua-Material">Material</h3><pre><code class="language-lua">value:Material()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>Map=0, Material=1;</code></pre><pre><code>SceneEnvironmentMode::Material</code></pre></details><h3 id="lua-construction">Construction / enum values</h3><p>Global service table; do not construct an instance.</p><details><summary>Native declaration and binding adapter</summary><pre><code>api.create_named(&quot;SceneEnvironmentMode&quot;);</code></pre></details><p>Binding source: <code>src/Script/LuaServices.cpp</code>. Inherited component operations use the Entity component APIs.</p>
+<!-- API-SOURCE-END --></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../SceneEnvironment/en.html"><small>Previous</small>SceneEnvironment</a>
 <a class="next" href="../SceneManager/en.html"><small>Next</small>SceneManager</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#Map">Map</a><a class="toc-link" href="#Material">Material</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#Map">Map</a><a class="toc-link" href="#Material">Material</a><a class="toc-link" href="#source-contract">Lua members and signatures</a><a class="toc-link sub" href="#lua-Map">Map</a><a class="toc-link sub" href="#lua-Material">Material</a><a class="toc-link sub" href="#lua-construction">Construction / enum values</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

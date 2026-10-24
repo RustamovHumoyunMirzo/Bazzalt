@@ -52,11 +52,22 @@ if (hit) { auto selected = hit.Target; }</code></pre>
 <h2 id="operator-bool">operatorbool</h2>
 <pre><code>explicit operator bool() const</code></pre>
 <p>Tests handle/hit validity or nonzero UUID. This does not make a non-owning entity safe after its scene lifetime ends.</p>
-<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p></article>
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Public declarations</h2>
+<p>Header: <code>Bazzalt/SceneQuery.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
+<pre><code class="language-cpp">struct SceneQueryHit {
+Entity Target{};
+Vec3 Point{};
+Vec3 Normal{};
+float Distance = 0.0f;
+bool StartedInside = false;
+[[nodiscard]] explicit operator bool() const;
+};</code></pre>
+<!-- API-SOURCE-END --></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../SceneQueryBounds/en.html"><small>Previous</small>SceneQueryBounds</a>
 <a class="next" href="../SceneQueryOptions/en.html"><small>Next</small>SceneQueryOptions</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#Target">Target</a><a class="toc-link" href="#Point">Point</a><a class="toc-link" href="#Normal">Normal</a><a class="toc-link" href="#Distance">Distance</a><a class="toc-link" href="#StartedInside">StartedInside</a><a class="toc-link" href="#operator-bool">operatorbool</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#Target">Target</a><a class="toc-link" href="#Point">Point</a><a class="toc-link" href="#Normal">Normal</a><a class="toc-link" href="#Distance">Distance</a><a class="toc-link" href="#StartedInside">StartedInside</a><a class="toc-link" href="#operator-bool">operatorbool</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

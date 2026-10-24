@@ -107,11 +107,30 @@ constexpr UUID(std::uint64_t high, std::uint64_t low) : m_high(high), m_low(low)
 <table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
 <tr><td><code>UUID left</code></td><td>First operand or left projection extent.</td></tr>
 <tr><td><code>UUID right</code></td><td>Second operand or right projection extent.</td></tr>
-</tbody></table></article>
+</tbody></table><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Public declarations</h2>
+<p>Header: <code>Bazzalt/UUID.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
+<pre><code class="language-cpp">class UUID {
+constexpr UUID() = default;
+constexpr UUID(std::uint64_t high, std::uint64_t low);
+[[nodiscard]] static constexpr UUID Root();
+[[nodiscard]] static UUID Generate();
+[[nodiscard]] static bool TryParse(std::string_view text, UUID&amp; result);
+[[nodiscard]] std::string ToString() const;
+[[nodiscard]] constexpr std::uint64_t GetHigh() const;
+[[nodiscard]] constexpr std::uint64_t GetLow() const;
+[[nodiscard]] constexpr bool IsValid() const;
+[[nodiscard]] constexpr bool IsRoot() const;
+[[nodiscard]] explicit constexpr operator bool() const;
+friend constexpr bool operator==(UUID left, UUID right);
+friend constexpr bool operator!=(UUID left, UUID right);
+friend constexpr bool operator&lt;(UUID left, UUID right);
+};</code></pre>
+<!-- API-SOURCE-END --></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../UnresolvedComponents/en.html"><small>Previous</small>UnresolvedComponents</a>
 <a class="next" href="../Vec2/en.html"><small>Next</small>Vec2</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#UUID">UUID</a><a class="toc-link" href="#Root">Root</a><a class="toc-link" href="#Generate">Generate</a><a class="toc-link" href="#TryParse">TryParse</a><a class="toc-link" href="#ToString">ToString</a><a class="toc-link" href="#GetHigh">GetHigh</a><a class="toc-link" href="#GetLow">GetLow</a><a class="toc-link" href="#IsValid">IsValid</a><a class="toc-link" href="#IsRoot">IsRoot</a><a class="toc-link" href="#operator-bool">operatorbool</a><a class="toc-link" href="#operator-equal">operator==</a><a class="toc-link" href="#operator-not-equal">operator!=</a><a class="toc-link" href="#operator-less">operator&lt;</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#UUID">UUID</a><a class="toc-link" href="#Root">Root</a><a class="toc-link" href="#Generate">Generate</a><a class="toc-link" href="#TryParse">TryParse</a><a class="toc-link" href="#ToString">ToString</a><a class="toc-link" href="#GetHigh">GetHigh</a><a class="toc-link" href="#GetLow">GetLow</a><a class="toc-link" href="#IsValid">IsValid</a><a class="toc-link" href="#IsRoot">IsRoot</a><a class="toc-link" href="#operator-bool">operatorbool</a><a class="toc-link" href="#operator-equal">operator==</a><a class="toc-link" href="#operator-not-equal">operator!=</a><a class="toc-link" href="#operator-less">operator&lt;</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

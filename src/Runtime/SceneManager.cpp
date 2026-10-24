@@ -1,4 +1,5 @@
 #include "Bazzalt/SceneManager.h"
+#include "Bazzalt/Detail/SubsystemAccess.h"
 
 #include <algorithm>
 #include <vector>
@@ -12,16 +13,19 @@ Runtime::Engine* ActiveEngine() { return Engines.empty() ? nullptr : Engines.bac
 }
 
 bool SceneManager::LoadScene(const std::filesystem::path& path) {
+    Detail::RequireSubsystemService(Detail::SubsystemService::Scene,"SceneManager.LoadScene");
     auto* engine = ActiveEngine();
     return engine != nullptr && engine->RequestSceneLoad(path);
 }
 
 bool SceneManager::LoadScene(UUID assetId) {
+    Detail::RequireSubsystemService(Detail::SubsystemService::Scene,"SceneManager.LoadScene");
     auto* engine = ActiveEngine();
     return engine != nullptr && engine->RequestSceneLoad(assetId);
 }
 
 Scene* SceneManager::GetActiveScene() {
+    Detail::RequireSubsystemService(Detail::SubsystemService::Scene,"SceneManager.GetActiveScene");
     auto* engine = ActiveEngine();
     return engine != nullptr ? &engine->GetScene() : nullptr;
 }

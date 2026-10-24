@@ -154,6 +154,8 @@ class EditorController(QObject):
             self.Timer.stop()
             return
         tick_ms=(monotonic()-tick_start)*1000
+        interval=self.Runtime.ApplicationTickInterval() if hasattr(self.Runtime,'ApplicationTickInterval') else 16
+        if self.Timer.interval()!=interval:self.Timer.setInterval(interval)
         if self._play_authoring is not None and not self.Runtime.IsPlaying():self._RestorePlayAuthoring()
         self._stats_frames+=1;now=monotonic()
         if now-self._stats_started>=1.0:
@@ -1049,12 +1051,16 @@ class EditorController(QObject):
             action.setData(component_type)
             action.triggered.connect(lambda _=False, name=component_type: self._AddComponent(name))
         scripts=self.ScriptCompiler.Discover() if self.ScriptCompiler else []
+        from ..subsystems import Registrations
+        try:
+            registered_paths={Path(record['path']).resolve() for value in Registrations(self.Runtime.ProjectInfo().get('properties',{})) if (record:=self.Runtime.AssetInfo(value['asset'])) and record.get('path')}
+        except (ValueError,TypeError):registered_paths=set()
         if self.ScriptCompiler and self.ScriptCompiler.Diagnostics:
             for diagnostic in self.ScriptCompiler.Diagnostics:self._ScriptValidationFailed(diagnostic.message)
         if scripts:
             menu.addSeparator();script_menu=menu
             for descriptor in scripts:
-                if getattr(descriptor,'is_application',False):continue
+                if getattr(descriptor,'is_application',False) or getattr(descriptor,'is_subsystem',False) or descriptor.path.resolve() in registered_paths:continue
                 action=script_menu.addAction(descriptor.name);action.setToolTip(str(descriptor.path));action.setEnabled(not self.ScriptAttachments or not any(value.get("type")==descriptor.name for value in self.ScriptAttachments.For(self.SelectedEntity)));action.triggered.connect(lambda _=False,d=descriptor:self._AttachScript(d))
         button = self.Window.Properties.AddComponentButton
         search.textChanged.connect(lambda text:[action.setVisible(all(word in action.text().casefold() for word in text.casefold().split())) for action in menu.actions() if action is not search_action and not action.isSeparator()])
@@ -1169,10 +1175,12 @@ class EditorController(QObject):
         if self.Window.PreferenceValue("console","clear_on_play",False):self.Window.Console.Clear()
         if self.ScriptCompiler and self.ScriptAttachments:
             tr=self.Window.Localization.Translate
-            application=self.Runtime.ProjectInfo().get('properties',{}).get('application.script','')
-            record=self.Runtime.ResolveAssetRecord(application) if application else None
-            try:attachments=self.ScriptAttachments.WithApplicationSource(record['path'] if record else None)
-            except ScriptValidationError as error:self._ScriptValidationFailed(error);return
+            from ..subsystems import Registrations,Sources,WithSubsystems
+            info=self.Runtime.ProjectInfo()
+            try:
+                registrations=Registrations(info.get('properties',{}));sources=Sources(Path(info.get('project_path','')),registrations) if registrations else {}
+                attachments=WithSubsystems(self.ScriptAttachments,sources);self.ScriptCompiler.SubsystemSources=list(sources.values())
+            except (ValueError,OSError,TypeError) as error:self._ScriptValidationFailed(error);return
             native_sources=[path for path in attachments.UsedSources() if Path(path).suffix.lower()!=".lua"]
             progress=None
             if native_sources:
@@ -1191,7 +1199,7 @@ class EditorController(QObject):
             try:bindings=attachments.RuntimeBindings(result.outputs)
             except ScriptValidationError as error:self._ScriptValidationFailed(error);self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
             active_entities={str(entity["uuid"]) for entity in self.Runtime.Entities()}
-            bindings=[binding for binding in bindings if binding["entity"] in active_entities or binding["entity"]=="@application"]
+            bindings=[binding for binding in bindings if binding["entity"] in active_entities or binding["entity"].startswith('@subsystem:')]
             if not self.Runtime.ConfigureScripts(bindings):
                 self.Window.Console.AddMessage(self.Runtime.LastError(),ConsoleLevel.Error,True,tr("scripting.runtime_source"));self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
         authoring=(set(self._dirty_scenes),self.History.Checkpoint())
@@ -1202,7 +1210,7 @@ class EditorController(QObject):
             self.Window.Docking.activate_panel("output");self.GameInput.FocusGame()
 
     def _AttachScript(self,descriptor,entity_id:str|None=None)->None:
-        if getattr(descriptor,'is_application',False):return
+        if getattr(descriptor,'is_application',False) or getattr(descriptor,'is_subsystem',False):self._ScriptValidationFailed(self.Window.Localization.Translate('subsystems.cannot_attach'));return
         entity_id=entity_id or self.SelectedEntity
         if self.Runtime.IsEditorLocked(entity_id):return
         if not entity_id or not self.ScriptAttachments:return

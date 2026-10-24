@@ -1,4 +1,6 @@
 #include "Runtime/ApplicationEventsAccess.h"
+#include "Runtime/ApplicationAccess.h"
+#include "Bazzalt/Console.h"
 #include "Bazzalt/Detail/ModuleLifetime.h"
 #include <map>
 #include <memory>
@@ -7,6 +9,7 @@
 #include <vector>
 #include <string_view>
 #include <iterator>
+#include <optional>
 namespace Bazzalt {
 namespace {
 struct Entry {
@@ -15,22 +18,40 @@ struct Entry {
     ApplicationEvents::Callback Callback;
     ApplicationEventType Type;
     const void* Owner;
+    int Level=-1;
 };
 struct Registry { std::map<std::uint64_t,std::shared_ptr<Entry>> Entries;std::uint64_t Next=1; };
 Registry& State(){static Registry state;return state;}
 thread_local const void* CurrentOwner=nullptr;
+thread_local int CurrentLevel=-1;
+std::function<void(int)> StageLoader;
+std::string Failure;
+bool WindowReady=false;
+std::optional<ApplicationEvent> PendingFocus,PendingResize;
 }
 const char* ApplicationEvents::GetName(ApplicationEventType type){
     static constexpr const char* names[]={"OnBoot","OnBeforeWindowCreate","OnInit","OnLoad","OnPostWindowCreate","OnPreUpdate","OnUpdate","OnFixedUpdate","OnLateUpdate","OnPreRender","OnRender","OnPostRender","OnWindowResize","OnWindowFocusChanged","OnWindowCloseRequested","OnSceneLoad","OnSceneLoaded","OnSceneUnload","OnSceneUnloaded","OnPlay","OnStop","OnPreShutdown","OnShutdown"};
     auto index=static_cast<unsigned>(type);return index<std::size(names)?names[index]:"Unknown";
 }
-ApplicationEvents::Subscription ApplicationEvents::Subscribe(ApplicationEventType type,Callback callback){return Runtime::ApplicationEventsAccess::Subscribe(type,std::move(callback),CurrentOwner);}
+ApplicationEvents::Subscription ApplicationEvents::Subscribe(ApplicationEventType type,Callback callback){
+    if(CurrentLevel<0||!CurrentOwner)throw std::logic_error("Global application events may only be registered inside C++ Subsystem Script callbacks");
+    if(Runtime::ApplicationEventsAccess::GetEventLevel(type)<CurrentLevel)throw std::logic_error(std::string("Cannot subscribe to lower-level event ")+GetName(type));
+    return Runtime::ApplicationEventsAccess::Subscribe(type,std::move(callback),CurrentOwner);
+}
 bool ApplicationEvents::Unsubscribe(Subscription id){auto found=State().Entries.find(id);if(found==State().Entries.end())return false;auto retained=found->second;State().Entries.erase(found);return true;}
 const void* Runtime::ApplicationEventsAccess::SetOwner(const void* owner) noexcept {auto previous=CurrentOwner;CurrentOwner=owner;return previous;}
+int Runtime::ApplicationEventsAccess::SetSubsystemLevel(int level) noexcept{const auto previous=CurrentLevel;CurrentLevel=level;return previous;}
+int Runtime::ApplicationEventsAccess::GetSubsystemLevel() noexcept{return CurrentLevel;}
+int Runtime::ApplicationEventsAccess::GetEventLevel(ApplicationEventType type) noexcept{
+    switch(type){case ApplicationEventType::OnBoot:return 0;case ApplicationEventType::OnBeforeWindowCreate:return 1;case ApplicationEventType::OnInit:return 2;case ApplicationEventType::OnLoad:case ApplicationEventType::OnSceneLoad:return 3;default:return 4;}
+}
+void Runtime::ApplicationEventsAccess::BindStageLoader(std::function<void(int)> loader){if(loader)Failure.clear();WindowReady=false;PendingFocus.reset();PendingResize.reset();StageLoader=std::move(loader);}
+void Runtime::ApplicationEventsAccess::ThrowIfFailed(){if(!Failure.empty()){auto error=std::move(Failure);Failure.clear();throw std::runtime_error(error);}}
+void Runtime::ApplicationEventsAccess::Fail(const std::string& error) noexcept{if(Failure.empty())Failure=error;Application::Quit(1);Console::Error(error,"Subsystem");std::cerr<<"[Subsystem] "<<error<<'\n';}
 ApplicationEvents::Subscription Runtime::ApplicationEventsAccess::Subscribe(ApplicationEventType type,ApplicationEvents::Callback callback,const void* owner){
     if(!callback||std::string_view(ApplicationEvents::GetName(type))=="Unknown")throw std::invalid_argument("Invalid application event subscription");
     auto& state=State();const auto id=state.Next++;
-    state.Entries.emplace(id,std::make_shared<Entry>(Entry{Detail::GetCurrentGameplayModule(),std::move(callback),type,owner}));return id;
+    state.Entries.emplace(id,std::make_shared<Entry>(Entry{Detail::GetCurrentGameplayModule(),std::move(callback),type,owner,CurrentLevel}));return id;
 }
 void Runtime::ApplicationEventsAccess::DisconnectOwner(const void* owner) noexcept {
     // Destroy callbacks outside map iteration: captures may unsubscribe others.
@@ -38,14 +59,31 @@ void Runtime::ApplicationEventsAccess::DisconnectOwner(const void* owner) noexce
     for(auto id:ids)ApplicationEvents::Unsubscribe(id);
 }
 void Runtime::ApplicationEventsAccess::Emit(ApplicationEvent event) noexcept {
+    ApplicationAccess::Observe(event);
+    const auto failed=[](const std::string& error){Fail(error);};
+    if(StageLoader&&event.Type==ApplicationEventType::OnWindowFocusChanged&&!Application::IsPlaying()){PendingFocus=event;return;}
+    if(StageLoader&&!WindowReady){
+        if(event.Type==ApplicationEventType::OnWindowFocusChanged){PendingFocus=event;return;}
+        if(event.Type==ApplicationEventType::OnWindowResize){PendingResize=event;return;}
+    }
+    if(event.Type==ApplicationEventType::OnPostWindowCreate)WindowReady=true;
+    if(StageLoader&&(event.Type==ApplicationEventType::OnBoot||event.Type==ApplicationEventType::OnBeforeWindowCreate||event.Type==ApplicationEventType::OnInit||event.Type==ApplicationEventType::OnLoad||event.Type==ApplicationEventType::OnPostWindowCreate)){
+        try{StageLoader(GetEventLevel(event.Type));}catch(const std::exception& error){failed(error.what());return;}catch(...){failed("Subsystem loading failed");return;}
+    }
     // Snapshot IDs: removed callbacks are skipped; new callbacks wait until next emission.
     std::vector<ApplicationEvents::Subscription> ids;for(auto& [id,entry]:State().Entries)if(entry->Type==event.Type)ids.push_back(id);
     for(auto id:ids){auto found=State().Entries.find(id);if(found==State().Entries.end())continue;auto entry=found->second;
         auto previous=Detail::SetCurrentGameplayModule(entry->Module);
         auto owner=SetOwner(entry->Owner);
-        try{entry->Callback(event);}catch(const std::exception& error){std::cerr<<"[Application] "<<ApplicationEvents::GetName(event.Type)<<": "<<error.what()<<'\n';}catch(...){std::cerr<<"[Application] callback failed\n";}
+        const int level=SetSubsystemLevel(entry->Level);
+        try{entry->Callback(event);}catch(const std::exception& error){failed(std::string(ApplicationEvents::GetName(event.Type))+": "+error.what());}catch(...){failed("Subsystem callback failed");}
         Detail::SetCurrentGameplayModule(std::move(previous));
         SetOwner(owner);
+        SetSubsystemLevel(level);
     }
+    if(event.Type==ApplicationEventType::OnPostWindowCreate){
+        auto resize=std::move(PendingResize);PendingResize.reset();if(resize)Emit(*resize);
+    }
+    if(event.Type==ApplicationEventType::OnPlay){auto focus=std::move(PendingFocus);PendingFocus.reset();if(focus)Emit(*focus);}
 }
 }

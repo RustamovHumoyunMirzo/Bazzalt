@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <stdexcept>
 #include "Bazzalt/Component.h"
 #include "Bazzalt/Time.h"
 #include "Bazzalt/Input.h"
@@ -21,9 +22,6 @@ public:
     virtual void OnUpdate(float deltaTime) { (void)deltaTime; }
     virtual void OnFixedUpdate(float fixedDeltaTime) { (void)fixedDeltaTime; }
     virtual void OnLateUpdate(float deltaTime) { (void)deltaTime; }
-    // Application entry scripts receive global events through this hook. Scene
-    // behaviors can instead subscribe to ApplicationEvents during OnCreate.
-    virtual void OnApplicationEvent(const ApplicationEvent&) {}
     virtual void OnDestroy() {}
     [[nodiscard]] const std::string& GetEntityUUID() const { return m_entityUUID; }
     [[nodiscard]] Entity GetEntity() const {
@@ -41,6 +39,18 @@ public:
     static void Bind(Behavior& behavior,const char* entity){behavior.m_entityUUID=entity?entity:"";}
     static void BindTime(Detail::TimeState* state){Time::Bind(state);}
     static void BindInput(Detail::InputState* state){Input::Bind(state);}
+};
+
+// Call another native script through a shared public C++ interface/header.
+// Returned pointers/references are valid only while that script instance lives.
+class BAZZALT_API Scripts final {
+public:
+    static Behavior* Find(Entity entity,const std::string& typeName);
+    template<class T> static T& Get(Entity entity,const std::string& typeName){
+        auto* value=dynamic_cast<T*>(Find(entity,typeName));
+        if(!value)throw std::logic_error("Script instance is missing or has an incompatible interface: "+typeName);
+        return *value;
+    }
 };
 
 enum class PropertyType : std::uint8_t { Boolean, Integer, Float, String, Vec2, Vec3, Vec4, Entity, Asset };

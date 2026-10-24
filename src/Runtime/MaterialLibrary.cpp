@@ -1,5 +1,6 @@
 #include "Runtime/MaterialLibrary.h"
 #include "Bazzalt/AssetManager.h"
+#include "Bazzalt/Detail/SubsystemAccess.h"
 #include "Bazzalt/Components/Mesh.h"
 #include "Bazzalt/Components/PrimitiveObject.h"
 #include "runtime_lit_filamat.h"
@@ -53,6 +54,7 @@ bool ParseValue(ryml::ConstNodeRef node,ShaderParameterType type,Detail::Materia
     } catch(...) { return false; }
 }
 Definition* ShaderDefinition(UUID id) {
+    Detail::RequireSubsystemService(Detail::SubsystemService::Rendering,"Shader");
     if(const int preset=PresetIndex(id);preset>=0){
         static std::array<Definition,4> builtins=[](){std::array<Definition,4> values;
             for(int i=0;i<4;++i){auto& value=values[i];value.Shader=UUID{BuiltinShaderNamespace,std::uint64_t(i+1)};value.Stamp="builtin-runtime-2";
@@ -83,6 +85,7 @@ Definition* ShaderDefinition(UUID id) {
     }catch(...){return nullptr;}
 }
 Definition* MaterialDefinition(UUID id) {
+    Detail::RequireSubsystemService(Detail::SubsystemService::Rendering,"Material");
     if(auto found=Materials.find(id);found!=Materials.end()&&found->second.Transient)return &found->second;
     const auto asset=AssetManager::GetAsset(id);if(!asset||Extension(asset->SourcePath)!=".matinst")return nullptr;
     std::error_code error;const auto modified=std::filesystem::last_write_time(asset->SourcePath,error);if(error)return nullptr;

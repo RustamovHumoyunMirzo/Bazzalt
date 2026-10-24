@@ -9,11 +9,14 @@ class ContentFilterTests(unittest.TestCase):
     def test_application_entry_is_retained_and_cannot_be_excluded(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);self.Fixture(root)
-            (root/'Game.bproject').write_text('StartupScene: Assets/Main.bscene\nProperties:\n  application.script: unused\n')
+            import json
+            identity='12345678-1234-4234-8234-123456789abc'
+            index=root/'.bazzalt/CookedAssets.yaml';data=yaml.safe_load(index.read_text());data['Assets'][-1]['UUID']=identity;index.write_text(yaml.safe_dump(data))
+            (root/'Game.bproject').write_text('StartupScene: Assets/Main.bscene\nProperties:\n  application.subsystems: '+json.dumps(json.dumps([dict(asset=identity,level=4)]))+'\n')
             settings=copy.deepcopy(DEFAULTS['packaging']);settings['include_assets']='Assets/Main.bscene'
             FilterCooked(root,settings);self.assertTrue((root/'Assets/Unused.bin').exists())
             settings['exclude_assets']='Assets/Unused.bin'
-            with self.assertRaisesRegex(ValueError,'Application'):FilterCooked(root,settings)
+            with self.assertRaisesRegex(ValueError,'Subsystem'):FilterCooked(root,settings)
     def Fixture(self,root):
         records=[]
         for identity,name,contents in (('scene','Assets/Main.bscene',{'Mesh':'model'}),('model','Assets/Model.bin',None),('unused','Assets/Unused.bin',None)):
