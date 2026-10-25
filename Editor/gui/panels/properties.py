@@ -67,7 +67,7 @@ class ComponentSection(QFrame):
     def AddField(self, label: str, editor: QWidget) -> None:
         row=self.Form.rowCount();caption=QLabel(DisplayName(self._localization,label,"field"),self.Body);caption.setObjectName("InspectorFieldLabel");self._captions[label]=caption
         caption.setWordWrap(True);caption.setToolTip(caption.text())
-        caption.setMinimumWidth(72);caption.setMaximumWidth(120);caption.setSizePolicy(QSizePolicy.Policy.Preferred,QSizePolicy.Policy.Fixed);caption.setAlignment(Qt.AlignmentFlag.AlignLeading|Qt.AlignmentFlag.AlignVCenter)
+        caption.setMinimumWidth(min(120,max(72,caption.fontMetrics().horizontalAdvance(caption.text())+4)));caption.setMaximumWidth(120);caption.setSizePolicy(QSizePolicy.Policy.Preferred,QSizePolicy.Policy.Fixed);caption.setAlignment(Qt.AlignmentFlag.AlignLeading|Qt.AlignmentFlag.AlignVCenter)
         editor.setParent(self.Body)
         editor.setMinimumWidth(0);editor.setMaximumWidth(260);editor.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Fixed)
         self.Form.setRowMinimumHeight(row,24)

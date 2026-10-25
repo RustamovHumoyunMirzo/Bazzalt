@@ -161,7 +161,7 @@ class AssetOpeningTests(unittest.TestCase):
         application.write_bytes(b"test")
         file = self.Root / "Код & player.cpp"
         file.write_text("test", encoding="utf-8")
-        with patch("Editor.platform_services.sys.platform", "win32"), patch("Editor.platform_services.subprocess.Popen") as launch:
+        with patch("Editor.platform_services.sys.platform", "win32"), patch("Editor.platform_services.subprocess.CREATE_NO_WINDOW",0x08000000,create=True), patch("Editor.platform_services.subprocess.Popen") as launch:
             LaunchApplication(application, [file])
         self.assertEqual(launch.call_args.args[0], [str(application), str(file.resolve())])
         self.assertFalse(launch.call_args.kwargs["shell"])

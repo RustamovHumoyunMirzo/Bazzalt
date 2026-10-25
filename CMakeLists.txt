@@ -253,6 +253,9 @@ target_include_directories(Bazzalt
 )
 
 target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE BazzaltMiniaudio BazzaltLuaBindings BazzaltLua SDL3::SDL3-static ryml::ryml Filament::Filament ${CMAKE_DL_LIBS})
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SIZEOF_VOID_P EQUAL 4)
+    target_link_libraries(Bazzalt PRIVATE atomic)
+endif()
 
 # One-way link: GUI imports core; core loads the sibling module through a private
 # versioned table. This avoids circular DLL dependencies/import libraries.
@@ -436,6 +439,14 @@ if(BUILD_TESTING)
             target_compile_options(${target} PRIVATE -UNDEBUG)
         endif()
     endfunction()
+    add_library(BazzaltSystemIdentityModule SHARED tests/fixtures/SystemIdentityModule.cpp)
+    target_link_libraries(BazzaltSystemIdentityModule PRIVATE Bazzalt)
+    target_compile_definitions(BazzaltSystemIdentityModule PRIVATE BUILDING_SYSTEM_IDENTITY_PROBE)
+    set_target_properties(BazzaltSystemIdentityModule PROPERTIES CXX_VISIBILITY_PRESET hidden)
+    add_executable(BazzaltSystemIdentityTests tests/SystemIdentityTests.cpp)
+    target_link_libraries(BazzaltSystemIdentityTests PRIVATE Bazzalt BazzaltSystemIdentityModule)
+    bazzalt_enable_test_assertions(BazzaltSystemIdentityTests)
+    add_test(NAME BazzaltSystemIdentityTests COMMAND BazzaltSystemIdentityTests)
     add_executable(BazzaltNumberParsingTests tests/NumberParsingTests.cpp)
     target_include_directories(BazzaltNumberParsingTests PRIVATE src)
     if(MSVC)

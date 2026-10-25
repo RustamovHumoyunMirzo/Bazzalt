@@ -91,3 +91,15 @@ valid subnormals when libc sets ERANGE, so do not use num_get here. Both paths r
 nonfinite values and out-of-range results without changing the destination.
 Audio, scenes, GUI fields and CSS use this helper. NumberParsingTests executes
 both paths even on Windows and runs before the full Linux builds.
+
+Scene system keys compare owned RTTI type names, not RTTI addresses: hidden
+type_info objects in the Python bridge and shared libraries are distinct under
+libc++. Cached names avoid per-frame temporary allocations. SystemIdentityTests
+exercises add/get/remove through a separate module with hidden RTTI.
+
+Each native host owns its OS event pump (Qt, Win32 or SDL). InputAccess queues
+forwarded SDL-shaped input privately and drains it exactly once in BeginFrame.
+It must not push forwarded events back into SDL's native queue, poll window
+events from another host, or depend on SDL poll-sentinel timing. Focus changes
+clear the private queue. Linux x86 core links libatomic for 64-bit atomics;
+target systems need the corresponding libatomic1 package.

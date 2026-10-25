@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
-#include <typeindex>
+#include <typeinfo>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -106,7 +106,7 @@ public:
                       "SystemType must derive from Bazzalt::System");
         if (m_isUpdating)
             throw std::logic_error("Systems cannot be added during Scene::Update");
-        const std::type_index type = typeid(SystemType);
+        const auto& type = SystemKey<SystemType>();
         auto existing = m_systemLookup.find(type);
         if (existing != m_systemLookup.end()) {
             return static_cast<SystemType&>(*existing->second);
@@ -128,24 +128,24 @@ public:
 
     template<typename SystemType>
     [[nodiscard]] bool HasSystem() const {
-        return m_systemLookup.find(typeid(SystemType)) != m_systemLookup.end();
+        return m_systemLookup.find(SystemKey<SystemType>()) != m_systemLookup.end();
     }
 
     template<typename SystemType>
     SystemType& GetSystem() {
-        return static_cast<SystemType&>(*m_systemLookup.at(typeid(SystemType)));
+        return static_cast<SystemType&>(*m_systemLookup.at(SystemKey<SystemType>()));
     }
 
     template<typename SystemType>
     const SystemType& GetSystem() const {
-        return static_cast<const SystemType&>(*m_systemLookup.at(typeid(SystemType)));
+        return static_cast<const SystemType&>(*m_systemLookup.at(SystemKey<SystemType>()));
     }
 
     template<typename SystemType>
     bool RemoveSystem() {
         if (m_isUpdating)
             throw std::logic_error("Systems cannot be removed during Scene::Update");
-        const std::type_index type = typeid(SystemType);
+        const auto& type = SystemKey<SystemType>();
         auto found = m_systemLookup.find(type);
         if (found == m_systemLookup.end()) {
             return false;
@@ -172,8 +172,16 @@ private:
     friend class Runtime::Engine;
 
     template<typename SystemType>
+    static const std::string& SystemKey() {
+        // Hidden RTTI objects can have different addresses across ELF modules.
+        // Own and compare the type name instead; cache it per instantiation.
+        static const std::string key(typeid(SystemType).name());
+        return key;
+    }
+
+    template<typename SystemType>
     bool UpdateSystem(float deltaTime = 0.0f) {
-        auto found = m_systemLookup.find(typeid(SystemType));
+        auto found = m_systemLookup.find(SystemKey<SystemType>());
         if (found == m_systemLookup.end() || !found->second->IsEnabled()) return false;
         found->second->OnUpdate(*this, deltaTime);
         return true;
@@ -194,7 +202,7 @@ private:
     UUID m_uuid = UUID::Generate();
     std::unordered_map<UUID, entt::entity> m_uuidLookup;
     std::vector<std::unique_ptr<System>> m_systems;
-    std::unordered_map<std::type_index, System*> m_systemLookup;
+    std::unordered_map<std::string, System*> m_systemLookup;
     bool m_isUpdating = false;
 };
 
