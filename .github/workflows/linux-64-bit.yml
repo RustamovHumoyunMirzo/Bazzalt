@@ -33,6 +33,8 @@ jobs:
           for dependency in entt rapidyaml filament sdl3 stb_image lua sol2 miniaudio freetype text_shaping pybind11; do
             if [ -f "scripts/get_${dependency}.sh" ]; then sh "scripts/get_${dependency}.sh"; fi
           done
+      - name: Check Sol2 member callbacks before the full build
+        run: clang++ -std=c++20 -stdlib=libc++ -fsyntax-only -Ideps/sol2/include -Ideps/lua/src tests/Sol2CompatibilityProbe.cpp
       - name: Configure and build core, editor bridge, player and cooker
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DPython_EXECUTABLE="$(command -v python)"

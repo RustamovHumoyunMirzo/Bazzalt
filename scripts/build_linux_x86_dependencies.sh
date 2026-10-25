@@ -10,6 +10,8 @@ mkdir -p "$WORK"
 if [ ! -d "$SOURCE" ]; then git clone --depth 1 --branch v1.77.0 https://github.com/google/filament.git "$SOURCE"; fi
 [ "$(git -C "$SOURCE" rev-parse HEAD)" = "$PIN" ] || { echo 'Filament source integrity mismatch' >&2; exit 1; }
 python3 "$ROOT/scripts/patch_filament_win32.py" "$SOURCE"
+python3 "$ROOT/scripts/patch_filament_linux_x86.py" "$SOURCE"
+python3 "$ROOT/scripts/test_bluegl_linux_x86.py" "$SOURCE"
 # Linux x86 uses the distribution's multilib libstdc++; the official x64 SDK uses libc++.
 # Build native 32-bit tools too: the x64 Linux CI host supports IA32 executables.
 CC=clang CXX=clang++ cmake -S "$SOURCE" -B "$WORK/filament-build" -G Ninja \

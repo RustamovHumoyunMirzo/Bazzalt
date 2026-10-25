@@ -33,13 +33,14 @@ jobs:
         id: filament
         with:
           path: build/linux32-bootstrap/filament-x86
-          key: linux-filament-x86-v1.77.0-clang18-libstdcxx-${{ hashFiles('scripts/build_linux_x86_dependencies.sh', 'scripts/patch_filament_win32.py') }}
+          key: linux-filament-x86-v1.77.0-clang18-libstdcxx-${{ hashFiles('scripts/build_linux_x86_dependencies.sh', 'scripts/patch_filament_win32.py', 'scripts/patch_filament_linux_x86.py', 'scripts/test_bluegl_linux_x86.py') }}
+      - name: Fetch engine dependencies and check Sol2 member callbacks
+        run: |
+          for dependency in entt rapidyaml sdl3 lua sol2 miniaudio freetype text_shaping; do sh "scripts/get_${dependency}.sh"; done
+          clang++ -m32 -std=c++20 -stdlib=libstdc++ -fsyntax-only -Ideps/sol2/include -Ideps/lua/src tests/Sol2CompatibilityProbe.cpp
       - name: Build pinned x86 Filament SDK on CI
         if: steps.filament.outputs.cache-hit != 'true'
         run: sh scripts/build_linux_x86_dependencies.sh
-      - name: Fetch engine dependencies
-        run: |
-          for dependency in entt rapidyaml sdl3 lua sol2 miniaudio freetype text_shaping; do sh "scripts/get_${dependency}.sh"; done
       - name: Build x86 core, GUI, Lua and player without editor or Python bridge
         run: |
           cmake -S . -B build/linux-x86 -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DBAZZALT_BUILD_EDITOR_BRIDGE=OFF -DBAZZALT_FILAMENT_DIR="$PWD/build/linux32-bootstrap/filament-x86" -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_ASM_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32 -DCMAKE_SHARED_LINKER_FLAGS=-m32 -DCMAKE_LIBRARY_PATH=/usr/lib/i386-linux-gnu -DOPENSSL_CRYPTO_LIBRARY=/usr/lib/i386-linux-gnu/libcrypto.so

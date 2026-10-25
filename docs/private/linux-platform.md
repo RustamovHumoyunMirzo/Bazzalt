@@ -50,3 +50,21 @@ layout is lib/x86; no x64 archive can be substituted. Engine CMake and the
 script compiler select the same ABI. Editor/Hub/compiler stay x64. The release
 workflow embeds the x86 runtime template and publishes a separate x86 Core ZIP.
 The host needs IA32 execution and target libraries for package verification.
+
+## Pinned dependency compatibility
+
+Sol2 3.3.1 hits LLVM's Clang 18 dependent-noexcept callback regression
+(ThePhD/sol2#1581, llvm/llvm-project#91362). Fetch scripts apply
+patch_sol2_clang18.py; CMake also applies it for existing Clang 18 checkouts.
+Only two member-variable callback entry points change, and only Clang 18 sees
+the omitted noexcept. Other compilers retain the upstream specification.
+Linux CI compiles Sol2CompatibilityProbe.cpp before building the engine.
+
+Filament's Linux universal BlueGL assembly selects x64 for every non-AArch64
+target. patch_filament_linux_x86.py adds a dedicated __i386__ branch and emits
+PIC tail-call stubs from every upstream entry point. EAX is scratch; the
+argument stack, callee-saved registers and x87/SSE argument state are preserved.
+test_bluegl_linux_x86.py builds a small shared dispatch library and PIE caller
+and exercises integer, float, double and pointer calls 10,000 times before the
+large renderer build. Both patch scripts are idempotent and reject unfamiliar
+source layouts. The Filament cache key includes patches and the runtime probe.

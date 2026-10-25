@@ -8,3 +8,5 @@ if (-not (Test-Path "$Destination/.git")) {
 }
 $Actual = (git -C $Destination rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or $Actual -ne $Commit) { throw 'Sol2 source pin mismatch' }
+python (Join-Path $PSScriptRoot 'patch_sol2_clang18.py') $Destination
+if ($LASTEXITCODE -ne 0) { throw 'Sol2 Clang compatibility patch failed' }

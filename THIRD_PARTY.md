@@ -16,6 +16,13 @@ are in [sources.json](licenses/third_party/sources.json).
 No system font is redistributed. Games must obtain distribution rights for their
 fonts, audio, textures and other project content.
 
+Local compatibility patches preserve upstream licenses. Sol2 3.3.1's member
+callbacks omit their dependent `noexcept` specification only on Clang 18 to
+work around [upstream issue #1581](https://github.com/ThePhD/sol2/issues/1581).
+The Linux x86 Filament build adds i386 position-independent BlueGL dispatch
+thunks; upstream x64 and ARM assembly remains unchanged. Patch sources and
+regression probes are in `scripts/patch_*` and `tests/Sol2CompatibilityProbe.cpp`.
+
 ## Core, GUI and scripting
 
 | Dependency / copyright owner | Used for | License and upstream notice |
