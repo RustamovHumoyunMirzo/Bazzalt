@@ -5,13 +5,84 @@ material {
     depthWrite : false,
     doubleSided : true,
     flipUV : false,
-    parameters : [{type:sampler2d,name:image}],
-    requires : [uv0,color]
+    parameters : [
+        {type:sampler2d,name:image},{type:sampler2d,name:original},
+        {type:float,name:mode},{type:float2,name:panelSize},
+        {type:float4,name:radiusX},{type:float4,name:radiusY},{type:float4,name:borderWidths},
+        {type:"float4[4]",name:borderColors},
+        {type:float4,name:gradient},{type:float4,name:gradientGeometry},
+        {type:"float4[8]",name:stopColors},{type:"float[8]",name:stopPositions},
+        {type:float4,name:effect},{type:float4,name:effectColor}
+    ],
+    requires : [uv0,uv1,color]
 }
 fragment {
+    vec4 premultiplied(vec4 v){return vec4(v.rgb*v.a,v.a);}
+    float rounded(vec2 p,vec2 size,vec4 rx,vec4 ry) {
+        int corner=p.y<size.y*.5?(p.x<size.x*.5?0:1):(p.x<size.x*.5?3:2);
+        vec2 r=vec2(rx[corner],ry[corner]);
+        vec2 center=vec2(corner==0||corner==3?r.x:size.x-r.x,corner<2?r.y:size.y-r.y);
+        // Only a corner's elliptical quadrant needs clipping.
+        vec2 delta=(p-center)*vec2(corner==0||corner==3?-1.0:1.0,corner<2?-1.0:1.0);
+        float d=max(max(-p.x,p.x-size.x),max(-p.y,p.y-size.y));
+        if(all(greaterThan(r,vec2(0.0)))&&all(greaterThan(delta,vec2(0.0))))d=max(d,(length(delta/r)-1.0)*min(r.x,r.y));
+        return 1.0-smoothstep(-.6,.6,d);
+    }
+    vec4 filtered(vec2 uv) {
+        float kind=materialParams.effect.x,amount=materialParams.effect.y;
+        uv=uvToRenderTargetUV(uv);
+        vec4 v=texture(materialParams_image,uv);
+        if(kind==9.0) {
+            v=vec4(0.0);float weight=0.0;
+            for(int i=-16;i<=16;i++){float x=float(i)/16.0*3.0;float w=exp(-.5*x*x);v+=texture(materialParams_image,uv+materialParams.effect.zw*x*amount)*w;weight+=w;}v/=weight;
+        }
+        // Offscreen targets store premultiplied colors; color functions operate on straight RGB.
+        vec3 c=v.a>0.00001?v.rgb/v.a:vec3(0.0);
+        if(kind==1.0)c*=amount;
+        else if(kind==2.0)c=(c-.5)*amount+.5;
+        else if(kind==3.0)c=mix(c,vec3(dot(c,vec3(.2126,.7152,.0722))),amount);
+        else if(kind==4.0)c=mix(c,1.0-c,amount);
+        else if(kind==5.0)v.a*=amount;
+        else if(kind==6.0){vec3 gray=vec3(dot(c,vec3(.2126,.7152,.0722)));c=mix(gray,c,amount);}
+        else if(kind==7.0)c=mix(c,vec3(dot(c,vec3(.393,.769,.189)),dot(c,vec3(.349,.686,.168)),dot(c,vec3(.272,.534,.131))),amount);
+        else if(kind==8.0){float s=sin(amount),co=cos(amount);c=mat3(.213+.787*co-.213*s,.213-.213*co+.143*s,.213-.213*co-.787*s,.715-.715*co-.715*s,.715+.285*co+.140*s,.715-.715*co+.715*s,.072-.072*co+.928*s,.072-.072*co-.283*s,.072+.928*co+.072*s)*c;}
+        else if(kind==10.0){vec4 source=texture(materialParams_original,uv);float alpha=texture(materialParams_image,uv-materialParams.effect.zw).a*materialParams.effectColor.a;return source+vec4(materialParams.effectColor.rgb*alpha,alpha)*(1.0-source.a);}
+        return vec4(clamp(c,0.0,1.0)*v.a,v.a);
+    }
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
-        vec4 value=texture(materialParams_image,getUV0())*getColor();
-        material.baseColor=vec4(value.rgb*value.a,value.a);
+        vec4 value;
+        if(materialParams.mode==2.0||materialParams.mode==3.0){value=filtered(getUV0())*getColor();if(materialParams.mode==3.0)value*=rounded(getUV1()*materialParams.panelSize,materialParams.panelSize,materialParams.radiusX,materialParams.radiusY);}
+        else {
+            value=texture(materialParams_image,getUV0())*getColor();
+            vec2 p=getUV1()*materialParams.panelSize;
+            if(materialParams.mode==1.0&&materialParams.gradient.x>0.0){
+                vec2 q=p-materialParams.gradientGeometry.xy*materialParams.panelSize;float angle=materialParams.gradient.y;
+                vec2 direction=vec2(sin(angle),-cos(angle));float t;
+                if(materialParams.gradient.x==1.0)t=dot(p-materialParams.panelSize*.5,direction)/max(.001,dot(abs(direction),materialParams.panelSize))+.5;
+                else if(materialParams.gradient.x==2.0)t=length(q/max(vec2(.001),materialParams.gradientGeometry.zw*materialParams.panelSize));
+                else t=fract((atan(q.x,-q.y)-angle)/6.28318530718);
+                int count=int(materialParams.gradient.z);float first=materialParams.stopPositions[0],last=materialParams.stopPositions[count-1];
+                if(materialParams.gradient.w>0.0)t=first+mod(t-first,max(.00001,last-first));
+                vec4 c=premultiplied(materialParams.stopColors[0]);
+                for(int i=1;i<8;i++){if(i>=count)break;float a=materialParams.stopPositions[i-1],b=materialParams.stopPositions[i];if(t>=a)c=b<=a?premultiplied(materialParams.stopColors[i]):mix(premultiplied(materialParams.stopColors[i-1]),premultiplied(materialParams.stopColors[i]),clamp((t-a)/max(.00001,b-a),0.0,1.0));}
+                if(c.a>0.00001)c.rgb/=c.a;
+                value=c*getColor();
+            }
+            float mask=rounded(p,materialParams.panelSize,materialParams.radiusX,materialParams.radiusY);
+            if(materialParams.mode==1.0){
+                vec4 widths=materialParams.borderWidths;
+                // L/T/R/B insets, with independently reduced corner ellipses.
+                vec2 innerSize=max(vec2(0.0),materialParams.panelSize-vec2(widths.x+widths.z,widths.y+widths.w));
+                vec4 ix=max(vec4(0.0),materialParams.radiusX-vec4(widths.x,widths.z,widths.z,widths.x));
+                vec4 iy=max(vec4(0.0),materialParams.radiusY-vec4(widths.y,widths.y,widths.w,widths.w));
+                float inside=rounded(p-widths.xy,innerSize,ix,iy);
+                vec4 distances=vec4(p.x,p.y,materialParams.panelSize.x-p.x,materialParams.panelSize.y-p.y)/max(vec4(.0001),widths);
+                int side=0;for(int i=1;i<4;i++)if(distances[i]<distances[side])side=i;
+                vec4 edge=materialParams.borderColors[side];value=mix(edge,value,inside);
+            }
+            value.a*=mask;value.rgb*=value.a;
+        }
+        material.baseColor=value;
     }
 }

@@ -1,0 +1,542 @@
+[
+  {
+    "file": "Qt/LGPL-3.0-only.txt",
+    "source": "https://raw.githubusercontent.com/qt/qtbase/v6.10.2/LICENSES/LGPL-3.0-only.txt",
+    "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
+  },
+  {
+    "file": "Qt/GPL-3.0-only.txt",
+    "source": "https://raw.githubusercontent.com/qt/qtbase/v6.10.2/LICENSES/GPL-3.0-only.txt",
+    "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+  },
+  {
+    "file": "Filament/third_party/abseil/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/abseil/LICENSE",
+    "sha256": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747"
+  },
+  {
+    "file": "Filament/third_party/basisu/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/basisu/LICENSE",
+    "sha256": "065fcf48d6af21c0b75e23be5ed5753aee75c892e1c2cf178fa6736305614a5c"
+  },
+  {
+    "file": "Filament/third_party/basisu/zstd/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/basisu/zstd/LICENSE",
+    "sha256": "2c1a7fa704df8f3a606f6fc010b8b5aaebf403f3aeec339a12048f1ba7331a0b"
+  },
+  {
+    "file": "Filament/third_party/benchmark/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/benchmark/LICENSE",
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
+  {
+    "file": "Filament/third_party/cgltf/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/cgltf/LICENSE",
+    "sha256": "f619925f80ef862497aaf8e8155ef218fa6a2190055129523ca3df9119a9ba95"
+  },
+  {
+    "file": "Filament/third_party/civetweb/LICENSE.md",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/civetweb/LICENSE.md",
+    "sha256": "1cd00da00b8649b4005757f4019acfd3102ecd407f47998081697e8e9086f706"
+  },
+  {
+    "file": "Filament/third_party/civetweb/examples/rest/cJSON/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/civetweb/examples/rest/cJSON/LICENSE",
+    "sha256": "a36dda207c36db5818729c54e7ad4e8b0c6fba847491ba64f372c1a2037b6d5c"
+  },
+  {
+    "file": "Filament/third_party/clang/LICENSE.TXT",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/clang/LICENSE.TXT",
+    "sha256": "f5bf13a3f59eff01c0c4f116a2145536e5f7011d7bb07d043eef8d6bab9a6684"
+  },
+  {
+    "file": "Filament/third_party/dawn/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/LICENSE",
+    "sha256": "0493f897193af1796d5054659f45ec7d4c5af648fa67a99f01d30e55cc805abc"
+  },
+  {
+    "file": "Filament/third_party/dawn/src/emdawnwebgpu/pkg/webgpu_cpp/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/src/emdawnwebgpu/pkg/webgpu_cpp/LICENSE",
+    "sha256": "7e1efc85a78732a13d7ddfc8b52912da7c8f8d3c6d334624b20e3f3a96297de0"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/EGL-Registry/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/EGL-Registry/LICENSE",
+    "sha256": "4782253b8777b2c679544b31b18a52616d3c2ba0515dcf695e262bd318b356f0"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/EGL-Registry/src/sdk/docs/man/copyright.xml",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/EGL-Registry/src/sdk/docs/man/copyright.xml",
+    "sha256": "3a528aae8731663f7b2b02ee709b1ba1fd4f9bbd8935941b2a93981c5ab78bc4"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/EGL-Registry/src/sdk/docs/man/xhtml/copyright.inc.xsl",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/EGL-Registry/src/sdk/docs/man/xhtml/copyright.inc.xsl",
+    "sha256": "609ae74144cd07a61653f733a0e11abf241a10c7dff4acd07dacda9fbffae22e"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/OpenGL-Registry/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/OpenGL-Registry/LICENSE",
+    "sha256": "d20809e7f3c8116615249bdefdc826c29b0b8332e7ac7ac249fd3949b716e8c5"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/agility-sdk/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/agility-sdk/LICENSE",
+    "sha256": "caf3f489e3959df3605fec3c1f921fe72456c5d3640d998a5e635e8a9505cec5"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/benchmark_shaders/unity_boat_attack/LICENSE.md",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/benchmark_shaders/unity_boat_attack/LICENSE.md",
+    "sha256": "7ff3a8e0e49a0141989e4dea4fa92e18f908fe462a19d4b6cb2f1225c857bfa1"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/directx-headers/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/directx-headers/LICENSE",
+    "sha256": "7c77a44a8acd9b41fdc209864a8016b3d430b5d0e09309818d5b7444336df744"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/directx-headers/src/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/directx-headers/src/LICENSE",
+    "sha256": "fd532481d828e13a0b13ccb598e02338a3617740675a862ee6bdc1541b68e93d"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/directx-shader-compiler/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/directx-shader-compiler/LICENSE",
+    "sha256": "27a49e35d1da96eba18fba54bc882667ff0ff8c0254f16f2b6e165d605ba7df8"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/directx-shader-compiler/src/LICENSE.TXT",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/directx-shader-compiler/src/LICENSE.TXT",
+    "sha256": "27a49e35d1da96eba18fba54bc882667ff0ff8c0254f16f2b6e165d605ba7df8"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/directx-shader-compiler/src/lib/DxilCompression/LICENSE.TXT",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/directx-shader-compiler/src/lib/DxilCompression/LICENSE.TXT",
+    "sha256": "6f20fa7672b00e2e975c291df737cf227addf3ad32e36fef3fe0f416e4664d3d"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/directx-shader-compiler/src/test/YAMLParser/LICENSE.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/directx-shader-compiler/src/test/YAMLParser/LICENSE.txt",
+    "sha256": "d0d8b09800a45cd982e9568fc7669d9c1a4c330e275a821bbe24d54366d16fe9"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/directx-shader-compiler/src/tools/clang/lib/Headers/hlsl/LICENSE.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/directx-shader-compiler/src/tools/clang/lib/Headers/hlsl/LICENSE.txt",
+    "sha256": "eb425408dc2905e3506310bfdc33fdf00c1dfc2f2f01de95fb01809b29765be2"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/directx-shader-compiler/src/utils/unittest/googlemock/LICENSE.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/directx-shader-compiler/src/utils/unittest/googlemock/LICENSE.txt",
+    "sha256": "9702de7e4117a8e2b20dafab11ffda58c198aede066406496bef670d40a22138"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/directx-shader-compiler/src/utils/unittest/googletest/LICENSE.TXT",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/directx-shader-compiler/src/utils/unittest/googletest/LICENSE.TXT",
+    "sha256": "9702de7e4117a8e2b20dafab11ffda58c198aede066406496bef670d40a22138"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/emdawnwebgpu/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/emdawnwebgpu/LICENSE",
+    "sha256": "2f79bf3699b0870251255b381670237f73f21a04a38c094f791eba39c5fd1df7"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/emdawnwebgpu/pkg/webgpu/src/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/emdawnwebgpu/pkg/webgpu/src/LICENSE",
+    "sha256": "2f79bf3699b0870251255b381670237f73f21a04a38c094f791eba39c5fd1df7"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/glfw3/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/glfw3/LICENSE",
+    "sha256": "149704059b5d0bf551637e50042dd4de9c2cae921021f6636298911e3a5f9462"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/glfw3/src/LICENSE.md",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/glfw3/src/LICENSE.md",
+    "sha256": "149704059b5d0bf551637e50042dd4de9c2cae921021f6636298911e3a5f9462"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/google_benchmark/src/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/google_benchmark/src/LICENSE",
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/googletest/src/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/googletest/src/LICENSE",
+    "sha256": "9702de7e4117a8e2b20dafab11ffda58c198aede066406496bef670d40a22138"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/jinja2/LICENSE.rst",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/jinja2/LICENSE.rst",
+    "sha256": "3b49dcee4105eb37bac10faf1be260408fe85d252b8e9df2e0979fc1e094437b"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/libprotobuf-mutator/src/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/libprotobuf-mutator/src/LICENSE",
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/markupsafe/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/markupsafe/LICENSE",
+    "sha256": "0bbe88228fd63d20ec097f64e58d5a0a465123ae139140a18d406c60b48824b5"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/protobuf/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/protobuf/LICENSE",
+    "sha256": "6e5e117324afd944dcf67f36cf329843bc1a92229a8cd9bb573d7a83130fea7d"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/protobuf/src/google/protobuf/compiler/notices.h",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/protobuf/src/google/protobuf/compiler/notices.h",
+    "sha256": "b47ca1ea743623d50c6e02faa136dea4f6574a98e200666f859dbf57fb491721"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/protobuf/third_party/utf8_range/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/protobuf/third_party/utf8_range/LICENSE",
+    "sha256": "02de69b64fc36d9e938f418e52723e42f0b2b226d58a9cb3c8dcbdf7059f5074"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/renderdoc/LICENSE.md",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/renderdoc/LICENSE.md",
+    "sha256": "b921912e9e433291f6010631a0dd41cec76c4a877966ecc22ba86151b2e66718"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/vulkan-headers/LICENSE.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/vulkan-headers/LICENSE.txt",
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/vulkan-headers/src/LICENSE.md",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/vulkan-headers/src/LICENSE.md",
+    "sha256": "95ad366d23fadf701d355bc45fb8b82ae2d700239471d35d41286ac3b08ff903"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/vulkan-loader/src/LICENSE.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/vulkan-loader/src/LICENSE.txt",
+    "sha256": "43c0a37e6a0fa7ff3c843b3ec5a4fac84b712558ddac103fbd4c1649662a9ece"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/vulkan-utility-libraries/src/LICENSE.md",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/vulkan-utility-libraries/src/LICENSE.md",
+    "sha256": "69760673abf91cfd0280ae73739a29c078f493804d9016a122b3b189b48ad6e6"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/webgpu-headers/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/webgpu-headers/LICENSE",
+    "sha256": "17420d366df90c474bd70ad474694956cdb7fc64be70387a49a45458c4152d22"
+  },
+  {
+    "file": "Filament/third_party/dawn/third_party/webgpu-headers/src/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/third_party/webgpu-headers/src/LICENSE",
+    "sha256": "17420d366df90c474bd70ad474694956cdb7fc64be70387a49a45458c4152d22"
+  },
+  {
+    "file": "Filament/third_party/dawn/tools/nocompile/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/dawn/tools/nocompile/LICENSE",
+    "sha256": "368cca1106be99d39ecd32a38d8305585d802a475effb66380b91ffc9bcf709b"
+  },
+  {
+    "file": "Filament/third_party/draco/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/draco/LICENSE",
+    "sha256": "d3709b0fb4b8a94bbb1d02b8a2e484f258b0d9c5c5a01f940391f3fe662cd1a4"
+  },
+  {
+    "file": "Filament/third_party/getopt/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/getopt/LICENSE",
+    "sha256": "aeee7ab07f73dabe2cdda945c5420d9820e58f411e077bea48877415168153a5"
+  },
+  {
+    "file": "Filament/third_party/gl-matrix/LICENSE.md",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/gl-matrix/LICENSE.md",
+    "sha256": "61ed58d1088e313710c4192cf02f97bda3cc0bb4b3b4d3f66e54ad1b666a3a52"
+  },
+  {
+    "file": "Filament/third_party/glslang/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/glslang/LICENSE",
+    "sha256": "42ffa20349670c33bff23cec16858121d1bc6174f89efc86b3413f176708e5db"
+  },
+  {
+    "file": "Filament/third_party/glslang/LICENSE.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/glslang/LICENSE.txt",
+    "sha256": "17e70c676e1521ff3e4686f04a2053d93a7e28a33be8de7ec37ab0ff72feb677"
+  },
+  {
+    "file": "Filament/third_party/gltumble/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/gltumble/LICENSE",
+    "sha256": "2f4803a4ec5907c67808d95e7ccf0671d2236fe5752c0256c0a47573cc9b2638"
+  },
+  {
+    "file": "Filament/third_party/imgui/LICENSE.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/imgui/LICENSE.txt",
+    "sha256": "c80c5789748d955c4a650562baa0d750494e2c7128c2ca66aaebe2e3c4e198bf"
+  },
+  {
+    "file": "Filament/third_party/imgui/examples/libs/glfw/COPYING.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/imgui/examples/libs/glfw/COPYING.txt",
+    "sha256": "da2fb2c802537710cdebe8881b55356d07b88a6dbd7e4b912ac3091f8e6b5f6a"
+  },
+  {
+    "file": "Filament/third_party/jsmn/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/jsmn/LICENSE",
+    "sha256": "4675b94a50d2afe811c52785463c854f1156056632cce17cc7133939eac8ed55"
+  },
+  {
+    "file": "Filament/third_party/libassimp/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libassimp/LICENSE",
+    "sha256": "a26ccc3dbf2f58ea99c100945a8a126fa0f9f4d7fd2b49aa8bdb8e09355864d8"
+  },
+  {
+    "file": "Filament/third_party/libassimp/contrib/clipper/License.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libassimp/contrib/clipper/License.txt",
+    "sha256": "710f22ccbfde6bef1898116376c7e32030c2940c72e1eaa0a89b980c9552a541"
+  },
+  {
+    "file": "Filament/third_party/libassimp/contrib/gtest/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libassimp/contrib/gtest/LICENSE",
+    "sha256": "9702de7e4117a8e2b20dafab11ffda58c198aede066406496bef670d40a22138"
+  },
+  {
+    "file": "Filament/third_party/libassimp/contrib/openddlparser/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libassimp/contrib/openddlparser/LICENSE",
+    "sha256": "656597ef86119e4a526fb8621e0112b95051cf9d63a311b09b3a73346da00ead"
+  },
+  {
+    "file": "Filament/third_party/libassimp/contrib/poly2tri/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libassimp/contrib/poly2tri/LICENSE",
+    "sha256": "a4d34b9e99a7f11d095ba330da5a4723ec00b019ae1ba42cba46ad1d89902c4e"
+  },
+  {
+    "file": "Filament/third_party/libassimp/contrib/rapidjson/license.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libassimp/contrib/rapidjson/license.txt",
+    "sha256": "a140e5d46fe734a1c78f1a3c3ef207871dd75648be71fdda8e309b23ab8b1f32"
+  },
+  {
+    "file": "Filament/third_party/libassimp/contrib/zlib/contrib/dotzlib/LICENSE_1_0.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libassimp/contrib/zlib/contrib/dotzlib/LICENSE_1_0.txt",
+    "sha256": "8d8291caf1cee26d23acf3eb67c9f9a2d58f1c681b16a4fbe8cbfb9e3c0b5a9b"
+  },
+  {
+    "file": "Filament/third_party/libassimp/packaging/windows-innosetup/LICENSE.rtf",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libassimp/packaging/windows-innosetup/LICENSE.rtf",
+    "sha256": "0a8f31c79a9691928200d1a1c2616307290f39ab4798bf69e33a6d6ade093a75"
+  },
+  {
+    "file": "Filament/third_party/libgtest/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libgtest/LICENSE",
+    "sha256": "9702de7e4117a8e2b20dafab11ffda58c198aede066406496bef670d40a22138"
+  },
+  {
+    "file": "Filament/third_party/libpng/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libpng/LICENSE",
+    "sha256": "16d9daaafbf63a31a5bdc91d4600972548fef5aaa1244202393288dbd079c49a"
+  },
+  {
+    "file": "Filament/third_party/libpng/contrib/gregbook/COPYING",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libpng/contrib/gregbook/COPYING",
+    "sha256": "d6cb0e9e560f51085556949a84af12b79a00f10ab8b66c752537faf7cd665572"
+  },
+  {
+    "file": "Filament/third_party/libpng/contrib/gregbook/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libpng/contrib/gregbook/LICENSE",
+    "sha256": "b6a03c1803eb58ffb1f1278d5c7d4096c4c116e66dce8a7553e8c77d163c3438"
+  },
+  {
+    "file": "Filament/third_party/libpng/contrib/pngexif/LICENSE_MIT.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libpng/contrib/pngexif/LICENSE_MIT.txt",
+    "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+  },
+  {
+    "file": "Filament/third_party/libpng/contrib/pngminus/LICENSE.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libpng/contrib/pngminus/LICENSE.txt",
+    "sha256": "1806f1f10d393e9e377b3a8d1b968452b54f1a90378f14eeef45426946ace330"
+  },
+  {
+    "file": "Filament/third_party/libsdl2/COPYING.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libsdl2/COPYING.txt",
+    "sha256": "61e627031e1160bf8b9bdbc9cda27656d422ea8eaab199b64b4a4a4168437154"
+  },
+  {
+    "file": "Filament/third_party/libsdl2/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libsdl2/LICENSE",
+    "sha256": "61e627031e1160bf8b9bdbc9cda27656d422ea8eaab199b64b4a4a4168437154"
+  },
+  {
+    "file": "Filament/third_party/libsdl2/Xcode-iOS/Demos/data/bitmapfont/license.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libsdl2/Xcode-iOS/Demos/data/bitmapfont/license.txt",
+    "sha256": "5059bc9c2f37b7e7a557685ae9330ecfd798537bdfde94de63a9c721c92a8856"
+  },
+  {
+    "file": "Filament/third_party/libsdl2/Xcode/SDL/pkg-support/resources/License.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libsdl2/Xcode/SDL/pkg-support/resources/License.txt",
+    "sha256": "e39c5c45d118207c93205673d59480275de04fe79ad2fb6c4461f2545e0d3e92"
+  },
+  {
+    "file": "Filament/third_party/libsdl2/debian/copyright",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libsdl2/debian/copyright",
+    "sha256": "768b2a5b6fb71d30d6dea8c6406c0ee9ca176b0bd6268abf381bed9d496b39ce"
+  },
+  {
+    "file": "Filament/third_party/libsdl2/src/video/yuv2rgb/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libsdl2/src/video/yuv2rgb/LICENSE",
+    "sha256": "f7d74004cc75778cae46c5f0139f244d67c07ef64cf51937e8272352197dcb18"
+  },
+  {
+    "file": "Filament/third_party/libsdl2/test/COPYING",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libsdl2/test/COPYING",
+    "sha256": "d5a549e4a7b88cb696d0db15b21830061131ed361257ab399a33ca08ce0b33d5"
+  },
+  {
+    "file": "Filament/third_party/libwebp/COPYING",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libwebp/COPYING",
+    "sha256": "5aec868f669e384a22372a4e8a1a6cd7d44c64cd451f960ca69cc170d1e13acf"
+  },
+  {
+    "file": "Filament/third_party/libz/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libz/LICENSE",
+    "sha256": "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243"
+  },
+  {
+    "file": "Filament/third_party/libz/contrib/dotzlib/LICENSE_1_0.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/libz/contrib/dotzlib/LICENSE_1_0.txt",
+    "sha256": "36266a8fd073568394cb81cdb2b124f7fdae2c64c1a7ed09db34b4d22efa2951"
+  },
+  {
+    "file": "Filament/third_party/markdeep/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/markdeep/LICENSE",
+    "sha256": "329dd4bf65e605a0e2a8b9faaf4dbf80a73d4d8c42b2009420f71c3f606ab90f"
+  },
+  {
+    "file": "Filament/third_party/meshoptimizer/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/meshoptimizer/LICENSE",
+    "sha256": "063805e3b8e24ceab4c5dea358b03245ee41c31be87cf65c61d836636cb494bb"
+  },
+  {
+    "file": "Filament/third_party/mikktspace/include/mikktspace/mikktspace.h",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/mikktspace/include/mikktspace/mikktspace.h",
+    "sha256": "17fc433894f24c73753d548086cc4d8c5c0379f4a6edfb98b5da243e4f0bc3d0"
+  },
+  {
+    "file": "Filament/third_party/models/shader_ball/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/models/shader_ball/LICENSE",
+    "sha256": "60d2c28d19d2bdf7bbaa59829e7a595234265e8111a01ccb74d25d6c4d2d013a"
+  },
+  {
+    "file": "Filament/third_party/robin-map/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/robin-map/LICENSE",
+    "sha256": "11f2c685ba565a31aef1219f63a7a8845602c97bff70016b9e3278dfe51a2ec5"
+  },
+  {
+    "file": "Filament/third_party/smol-v/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/smol-v/LICENSE",
+    "sha256": "9cea538cc1ee6680f4d13e212bfef5b581cd5d873cbedf6dc07699dbe7e69651"
+  },
+  {
+    "file": "Filament/third_party/spirv-cross/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/spirv-cross/LICENSE",
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
+  {
+    "file": "Filament/third_party/spirv-cross/LICENSES/LicenseRef-KhronosFreeUse.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/spirv-cross/LICENSES/LicenseRef-KhronosFreeUse.txt",
+    "sha256": "fbeaca472f4f70e276dd1106ca5097435967a22ad6c1d8200aef7ad9f70aaf3f"
+  },
+  {
+    "file": "Filament/third_party/spirv-headers/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/spirv-headers/LICENSE",
+    "sha256": "ea43b1de38a6f90c488800d66dec1ed671e68cda530266bc96951fb5b6307613"
+  },
+  {
+    "file": "Filament/third_party/spirv-tools/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/spirv-tools/LICENSE",
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
+  {
+    "file": "Filament/third_party/spirv-tools/utils/vscode/src/lsp/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/spirv-tools/utils/vscode/src/lsp/LICENSE",
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
+  {
+    "file": "Filament/third_party/stb/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/stb/LICENSE",
+    "sha256": "296bf9398cd1c82620d19cd623db6b880e31a266df7183141d49e486fc30c8da"
+  },
+  {
+    "file": "Filament/third_party/stb/data/herringbone/license.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/stb/data/herringbone/license.txt",
+    "sha256": "100868556be0b9e6df6593886e9e1f7746cac63e1ad6b3a655e36bd23ad4f4fd"
+  },
+  {
+    "file": "Filament/third_party/tinyexr/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/tinyexr/LICENSE",
+    "sha256": "b90388aaadc2b6f77a5c01278697a2a0539eab471a3befc6a081728becdc3390"
+  },
+  {
+    "file": "Filament/third_party/tinyexr/NOTICE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/tinyexr/NOTICE",
+    "sha256": "c26b775b31bf5852e988f1cda2226f0c78e25dc7ab391b928aa766382a53823d"
+  },
+  {
+    "file": "Filament/third_party/tinyexr/deps/astcenc/LICENSE.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/tinyexr/deps/astcenc/LICENSE.txt",
+    "sha256": "494accc32e50eb523a0e384d0ae6d4b702db867a89d6971216760e92b240ee12"
+  },
+  {
+    "file": "Filament/third_party/tinyexr/deps/libdeflate/COPYING",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/tinyexr/deps/libdeflate/COPYING",
+    "sha256": "4ad69099cb4374836fd27583d9991e2838cd86b6e4666ab26b2d32582c91e73a"
+  },
+  {
+    "file": "Filament/third_party/tinyexr/deps/miniz/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/tinyexr/deps/miniz/LICENSE",
+    "sha256": "0115478d567121238cf6cc1c0c361926cf07a49d9e4c9e66da97fac6a01646b3"
+  },
+  {
+    "file": "Filament/third_party/tinyexr/deps/zstd/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/tinyexr/deps/zstd/LICENSE",
+    "sha256": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8"
+  },
+  {
+    "file": "Filament/third_party/tinyexr/third_party/cuew/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/tinyexr/third_party/cuew/LICENSE",
+    "sha256": "60db0cd8c762a89420f8d87ca34a5a7ed2885da2a1502d7fbbe5fb31da9b5a2f"
+  },
+  {
+    "file": "Filament/third_party/tinyexr/tools/envmap/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/tinyexr/tools/envmap/LICENSE",
+    "sha256": "b99080400ba09725867795356e38da1a0aeb563de8566a1255eb745980c58999"
+  },
+  {
+    "file": "Filament/third_party/tinyexr/tools/texcomp/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/tinyexr/tools/texcomp/LICENSE",
+    "sha256": "b99080400ba09725867795356e38da1a0aeb563de8566a1255eb745980c58999"
+  },
+  {
+    "file": "Filament/third_party/tinyexr/tools/texcomp/NOTICE.md",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/tinyexr/tools/texcomp/NOTICE.md",
+    "sha256": "a2b21ae925baa7c5966f222398565776c1bc218354cc65fa8391f7f204b77464"
+  },
+  {
+    "file": "Filament/third_party/tinyexr/tools/texpipe/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/tinyexr/tools/texpipe/LICENSE",
+    "sha256": "b99080400ba09725867795356e38da1a0aeb563de8566a1255eb745980c58999"
+  },
+  {
+    "file": "Filament/third_party/vkmemalloc/LICENSE.txt",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/vkmemalloc/LICENSE.txt",
+    "sha256": "52df2c03d6cfc9ffec13c9d3626c530fc9ce0cbe41d5ea3d10cd46edeb1aeb38"
+  },
+  {
+    "file": "Filament/third_party/zstd/COPYING",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/zstd/COPYING",
+    "sha256": "f9c375a1be4a41f7b70301dd83c91cb89e41567478859b77eef375a52d782505"
+  },
+  {
+    "file": "Filament/third_party/zstd/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/zstd/LICENSE",
+    "sha256": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8"
+  },
+  {
+    "file": "Filament/third_party/zstd/build/LICENSE",
+    "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/zstd/build/LICENSE",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+]

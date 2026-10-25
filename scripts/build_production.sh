@@ -24,6 +24,8 @@ HUB="$OUTPUT/bazzalt_hub.dist"
 python "$ROOT/scripts/compile_resources.py" --audit "$HUB"
 python "$ROOT/scripts/compile_resources.py" --audit "$OUTPUT/bazzalt_editor.dist"
 TARGET="$OUTPUT/bazzalt_editor.dist"
+python "$ROOT/scripts/collect_third_party.py" --output "$TARGET/licenses" --python
+python "$ROOT/scripts/collect_third_party.py" --output "$HUB/licenses" --python
 mkdir -p "$TARGET/Editor"
 cp "$NATIVE" "$TARGET/Editor/"
 cp -R "$BUILD/ScriptSDK" "$TARGET/"
@@ -45,6 +47,6 @@ done
 for LIBRARY in "$BUILD"/Editor/libbazzalt_lua.* "$BUILD"/Editor/libbazzalt_gui.*; do
   if [ -f "$LIBRARY" ]; then cp "$LIBRARY" "$TARGET/Editor/"; fi
 done
-printf '{\n  "version": "%s",\n  "executable": "Bazzalt",\n  "project_format_max": 1,\n  "gui_abi": 1\n}\n' "$VERSION" > "$TARGET/editor.json"
+printf '{\n  "version": "%s",\n  "executable": "Bazzalt",\n  "project_format_max": 1,\n  "gui_abi": 4\n}\n' "$VERSION" > "$TARGET/editor.json"
 python "$ROOT/scripts/compile_resources.py" --audit "$HUB"
 printf 'Independent Hub: %s\nManaged Editor: %s\n' "$HUB" "$TARGET"

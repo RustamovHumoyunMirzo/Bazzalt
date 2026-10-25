@@ -95,7 +95,7 @@ void Apply(GuiComputed& value,const GuiComputed* parent){
         else if(name=="border-color")style.BorderColor=Color(data,style.BorderColor);
         else if(name=="font-size"){auto env=value.Context;env.PercentageBase=parent?parent->Text.FontSize:16;if(auto n=CSS::ResolveLength(data,env);n&&*n>=1&&*n<=512)text.FontSize=float(*n);}
         else if(name=="font-family"){if(auto id=Reference(data);id){auto info=AssetManager::GetAsset(id);if(info&&info->State==AssetState::Ready&&info->Importer=="Bazzalt.Font")text.Font=id;}}
-        else if(name=="background-image"){if(auto id=Reference(data);id)value.BackgroundTexture=id;}
+        else if(name=="background-image"||name=="background"){if(auto id=Reference(data);id)value.BackgroundTexture=id;else if(auto color=CSS::ResolveColor(data)){style.Color={float(color->R),float(color->G),float(color->B),float(color->A)};style.HoverColor=style.PressedColor=style.DisabledColor=style.Color;}}
         else if(name=="opacity"){if(auto n=CSS::ResolveLength(data);n&&*n>=0&&*n<=1)style.Opacity=float(*n);}
         else if(name=="border-width"){if(auto n=CSS::ResolveLength(data,value.Context);n&&*n>=0&&*n<=10000)style.BorderWidth=float(*n);}
         else if(name=="letter-spacing"){if(auto n=CSS::ResolveLength(data,value.Context);n&&std::fabs(*n)<=1000)text.LetterSpacing=float(*n);}
@@ -109,6 +109,7 @@ void Apply(GuiComputed& value,const GuiComputed* parent){
         else if(name=="align-items"&&keyword)value.Rect.Align=*keyword=="center"?GuiAlignment::Center:*keyword=="end"||*keyword=="flex-end"?GuiAlignment::End:*keyword=="stretch"?GuiAlignment::Stretch:GuiAlignment::Start;
         else if(name=="justify-content"&&keyword)value.Rect.Justify=*keyword=="center"?GuiJustify::Center:*keyword=="end"||*keyword=="flex-end"?GuiJustify::End:*keyword=="space-between"?GuiJustify::SpaceBetween:GuiJustify::Start;
         else if(name=="overflow"&&keyword)value.Rect.ClipChildren=*keyword=="hidden"||*keyword=="clip";
+        else if(name=="position"&&keyword)value.Rect.IgnoreLayout=*keyword=="absolute";
         else if(name=="z-index"){if(auto n=CSS::ResolveLength(data);n&&*n>=-100000&&*n<=100000)value.Rect.ZIndex=int(*n);}
     }
     value.Rect.Visible=value.Rect.Visible&&!value.Hidden;
@@ -128,7 +129,14 @@ void Apply(GuiComputed& value,const GuiComputed* parent){
 void ApplyGuiLayout(GuiComputed& value,Vec2 parentSize){
     const auto number=[&](const std::string& name,float& field,bool vertical,bool negative=false){auto found=value.Cascade.Properties.find(name);if(found==value.Cascade.Properties.end())return;auto env=value.Context;env.PercentageBase=vertical?parentSize.Y:parentSize.X;auto n=CSS::ResolveLength(found->second,env);if(n&&std::fabs(*n)<=100000&&(negative||*n>=0))field=float(*n);};
     auto& r=value.Rect;number("width",r.Size.X,false);number("height",r.Size.Y,true);number("min-width",r.MinSize.X,false);number("min-height",r.MinSize.Y,true);number("max-width",r.MaxSize.X,false);number("max-height",r.MaxSize.Y,true);
+    if(auto aspect=value.Cascade.Properties.find("aspect-ratio");aspect!=value.Cascade.Properties.end()){
+        const auto& tokens=aspect->second.Tokens;auto slash=std::find_if(tokens.begin(),tokens.end(),[](const auto& t){return t.Text=="/";});std::optional<double> ratio;
+        if(slash==tokens.end())ratio=CSS::ResolveLength(aspect->second);else {auto a=CSS::ResolveLength(CSS::Value{{tokens.begin(),slash}}),b=CSS::ResolveLength(CSS::Value{{slash+1,tokens.end()}});if(a&&b&&*b>0)ratio=*a / *b;}
+        if(ratio&&*ratio>0&&*ratio<10000){if(value.Cascade.Properties.contains("width")&&!value.Cascade.Properties.contains("height"))r.Size.Y=float(r.Size.X / *ratio);else if(value.Cascade.Properties.contains("height")&&!value.Cascade.Properties.contains("width"))r.Size.X=float(r.Size.Y * *ratio);}
+    }
     number("left",r.Position.X,false,true);number("top",r.Position.Y,true,true);number("gap",r.Gap,false);number("flex-grow",r.FlexGrow,false);number("flex-shrink",r.FlexShrink,false);
+    if(value.Cascade.Properties.contains("right")&&!value.Cascade.Properties.contains("left")){float right=0;number("right",right,false,true);r.Position.X=parentSize.X-r.Size.X-right;r.AnchorMin.X=r.AnchorMax.X=r.Pivot.X=0;}
+    if(value.Cascade.Properties.contains("bottom")&&!value.Cascade.Properties.contains("top")){float bottom=0;number("bottom",bottom,true,true);r.Position.Y=parentSize.Y-r.Size.Y-bottom;r.AnchorMin.Y=r.AnchorMax.Y=r.Pivot.Y=0;}
     auto env=value.Context;env.PercentageBase=parentSize.X;
     if(auto p=value.Cascade.Properties.find("padding");p!=value.Cascade.Properties.end())Insets(r.Padding,p->second,env);
     if(auto p=value.Cascade.Properties.find("margin");p!=value.Cascade.Properties.end())Insets(r.Margin,p->second,env);
@@ -170,14 +178,14 @@ void GuiSystem::PrepareStyles(Entity root,GuiBounds surface,float scale){
             value.Context.Width=surface.Size.X/scale;value.Context.Height=surface.Size.Y/scale;value.Context.FontSize=value.Text.FontSize;
             CSS::Limits limits;limits.ResolveWork=100000;value.Cascade=CSS::Compute(combined,node,value.Context,limits);
             static const std::set<std::string> supported={"color","background-color","border-color","border-width","opacity","font-family","font-size","font-kerning","letter-spacing","line-height","white-space","display","visibility","pointer-events","flex-direction","align-items","justify-content","overflow","z-index","width","height","min-width","min-height","max-width","max-height","left","top","gap","flex-grow","flex-shrink","padding","margin","padding-left","padding-top","padding-right","padding-bottom","margin-left","margin-top","margin-right","margin-bottom","background-image"};
-            for(const auto& [name,data]:value.Cascade.Properties)if(!supported.contains(name)&&StyleDiagnostics.size()<64)StyleDiagnostics.push_back("Unsupported GUI CSS property: "+name);
+            for(const auto& [name,data]:value.Cascade.Properties)if(!supported.contains(name)&&!IsGuiPaintProperty(name)&&name!="position"&&name!="aspect-ratio"&&name!="right"&&name!="bottom"&&StyleDiagnostics.size()<64)StyleDiagnostics.push_back("Unsupported GUI CSS property: "+name);
             for(const auto& diagnostic:value.Cascade.Diagnostics)if(StyleDiagnostics.size()<64)StyleDiagnostics.push_back(diagnostic.Message);
             const GuiComputed* inherited=nullptr;if(parent){auto found=Computed.find(e.GetParent().GetUUID());if(found!=Computed.end())inherited=&found->second;}
             if(inherited)value.Context.FontSize=inherited->Text.FontSize;
             if(auto found=Computed.find(root.GetUUID());found!=Computed.end())value.Context.RootFontSize=found->second.Text.FontSize;
             Apply(value,inherited);if(node.Attributes.contains("disabled")){value.Button.Interactable=false;value.Input.Interactable=false;}
             value.Context.FontSize=value.Text.FontSize;if(e==root)value.Context.RootFontSize=value.Text.FontSize;
-            ApplyGuiLayout(value,{float(value.Context.Width),float(value.Context.Height)});Computed[e.GetUUID()]=std::move(value);
+            ApplyGuiLayout(value,{float(value.Context.Width),float(value.Context.Height)});value.Paint=ResolveGuiPaint(value.Cascade,value.Context,e==root?Vec2{float(value.Context.Width),float(value.Context.Height)}:value.Rect.Size,&StyleDiagnostics,inherited?&inherited->Paint:nullptr);Computed[e.GetUUID()]=std::move(value);
         }
         std::map<std::string,std::size_t> totals,indices;for(auto child:children)++totals[Type(child)];const CSS::Node* prior=nullptr;
         for(std::size_t i=0;i<children.size();++i){auto child=children[i];auto type=Type(child);visit(child,&node,prior,scopes,i+1,children.size(),++indices[type],totals[type],depth+1);prior=&nodes[child.GetUUID()];}

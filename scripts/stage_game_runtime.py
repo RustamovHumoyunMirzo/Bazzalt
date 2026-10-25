@@ -36,6 +36,9 @@ def Stage(build,output,architecture,root=None):
     if not library.exists():library=build/'ScriptSDK/lib/Bazzalt.lib'
     shutil.copy2(library,sdk/'lib/Bazzalt.lib')
     licenses=output/'licenses';licenses.mkdir(exist_ok=True)
+    try:from .collect_third_party import Collect
+    except ImportError:from collect_third_party import Collect
+    Collect(licenses,root)
     for file in (build/'ScriptSDK/licenses').glob('*'):
         if file.is_file():shutil.copy2(file,licenses/file.name)
     for source,name in ((root/'LICENSE','Bazzalt.txt'),(root/'deps/lua/README','Lua.txt'),(root/'deps/sol2/LICENSE.txt','Sol2.txt'),(root/'deps/filament/LICENSE','Filament.txt'),(root/'deps/SDL3/LICENSE.txt','SDL3.txt')):

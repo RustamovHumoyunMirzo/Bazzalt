@@ -90,7 +90,7 @@ static void TestStylesheetsAndFonts(){
     std::filesystem::create_directories(folder/"Assets");
     struct Cleanup{std::filesystem::path Path;~Cleanup(){std::error_code error;std::filesystem::remove_all(Path,error);}} cleanup{folder};
     const auto write=[](const std::filesystem::path& path,const std::string& text){std::ofstream output(path,std::ios::binary);output<<text;assert(output.good());};
-    const auto css=folder/"Assets/UI.css";write(css,"Frame{display:flex;padding:10px} Button{width:50%;height:30px;background-color:red} .primary[tags~=action][state=active]{height:35px} .primary:hover{background-color:lime} .hidden{display:none} .ghost{pointer-events:none}");
+    const auto css=folder/"Assets/UI.css";write(css,"Frame{display:flex;padding:10px} Button{width:50%;height:30px;background-color:red} .primary[tags~=action][state=active]{height:35px} .primary:hover{background-color:lime} .hidden{display:none} .ghost{pointer-events:none} @viewport(width<400px){#play{height:27px}}");
     write(folder/"Game.bproject","FormatVersion: 1\nProjectUUID: '"+UUID::Generate().ToString()+"'\nName: GUI\nAssetDirectory: Assets\nStartupScene: ''\nProperties: {}\n");
     std::filesystem::path font;
     for(const auto& candidate:{std::filesystem::path("C:/Windows/Fonts/arial.ttf"),std::filesystem::path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),std::filesystem::path("/System/Library/Fonts/Supplemental/Arial.ttf")})if(std::filesystem::is_regular_file(candidate)){font=folder/"Assets/TestFont.ttf";std::filesystem::copy_file(candidate,font);break;}
@@ -103,7 +103,7 @@ static void TestStylesheetsAndFonts(){
     assert(GUI::GetBounds(button).Position.X==10&&GUI::GetBounds(button).Size.X==240&&GUI::GetBounds(button).Size.Y==35);
     assert(button.GetComponent<RectTransform>().Size.X==160);assert(GUI::GetBounds(hidden).Size.X==0);
     assert(GUI::ResolveStyle(button).Color.X==1);gui.Interactions[button.GetUUID()].Hovered=true;gui.Layout(scene,{500,200});assert(GUI::ResolveStyle(button).Color.Y==1);
-    gui.Layout(scene,{300,200});assert(GUI::GetBounds(button).Size.X==140);
+    gui.Layout(scene,{300,200});assert(GUI::GetBounds(button).Size.X==140&&GUI::GetBounds(button).Size.Y==27);
     element.Classes="primary ghost";gui.Layout(scene,{300,200});assert(!GUI::Focus(button));element.Classes="primary";
     auto nested=scene.CreateEntity("Nested frame");nested.SetParent(root,false);nested.AddComponent<Frame>().ScaleMode=GuiScaleMode::ConstantPixels;
     auto independent=scene.CreateEntity("Independent");independent.SetParent(nested,false);independent.AddComponent<RectTransform>();independent.AddComponent<Rectangle>();independent.AddComponent<GuiButton>();gui.Layout(scene,{300,200});assert(GUI::GetBounds(independent).Size.X==160);
@@ -129,6 +129,37 @@ static void TestStylesheetsAndFonts(){
             renderer.PrepareOverlay(scene,{500,200});assert(presenter.beginFrame(swap));presenter.setClearOptions({.clearColor={0,0,0,1},.clear=true});presenter.render(clear);renderer.RenderOverlay(scene,{500,200});
             presenter.readPixels(0,0,500,200,filament::Texture::PixelBufferDescriptor(pixels.data(),pixels.size(),filament::Texture::Format::RGBA,filament::Texture::Type::UBYTE,[](void*,std::size_t,void* user){static_cast<std::atomic<bool>*>(user)->store(true);},&ready));presenter.endFrame();graphics.flushAndWait();assert(ready);
             std::size_t ink=0;for(std::size_t i=0;i<pixels.size();i+=4)if(pixels[i]>150&&pixels[i+2]>150&&pixels[i+1]<80)++ink;assert(ink>20); // Actual FreeType glyph alpha + CSS-inherited magenta color.
+            button.GetComponent<GuiText>().Enabled=false;gui.Interactions.clear();
+            const auto drawCss=[&](const std::string& rules){
+                write(css,rules);assert(engine.RefreshAssets());renderer.PrepareOverlay(scene,{500,200});auto* input=renderer.GetSceneInputTarget();clear->setRenderTarget(input);
+                assert(presenter.beginFrame(swap));renderer.RenderSpatialEffects();presenter.setClearOptions({.clearColor={0,0,0,1},.clear=true});presenter.render(clear);clear->setRenderTarget(nullptr);renderer.RenderOverlay(scene,{500,200});
+                ready=false;presenter.readPixels(0,0,500,200,filament::Texture::PixelBufferDescriptor(pixels.data(),pixels.size(),filament::Texture::Format::RGBA,filament::Texture::Type::UBYTE,[](void*,std::size_t,void* user){static_cast<std::atomic<bool>*>(user)->store(true);},&ready));presenter.endFrame();graphics.flushAndWait();assert(ready);
+            };
+            const auto pixel=[&](int x,int y,int channel){return int(pixels[(y*500+x)*4+channel]);};
+            const std::string panel="#play{width:200px;height:100px;left:100px;top:50px;background-color:red;";
+            drawCss(panel+"border-radius:30px;border-width:4px 8px 12px 16px;border-color:lime;}");
+            assert(pixel(200,100,0)>200&&pixel(200,100,1)<40);assert(pixel(101,51,0)<30);assert(pixel(104,100,1)>180);
+            drawCss(panel+"background-image:linear-gradient(to right,red,blue);}");assert(pixel(120,100,0)>pixel(120,100,2)&&pixel(280,100,2)>pixel(280,100,0));
+            drawCss(panel+"background-image:radial-gradient(circle at center,red,blue);}");assert(pixel(200,100,0)>pixel(200,100,2)&&pixel(110,100,2)>pixel(110,100,0));
+            drawCss(panel+"background-image:conic-gradient(red,blue,red);}");assert(std::abs(pixel(200,55,0)-pixel(200,145,0))>150);
+            drawCss(panel+"background-image:repeating-linear-gradient(to right,red 0px 10px,blue 10px 20px);}");assert(std::abs(pixel(105,100,0)-pixel(115,100,0))>150);
+            drawCss(panel+"background-image:repeating-radial-gradient(circle,red 0px 8px,blue 8px 16px);}");assert(std::abs(pixel(204,100,0)-pixel(212,100,0))>150);
+            drawCss(panel+"background-image:repeating-conic-gradient(red 0deg 45deg,blue 45deg 90deg);}");assert(std::abs(pixel(217,70,0)-pixel(230,83,0))>150);
+            drawCss(panel+"filter:invert(1);}");assert(pixel(200,100,0)<40&&pixel(200,100,1)>180&&pixel(200,100,2)>180);
+            drawCss(panel+"filter:grayscale(1);}");assert(std::abs(pixel(200,100,0)-pixel(200,100,1))<3&&std::abs(pixel(200,100,1)-pixel(200,100,2))<3);
+            drawCss("#play{width:100px;height:100px;left:200px;top:50px;background-color:white;filter:drop-shadow(20px 0px 0px red);}");assert(pixel(310,100,0)>180&&pixel(310,100,1)<40);
+            drawCss("#play{width:100px;height:100px;left:200px;top:50px;background-color:white;filter:blur(6px);}");assert(pixel(196,100,0)>5&&pixel(250,100,0)>180);
+            auto behind=scene.CreateEntity("Behind");behind.SetParent(root,false);behind.AddComponent<RectTransform>();behind.AddComponent<Rectangle>();behind.AddComponent<GuiElement>().ID="behind";
+            behind.GetComponent<RectTransform>().ZIndex=-1;
+            drawCss("#behind{width:100px;height:100px;left:100px;top:50px;background-color:red} #play{width:200px;height:100px;left:100px;top:50px;background-color:transparent;backdrop-filter:invert(1)}");
+            assert(pixel(150,100,0)<40&&pixel(150,100,1)>180&&pixel(250,100,0)>180);
+            drawCss("#behind{width:100px;height:100px;left:100px;top:50px;background-color:red} #play{width:200px;height:100px;left:100px;top:50px;background-color:transparent;backdrop-filter:blur(0px)}");assert(pixel(150,100,0)>180&&pixel(150,100,1)<40&&pixel(250,100,0)<40);
+            drawCss("#play{width:200px;height:100px;left:100px;top:50px;background-color:red} @viewport(width>=400px){#play{background-color:lime}}");assert(pixel(200,100,1)>180&&pixel(200,100,0)<40);
+            drawCss(panel+"filter:invert(1)}");frame.Mode=FrameMode::Spatial;frame.ReferenceSize={500,200};frame.PixelsPerUnit=1;gui.Layout(scene,{500,200});renderer.PrepareSpatial(scene);
+            clear->setScene(&backend.GetScene());clear->setVisibleLayers(0xff,0x40);clear->setPostProcessingEnabled(false);camera->setExposure(1.f);camera->setProjection(filament::Camera::Projection::ORTHO,-250,250,-100,100,.1,10);camera->lookAt({0,0,1},{0,0,0},{0,1,0});
+            assert(presenter.beginFrame(swap));renderer.RenderSpatialEffects();presenter.setClearOptions({.clearColor={0,0,0,1},.clear=true});presenter.render(clear);ready=false;
+            presenter.readPixels(0,0,500,200,filament::Texture::PixelBufferDescriptor(pixels.data(),pixels.size(),filament::Texture::Format::RGBA,filament::Texture::Type::UBYTE,[](void*,std::size_t,void* user){static_cast<std::atomic<bool>*>(user)->store(true);},&ready));presenter.endFrame();graphics.flushAndWait();assert(ready);assert(pixel(200,100,1)>150&&pixel(200,100,0)<50);
+            frame.Mode=FrameMode::Viewport;
             renderer.Clear();graphics.destroy(clear);graphics.destroyCameraComponent(cameraEntity);graphics.getEntityManager().destroy(cameraEntity);graphics.destroy(swap);
         }
         renderer.Clear();backend.SetGuiScene(nullptr);

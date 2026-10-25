@@ -5,7 +5,7 @@
 #include "GUI/FontFace.h"
 namespace Bazzalt { class ComponentSerializationRegistry; }
 namespace Bazzalt::Runtime {
-inline constexpr std::uint32_t GuiModuleVersion=3;
+inline constexpr std::uint32_t GuiModuleVersion=4;
 // Private, versioned interface. Modules are built with the matching core/toolchain.
 struct GuiModuleApi {
     std::uint32_t Version,Size;
@@ -26,6 +26,8 @@ struct GuiModuleApi {
     Vec2 (*MeasureFont)(UUID,std::uint32_t,const std::string&,float,float);
     std::vector<UUID> (*StylesheetReferences)(const std::filesystem::path&);
     FontPreviewImage (*PreviewFont)(UUID,std::uint32_t,const std::string&,float,std::uint32_t);
+    filament::RenderTarget* (*SceneInputTarget)(const void*);
+    void (*RenderSpatialEffects)(void*);
 };
 using GetGuiModuleApi=const GuiModuleApi* (*)(std::uint32_t,std::uint32_t);
 const GuiModuleApi& GuiModule();

@@ -53,5 +53,5 @@ class GlobalSubsystemsDialog(QDialog):
         try:
             values=self._Validate(self.Values);info=self.Editor.Runtime.ProjectInfo();properties=dict(info.get('properties',{}));properties[KEY]=json.dumps(values);properties.pop('application.script',None)
             if not self.Editor.Runtime.UpdateProjectInfo(info['name'],properties):raise ValueError(self.Editor.Runtime.LastError())
-            self.Info=self.Editor.Runtime.ProjectInfo();self.Error.setText(self.Tr('subsystems.saved'))
+            self.Info=self.Editor.Runtime.ProjectInfo();self.accept()
         except (ValueError,OSError,TypeError) as error:self.Error.setText(str(error))

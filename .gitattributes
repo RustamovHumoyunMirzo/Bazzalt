@@ -1,0 +1,2 @@
+# Upstream notices are preserved byte-for-byte and checked against SHA-256 hashes.
+licenses/third_party/** -text -whitespace

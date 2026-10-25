@@ -22,6 +22,7 @@ class SubsystemTests(unittest.TestCase):
             dialog=GlobalSubsystemsDialog(parent);self.assertTrue(dialog.isModal());self.assertEqual(dialog.Tree.topLevelItemCount(),5)
             dialog.Picker.SetValue(identity);dialog.Level.SetValue(2);dialog._Add();self.assertEqual(dialog.Values,[dict(asset=identity,level=2)])
             dialog._Apply();properties=parent.Runtime.UpdateProjectInfo.call_args.args[1];self.assertEqual(properties['custom'],'keep');self.assertEqual(json.loads(properties[KEY]),dialog.Values)
+            self.assertEqual(dialog.result(),dialog.DialogCode.Accepted);self.assertFalse(dialog.isVisible());self.assertFalse(dialog.Error.text())
             dialog.Tree.setCurrentItem(dialog.Tree.topLevelItem(2).child(0));dialog._Remove();self.assertEqual(dialog.Values,[])
             dialog.close();parent.close();app.processEvents()
     def test_registration_validation(self):

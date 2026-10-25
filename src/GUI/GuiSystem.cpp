@@ -11,6 +11,14 @@
 namespace Bazzalt::Runtime {
 namespace {
 bool Finite(Vec2 v){return std::isfinite(v.X)&&std::isfinite(v.Y);}
+bool ContainsPoint(const GuiItem& item,Vec2 point){
+    if(!item.Bounds.Contains(point)||!item.Clip.Contains(point))return false;
+    const auto& system=item.Owner.GetScene()->GetSystem<GuiSystem>();
+    const auto inside=[&](const GuiItem& entry){auto computed=system.Computed.find(entry.Owner.GetUUID());if(computed==system.Computed.end())return true;const auto size=entry.Bounds.Size/entry.Scale;return GuiPaintContains(computed->second.Paint,(point-entry.Bounds.Position)/entry.Scale,size);};
+    if(!inside(item))return false;
+    for(auto parent=item.Owner.GetParent();parent&&!parent.HasComponent<Frame>();parent=parent.GetParent())if(const auto* rect=EffectiveGui<RectTransform>(parent);rect&&rect->ClipChildren){auto found=std::find_if(system.Items.begin(),system.Items.end(),[&](const GuiItem& entry){return entry.Owner==parent;});if(found!=system.Items.end()&&!inside(*found))return false;}
+    return true;
+}
 bool Insets(Vec4 v){return std::isfinite(v.X)&&std::isfinite(v.Y)&&std::isfinite(v.Z)&&std::isfinite(v.W)&&v.X>=0&&v.Y>=0&&v.Z>=0&&v.W>=0;}
 bool ValidLayout(const RectTransform& v){
     return v.Enabled&&v.Visible&&static_cast<unsigned>(v.Layout)<=2&&static_cast<unsigned>(v.Align)<=3&&static_cast<unsigned>(v.Justify)<=3&&Finite(v.Position)&&Finite(v.Size)&&Finite(v.AnchorMin)&&Finite(v.AnchorMax)&&Finite(v.Pivot)&&Finite(v.MinSize)&&Finite(v.MaxSize)&&
@@ -115,6 +123,7 @@ void GuiSystem::Descend(Entity parent,Entity root,GuiBounds bounds,GuiBounds cli
                             bounds.Position.Y+bounds.Size.Y*v.AnchorMin.Y+v.Position.Y*scale-v.Pivot.Y*size.Y},size};
         if(auto placed=flow.find(child.GetUUID());placed!=flow.end())resolved=placed->second;
         if(!Finite(resolved.Position)||!Finite(resolved.Size))continue;
+        if(auto computed=Computed.find(child.GetUUID());computed!=Computed.end()){auto inherited=Computed.find(parent.GetUUID());computed->second.Paint=ResolveGuiPaint(computed->second.Cascade,computed->second.Context,resolved.Size/scale,nullptr,inherited==Computed.end()?nullptr:&inherited->second.Paint);}
         Items.push_back({child,root,resolved,clip,surface,scale,Items.size()});
         Descend(child,root,resolved,v.ClipChildren?Intersect(clip,resolved):clip,surface,scale,depth+1);
     }
@@ -166,7 +175,7 @@ void GuiSystem::ModuleProcessInput(Scene& scene){
     const Vec2 pointer=Input::GetMousePosition();float spatialDistance=std::numeric_limits<float>::max();
     for(auto it=Items.rbegin();it!=Items.rend();++it){
         const auto& frame=it->Root.GetComponent<Frame>();if(!frame.Interactable||!HitTarget(it->Owner)||!DirectInput(*it))continue;
-        if(frame.Mode!=FrameMode::Spatial){if(it->Bounds.Contains(pointer)&&it->Clip.Contains(pointer)){Hovered=it->Owner.GetUUID();break;}continue;}
+        if(frame.Mode!=FrameMode::Spatial){if(ContainsPoint(*it,pointer)){Hovered=it->Owner.GetUUID();break;}continue;}
         auto camera=scene.GetEntity(frame.Camera);if(!camera){for(auto handle:scene.GetRegistry().view<Camera>()){auto candidate=scene.GetEntity(static_cast<Entity::Id>(handle));const auto& c=candidate.GetComponent<Camera>();if(c.Enabled&&c.Active){camera=candidate;break;}}}
         if(!camera)continue;
         const auto* c=camera.TryGetComponent<Camera>();if(!c||!c->Enabled||!c->Active)continue;
@@ -176,7 +185,7 @@ void GuiSystem::ModuleProcessInput(Scene& scene){
         if(std::fabs(direction.Z)<1e-6f)continue;float distance=-origin.Z/direction.Z;
         if(distance<0||distance>=spatialDistance)continue;
         Vec3 point=origin+direction*distance;Vec2 local{point.X*frame.PixelsPerUnit+frame.ReferenceSize.X*.5f,-point.Y*frame.PixelsPerUnit+frame.ReferenceSize.Y*.5f};
-        if(it->Bounds.Contains(local)&&it->Clip.Contains(local)){Hovered=it->Owner.GetUUID();spatialDistance=distance;}
+        if(ContainsPoint(*it,local)){Hovered=it->Owner.GetUUID();spatialDistance=distance;}
     }
     if(previous!=Hovered){if(previous)Interactions[previous].PointerExited=true;if(Hovered)Interactions[Hovered].PointerEntered=true;}
     if(Hovered)Interactions[Hovered].Hovered=true;

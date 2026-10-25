@@ -6,6 +6,7 @@ FreeType 2.14.3 is pinned by commit in `get_freetype.ps1` / `.sh`, configured by
 `cmake/FreeType.cmake`, and linked privately into `BazzaltGui`. It is not part of
 the public SDK headers. GUI module ABI 3 extends the private dispatch table with
 asset validation, font metadata, measurement, preview and CSS dependency queries.
+GUI ABI 4 additionally supplies private scene-input and spatial-effect rendering hooks.
 Deploy matching core/GUI binaries. Production staging includes FreeType and its
 bundled zlib license notices. Font distribution rights remain the game's concern.
 
@@ -92,6 +93,46 @@ No font-fallback chain or color-glyph renderer is provided; pick a font with the
 required script coverage. IME/caret editing and vertical writing are separate work.
 Production staging carries HarfBuzz COPYING and SheenBidi Apache license notices.
 WOFF2 requires Brotli and is not advertised by the current build configuration.
+
+## GPU CSS paint and effects
+
+`GuiPaint.cpp` validates typed borders/radii, gradient stops and ordered filter
+chains. `Cascade.cpp` expands shorthand candidates using their declaration's
+priority, then resolves values after variable substitution. Longhands do not win
+merely because a map visits their names last. The renderer resolves percentage
+radii against actual bounds and applies CSS corner overlap reduction.
+
+The GUI material handles antialiased elliptical corners, independently colored
+and sized edges, layered linear/radial/conic gradients and premultiplied texture
+copies. Filters isolate an element/subtree before applying ordered passes.
+A backdrop reads the current accumulation into a distinct scratch target, then
+composites a clipped result; it never samples its own render attachment. Gaussian
+blur is separable; drop-shadow combines blurred alpha with the original source.
+Color filters operate on straight RGB and restore premultiplication afterward.
+
+Plans, scenes, samplers and targets are prepared before beginFrame. Slots are reused
+and unused passes retired. Fonts remain protected while any planned pass samples
+them. Per destination: 16M scratch pixels, dimensions <=4096, 128 targets, 256 passes
+and 16 nested groups. Resolution adapts to the allocation budget. Over-limit plans
+report diagnostics and rebuild ordinary unfiltered geometry.
+The accumulation buffer and optional scene input retain full destination resolution;
+only effect scratch buffers are reduced, so a blurred panel does not downsample
+the rest of the game image. Their full-size attachments are separate from the
+16M scratch-pixel budget.
+Full-size effect destinations are limited to 16384 pixels per edge and 32M pixels;
+larger spatial reference canvases fall back to ordinary geometry before allocating
+a texture, rather than sending invalid dimensions to Filament.
+
+Direct Game presentation captures current world rendering into a private scene
+input before GUI compositing; clear it explicitly even with no camera. Capture
+overlays can read their current world target while writing a separate scratch
+target, then composite back. Spatial Frames render GUI locally and place the
+result on their Frame plane; their backdrop is earlier plane-local GUI, rather
+than an arbitrary camera-dependent world sample. Render spatial plans before
+camera/world views. Core and GUI module must both use ABI 4.
+
+The optional GPU test reads actual border/radius/gradient pixels, invert,
+grayscale, blur, drop-shadow, backdrop, responsive @viewport and spatial effects.
 
 ## Extending and verifying
 

@@ -15,6 +15,8 @@ public:
     void RenderOverlay(Bazzalt::Scene& scene,Vec2 size);
     void RenderCameraOverlay(Bazzalt::Scene& scene,UUID camera,Vec2 size,filament::RenderTarget* target);
     void Clear();
+    filament::RenderTarget* GetSceneInputTarget() const;
+    void RenderSpatialEffects();
     [[nodiscard]] std::size_t GetBatchCount() const;
 private:
     void* m_impl=nullptr;

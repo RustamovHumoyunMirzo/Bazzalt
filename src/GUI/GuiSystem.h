@@ -3,12 +3,14 @@
 #include "Bazzalt/GUI.h"
 #include "Bazzalt/Scene.h"
 #include "GUI/CSS/CSS.h"
+#include "GUI/GuiPaint.h"
 
 namespace Bazzalt::Runtime {
 struct GuiComputed {
     RectTransform Rect;GuiStyle Style;GuiText Text;GuiImage Image;GuiButton Button;GuiTextInput Input;
     bool Hidden=false,PointerEvents=true;
     UUID BackgroundTexture{};
+    GuiPaint Paint;
     CSS::ComputedStyle Cascade;CSS::Environment Context;
 };
 struct GuiItem {

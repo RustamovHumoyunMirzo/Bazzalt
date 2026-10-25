@@ -165,7 +165,7 @@ file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS
 )
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/EditorBridge/")
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/GUI/CSS/")
-list(FILTER LIB_SOURCES EXCLUDE REGEX "/GUI/(FontFace|GuiStyles)\\.cpp$")
+list(FILTER LIB_SOURCES EXCLUDE REGEX "/GUI/(FontFace|GuiStyles|GuiPaint)\\.cpp$")
 add_subdirectory(src/GUI/CSS)
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/GUI/(GuiSystem|GuiRenderer|GuiSerialization|GuiModule)\\.cpp$")
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/Script/Lua[^/]*\\.cpp$|/Runtime/LuaRuntime\\.cpp$")
@@ -232,7 +232,7 @@ target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE BazzaltMiniaudio Bazzalt
 
 # One-way link: GUI imports core; core loads the sibling module through a private
 # versioned table. This avoids circular DLL dependencies/import libraries.
-add_library(BazzaltGui SHARED src/GUI/FontFace.cpp src/GUI/GuiStyles.cpp src/GUI/GuiModule.cpp src/GUI/GuiSystem.cpp
+add_library(BazzaltGui SHARED src/GUI/GuiPaint.cpp src/GUI/FontFace.cpp src/GUI/GuiStyles.cpp src/GUI/GuiModule.cpp src/GUI/GuiSystem.cpp
     src/GUI/GuiRenderer.cpp src/GUI/GuiSerialization.cpp ${BAZZALT_EMBEDDED_HEADERS})
 target_include_directories(BazzaltGui PRIVATE include src "${_bazzalt_generated_dir}")
 target_link_libraries(BazzaltGui PRIVATE Bazzalt Filament::Filament BazzaltCSS freetype harfbuzz SheenBidi)
@@ -408,6 +408,11 @@ if(BUILD_TESTING)
     add_test(NAME BazzaltInputTests COMMAND BazzaltInputTests $<TARGET_FILE:BazzaltScriptLifecycleModule>)
     add_executable(BazzaltMaterialTests tests/MaterialTests.cpp)
     add_executable(BazzaltGuiTests tests/GuiTests.cpp)
+    add_executable(BazzaltGuiPaintTests tests/GuiPaintTests.cpp src/GUI/GuiPaint.cpp)
+    target_include_directories(BazzaltGuiPaintTests PRIVATE src)
+    target_link_libraries(BazzaltGuiPaintTests PRIVATE Bazzalt BazzaltCSS)
+    bazzalt_enable_test_assertions(BazzaltGuiPaintTests)
+    add_test(NAME BazzaltGuiPaintTests COMMAND BazzaltGuiPaintTests)
     add_executable(BazzaltTextShapingTests tests/TextShapingTests.cpp src/GUI/FontFace.cpp)
     target_include_directories(BazzaltTextShapingTests PRIVATE src)
     target_link_libraries(BazzaltTextShapingTests PRIVATE Bazzalt BazzaltCSS freetype harfbuzz SheenBidi)

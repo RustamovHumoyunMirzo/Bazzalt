@@ -110,6 +110,9 @@ inputs. Keep the `Button { ) ] ; color:red; }` no-progress regression. Tests hav
 20-second timeout. The lightweight GUI CSS workflow runs Windows x64/x86 (game-core
 compatibility, not x86 editor support) and Linux with ASan/UBSan; no big dependencies.
 
-Future work: complete stylesheet asset/component integration, typed GUI property
-mapping, invalidation/hot reload, font assets/FreeType, and optional additional CSS
-grammar. Do not turn warnings into silent simulated browser behavior.
+Stylesheet assets, typed application, live reimport, FreeType/HarfBuzz fonts and
+GPU paint/effect integration are implemented; see [gui-styles-fonts.md](gui-styles-fonts.md).
+Range and aspect-ratio viewport conditions join the original size/orientation
+conditions. Shorthand candidates participate in the cascade before typed expansion,
+so specificity, source order, variables and !important also govern their longhands.
+Do not turn unsupported syntax warnings into silent simulated browser behavior.

@@ -23,9 +23,9 @@ Ship matching binaries/compiler/CRT; this is not a third-party plugin ABI. Keep
 the module resident until process exit because component descriptors retain its
 callbacks. RenderBackend destroys GUI GPU resources before its Filament engine.
 Missing/incompatible modules produce an explicit runtime error, not silent GUI
-fallbacks. Current release manifests declare `gui_abi: 3`; Hub accepts historical 1/2 and current 3
+fallbacks. Current release manifests declare `gui_abi: 4`; Hub accepts historical 1/2/3 and current 4
 for complete, internally matching historical/new packages, but never mixes core
-and GUI modules from different builds. The native loader requires ABI 2. Hub
+and GUI modules from different builds. The native loader requires ABI 4. Hub
 validates new packages but
 still accepts older editor releases that do not declare this module.
 

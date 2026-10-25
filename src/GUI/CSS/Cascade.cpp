@@ -26,12 +26,28 @@ class Conditions {
                 if(name=="orientation"){auto value=ResolveString({tokens});return value&&Lower(*value)==(Env.Width>=Env.Height?"landscape":"portrait");}
                 if(name=="prefers-color-scheme"){auto value=ResolveString({tokens});return value&&Lower(*value)==Lower(Env.ColorScheme);}
                 if(name=="prefers-reduced-motion"){auto value=ResolveString({tokens});return value&&Lower(*value)==(Env.ReducedMotion?"reduce":"no-preference");}
+                if(name=="aspect-ratio"||name=="min-aspect-ratio"||name=="max-aspect-ratio"){
+                    auto slash=std::find_if(tokens.begin(),tokens.end(),[](const Token& t){return Symbol(t,"/");});
+                    std::optional<double> value;if(slash==tokens.end())value=ResolveLength({tokens});else {auto a=ResolveLength({{tokens.begin(),slash}}),b=ResolveLength({{slash+1,tokens.end()}});if(a&&b&&*b>0)value=*a / *b;}
+                    if(!value||*value<=0||Env.Height<=0)return false;const auto actual=Env.Width/Env.Height;
+                    return name.starts_with("min-")?actual>=*value:name.starts_with("max-")?actual<=*value:std::fabs(actual-*value)<1e-6;
+                }
                 const bool width=name=="width"||name=="min-width"||name=="max-width",height=name=="height"||name=="min-height"||name=="max-height";
                 if(!width&&!height)return false;
                 auto value=ResolveLength({tokens},Env);if(!value||*value<0)return false;const auto actual=width?Env.Width:Env.Height;
                 return name.starts_with("min-")?actual>=*value:name.starts_with("max-")?actual<=*value:std::fabs(actual-*value)<1e-6;
             }
-            At=begin;bool value=Or();if(!Take(")")){Valid=false;return false;}return value;
+            At=begin;
+            // Media-query range syntax: (width >= 600px), (400px < width <= 1200px).
+            auto end=begin;int nesting=0;bool range=false;for(;end<Tokens.size()&&Tokens[end].Kind!=TokenKind::End;++end){if(Symbol(Tokens[end],")")&&nesting==0)break;if(Symbol(Tokens[end],"("))++nesting;if(Symbol(Tokens[end],")"))--nesting;if(nesting==0&&(Symbol(Tokens[end],"<")||Symbol(Tokens[end],">")||Symbol(Tokens[end],"=")))range=true;}
+            if(range){
+                std::vector<std::optional<double>> values;std::vector<std::string> operators;auto start=begin;
+                const auto operand=[&](std::size_t a,std::size_t b)->std::optional<double>{auto t=Slice(Tokens,a,b);Trim(t);if(t.size()==1&&t[0].Kind==TokenKind::Ident){auto key=Lower(t[0].Text);if(key=="width")return Env.Width;if(key=="height")return Env.Height;return {};}return ResolveLength({t},Env);};
+                for(auto i=begin;i<end;++i)if(Symbol(Tokens[i],"<")||Symbol(Tokens[i],">")||Symbol(Tokens[i],"=")){values.push_back(operand(start,i));auto op=Tokens[i].Text;if(i+1<end&&Symbol(Tokens[i+1],"="))op+=Tokens[++i].Text;operators.push_back(op);start=i+1;}
+                values.push_back(operand(start,end));At=end;if(!Take(")")||operators.empty()||operators.size()>2){Valid=false;return false;}
+                for(std::size_t i=0;i<operators.size();++i){if(!values[i]||!values[i+1])return false;const auto a=*values[i],b=*values[i+1];const auto& op=operators[i];if(!(op=="<"?a<b:op==">"?a>b:op=="<="?a<=b:op==">="?a>=b:op=="="?std::fabs(a-b)<1e-6:false))return false;}return true;
+            }
+            bool value=Or();if(!Take(")")){Valid=false;return false;}return value;
         }
         if(Word("all")||Word("screen"))return true;
         if(Peek().Kind==TokenKind::Ident){++At;return false;}
@@ -47,6 +63,29 @@ struct Priority {
     bool Important;long long Layer;Specificity Weight;std::size_t Order;
     auto operator<=>(const Priority&)const=default;
 };
+std::vector<Value> Parts(const Value& data,std::string_view separator=" "){
+    std::vector<Value> parts(1);int depth=0;for(const auto& token:data.Tokens){if(Symbol(token,"("))++depth;if(Symbol(token,")"))--depth;if(depth==0&&((separator==" "&&token.Kind==TokenKind::Space)||Symbol(token,separator))){if(!parts.back().Tokens.empty())parts.emplace_back();}else parts.back().Tokens.push_back(token);}if(parts.back().Tokens.empty())parts.pop_back();return parts;
+}
+std::vector<std::string> Longhands(const std::string& name){
+    if(name=="border-radius")return {"border-top-left-radius","border-top-right-radius","border-bottom-right-radius","border-bottom-left-radius"};
+    if(name=="background")return {"background-image","background-color"};
+    if(name=="border")return {"border-left-width","border-top-width","border-right-width","border-bottom-width","border-left-color","border-top-color","border-right-color","border-bottom-color","border-style"};
+    if(name!="padding"&&name!="margin"&&name!="border-width"&&name!="border-color")return {};
+    std::vector<std::string> result;for(const auto* side:{"top","right","bottom","left"})result.push_back(name.starts_with("border-")?"border-"+std::string(side)+name.substr(6):name+"-"+side);return result;
+}
+std::optional<Value> Expand(const std::string& source,const std::string& name,Value value){
+    if(source==name)return value;
+    auto tokens=value.Tokens;Trim(tokens);if(tokens.size()==1&&tokens[0].Kind==TokenKind::Ident){auto key=Lower(tokens[0].Text);if(key=="initial"||key=="inherit"||key=="unset")return value;}
+    if(source=="background"){const bool color=ResolveColor(value).has_value();if(name=="background-color")return color?value:ParseValue("transparent").Data;return color?ParseValue("none").Data:value;}
+    if(source=="border"){
+        const bool width=name.ends_with("width"),color=name.ends_with("color");
+        for(const auto& part:Parts(value)){if(color&&ResolveColor(part))return part;if(width){auto n=ResolveLength(part);if(n&&*n>=0)return part;}if(!width&&!color){auto key=Lower(part.ToString());if(key=="solid"||key=="none")return part;}}
+        return ParseValue(width?"3px":color?"currentColor":"none").Data;
+    }
+    auto targets=Longhands(source);auto found=std::find(targets.begin(),targets.end(),name);if(found==targets.end())return value;const auto index=std::size_t(found-targets.begin());
+    const auto select=[&](const Value& axis)->std::optional<Value>{auto parts=Parts(axis);if(parts.empty()||parts.size()>4)return {};const std::size_t indices[4]={0,parts.size()>1?1u:0u,parts.size()>2?2u:0u,parts.size()>3?3u:parts.size()>1?1u:0u};return parts[indices[index]];};
+    auto axes=Parts(value,"/");if(axes.empty()||axes.size()>2||(source!="border-radius"&&axes.size()>1))return {};auto first=select(axes[0]);if(!first)return {};if(axes.size()==1)return first;auto second=select(axes[1]);if(!second)return {};first->Tokens.push_back({TokenKind::Space," ","",0,{}});first->Tokens.insert(first->Tokens.end(),second->Tokens.begin(),second->Tokens.end());return first;
+}
 }
 bool EvaluateCondition(const Condition& condition,const Environment& environment){
     if(condition.Directive!="media"&&condition.Directive!="viewport")return false;
@@ -68,6 +107,7 @@ ComputedStyle Compute(const Stylesheet& sheet,const Node& node,const Environment
     for(auto it=ancestors.rbegin();it!=ancestors.rend();++it){
         const auto& current=**it;
         std::map<std::string,std::pair<Priority,Value>> winners;
+        std::map<std::string,std::string> origins;
         for(const auto& rule:sheet.Rules){
             if(remaining==0)return exhausted();
             --remaining;
@@ -81,8 +121,8 @@ ComputedStyle Compute(const Stylesheet& sheet,const Node& node,const Environment
                 if(!remaining)return exhausted();
                 --remaining;
                 Priority priority{declaration.Important,declaration.Important?-rank:rank,*weight,declaration.Order};
-                auto found=winners.find(declaration.Property);
-                if(found==winners.end()||found->second.first<=priority)winners[declaration.Property]={priority,declaration.Data};
+                const auto offer=[&](const std::string& name){auto found=winners.find(name);if(found==winners.end()||found->second.first<=priority){winners[name]={priority,declaration.Data};origins[name]=declaration.Property;}};
+                offer(declaration.Property);for(const auto& name:Longhands(declaration.Property))offer(name);
             }
         }
         // Freeze inherited variables at the parent's computed value, not the
@@ -106,7 +146,7 @@ ComputedStyle Compute(const Stylesheet& sheet,const Node& node,const Environment
             for(const auto& [name,winner]:winners)if(!name.starts_with("--")){
                 if(!remaining)return exhausted();
                 --remaining;
-                if(auto expanded=SubstituteVariables(winner.second,result.CustomProperties,result.Diagnostics,limits))result.Properties[name]=std::move(*expanded);
+                if(auto expanded=SubstituteVariables(winner.second,result.CustomProperties,result.Diagnostics,limits))if(auto value=Expand(origins.at(name),name,std::move(*expanded)))result.Properties[name]=std::move(*value);
             }
         }
     }

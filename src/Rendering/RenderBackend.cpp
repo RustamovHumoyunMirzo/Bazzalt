@@ -683,6 +683,7 @@ void RenderBackend::Render() {
         }
         m_captureReads.clear();
         if(m_captureSwapChain&&m_renderer->beginFrame(m_captureSwapChain)){
+            if(m_guiRenderer){m_guiRenderer->RenderSpatialEffects();m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});}
             try{for(auto id:ordered){auto* view=m_cameraViews.at(id);auto* target=const_cast<filament::RenderTarget*>(view->getRenderTarget());const auto* color=target->getTexture(filament::RenderTarget::AttachmentPoint::COLOR);RenderCameraView(view);if(m_guiScene&&m_guiRenderer)m_guiRenderer->RenderCameraOverlay(*m_guiScene,id,{float(color->getWidth()),float(color->getHeight())},target);if(m_guiScene){const auto entity=m_guiScene->GetEntity(id);if(const auto* camera=entity.TryGetComponent<Camera>();camera&&camera->RenderTarget)m_assets->GenerateTextureMipmaps(camera->RenderTarget,const_cast<filament::Texture*>(color));}}}
             catch(...){m_renderer->endFrame();throw;}
             m_renderer->endFrame();
@@ -722,6 +723,7 @@ void RenderBackend::Render() {
             m_statisticsRenderer->PrepareOverlay(*m_statisticsScene,{float(resource->Width),float(resource->Height)});
         }
         if (!resource->SwapChain || !m_renderer->beginFrame(resource->SwapChain)) continue;
+        if(m_guiRenderer){m_guiRenderer->RenderSpatialEffects();m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});}
         if (resource->Kind == ViewportKind::Scene) {
             bool outlined=false;
             if(!m_outlineSelected.empty()||!m_outlineHovered.empty()){
@@ -746,17 +748,18 @@ void RenderBackend::Render() {
             m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});
             if(m_statisticsVisible&&!m_statisticsText.empty()&&m_statisticsRenderer){m_statisticsRenderer->RenderOverlay(*m_statisticsScene,{float(resource->Width),float(resource->Height)});m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});}
         } else {
+            auto* guiInput=m_guiRenderer?m_guiRenderer->GetSceneInputTarget():nullptr;
             const bool directCamera=std::any_of(m_activeViews.begin(),m_activeViews.end(),[](filament::View* view){return view&&!view->getRenderTarget();});
             if (!directCamera) {
                 // Render an empty view solely to clear the swap chain.  Its
                 // scene is deliberately null, so a missing game camera can
                 // never expose the editor fallback camera.
                 m_renderer->setClearOptions({.clearColor={0,0,0,1},.clear=true});
-                if (resource->View) m_renderer->render(resource->View);
+                if (resource->View) {resource->View->setRenderTarget(guiInput);m_renderer->render(resource->View);resource->View->setRenderTarget(nullptr);}
                 m_renderer->setClearOptions({.clearColor={0.055,0.065,0.085,1.0},.clear=true});
             }
             for (filament::View* view : m_activeViews)
-                if (view&&!view->getRenderTarget()) m_renderer->render(view);
+                if (view&&!view->getRenderTarget()) {view->setRenderTarget(guiInput);try{m_renderer->render(view);}catch(...){view->setRenderTarget(nullptr);throw;}view->setRenderTarget(nullptr);}
         }
         if(resource->Kind==ViewportKind::Game&&m_guiScene&&m_guiRenderer){m_guiRenderer->RenderOverlay(*m_guiScene,{float(resource->Width),float(resource->Height)});m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});}
         m_renderer->endFrame();m_presentedViewports.insert(id);

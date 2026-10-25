@@ -258,7 +258,6 @@
   "subsystems.select": "Select C++ Script",
   "subsystems.add": "Add",
   "subsystems.remove": "Remove Selected",
-  "subsystems.saved": "Subsystem registrations saved. Changes apply on the next Play or game build.",
   "subsystems.cannot_attach": "Subsystem Scripts cannot be attached to entities.",
   "subsystems.stop_playing": "Stop Play to edit global subsystems.",
   "subsystems.no_project": "Open a project to edit global subsystems.",

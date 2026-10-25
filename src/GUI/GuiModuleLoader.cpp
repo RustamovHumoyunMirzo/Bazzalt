@@ -36,7 +36,7 @@ const GuiModuleApi* Load(){
 #endif
     const auto* api=get?get(GuiModuleVersion,sizeof(GuiModuleApi)):nullptr;
     if(!api||api->Version!=GuiModuleVersion||api->Size!=sizeof(GuiModuleApi)||!api->Layout||!api->ProcessInput||!api->Focus||!api->RegisterComponents||!api->CreateRenderer||!api->DestroyRenderer||!api->ClearRenderer||!api->BatchCount||!api->PrepareSpatial||!api->PrepareOverlay||!api->RenderOverlay||!api->RenderCameraOverlay)throw std::runtime_error("Incompatible GUI runtime. Core and bazzalt_gui must come from the same build.");
-    if(!api->ValidateAsset||!api->InspectFont||!api->MeasureFont||!api->StylesheetReferences||!api->PreviewFont)throw std::runtime_error("Incomplete GUI asset/font module");
+    if(!api->ValidateAsset||!api->InspectFont||!api->MeasureFont||!api->StylesheetReferences||!api->PreviewFont||!api->SceneInputTarget||!api->RenderSpatialEffects)throw std::runtime_error("Incomplete GUI module");
     return api;
 }
 }
@@ -51,6 +51,8 @@ void RegisterGuiComponents(ComponentSerializationRegistry& registry){GuiModule()
 GuiRenderer::GuiRenderer(RenderBackend& backend):m_impl(GuiModule().CreateRenderer(backend)){}
 GuiRenderer::~GuiRenderer(){if(m_impl)GuiModule().DestroyRenderer(m_impl);}
 void GuiRenderer::Clear(){GuiModule().ClearRenderer(m_impl);}
+filament::RenderTarget* GuiRenderer::GetSceneInputTarget()const{return GuiModule().SceneInputTarget(m_impl);}
+void GuiRenderer::RenderSpatialEffects(){GuiModule().RenderSpatialEffects(m_impl);}
 std::size_t GuiRenderer::GetBatchCount() const{return GuiModule().BatchCount(m_impl);}
 void GuiRenderer::PrepareSpatial(Scene& scene){GuiModule().PrepareSpatial(m_impl,scene);}
 void GuiRenderer::PrepareOverlay(Scene& scene,Vec2 size,UUID camera,filament::RenderTarget* target){GuiModule().PrepareOverlay(m_impl,scene,size,camera,target);}

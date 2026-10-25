@@ -12,6 +12,8 @@ public:
     void RenderOverlay(Bazzalt::Scene& scene,Vec2 size);
     void RenderCameraOverlay(Bazzalt::Scene& scene,UUID camera,Vec2 size,filament::RenderTarget* target);
     void Clear();
+    filament::RenderTarget* GetSceneInputTarget() const;
+    void RenderSpatialEffects();
     std::size_t GetBatchCount() const;
 private:
     struct Impl;std::unique_ptr<Impl> m_impl;

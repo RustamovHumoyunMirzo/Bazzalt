@@ -40,26 +40,12 @@ in [docs/public/README.md](docs/public/README.md).
 
 ## Contributing
 
-Issues and focused pull requests are welcome. Include tests for behavior
-changes, keep third-party types out of `include/Bazzalt`, preserve UUID and YAML
-forward compatibility, and run the native and editor test suites before
-submitting changes.
-
-Public gameplay API changes must update the Lua bindings, API coverage tests,
-and documentation too. Lua names follow the same PascalCase conventions as C++.
-See [Lua integration](docs/private/lua-scripting.md) for bindings, lifecycle,
-bytecode assets, and DLL deployment rules.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines, API/Lua parity,
+testing and dependency maintenance.
 
 ## License
 
-This project uses a modular multi-license structure:
-
-Portions of this software use the FreeType Project (www.freetype.org), under the
-FreeType License. Packaged runtimes include its license and bundled zlib notice
-in `licenses/`. No system font is redistributed by default; projects must use
-fonts they have permission to ship.
-
-* **Core Engine:** Licensed under the **Apache License 2.0**. You can find the full terms in the root [LICENSE](LICENSE) file.
-* **Editor (`/Editor`) and Launcher (`/Launcher`):** Licensed under the **GNU Lesser General Public License v3 (LGPLv3)**. The specific terms for the editor are located in the [Editor/LICENSE](Editor/LICENSE) and [Launcher/LICENSE](Launcher/LICENSE) files.
-
-This structure allows the core engine to remain permissive under Apache 2.0 while ensuring full legal and technical compliance with the [PySide6 (Qt)](https://www.qt.io/qt-for-python) framework used by the editor and launcher.
+Core: [Apache-2.0](LICENSE). Editor and Hub:
+[LGPLv3](Editor/LICENSE) / [LGPLv3](Launcher/LICENSE).
+Dependency licenses, attribution and distribution notices are listed in
+[THIRD_PARTY.md](THIRD_PARTY.md).
