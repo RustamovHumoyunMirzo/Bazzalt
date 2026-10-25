@@ -2,6 +2,7 @@ from pathlib import Path
 import csv
 import io
 import json
+import os
 import re
 import tempfile
 import unittest
@@ -110,8 +111,9 @@ class Win32PackagingTests(unittest.TestCase):
         self.assertIn("scripts/patch_filament_win32.py",(root/".github/workflows/windows-product.yml").read_text())
 
     def test_enumerate_calling_convention_compiles_for_win32_vulkan_functions(self):
-        root=Path(__file__).resolve().parents[2];powershell=shutil.which("pwsh")
-        if not powershell:self.skipTest("MSVC environment unavailable")
+        root=Path(__file__).resolve().parents[2];powershell=shutil.which("pwsh") if os.name=='nt' else None
+        compiler=shutil.which("clang++") if os.name!='nt' else None
+        if not powershell and not compiler:self.skipTest("No compiler available for Win32 calling-convention checks")
         source=self.Root/"enumerate.cpp"
         source.write_text("""
 #define VKAPI_PTR __stdcall
@@ -127,7 +129,11 @@ void test(){enumerate(first);enumerate(second,1);enumerate(third,1,2);}
 """,encoding="utf-8")
         toolchain=str(root/"scripts/windows_toolchain.ps1").replace("'","''");filename=str(source).replace("'","''")
         for arch in ("x86","x64"):
-            result=subprocess.run([powershell,"-NoProfile","-Command",f". '{toolchain}'; Import-BazzaltMsvc {arch}; & cl /nologo /Zs /std:c++17 '{filename}'; exit $LASTEXITCODE"],capture_output=True,text=True)
+            if compiler:
+                target='i686-pc-windows-msvc' if arch=='x86' else 'x86_64-pc-windows-msvc'
+                command=[compiler,'-target',target,'-fsyntax-only','-std=c++17',str(source)]
+            else:command=[powershell,"-NoProfile","-Command",f". '{toolchain}'; Import-BazzaltMsvc {arch}; & cl /nologo /Zs /std:c++17 '{filename}'; exit $LASTEXITCODE"]
+            result=subprocess.run(command,capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
 
     def test_patched_vulkan_handle_conversion_compiles_for_x86_and_x64(self):

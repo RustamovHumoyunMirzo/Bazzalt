@@ -2,6 +2,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import stat
 import struct
@@ -151,7 +152,7 @@ class DownloadTests(unittest.TestCase):
         entry=Entry(executable,"hub","1.0.0","x64","https://example.org/releases");ValidateEntry(entry)
 
     def test_compiler_resolution_shared_override_and_invalid_override(self):
-        tools=self.Root/"tools";compiler=tools/"llvm/bin/clang++.exe";compiler.parent.mkdir(parents=True);compiler.write_bytes(PE())
+        tools=self.Root/"tools";compiler=tools/"llvm/bin"/("clang++.exe" if os.name=='nt' else "clang++");compiler.parent.mkdir(parents=True);compiler.write_bytes(PE())
         with patch("bazzalt.tools.DataPaths.Tools",return_value=tools):
             self.assertEqual(FindCompiler(),compiler);self.assertEqual(FindCompiler(str(compiler)),compiler);self.assertIsNone(FindCompiler(str(self.Root/"missing")))
 
@@ -159,7 +160,7 @@ class DownloadTests(unittest.TestCase):
         source=self.Root/"Assets/Walk.cpp";source.parent.mkdir();source.write_text("COMPONENT(Walk) { PROPERTY(float, Speed, 1.0f); };",encoding="utf-8")
         compiler=ScriptCompiler(self.Root,engine_root=self.Root,app_root=self.Root,tools={"compiler_path":str(self.Root/"missing")})
         result=compiler.Build([source]);self.assertFalse(result.success);self.assertEqual(result.diagnostics[0].localization_key,"scripting.toolchain_missing")
-        sdk=self.Root/"ScriptSDK";headers=sdk/"include/Bazzalt";headers.mkdir(parents=True);(headers/"Scene.h").write_text("// header");entt=sdk/"include/entt/entity";entt.mkdir(parents=True);(entt/"registry.hpp").write_text("// entt");(sdk/"lib").mkdir();(sdk/"lib/Bazzalt.lib").write_bytes(b"lib")
+        sdk=self.Root/"ScriptSDK";headers=sdk/"include/Bazzalt";headers.mkdir(parents=True);(headers/"Scene.h").write_text("// header");entt=sdk/"include/entt/entity";entt.mkdir(parents=True);(entt/"registry.hpp").write_text("// entt");(sdk/"lib").mkdir();(sdk/"lib"/("Bazzalt.lib" if os.name=='nt' else "libBazzalt.dylib" if os.sys.platform=='darwin' else "libBazzalt.so")).write_bytes(b"lib")
         fake=self.Root/"clang++.exe";fake.write_bytes(PE());compiler.Tools={"compiler_path":str(fake)}
         with patch("Editor.scripting.subprocess.run",side_effect=OSError("Cannot launch compiler")):
             result=compiler.Build([source])
