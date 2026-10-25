@@ -13,24 +13,6 @@ support for generating games; the Win32 CI badge covers that runtime only.
 > **Alpha status:** core workflows are functional, but APIs and file formats may
 > still change. BAZZALT is not yet recommended for production projects.
 
-Version 0.6 adds native audio: Audio Clips with editor preview, positional
-sources/listeners, distance curves, streaming, playback controls, and mixer
-buses. C++ and Lua share the same audio API. See the
-[audio guide](docs/public/0.6.0/manual/audio/en.html).
-
-Runtime GUI supports responsive layouts, CSS stylesheet assets and FreeType font
-assets with HarfBuzz shaping and bidirectional text, C++/Lua access and editor authoring/preview. See the
-[GUI guide](docs/public/0.6.0/native/gui/en.html). Source builds also require the
-pinned FreeType source (`scripts/get_freetype.ps1` / `scripts/get_freetype.sh`) and
-text shaping sources (`scripts/get_text_shaping.ps1` / `.sh`);
-large renderer dependencies remain supplied by the existing CI workflows.
-
-Build standalone Windows x86/x64 games from **Build → Build Settings**. The
-separate content compiler packages saved scenes, scripts, and assets with a
-prebuilt native runtime; games do not include Python or the editor. See
-[building a game](docs/public/0.6.0/manual/building-games/en.html), including
-packaging, ZIP output, and the limits of asset encryption.
-
 ## Documentation
 
 Read the [public guides](docs/public/index.html) for scene editing, C++ and Lua
