@@ -68,3 +68,15 @@ test_bluegl_linux_x86.py builds a small shared dispatch library and PIE caller
 and exercises integer, float, double and pointer calls 10,000 times before the
 large renderer build. Both patch scripts are idempotent and reject unfamiliar
 source layouts. The Filament cache key includes patches and the runtime probe.
+
+The x86 source patch also requires _LIBCPP_VERSION before enabling libc++'s
+mutex annotations. Defining _LIBCPP_ENABLE_THREAD_SAFETY_ANNOTATIONS alone does
+not annotate libstdc++'s std::mutex. Locking code remains unchanged; other
+compiler diagnostics remain enabled.
+
+libc++ 18 lacks floating-point std::from_chars. Private Utils/NumberParsing.h
+uses native from_chars when available and otherwise parses strict decimal
+numbers through a classic-locale stream. Both paths reject trailing data,
+nonfinite values and out-of-range results without changing the destination.
+Audio, scenes, GUI fields and CSS use this helper. NumberParsingTests executes
+both paths even on Windows and runs before the full Linux builds.

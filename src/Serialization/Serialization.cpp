@@ -1,4 +1,5 @@
 #include "Bazzalt/Serialization.h"
+#include "Utils/NumberParsing.h"
 #include "Audio/AudioRuntime.h"
 #include "GUI/GuiSerialization.h"
 #include <charconv>
@@ -32,12 +33,12 @@ std::string PathUtf8(const std::filesystem::path&p){const auto v=p.generic_u8str
 std::string Key(ryml::ConstNodeRef n) { auto v=n.key(); return {v.str,v.len}; }
 std::string Quote(const std::string& s) { std::ostringstream o; o<<'"'; for(unsigned char c:s){ switch(c){case '\\':o<<"\\\\";break;case '"':o<<"\\\"";break;case '\n':o<<"\\n";break;case '\r':o<<"\\r";break;case '\t':o<<"\\t";break;default:o<<static_cast<char>(c);} } o<<'"'; return o.str(); }
 bool UInt(ryml::ConstNodeRef n, std::uint32_t& v) { auto s=Text(n); auto r=std::from_chars(s.data(),s.data()+s.size(),v); return r.ec==std::errc{}&&r.ptr==s.data()+s.size(); }
-std::string Float(float v){std::ostringstream s;s<<std::setprecision(std::numeric_limits<float>::max_digits10)<<v;return s.str();}
+std::string Float(float v){std::ostringstream s;s.imbue(std::locale::classic());s<<std::setprecision(std::numeric_limits<float>::max_digits10)<<v;return s.str();}
 std::string EnvironmentYaml(const SceneEnvironment& v){
     std::ostringstream out;out<<"Environment:\n  Version: 2\n  Mode: "<<static_cast<int>(v.Mode)<<"\n  Source: "<<Quote(v.SourceAsset.ToString())<<"\n  Material: "<<Quote(v.MaterialAsset.ToString())<<"\n  Intensity: "<<Float(v.Intensity)<<"\n  IBL: "<<(v.ImageBasedLighting?"true":"false")<<"\n  Skybox: "<<(v.SkyboxVisible?"true":"false")<<"\n  ShowSun: "<<(v.ShowSun?"true":"false")<<"\n";
     out<<"  RotationX: "<<Float(v.Rotation.X)<<"\n  RotationY: "<<Float(v.Rotation.Y)<<"\n  RotationZ: "<<Float(v.Rotation.Z)<<"\n  ClearR: "<<Float(v.ClearColor.X)<<"\n  ClearG: "<<Float(v.ClearColor.Y)<<"\n  ClearB: "<<Float(v.ClearColor.Z)<<"\n  ClearA: "<<Float(v.ClearColor.W)<<"\n";return out.str();
 }
-bool Float(const PropertyMap& p,const char* k,float& v){auto i=p.find(k);if(i==p.end())return false;auto b=i->second.data(),e=b+i->second.size();auto r=std::from_chars(b,e,v);return r.ec==std::errc{}&&r.ptr==e&&std::isfinite(v);}
+bool Float(const PropertyMap& p,const char* k,float& v){auto i=p.find(k);return i!=p.end()&&Detail::ParseNumber(i->second,v);}
 bool Bool(const PropertyMap&p,const char*k,bool&v){auto i=p.find(k);if(i==p.end())return false;if(i->second=="true"){v=true;return true;}if(i->second=="false"){v=false;return true;}return false;}
 bool Unsigned(const PropertyMap&p,const char*k,std::uint32_t&v){auto i=p.find(k);if(i==p.end())return false;auto b=i->second.data(),e=b+i->second.size();auto r=std::from_chars(b,e,v);return r.ec==std::errc{}&&r.ptr==e;}
 template<typename T> bool Enum(const PropertyMap&p,const char*k,T&v){auto i=p.find(k);if(i==p.end())return false;int n=0;auto b=i->second.data(),e=b+i->second.size();auto r=std::from_chars(b,e,n);if(r.ec!=std::errc{}||r.ptr!=e)return false;v=static_cast<T>(n);return true;}

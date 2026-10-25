@@ -11,6 +11,9 @@ if [ ! -d "$SOURCE" ]; then git clone --depth 1 --branch v1.77.0 https://github.
 [ "$(git -C "$SOURCE" rev-parse HEAD)" = "$PIN" ] || { echo 'Filament source integrity mismatch' >&2; exit 1; }
 python3 "$ROOT/scripts/patch_filament_win32.py" "$SOURCE"
 python3 "$ROOT/scripts/patch_filament_linux_x86.py" "$SOURCE"
+clang++ -m32 -std=c++20 -stdlib=libstdc++ -D_LIBCPP_ENABLE_THREAD_SAFETY_ANNOTATIONS \
+  -Werror -Wthread-safety -fsyntax-only -I"$SOURCE/libs/utils/include" \
+  "$ROOT/tests/FilamentThreadAnnotationsProbe.cpp"
 python3 "$ROOT/scripts/test_bluegl_linux_x86.py" "$SOURCE"
 # Linux x86 uses the distribution's multilib libstdc++; the official x64 SDK uses libc++.
 # Build native 32-bit tools too: the x64 Linux CI host supports IA32 executables.

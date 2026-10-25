@@ -22,6 +22,8 @@ work around [upstream issue #1581](https://github.com/ThePhD/sol2/issues/1581).
 The Linux x86 Filament build adds i386 position-independent BlueGL dispatch
 thunks; upstream x64 and ARM assembly remains unchanged. Patch sources and
 regression probes are in `scripts/patch_*` and `tests/Sol2CompatibilityProbe.cpp`.
+The x86 patch also limits libc++ mutex annotations to libc++ builds; it leaves
+mutex operations and unrelated diagnostics unchanged.
 
 ## Core, GUI and scripting
 

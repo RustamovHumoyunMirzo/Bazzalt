@@ -1,4 +1,5 @@
 #include "GUI/CSS/CSS.h"
+#include "Utils/NumberParsing.h"
 #include <algorithm>
 #include <charconv>
 #include <cmath>
@@ -88,8 +89,7 @@ public:
                     Next();if(Peek()=='+'||Peek()=='-')Next();while(std::isdigit(static_cast<unsigned char>(Peek())))Next();
                 }
                 std::string text(Source.substr(begin,Offset-begin));double number=0;auto numeric=std::string_view(text);if(numeric.starts_with('+'))numeric.remove_prefix(1);
-                const auto parsed=std::from_chars(numeric.data(),numeric.data()+numeric.size(),number);
-                if(parsed.ec!=std::errc{}||!std::isfinite(number)){Diagnostics.push_back({Severity::Error,at,"Invalid or nonfinite number"});number=std::numeric_limits<double>::quiet_NaN();}
+                if(!::Bazzalt::Detail::ParseNumber(numeric,number)){Diagnostics.push_back({Severity::Error,at,"Invalid or nonfinite number"});number=std::numeric_limits<double>::quiet_NaN();}
                 TokenKind kind=TokenKind::Number;std::string unit;
                 if(Peek()=='%'){kind=TokenKind::Percentage;unit="%";Next();}else if(StartsName()){kind=TokenKind::Dimension;unit=Identifier();}
                 tokens.push_back({kind,std::move(text),std::move(unit),number,at});

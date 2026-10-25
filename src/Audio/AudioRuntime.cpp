@@ -1,4 +1,5 @@
 #include "Audio/AudioRuntime.h"
+#include "Utils/NumberParsing.h"
 #include "Bazzalt/Detail/SubsystemAccess.h"
 #include "Audio/AudioEffects.h"
 #include "Bazzalt/AssetManager.h"
@@ -128,7 +129,7 @@ bool ReadAudioMixer(const std::filesystem::path& path,std::vector<AudioBusSettin
             AudioBusSettings bus;
             if(!n.has_child("Id")||!n.has_child("Parent")||!n.has_child("Name")||!UUID::TryParse(value(n["Id"]),bus.Id)||!UUID::TryParse(value(n["Parent"]),bus.Parent))throw std::invalid_argument("Invalid bus UUID/name");
             bus.Name=value(n["Name"]);
-            auto number=[&](const char* key,float& v){if(!n.has_child(key))return;auto t=value(n[key]);auto r=std::from_chars(t.data(),t.data()+t.size(),v);if(r.ec!=std::errc{}||r.ptr!=t.data()+t.size())throw std::invalid_argument("Invalid bus number");};
+            auto number=[&](const char* key,float& v){if(!n.has_child(key))return;if(!Detail::ParseNumber(value(n[key]),v))throw std::invalid_argument("Invalid bus number");};
             number("Volume",bus.Volume);number("Pitch",bus.Pitch);
             auto boolean=[&](const char* key,bool& v){if(!n.has_child(key))return;auto t=value(n[key]);if(t!="true"&&t!="false")throw std::invalid_argument("Invalid bus boolean");v=t=="true";};
             boolean("Muted",bus.Muted);boolean("Solo",bus.Solo);boolean("Paused",bus.Paused);boolean("Bypass",bus.Bypass);
@@ -139,7 +140,7 @@ bool ReadAudioMixer(const std::filesystem::path& path,std::vector<AudioBusSettin
                     AudioEffectSettings e;if(!fx.has_child("Id")||!UUID::TryParse(value(fx["Id"]),e.Id)||!fx.has_child("Type"))throw std::invalid_argument("Invalid effect ID/type");
                     const auto type=value(fx["Type"]);const char* types[]={"Lowpass","Highpass","Echo","Distortion","Reverb","Equalizer"};int index=0;for(;index<6&&type!=types[index];++index){}if(index==6)throw std::invalid_argument("Unknown audio effect");e.Type=AudioEffectType(index);
                     if(fx.has_child("Enabled")){auto enabled=value(fx["Enabled"]);if(enabled!="true"&&enabled!="false")throw std::invalid_argument("Invalid effect enabled flag");e.Enabled=enabled=="true";}
-                    if(fx.has_child("Parameters")){if(!fx["Parameters"].is_map())throw std::invalid_argument("Invalid effect parameters");for(auto p:fx["Parameters"].children()){float v;auto t=value(p);auto r=std::from_chars(t.data(),t.data()+t.size(),v);if(r.ec!=std::errc{}||r.ptr!=t.data()+t.size())throw std::invalid_argument("Invalid effect parameter number");auto key=p.key();e.Parameters.emplace(std::string(key.str,key.len),v);}}
+                    if(fx.has_child("Parameters")){if(!fx["Parameters"].is_map())throw std::invalid_argument("Invalid effect parameters");for(auto p:fx["Parameters"].children()){float v;if(!Detail::ParseNumber(value(p),v))throw std::invalid_argument("Invalid effect parameter number");auto key=p.key();e.Parameters.emplace(std::string(key.str,key.len),v);}}
                     bus.Effects.push_back(std::move(e));
                 }
             }

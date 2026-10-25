@@ -1,7 +1,7 @@
 import tempfile,unittest
 from pathlib import Path
 from scripts.patch_sol2_clang18 import Patch as PatchSol,OLD as SOL_OLD,NEW as SOL_NEW
-from scripts.patch_filament_linux_x86 import Patch as PatchBlue,Symbols
+from scripts.patch_filament_linux_x86 import Patch as PatchBlue,Symbols,ANNOTATION_OLD,ANNOTATION_NEW
 
 class DependencyCompatibilityTests(unittest.TestCase):
     def test_sol_patch_is_idempotent_and_rejects_partially_patched_input(self):
@@ -20,7 +20,9 @@ class DependencyCompatibilityTests(unittest.TestCase):
             universal=source/'BlueGLCoreLinuxUniversalImpl.S';old='#if defined(__aarch64__)\n#include "arm.S"\n#else\n#include "BlueGLCoreLinuxImpl.S"\n#endif\n';universal.write_text(old)
             names=['glProbe'+str(i) for i in range(2575)];upstream='/* upstream license */\n'+'\n'.join('bluegl_'+name+':' for name in names)
             assembly=source/'BlueGLCoreLinuxImpl.S';assembly.write_text(upstream)
+            compiler=root/'libs/utils/include/utils/compiler.h';compiler.parent.mkdir(parents=True);compiler.write_text(ANNOTATION_OLD+'\n#endif\n')
             self.assertTrue(PatchBlue(root));generated=source/'BlueGLCoreLinuxI386Impl.S';stamp=generated.stat().st_mtime_ns
+            self.assertIn(ANNOTATION_NEW,compiler.read_text())
             self.assertEqual(Symbols(generated.read_text()),names);self.assertEqual(assembly.read_text(),upstream)
             self.assertIn('#elif defined(__aarch64__)',universal.read_text());self.assertIn('#include "arm.S"',universal.read_text())
             self.assertFalse(PatchBlue(root));self.assertEqual(generated.stat().st_mtime_ns,stamp)

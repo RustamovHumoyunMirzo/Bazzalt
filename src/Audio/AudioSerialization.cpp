@@ -1,12 +1,13 @@
 #include "Audio/AudioRuntime.h"
+#include "Utils/NumberParsing.h"
 #include <charconv>
 #include <cmath>
 #include <iomanip>
 #include <sstream>
 namespace Bazzalt::Runtime {
 namespace {
-std::string Number(float v){std::ostringstream s;s<<std::setprecision(9)<<v;return s.str();}
-template<class T> bool Number(const PropertyMap& p,const std::string& key,T& v){auto i=p.find(key);if(i==p.end())return false;auto b=i->second.data();auto r=std::from_chars(b,b+i->second.size(),v);if(r.ec!=std::errc{}||r.ptr!=b+i->second.size())return false;if constexpr(std::is_floating_point_v<T>)return std::isfinite(v);return true;}
+std::string Number(float v){std::ostringstream s;s.imbue(std::locale::classic());s<<std::setprecision(9)<<v;return s.str();}
+template<class T> bool Number(const PropertyMap& p,const std::string& key,T& v){auto i=p.find(key);return i!=p.end()&&Detail::ParseNumber(i->second,v);}
 bool Boolean(const PropertyMap& p,const char* key,bool& v){auto i=p.find(key);if(i==p.end()||(i->second!="true"&&i->second!="false"))return false;v=i->second=="true";return true;}
 bool Id(const PropertyMap& p,const char* key,UUID& v){auto i=p.find(key);return i!=p.end()&&UUID::TryParse(i->second,v);}
 }

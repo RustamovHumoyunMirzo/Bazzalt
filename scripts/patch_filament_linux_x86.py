@@ -1,9 +1,11 @@
-"""Add i386 PIC OpenGL dispatch thunks to pinned Filament's BlueGL library."""
+"""Add i386 PIC dispatch and libstdc++ annotation compatibility to pinned Filament."""
 import argparse,re
 from pathlib import Path
 
 OLD='#if defined(__aarch64__)'
 NEW='#if defined(__i386__)\n#   include "BlueGLCoreLinuxI386Impl.S"\n#elif defined(__aarch64__)'
+ANNOTATION_OLD='#if defined(_LIBCPP_ENABLE_THREAD_SAFETY_ANNOTATIONS) && UTILS_HAS_THREADING'
+ANNOTATION_NEW='#if defined(_LIBCPP_ENABLE_THREAD_SAFETY_ANNOTATIONS) && defined(_LIBCPP_VERSION) && UTILS_HAS_THREADING'
 
 def Symbols(text):
     names=re.findall(r'^bluegl_(gl\w+):$',text,re.M)
@@ -41,8 +43,12 @@ def Patch(source):
     else:raise ValueError('Pinned BlueGL architecture selection changed; review upstream')
     upstream=(root/'BlueGLCoreLinuxImpl.S').read_text(encoding='utf-8')
     if len(Symbols(upstream))!=2575:raise ValueError('Pinned BlueGL function count changed; review upstream')
+    compiler=Path(source)/'libs/utils/include/utils/compiler.h';annotations=compiler.read_text(encoding='utf-8')
+    if annotations.count(ANNOTATION_NEW)==1:fixed=annotations
+    elif annotations.count(ANNOTATION_OLD)==1:fixed=annotations.replace(ANNOTATION_OLD,ANNOTATION_NEW)
+    else:raise ValueError('Pinned Filament thread annotation condition changed; review upstream')
     generated=Generate(upstream);target=root/'BlueGLCoreLinuxI386Impl.S';changed=False
-    for path,text in ((universal,updated),(target,generated)):
+    for path,text in ((universal,updated),(target,generated),(compiler,fixed)):
         if not path.exists() or path.read_text(encoding='utf-8')!=text:path.write_text(text,encoding='utf-8',newline='\n');changed=True
     return changed
 

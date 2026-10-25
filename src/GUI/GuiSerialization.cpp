@@ -1,4 +1,5 @@
 #include "GUI/GuiSerialization.h"
+#include "Utils/NumberParsing.h"
 #include "Bazzalt/GUI.h"
 #include "Bazzalt/Components/CameraRenderTarget.h"
 #include "Bazzalt/Serialization.h"
@@ -35,7 +36,7 @@ template<class T> bool Read(const std::string& text,T& value){
     else if constexpr(std::is_same_v<T,bool>){if(text=="true"){value=true;return true;}if(text=="false"){value=false;return true;}return false;}
     else if constexpr(std::is_enum_v<T>){int number;auto result=std::from_chars(text.data(),text.data()+text.size(),number);constexpr int maximum=std::is_same_v<T,GuiAlignment>||std::is_same_v<T,GuiJustify>?3:std::is_same_v<T,FrameMode>||std::is_same_v<T,GuiLayoutMode>||std::is_same_v<T,GuiTextAlignment>?2:1;if(result.ec!=std::errc{}||result.ptr!=text.data()+text.size()||number<0||number>maximum)return false;value=static_cast<T>(number);return true;}
     else if constexpr(std::is_same_v<T,Vec2>||std::is_same_v<T,Vec4>){std::istringstream in(text);in.imbue(std::locale::classic());char separator;float numbers[4];constexpr int count=std::is_same_v<T,Vec2>?2:4;for(int i=0;i<count;++i){if(i&&(!(in>>separator)||separator!=','))return false;if(!(in>>numbers[i])||!std::isfinite(numbers[i]))return false;}in>>std::ws;if(!in.eof())return false;if constexpr(count==2)value={numbers[0],numbers[1]};else value={numbers[0],numbers[1],numbers[2],numbers[3]};return true;}
-    else {auto result=std::from_chars(text.data(),text.data()+text.size(),value);if(result.ec!=std::errc{}||result.ptr!=text.data()+text.size())return false;if constexpr(std::is_floating_point_v<T>)return std::isfinite(value);else return true;}
+    else return Detail::ParseNumber(text,value);
 }
 template<class T> bool Valid(const T& v){
     if constexpr(std::is_same_v<T,Frame>)return v.ReferenceSize.X>0&&v.ReferenceSize.Y>0&&v.PixelsPerUnit>0&&v.MatchWidthOrHeight>=0&&v.MatchWidthOrHeight<=1;
