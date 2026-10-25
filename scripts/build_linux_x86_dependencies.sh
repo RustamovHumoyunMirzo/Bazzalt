@@ -19,7 +19,8 @@ python3 "$ROOT/scripts/test_bluegl_linux_x86.py" "$SOURCE"
 # Build native 32-bit tools too: the x64 Linux CI host supports IA32 executables.
 CC=clang CXX=clang++ cmake -S "$SOURCE" -B "$WORK/filament-build" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$WORK/filament-x86" \
-  -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_ASM_FLAGS=-m32 \
+  -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+  "-DCMAKE_C_FLAGS=-m32 -msse2 -mfpmath=sse" "-DCMAKE_CXX_FLAGS=-m32 -msse2 -mfpmath=sse" -DCMAKE_ASM_FLAGS=-m32 \
   -DCMAKE_EXE_LINKER_FLAGS=-m32 -DCMAKE_SHARED_LINKER_FLAGS=-m32 \
   -DCMAKE_LIBRARY_PATH=/usr/lib/i386-linux-gnu \
   -DDIST_ARCH=x86 -DDIST_DIR=x86 -DUSE_STATIC_LIBCXX=OFF \
@@ -27,5 +28,12 @@ CC=clang CXX=clang++ cmake -S "$SOURCE" -B "$WORK/filament-build" -G Ninja \
   -DFILAMENT_BUILD_TESTING=OFF -DSPIRV_SKIP_TESTS=ON \
   -DFILAMENT_BUILD_FILAMAT=ON -DFILAMENT_SUPPORTS_VULKAN=ON \
   -DFILAMENT_SUPPORTS_WEBGPU=OFF
+# Compile the previously failing SIMD culler before the expensive SDK build.
+clang++ -m32 -msse2 -mfpmath=sse -std=c++20 -stdlib=libstdc++ -O3 -DNDEBUG \
+  -ffast-math -fno-finite-math-only -ffp-contract=fast -Werror=pass-failed \
+  -I"$SOURCE/filament/include" -I"$SOURCE/filament/src" \
+  -I"$SOURCE/filament/backend/include" -I"$SOURCE/libs/math/include" \
+  -I"$SOURCE/libs/utils/include" -I"$SOURCE/third_party/robin-map/include" \
+  -c "$SOURCE/filament/src/Culler.cpp" -o "$WORK/culler-probe.o"
 cmake --build "$WORK/filament-build" --target install --parallel "${BAZZALT_BUILD_JOBS:-2}"
 test -f "$WORK/filament-x86/lib/x86/libfilament.a"

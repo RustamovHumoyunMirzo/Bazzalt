@@ -18,6 +18,9 @@ jobs:
       CXX: clang++
       PKG_CONFIG_LIBDIR: /usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig
       PYTHONUTF8: '1'
+      CCACHE_DIR: ${{ github.workspace }}/build/.ccache-x86
+      CCACHE_MAXSIZE: 2G
+      CCACHE_COMPILERCHECK: content
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
@@ -27,8 +30,14 @@ jobs:
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y clang ninja-build pkg-config g++-multilib libssl-dev:i386 libx11-dev:i386 libx11-xcb-dev:i386 libxcb1-dev:i386 libxext-dev:i386 libxrandr-dev:i386 libxcursor-dev:i386 libxi-dev:i386 libxfixes-dev:i386 libxss-dev:i386 libxtst-dev:i386 libgl1-mesa-dev:i386 libvulkan-dev:i386 mesa-vulkan-drivers:i386 xvfb
+          sudo apt-get install -y clang ccache ninja-build pkg-config g++-multilib libssl-dev:i386 libx11-dev:i386 libx11-xcb-dev:i386 libxcb1-dev:i386 libxext-dev:i386 libxrandr-dev:i386 libxcursor-dev:i386 libxi-dev:i386 libxfixes-dev:i386 libxss-dev:i386 libxtst-dev:i386 libgl1-mesa-dev:i386 libvulkan-dev:i386 mesa-vulkan-drivers:i386 xvfb
           python -m pip install -r requirements-build.txt PySide6==6.10.2
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: objects
+        with:
+          path: build/.ccache-x86
+          key: linux-x86-objects-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: linux-x86-objects-
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         id: filament
         with:
@@ -43,6 +52,12 @@ jobs:
       - name: Build pinned x86 Filament SDK on CI
         if: steps.filament.outputs.cache-hit != 'true'
         run: sh scripts/build_linux_x86_dependencies.sh
+      - name: Preserve renderer compiler cache even after a failed build
+        if: always()
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: build/.ccache-x86
+          key: ${{ steps.objects.outputs.cache-primary-key }}
       - name: Save completed Filament SDK before engine tests
         if: steps.filament.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -51,7 +66,7 @@ jobs:
           key: ${{ steps.filament.outputs.cache-primary-key }}
       - name: Build x86 core, GUI, Lua and player without editor or Python bridge
         run: |
-          cmake -S . -B build/linux-x86 -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DBAZZALT_BUILD_EDITOR_BRIDGE=OFF -DBAZZALT_FILAMENT_DIR="$PWD/build/linux32-bootstrap/filament-x86" -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_ASM_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32 -DCMAKE_SHARED_LINKER_FLAGS=-m32 -DCMAKE_LIBRARY_PATH=/usr/lib/i386-linux-gnu -DOPENSSL_CRYPTO_LIBRARY=/usr/lib/i386-linux-gnu/libcrypto.so
+          cmake -S . -B build/linux-x86 -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DBAZZALT_BUILD_EDITOR_BRIDGE=OFF -DBAZZALT_FILAMENT_DIR="$PWD/build/linux32-bootstrap/filament-x86" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_ASM_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32 -DCMAKE_SHARED_LINKER_FLAGS=-m32 -DCMAKE_LIBRARY_PATH=/usr/lib/i386-linux-gnu -DOPENSSL_CRYPTO_LIBRARY=/usr/lib/i386-linux-gnu/libcrypto.so
           cmake --build build/linux-x86 --parallel 2
           ctest --test-dir build/linux-x86 --output-on-failure
       - name: Stage and audit x86 runtime template and Core SDK

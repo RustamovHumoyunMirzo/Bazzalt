@@ -17,6 +17,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # Match the official x64 SDK or our multilib x86 SDK, respectively.
     if(CMAKE_SIZEOF_VOID_P EQUAL 4)
         set(_bazzalt_linux_stdlib libstdc++)
+        add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:-msse2>" "$<$<COMPILE_LANGUAGE:C,CXX>:-mfpmath=sse>")
     else()
         set(_bazzalt_linux_stdlib libc++)
     endif()

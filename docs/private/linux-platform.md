@@ -50,6 +50,10 @@ layout is lib/x86; no x64 archive can be substituted. Engine CMake and the
 script compiler select the same ABI. Editor/Hub/compiler stay x64. The release
 workflow embeds the x86 runtime template and publishes a separate x86 Core ZIP.
 The host needs IA32 execution and target libraries for package verification.
+Linux x86 targets require SSE2. The SDK, engine and generated script modules
+compile with -msse2 -mfpmath=sse; this also enables Filament's forced four-wide
+culling loops. The real Culler.cpp is compiled as an optimized precheck before
+the full renderer build, with failed requested optimizations still treated as errors.
 
 ## Pinned dependency compatibility
 

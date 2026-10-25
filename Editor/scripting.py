@@ -182,7 +182,7 @@ class ScriptCompiler:
                 command.extend(["-fPIC",f"-Wl,-rpath,{sdk/'lib'}"])
                 if os.sys.platform!="darwin":
                     command.extend(["-stdlib=libstdc++" if self.Architecture=='x86' else "-stdlib=libc++","-Wl,--no-undefined"])
-                    if self.Architecture=='x86':command.append('-m32')
+                    if self.Architecture=='x86':command.extend(['-m32','-msse2','-mfpmath=sse'])
             process=subprocess.run(command,cwd=self.project,text=True,capture_output=True,encoding="utf-8",errors="replace",creationflags=subprocess.CREATE_NO_WINDOW if os.name=="nt" else 0)
             for line in (process.stdout+"\n"+process.stderr).splitlines():
                 if line.strip():diagnostics.append(Diagnostic("error" if "error:" in line.lower() else "warning" if "warning:" in line.lower() else "info",line.strip()))
