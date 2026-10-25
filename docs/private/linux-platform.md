@@ -76,7 +76,8 @@ compiler diagnostics remain enabled.
 
 libc++ 18 lacks floating-point std::from_chars. Private Utils/NumberParsing.h
 uses native from_chars when available and otherwise parses strict decimal
-numbers through a classic-locale stream. Both paths reject trailing data,
+numbers through strtof_l/strtod_l and an owned C locale. Streams can reject
+valid subnormals when libc sets ERANGE, so do not use num_get here. Both paths reject trailing data,
 nonfinite values and out-of-range results without changing the destination.
 Audio, scenes, GUI fields and CSS use this helper. NumberParsingTests executes
 both paths even on Windows and runs before the full Linux builds.

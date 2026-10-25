@@ -1,8 +1,12 @@
 #pragma once
 #include <charconv>
 #include <cmath>
-#include <locale>
-#include <sstream>
+#include <cerrno>
+#include <cstdlib>
+#include <locale.h>
+#if defined(__APPLE__)
+#include <xlocale.h>
+#endif
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -17,14 +21,32 @@ inline bool IsDecimalNumber(std::string_view text) {
 }
 // libc++ 18 has no floating-point from_chars. Keep the same strict, locale-free
 // decimal input contract without requiring a newer runtime ABI or global locale.
+struct NumberLocale {
+#if defined(_WIN32)
+    _locale_t Value=_create_locale(LC_NUMERIC,"C");
+    ~NumberLocale(){if(Value)_free_locale(Value);}
+#else
+    locale_t Value=newlocale(LC_NUMERIC_MASK,"C",nullptr);
+    ~NumberLocale(){if(Value)freelocale(Value);}
+#endif
+};
 template<class T> bool ParseDecimalFallback(std::string_view text,T& value) {
     static_assert(std::is_floating_point_v<T>);
     if(!IsDecimalNumber(text))return false;
-    T parsed{};std::istringstream input{std::string(text)};input.imbue(std::locale::classic());
-    input>>std::noskipws>>parsed;
-    if(!input||input.peek()!=std::char_traits<char>::eof()||!std::isfinite(parsed))return false;
-    // Some num_get implementations report a rounded-to-zero underflow without
-    // failbit, unlike from_chars. Reject it without rejecting literal zero.
+    static const NumberLocale locale;if(!locale.Value)return false;
+    std::string input(text);char* end=nullptr;const int previousError=errno;errno=0;T parsed{};
+#if defined(_WIN32)
+    if constexpr(std::is_same_v<T,float>)parsed=_strtof_l(input.c_str(),&end,locale.Value);
+    else parsed=static_cast<T>(_strtod_l(input.c_str(),&end,locale.Value));
+#else
+    if constexpr(std::is_same_v<T,float>)parsed=strtof_l(input.c_str(),&end,locale.Value);
+    else if constexpr(std::is_same_v<T,double>)parsed=strtod_l(input.c_str(),&end,locale.Value);
+    else parsed=strtold_l(input.c_str(),&end,locale.Value);
+#endif
+    errno=previousError;
+    if(end!=input.c_str()+input.size()||!std::isfinite(parsed))return false;
+    // ERANGE also reports valid subnormals. Reject only overflow or a nonzero
+    // decimal rounded all the way to zero, preserving representable subnormals.
     if(parsed==T{})for(char c:text){if(c=='e'||c=='E')break;if(c>='1'&&c<='9')return false;}
     value=parsed;return true;
 }

@@ -3,6 +3,8 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <locale>
+#include <sstream>
 
 using Bazzalt::Detail::ParseNumber;
 using Bazzalt::Detail::ParseDecimalFallback;
@@ -19,7 +21,7 @@ template<class T> void FloatingCases(bool fallback) {
     assert(!parse(std::string_view("1\0x",3),value));
     for(T input:{std::numeric_limits<T>::max(),std::numeric_limits<T>::min(),std::numeric_limits<T>::denorm_min(),T(1)/T(3)}) {
         std::ostringstream text;text.imbue(std::locale::classic());text<<std::setprecision(std::numeric_limits<T>::max_digits10)<<input;
-        assert(parse(text.str(),value)&&value==input);
+        const bool accepted=parse(text.str(),value);if(!accepted||value!=input)std::cerr<<"Numeric round-trip failed: "<<text.str()<<" (fallback="<<fallback<<")\n";assert(accepted&&value==input);
     }
 }
 int main(){

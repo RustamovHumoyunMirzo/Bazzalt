@@ -8,7 +8,7 @@ permissions:
   contents: read
 concurrency:
   group: linux-x86-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   runtime:
     runs-on: ubuntu-24.04
@@ -29,7 +29,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang ninja-build pkg-config g++-multilib libssl-dev:i386 libx11-dev:i386 libx11-xcb-dev:i386 libxcb1-dev:i386 libxext-dev:i386 libxrandr-dev:i386 libxcursor-dev:i386 libxi-dev:i386 libxfixes-dev:i386 libxss-dev:i386 libxtst-dev:i386 libgl1-mesa-dev:i386 libvulkan-dev:i386 mesa-vulkan-drivers:i386 xvfb
           python -m pip install -r requirements-build.txt PySide6==6.10.2
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         id: filament
         with:
           path: build/linux32-bootstrap/filament-x86
@@ -43,6 +43,12 @@ jobs:
       - name: Build pinned x86 Filament SDK on CI
         if: steps.filament.outputs.cache-hit != 'true'
         run: sh scripts/build_linux_x86_dependencies.sh
+      - name: Save completed Filament SDK before engine tests
+        if: steps.filament.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: build/linux32-bootstrap/filament-x86
+          key: ${{ steps.filament.outputs.cache-primary-key }}
       - name: Build x86 core, GUI, Lua and player without editor or Python bridge
         run: |
           cmake -S . -B build/linux-x86 -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DBAZZALT_BUILD_EDITOR_BRIDGE=OFF -DBAZZALT_FILAMENT_DIR="$PWD/build/linux32-bootstrap/filament-x86" -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_ASM_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32 -DCMAKE_SHARED_LINKER_FLAGS=-m32 -DCMAKE_LIBRARY_PATH=/usr/lib/i386-linux-gnu -DOPENSSL_CRYPTO_LIBRARY=/usr/lib/i386-linux-gnu/libcrypto.so
