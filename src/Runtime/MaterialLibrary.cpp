@@ -7,6 +7,8 @@
 #include "runtime_unlit_filamat.h"
 #include "runtime_lit_transparent_filamat.h"
 #include "runtime_unlit_transparent_filamat.h"
+#include "runtime_canvas_filamat.h"
+#include "Bazzalt/GUI.h"
 #include <ryml.hpp>
 #include <ryml_std.hpp>
 #include <fstream>
@@ -33,7 +35,7 @@ struct Definition {
     MaterialRenderState State{};
 };
 constexpr std::uint64_t BuiltinShaderNamespace=0xba22a17000000002ULL;
-int PresetIndex(UUID id){return id.GetHigh()==BuiltinShaderNamespace&&id.GetLow()>=1&&id.GetLow()<=4?int(id.GetLow()-1):-1;}
+int PresetIndex(UUID id){return id.GetHigh()==BuiltinShaderNamespace&&id.GetLow()>=1&&id.GetLow()<=5?int(id.GetLow()-1):-1;}
 std::unordered_map<UUID,Definition> Shaders,Materials;
 std::string Read(const std::filesystem::path& path) {
     std::ifstream stream(path,std::ios::binary);return {std::istreambuf_iterator<char>(stream),{}};
@@ -56,10 +58,11 @@ bool ParseValue(ryml::ConstNodeRef node,ShaderParameterType type,Detail::Materia
 Definition* ShaderDefinition(UUID id) {
     Detail::RequireSubsystemService(Detail::SubsystemService::Rendering,"Shader");
     if(const int preset=PresetIndex(id);preset>=0){
-        static std::array<Definition,4> builtins=[](){std::array<Definition,4> values;
-            for(int i=0;i<4;++i){auto& value=values[i];value.Shader=UUID{BuiltinShaderNamespace,std::uint64_t(i+1)};value.Stamp="builtin-runtime-2";
+        static std::array<Definition,5> builtins=[](){std::array<Definition,5> values;
+            for(int i=0;i<5;++i){auto& value=values[i];value.Shader=UUID{BuiltinShaderNamespace,std::uint64_t(i+1)};value.Stamp="builtin-runtime-2";
                 value.Parameters={{"baseColor",ShaderParameterType::Float4},{"emissive",ShaderParameterType::Float3}};
                 Detail::MaterialValue color;std::fill_n(color.Numbers,4,1.f);value.Values["baseColor"]=color;value.Values["emissive"]={};
+                if(i==4){value.Parameters={{"source",ShaderParameterType::Texture2D},{"sourceRect",ShaderParameterType::Float4},{"baseColor",ShaderParameterType::Float4}};value.Values["source"]={};Detail::MaterialValue rect;rect.Numbers[2]=rect.Numbers[3]=1;value.Values["sourceRect"]=rect;}
                 if(i==1||i==3){value.Parameters.push_back({"baseColorTexture",ShaderParameterType::Texture2D});value.Values["baseColorTexture"]={};}
                 if(i==0||i==2){for(auto name:{"roughness","metallic","reflectance"}){value.Parameters.push_back({name,ShaderParameterType::Float});Detail::MaterialValue number;number.Numbers[0]=std::string(name)=="metallic"?0.f:.5f;value.Values[name]=number;}}
             }return values;
@@ -139,14 +142,18 @@ MaterialShaderPackage GetBuiltinMaterialPackage(UUID shader){
     case 1:return {Embedded::RuntimeUnlitFilamat,Embedded::RuntimeUnlitFilamatSize};
     case 2:return {Embedded::RuntimeLitTransparentFilamat,Embedded::RuntimeLitTransparentFilamatSize};
     case 3:return {Embedded::RuntimeUnlitTransparentFilamat,Embedded::RuntimeUnlitTransparentFilamatSize};
+    case 4:return {Embedded::RuntimeCanvasFilamat,Embedded::RuntimeCanvasFilamatSize};
     default:return {};
     }
 }
 }
 
 namespace Bazzalt {
-Shader Shader::Builtin(ShaderPreset preset){const auto value=static_cast<unsigned>(preset);if(value>3)throw std::invalid_argument("Invalid built-in shader preset");return Load({Runtime::BuiltinShaderNamespace,value+1});}
+void CameraPostProcessing::SetMaterial(Material material){if(material.GetAssetUUID()&&!material.IsCanvasCompatible())throw std::invalid_argument("Camera post-processing requires a canvas-compatible material");MaterialAsset=material.GetAssetUUID();}
+Material CameraPostProcessing::GetMaterial()const{return Material::Load(MaterialAsset);}
+Shader Shader::Builtin(ShaderPreset preset){const auto value=static_cast<unsigned>(preset);if(value>4)throw std::invalid_argument("Invalid built-in shader preset");return Load({Runtime::BuiltinShaderNamespace,value+1});}
 Material Material::Create(ShaderPreset preset){return Create(Shader::Builtin(preset));}
+bool Material::IsCanvasCompatible() const {if(!IsValid())return false;bool source=false,rect=false;for(const auto& p:GetParameters()){source|=p.Name=="source"&&p.Type==ShaderParameterType::Texture2D;rect|=p.Name=="sourceRect"&&p.Type==ShaderParameterType::Float4;}return source&&rect;}
 bool Material::IsRuntime() const {auto* definition=Runtime::MaterialDefinition(m_asset);return definition&&definition->Transient;}
 bool Material::Destroy(){auto found=Runtime::Materials.find(m_asset);if(found==Runtime::Materials.end()||!found->second.Transient)return false;Runtime::Materials.erase(found);return true;}
 void Material::SetShader(Shader shader,bool preserve){
@@ -186,9 +193,11 @@ std::size_t Material::ApplyTo(Entity entity,std::size_t slot,bool children) cons
     if(slot!=AllSlots&&slot>=4096)throw std::out_of_range("Material slot exceeds supported range");
     std::vector<Entity> targets{entity};if(children)for(std::size_t i=0;i<targets.size();++i)for(auto child:targets[i].GetChildren())targets.push_back(child);
     for(auto target:targets)if(target.HasComponent<PrimitiveObject>()&&slot!=AllSlots&&slot!=0)throw std::out_of_range("Primitives have only material slot zero");
+    for(auto target:targets)if(target.HasComponent<GuiElement>()&&!IsCanvasCompatible())throw std::invalid_argument("GUI requires a canvas-compatible material");
     std::size_t count=0;for(auto target:targets){bool applied=false;
         if(auto* mesh=target.TryGetComponent<Mesh>()){if(slot==AllSlots)mesh->SetMaterial(*this);else mesh->SetMaterial(slot,*this);applied=true;}
         if(auto* primitive=target.TryGetComponent<PrimitiveObject>()){primitive->SetMaterial(*this);applied=true;}
+        if(auto* gui=target.TryGetComponent<GuiElement>()){gui->SetMaterial(*this);applied=true;}
         if(applied)++count;
     }return count;
 }

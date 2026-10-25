@@ -255,6 +255,10 @@ class AssetBrowserPanel(QWidget):
         while candidate.exists():candidate=candidate.with_name(f"{stem} {number}{suffix}");number+=1
         return candidate
     def _Create(self,kind)->None:
+        if kind=="canvas_material":
+            import json
+            from Editor.materials import CANVAS_SHADER
+            path=self._Unique("New Canvas Material.matinst");path.write_text(json.dumps({"version":1,"shader":CANVAS_SHADER,"properties":{"baseColor":[1,1,1,1]}},indent=2)+"\n",encoding="utf-8");self.Refresh(path);self.Browser.editItem(self.Browser.currentItem());return
         if kind=="css":
             path=self._Unique("New Stylesheet.css");path.write_text('Button {\n    background-color: #30343c;\n    color: white;\n}\n\nButton:hover {\n    background-color: #424a58;\n}\n',encoding="utf-8");self.Refresh(path);self.Browser.editItem(self.Browser.currentItem());return
         if kind in {'subsystem','header'}:
@@ -370,7 +374,7 @@ class AssetBrowserPanel(QWidget):
         if target is not None and widget is self.Browser and not target.isSelected():self.Browser.setCurrentItem(target)
         reveal_paths=[Path(target.data(0,Qt.ItemDataRole.UserRole))] if widget is self.Tree and target is not None else [Path(item.data(Qt.ItemDataRole.UserRole)) for item in self.Browser.selectedItems()]
         tr=self._localization.Translate;menu=QMenu(self);create=menu.addMenu(tr("assets.create"))
-        for key,label in (("folder","assets.folder"),("scene","assets.scene"),("texture","assets.texture"),("audio_mixer","audio.mixer"),("cpp","assets.native_cpp"),("subsystem","subsystems.script"),("header","assets.header"),("lua","assets.lua"),("css","assets.stylesheet"),("shader","assets.shader"),("material","assets.material")):
+        for key,label in (("folder","assets.folder"),("scene","assets.scene"),("texture","assets.texture"),("audio_mixer","audio.mixer"),("cpp","assets.native_cpp"),("subsystem","subsystems.script"),("header","assets.header"),("lua","assets.lua"),("css","assets.stylesheet"),("shader","assets.shader"),("material","assets.material"),("canvas_material","materials.canvas")):
             action=create.addAction(tr(label));action.triggered.connect(lambda _=False,k=key:self._Create(k))
         menu.addAction(tr("assets.import"),self._Import);menu.addSeparator();selected=bool(self.Browser.selectedItems()) if widget is self.Browser else False
         current=Path(self.Browser.currentItem().data(Qt.ItemDataRole.UserRole)) if widget is self.Browser and self.Browser.currentItem() else None

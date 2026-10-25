@@ -1,0 +1,14 @@
+material {
+    name:BazzaltCanvas, shadingModel:unlit, blending:transparent,
+    postLightingBlending:opaque, depthWrite:false, doubleSided:true,
+    parameters:[{type:sampler2d,name:source},{type:float4,name:sourceRect},{type:float4,name:baseColor}],
+    requires:[uv0,color]
+}
+fragment {
+    void material(inout MaterialInputs material){
+        prepareMaterial(material);
+        vec4 color=texture(materialParams_source,uvToRenderTargetUV(materialParams.sourceRect.xy+getUV0()*materialParams.sourceRect.zw));
+        color*=vec4(materialParams.baseColor.rgb*materialParams.baseColor.a,materialParams.baseColor.a)*getColor();
+        material.baseColor=vec4(0.0);material.postLightingColor=color;
+    }
+}

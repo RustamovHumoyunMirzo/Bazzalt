@@ -56,6 +56,12 @@ static void TestLayoutAndInheritance(){
     br.Visible=false;gui.Layout(scene,{400,200});assert(GUI::GetBounds(b).Size.X==0);
     br.Visible=true;group.Layout=GuiLayoutMode::Absolute;group.Padding={};a.GetComponent<RectTransform>().Position={7,9};
     gui.Layout(scene,{400,200});assert(GUI::GetBounds(a).Position.X==7&&GUI::GetBounds(a).Position.Y==9);
+    auto container=scene.CreateEntity("Container");container.SetParent(root,false);auto& containerRect=container.AddComponent<RectTransform>();containerRect.Position={50,30};containerRect.Size={250,150};containerRect.Padding={5,10,15,20};
+    const auto original=GUI::GetBounds(a);assert(a.SetParent(container));auto retained=GUI::GetBounds(a);assert(std::abs(retained.Position.X-original.Position.X)<.01f&&std::abs(retained.Position.Y-original.Position.Y)<.01f&&retained.Size==original.Size);
+    assert(a.SetParent(root));retained=GUI::GetBounds(a);assert(std::abs(retained.Position.X-original.Position.X)<.01f&&std::abs(retained.Position.Y-original.Position.Y)<.01f);assert(!GUI::SetParent(root,a));
+    auto transparent=scene.CreateEntity("Transparent");transparent.SetParent(container,false);assert(a.SetParent(transparent));retained=GUI::GetBounds(a);assert(std::abs(retained.Position.X-original.Position.X)<.01f&&std::abs(retained.Position.Y-original.Position.Y)<.01f);assert(a.SetParent(root));
+    a.GetComponent<RectTransform>().Visible=false;const auto authored=a.GetComponent<RectTransform>().Size;assert(a.SetParent(container));assert(a.GetComponent<RectTransform>().Size==authored);a.GetComponent<RectTransform>().Visible=true;assert(a.SetParent(root));
+    RectTransform centered;centered.SetCentered({120,40});assert(centered.AnchorMin==Vec2(.5f,.5f)&&centered.Pivot==Vec2(.5f,.5f));centered.SetStretch({10,20,30,40});assert(centered.Size==Vec2(-40,-60)&&centered.Position==Vec2(10,20));
     gui.Layout(scene,{});assert(gui.Items.empty()&&GUI::GetBounds(a).Size.X==0); // No stale hit boxes.
     auto& source=root.AddComponent<Rectangle>();source.Style.Color={1,0,0,1};source.Style.Opacity=.6f;
     auto& target=a.AddComponent<Rectangle>();target.Style.Color={0,1,0,1};target.Style.InheritColor=target.Style.InheritOpacity=true;
@@ -123,20 +129,32 @@ static void TestStylesheetsAndFonts(){
         Runtime::RenderBackend backend;assert(backend.Initialize(!gpu));backend.SetGuiScene(&scene);Runtime::GuiRenderer renderer(backend);renderer.PrepareOverlay(scene,{500,200});assert(renderer.GetBatchCount()>0);
         if(gpu){
             auto& graphics=backend.GetEngine();auto& presenter=backend.GetRenderer();auto* swap=graphics.createSwapChain(500u,200u,filament::SwapChain::CONFIG_READABLE);
-            auto cameraEntity=graphics.getEntityManager().create();auto* camera=graphics.createCamera(cameraEntity);auto* clear=graphics.createView();clear->setCamera(camera);clear->setViewport({0,0,500,200});
+            auto cameraEntity=graphics.getEntityManager().create();auto* camera=graphics.createCamera(cameraEntity);auto* clear=graphics.createView();auto* emptyScene=graphics.createScene();clear->setScene(emptyScene);clear->setCamera(camera);clear->setViewport({0,0,500,200});
             for(int warmup=0;warmup<2;++warmup){renderer.PrepareOverlay(scene,{500,200});assert(presenter.beginFrame(swap));presenter.setClearOptions({.clearColor={0,0,0,1},.clear=true});presenter.render(clear);renderer.RenderOverlay(scene,{500,200});presenter.endFrame();graphics.flushAndWait();}
             std::vector<std::uint8_t> pixels(500*200*4);std::atomic<bool> ready=false;
             renderer.PrepareOverlay(scene,{500,200});assert(presenter.beginFrame(swap));presenter.setClearOptions({.clearColor={0,0,0,1},.clear=true});presenter.render(clear);renderer.RenderOverlay(scene,{500,200});
             presenter.readPixels(0,0,500,200,filament::Texture::PixelBufferDescriptor(pixels.data(),pixels.size(),filament::Texture::Format::RGBA,filament::Texture::Type::UBYTE,[](void*,std::size_t,void* user){static_cast<std::atomic<bool>*>(user)->store(true);},&ready));presenter.endFrame();graphics.flushAndWait();assert(ready);
             std::size_t ink=0;for(std::size_t i=0;i<pixels.size();i+=4)if(pixels[i]>150&&pixels[i+2]>150&&pixels[i+1]<80)++ink;assert(ink>20); // Actual FreeType glyph alpha + CSS-inherited magenta color.
             button.GetComponent<GuiText>().Enabled=false;gui.Interactions.clear();
+            filament::math::double4 sceneColor{0,0,0,1};
             const auto drawCss=[&](const std::string& rules){
                 write(css,rules);assert(engine.RefreshAssets());renderer.PrepareOverlay(scene,{500,200});auto* input=renderer.GetSceneInputTarget();clear->setRenderTarget(input);
-                assert(presenter.beginFrame(swap));renderer.RenderSpatialEffects();presenter.setClearOptions({.clearColor={0,0,0,1},.clear=true});presenter.render(clear);clear->setRenderTarget(nullptr);renderer.RenderOverlay(scene,{500,200});
+                assert(presenter.beginFrame(swap));renderer.RenderSpatialEffects();presenter.setClearOptions({.clearColor=sceneColor,.clear=true});presenter.render(clear);clear->setRenderTarget(nullptr);renderer.RenderOverlay(scene,{500,200});
                 ready=false;presenter.readPixels(0,0,500,200,filament::Texture::PixelBufferDescriptor(pixels.data(),pixels.size(),filament::Texture::Format::RGBA,filament::Texture::Type::UBYTE,[](void*,std::size_t,void* user){static_cast<std::atomic<bool>*>(user)->store(true);},&ready));presenter.endFrame();graphics.flushAndWait();assert(ready);
             };
             const auto pixel=[&](int x,int y,int channel){return int(pixels[(y*500+x)*4+channel]);};
             const std::string panel="#play{width:200px;height:100px;left:100px;top:50px;background-color:red;";
+            button.GetComponent<GuiText>().Enabled=true;button.GetComponent<GuiText>().Value="X";
+            drawCss("#play{width:200px;height:100px;left:100px;top:50px;background-color:transparent;color:magenta;font-size:24px;text-align:center;vertical-align:middle;padding:10px}");
+            int left=500,right=0,top=200,bottom=0;for(int y=0;y<200;++y)for(int x=0;x<500;++x)if(pixel(x,y,0)>150&&pixel(x,y,2)>150&&pixel(x,y,1)<80){left=std::min(left,x);right=std::max(right,x);top=std::min(top,y);bottom=std::max(bottom,y);}assert(right>left&&left>175&&right<225&&top>75&&bottom<125);
+            button.GetComponent<GuiText>().Enabled=false;
+            auto canvasMaterial=Material::Create(ShaderPreset::Canvas);assert(canvasMaterial.IsCanvasCompatible());element.SetMaterial(canvasMaterial);canvasMaterial.SetColor("baseColor",{0,1,0,1});
+            drawCss("#play{width:200px;height:100px;left:100px;top:50px;background-color:white}");assert(pixel(200,100,1)>180&&pixel(200,100,0)<40);
+            canvasMaterial.SetColor("baseColor",{0,0,1,1});drawCss("#play{width:200px;height:100px;left:100px;top:50px;background-color:white}");assert(pixel(200,100,2)>180&&pixel(200,100,1)<40);element.MaterialAsset={};
+            auto effectCamera=scene.CreateEntity("Post material camera");auto& postCamera=effectCamera.AddComponent<Camera>();postCamera.PostProcessing.SetMaterial(canvasMaterial);
+            sceneColor={1,1,1,1};frame.Visible=false;drawCss("");assert(renderer.GetSceneInputTarget()!=nullptr);assert(pixel(200,100,2)>180&&pixel(200,100,0)<40);postCamera.Enabled=false;drawCss("");assert(renderer.GetSceneInputTarget()==nullptr);assert(pixel(200,100,0)>180);postCamera.Enabled=true;frame.Visible=true;
+            drawCss(panel+"}");assert(pixel(200,100,0)>180&&pixel(200,100,2)<40); // Camera tint precedes the HUD.
+            scene.DestroyEntity(effectCamera);canvasMaterial.Destroy();sceneColor={0,0,0,1};
             drawCss(panel+"border-radius:30px;border-width:4px 8px 12px 16px;border-color:lime;}");
             assert(pixel(200,100,0)>200&&pixel(200,100,1)<40);assert(pixel(101,51,0)<30);assert(pixel(104,100,1)>180);
             drawCss(panel+"background-image:linear-gradient(to right,red,blue);}");assert(pixel(120,100,0)>pixel(120,100,2)&&pixel(280,100,2)>pixel(280,100,0));
@@ -160,7 +178,7 @@ static void TestStylesheetsAndFonts(){
             assert(presenter.beginFrame(swap));renderer.RenderSpatialEffects();presenter.setClearOptions({.clearColor={0,0,0,1},.clear=true});presenter.render(clear);ready=false;
             presenter.readPixels(0,0,500,200,filament::Texture::PixelBufferDescriptor(pixels.data(),pixels.size(),filament::Texture::Format::RGBA,filament::Texture::Type::UBYTE,[](void*,std::size_t,void* user){static_cast<std::atomic<bool>*>(user)->store(true);},&ready));presenter.endFrame();graphics.flushAndWait();assert(ready);assert(pixel(200,100,1)>150&&pixel(200,100,0)<50);
             frame.Mode=FrameMode::Viewport;
-            renderer.Clear();graphics.destroy(clear);graphics.destroyCameraComponent(cameraEntity);graphics.getEntityManager().destroy(cameraEntity);graphics.destroy(swap);
+            renderer.Clear();graphics.destroy(clear);graphics.destroy(emptyScene);graphics.destroyCameraComponent(cameraEntity);graphics.getEntityManager().destroy(cameraEntity);graphics.destroy(swap);
         }
         renderer.Clear();backend.SetGuiScene(nullptr);
     }

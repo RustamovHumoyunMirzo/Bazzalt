@@ -63,6 +63,9 @@ camera.PostProcessing.DepthOfField.FocusDistance = 5.0f;</code></pre>
 <h2 id="source-contract">Public declarations</h2>
 <p>Header: <code>Bazzalt/Components/Camera.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
 <pre><code class="language-cpp">struct CameraPostProcessing {
+UUID MaterialAsset{};
+BAZZALT_API void SetMaterial(Material material);
+[[nodiscard]] BAZZALT_API Material GetMaterial()const;
 bool Enabled = true;
 bool Bloom = true;
 bool AmbientOcclusion = true;

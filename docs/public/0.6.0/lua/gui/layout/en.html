@@ -66,11 +66,26 @@ box.Style.InheritOpacity = false
 child:SetComponent("Rectangle", box) -- visible opacity becomes 0.5</code></pre>
 <p>Text supports InheritColor, InheritFontSize and InheritWrap directly on GuiText. Image supports InheritColor directly on GuiImage. They inherit only from matching enabled ancestor components within the nearest Frame. GUI.ResolveText(entity) and GUI.ResolveImage(entity) return effective copies, preserving the child's own text or texture source. These functions do not write components.</p>
 <h2 id="reference">Reference</h2>
-<p>Complete fields and bindings: <a href="../../reference/RectTransform/en.html">RectTransform</a>, <a href="../../reference/GuiStyle/en.html">GuiStyle</a>, <a href="../../reference/GuiText/en.html">GuiText</a>, <a href="../../reference/GuiImage/en.html">GuiImage</a>, <a href="../../reference/GUI/en.html">GUI</a>, <a href="../../reference/GuiLayoutMode/en.html">GuiLayoutMode</a>, <a href="../../reference/GuiAlignment/en.html">GuiAlignment</a> and <a href="../../reference/GuiJustify/en.html">GuiJustify</a>. See <a href="../stylesheets/en.html">stylesheet assets</a> and <a href="../fonts/en.html">font assets</a> for scoped CSS, FreeType text and their Lua APIs.</p></article>
+<p>Complete fields and bindings: <a href="../../reference/RectTransform/en.html">RectTransform</a>, <a href="../../reference/GuiStyle/en.html">GuiStyle</a>, <a href="../../reference/GuiText/en.html">GuiText</a>, <a href="../../reference/GuiImage/en.html">GuiImage</a>, <a href="../../reference/GUI/en.html">GUI</a>, <a href="../../reference/GuiLayoutMode/en.html">GuiLayoutMode</a>, <a href="../../reference/GuiAlignment/en.html">GuiAlignment</a> and <a href="../../reference/GuiJustify/en.html">GuiJustify</a>. See <a href="../stylesheets/en.html">stylesheet assets</a> and <a href="../fonts/en.html">font assets</a> for scoped CSS, FreeType text and their Lua APIs.</p><h2 id="alignment-materials">Text alignment and material control</h2>
+<pre><code>local text = entity:GetComponent("GuiText")
+text.HorizontalAlignment = Bazzalt.GuiTextAlignment.Center
+text.VerticalAlignment = Bazzalt.GuiTextAlignment.Center
+entity:SetComponent("GuiText", text)
+local material = Bazzalt.Material.Create(Bazzalt.ShaderPreset.Canvas)
+material:SetColor("baseColor", Bazzalt.Vec4.new(0.5, 1, 1, 1))
+local element = entity:GetComponent("GuiElement")
+element:SetMaterial(material)
+entity:SetComponent("GuiElement", element)
+local view = camera:GetComponent("Camera")
+view.PostProcessing:SetMaterial(material)
+camera:SetComponent("Camera", view)</code></pre>
+<p>GUI components are values in Lua: write modified components back to the entity. Material parameters are shared live state. MaterialIncludesChildren defaults to false; enable it to process a whole GUI subtree together. Camera materials run before screen GUI. Disabled cameras and disabled post-processing skip their material. Use an empty Material to clear an assignment.</p>
+<p>GuiText and GuiTextInput have independent horizontal and vertical Start, Center and End alignment. RectTransform.Padding defines the content box. CSS text-align and vertical-align also apply. RectTransform:SetCentered(size) and SetStretch(insets) configure anchors and offsets. Bazzalt.GUI.SetParent(child, parent, true) preserves screen bounds between absolute GUI containers; flow containers reflow children. Keep widgets under a Frame to render them.</p>
+<p>See the <a href="../../../native/gui/layout/en.html#alignment-materials">C++ layout guide</a> for the custom canvas shader contract, display-space rendering and legacy Frame stylesheet compatibility.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../fonts/en.html"><small>Previous</small>Font assets in Lua</a>
 <a class="next" href="../stylesheets/en.html"><small>Next</small>GUI stylesheets in Lua</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#layout">Create a responsive row</a><a class="toc-link" href="#inherit">Inherit without losing local values</a><a class="toc-link" href="#reference">Reference</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#layout">Create a responsive row</a><a class="toc-link" href="#inherit">Inherit without losing local values</a><a class="toc-link" href="#reference">Reference</a><a class="toc-link" href="#alignment-materials">Text alignment and material control</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

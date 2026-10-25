@@ -77,6 +77,9 @@ class RuntimeGuiTests(unittest.TestCase):
         first=self.Runtime.EntityDetails(selected[-1]);frame=first["parent"]
         self.assertEqual(set(first["components"])&{"RectTransform","Rectangle","GuiText","GuiButton"},{"RectTransform","Rectangle","GuiText","GuiButton"})
         self.assertIn("Frame",self.Runtime.EntityDetails(frame)["components"])
+        self.assertNotIn("Stylesheet",self.Runtime.EntityDetails(frame)["component_data"]["Frame"])
+        self.assertEqual(first["component_data"]["GuiText"]["HorizontalAlignment"],1)
+        self.assertEqual(first["component_data"]["GuiText"]["VerticalAlignment"],1)
         EditorController._CreateGuiEntity(controller,"text_input",selected[-1])
         self.assertEqual(sum("Frame" in row["components"] for row in self.Runtime.Entities()),1)
         self.assertEqual(history.Begin.call_count,2);self.assertEqual(history.Commit.call_count,2);history.Cancel.assert_not_called()

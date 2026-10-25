@@ -2,9 +2,11 @@
 #include "GUI/GuiSerialization.h"
 #include "GUI/GuiAssetImport.h"
 #include <filesystem>
+#include <algorithm>
 #include <stdexcept>
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <windows.h>
 #else
 #include <dlfcn.h>
@@ -64,6 +66,22 @@ namespace { Runtime::GuiSystem* SystemFor(Entity entity){auto* scene=entity.GetS
 GuiInteraction GUI::GetInteraction(Entity entity){auto* system=SystemFor(entity);if(!system)return {};auto it=system->Interactions.find(entity.GetUUID());return it==system->Interactions.end()?GuiInteraction{}:it->second;}
 GuiBounds GUI::GetBounds(Entity entity){auto* system=SystemFor(entity);if(system)for(const auto& item:system->Items)if(item.Owner==entity)return item.Bounds;return {};}
 Entity GUI::GetFrame(Entity entity){auto current=entity.GetParent();for(std::size_t depth=0;current&&depth<128;++depth){if(current.HasComponent<Frame>())return current;current=current.GetParent();}return {};}
+bool GUI::SetParent(Entity child,Entity parent,bool preservePosition){
+    if(!child||!parent||child.GetScene()!=parent.GetScene())return false;
+    auto* scene=child.GetScene();auto* system=SystemFor(child);auto* rect=child.TryGetComponent<RectTransform>();
+    if(!preservePosition)return child.SetParent(parent,false);
+    if(!rect||!system)return child.SetParent(parent,true);
+    system->Layout(*scene,system->PresentationSize);const auto bounds=GetBounds(child);const bool hadBounds=std::any_of(system->Items.begin(),system->Items.end(),[&](const auto& item){return item.Owner==child;});const auto oldFrame=GetFrame(child);const auto newFrame=parent.HasComponent<Frame>()?parent:GetFrame(parent);
+    if(!oldFrame||!newFrame)return child.SetParent(parent,true);
+    const auto world=child.GetWorldMatrix();Mat4 inverse;Transform local;if(!parent.GetWorldMatrix().TryInverse(inverse)||!(inverse*world).Decompose(local.Position,local.Rotation,local.Scale))return false;
+    if(!child.SetParent(parent,false))return false;child.GetComponent<Transform>()=local;
+    system->Layout(*scene,system->PresentationSize);const Runtime::GuiItem* entry=nullptr;for(const auto& item:system->Items)if(item.Owner==child){entry=&item;break;}if(!entry||!hadBounds)return true;
+    GuiBounds content=entry->Surface;Entity container=parent;while(container!=newFrame&&!container.HasComponent<RectTransform>())container=container.GetParent();for(const auto& item:system->Items)if(item.Owner==container){content=item.Bounds;break;}
+    const auto* layout=Runtime::EffectiveGui<RectTransform>(container);if(container==newFrame){auto computed=system->Computed.find(container.GetUUID());if(computed!=system->Computed.end())layout=&computed->second.Rect;}
+    const float scale=entry->Scale;if(layout){content.Position=content.Position+Vec2{layout->Padding.X,layout->Padding.Y}*scale;content.Size={std::max(0.f,content.Size.X-(layout->Padding.X+layout->Padding.Z)*scale),std::max(0.f,content.Size.Y-(layout->Padding.Y+layout->Padding.W)*scale)};if(container==parent&&layout->Layout!=GuiLayoutMode::Absolute){system->Layout(*scene,system->PresentationSize);return true;}}
+    rect->Size={bounds.Size.X/scale-content.Size.X/scale*(rect->AnchorMax.X-rect->AnchorMin.X),bounds.Size.Y/scale-content.Size.Y/scale*(rect->AnchorMax.Y-rect->AnchorMin.Y)};
+    rect->Position={(bounds.Position.X-content.Position.X-content.Size.X*rect->AnchorMin.X+bounds.Size.X*rect->Pivot.X)/scale,(bounds.Position.Y-content.Position.Y-content.Size.Y*rect->AnchorMin.Y+bounds.Size.Y*rect->Pivot.Y)/scale};system->Layout(*scene,system->PresentationSize);return true;
+}
 GuiStyle GUI::ResolveStyle(Entity entity){
     if(auto* system=SystemFor(entity)){auto found=system->Computed.find(entity.GetUUID());if(found!=system->Computed.end())return found->second.Style;}
     auto* local=entity.TryGetComponent<Rectangle>();GuiStyle value=local?local->Style:GuiStyle{};

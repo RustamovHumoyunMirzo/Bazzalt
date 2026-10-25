@@ -32,6 +32,15 @@ class Assets:
     def IsPlaying(self):return False
 
 class MaterialTests(unittest.TestCase):
+    def test_embedded_canvas_material_requires_no_project_shader_or_compiler(self):
+        from Editor.materials import CANVAS_SHADER
+        with tempfile.TemporaryDirectory(dir=ROOT/"build") as folder:
+            assets=Assets(folder);compiler=MaterialCompiler(assets,ROOT)
+            identity=assets.Add("canvas.matinst",json.dumps({"version":1,"shader":CANVAS_SHADER,"properties":{"baseColor":[.2,.4,.6,1]}}))
+            compiler.PrepareMaterial(identity)
+            reflection=compiler.InspectShader(CANVAS_SHADER)
+            self.assertEqual([p["name"] for p in reflection["parameters"] if not p.get("engine_owned")],["baseColor"])
+            self.assertFalse((Path(folder)/"Cache").exists())
     def test_reflect_typed_fields_ignores_fragment_and_comments(self):
         info=Reflect('''// material { fake }
         material { name:"Typed",parameters:[{type:float,name:roughness},{type:float4,name:tint},{type:bool,name:enabled},{type:int,name:count},{type:sampler2d,name:albedo}],requires:[uv0] }

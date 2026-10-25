@@ -1,6 +1,7 @@
 material {
     name : BazzaltGUI,
     shadingModel : unlit,
+    postLightingBlending : opaque,
     blending : transparent,
     depthWrite : false,
     doubleSided : true,
@@ -83,6 +84,6 @@ fragment {
             }
             value.a*=mask;value.rgb*=value.a;
         }
-        material.baseColor=value;
+        material.baseColor=vec4(0.0);material.postLightingColor=value;
     }
 }

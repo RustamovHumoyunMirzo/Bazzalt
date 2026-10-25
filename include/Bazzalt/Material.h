@@ -28,6 +28,7 @@ public:
     [[nodiscard]] static Material Create(Shader shader) { auto* host=Detail::BoundMaterialServices; return Load(host?host->Clone(shader.GetAssetUUID(),true):UUID{}); }
     [[nodiscard]] BAZZALT_API static Material Create(ShaderPreset preset = ShaderPreset::StandardLit);
     [[nodiscard]] BAZZALT_API bool IsRuntime() const;
+    [[nodiscard]] BAZZALT_API bool IsCanvasCompatible() const;
     BAZZALT_API bool Destroy(); // Only transient materials; shared assets are never deleted.
     BAZZALT_API void SetShader(Shader shader, bool preserveProperties = true);
     BAZZALT_API void CopyPropertiesFrom(Material source, bool copyRenderState = true);

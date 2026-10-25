@@ -1,4 +1,5 @@
 #include "Bazzalt/Scene.h"
+#include "Bazzalt/GUI.h"
 #include "GUI/GuiSystem.h"
 
 #include <functional>
@@ -93,6 +94,7 @@ std::size_t Scene::GetEntityCount() const {
 
 bool Scene::SetParent(Entity child, Entity parent, bool worldPositionStays) {
     if (!Owns(child) || !Owns(parent) || child.GetUUID().IsRoot() || child == parent || IsAncestor(child, parent)) return false;
+    if(worldPositionStays&&HasSystem<Runtime::GuiSystem>()&&child.HasComponent<RectTransform>()&&GUI::GetFrame(child)&&(parent.HasComponent<Frame>()||GUI::GetFrame(parent)))return GUI::SetParent(child,parent,true);
     const UUID childUuid = child.GetUUID();
     const UUID parentUuid = parent.GetUUID();
     auto& childHierarchy = child.GetComponent<Hierarchy>();

@@ -6,7 +6,7 @@ FreeType 2.14.3 is pinned by commit in `get_freetype.ps1` / `.sh`, configured by
 `cmake/FreeType.cmake`, and linked privately into `BazzaltGui`. It is not part of
 the public SDK headers. GUI module ABI 3 extends the private dispatch table with
 asset validation, font metadata, measurement, preview and CSS dependency queries.
-GUI ABI 4 additionally supplies private scene-input and spatial-effect rendering hooks.
+GUI ABI 5 additionally supplies private scene-input and spatial-effect rendering hooks.
 Deploy matching core/GUI binaries. Production staging includes FreeType and its
 bundled zlib license notices. Font distribution rights remain the game's concern.
 
@@ -33,7 +33,7 @@ warning icon and inspector; they do not terminate the editor.
 ## Computed styles
 
 `GuiStyles.cpp` builds immutable hierarchy/state snapshots inside each Frame.
-`Frame.Stylesheet` scopes the root sheet. `GuiElement.Stylesheet` adds a subtree
+`GuiElement.Stylesheet` on the Frame entity scopes the root sheet. A child's `GuiElement.Stylesheet` adds a subtree
 scope, represented by a private selector state with unchanged specificity.
 Nested Frames are independent. Metadata includes ID (default entity name),
 Classes, Tags and presence/exact Attributes. Actual input supplies hover, active,
@@ -129,7 +129,7 @@ overlays can read their current world target while writing a separate scratch
 target, then composite back. Spatial Frames render GUI locally and place the
 result on their Frame plane; their backdrop is earlier plane-local GUI, rather
 than an arbitrary camera-dependent world sample. Render spatial plans before
-camera/world views. Core and GUI module must both use ABI 4.
+camera/world views. Core and GUI module must both use ABI 5.
 
 The optional GPU test reads actual border/radius/gradient pixels, invert,
 grayscale, blur, drop-shadow, backdrop, responsive @viewport and spatial effects.

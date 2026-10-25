@@ -6,6 +6,7 @@
 #include "Rendering/RenderBackend.h"
 #include "Rendering/RenderAssets.h"
 #include "Bazzalt/Components/CameraRenderTarget.h"
+#include "Bazzalt/Components/Camera.h"
 #include "gui_filamat.h"
 #include <filament/Engine.h>
 #include <filament/Scene.h>
@@ -40,7 +41,7 @@ struct GuiRendererModule::Impl {
     struct PaintState {int Mode=0;GuiBounds Bounds{};Vec4 RadiusX{},RadiusY{},Widths{};std::array<Vec4,4> BorderColors{};GuiGradient Gradient;GuiFilter Filter;filament::Texture* Original=nullptr;};
     struct Batch {
         filament::Texture* Texture=nullptr;
-        UUID Owner{};PaintState Paint;
+        UUID Owner{},CustomMaterial{};Vec4 SourceRect{0,0,1,1};PaintState Paint;
         std::vector<Vertex> Data;
         utils::Entity Entity;
         filament::MaterialInstance* Material=nullptr;
@@ -59,6 +60,7 @@ struct GuiRendererModule::Impl {
     std::vector<Batch> Spatial;
     std::unordered_map<UUID,Surface> Surfaces;
     std::unordered_map<UUID,Surface> SpatialSurfaces;
+    std::unordered_set<UUID> ReportedMaterials;
     PaintState ActivePaint;bool ForceBatch=false,FlatSpatial=false;
     struct AtlasGlyph {FontGlyph Metrics;Vec4 UV{};bool Baked=false;};
     struct FontPage {
@@ -146,27 +148,27 @@ struct GuiRendererModule::Impl {
         std::vector<std::uint8_t>().swap(glyph.Metrics.Alpha);return page.Glyphs.emplace(index,std::move(glyph)).first->second;
     }
     void FlushFonts(){for(auto& [key,page]:Fonts)if(page->Dirty){auto* copy=new std::vector<std::uint8_t>(page->Pixels);page->Texture->setImage(Engine,0,filament::Texture::PixelBufferDescriptor(copy->data(),copy->size(),filament::Texture::Format::RGBA,filament::Texture::Type::UBYTE,[](void*,std::size_t,void* user){delete static_cast<std::vector<std::uint8_t>*>(user);},copy));page->Dirty=false;}}
-    void Text(std::vector<Batch>& batches,GuiItem item,const std::string& text,float size,Vec4 color,bool wrap,bool spatial,UUID font={},std::uint32_t face=0,float letterSpacing=0,float lineSpacing=1,bool kerning=true){
+    void Text(std::vector<Batch>& batches,GuiItem item,const std::string& text,float size,Vec4 color,bool wrap,bool spatial,UUID font={},std::uint32_t face=0,float letterSpacing=0,float lineSpacing=1,bool kerning=true,GuiTextAlignment horizontal=GuiTextAlignment::Start,GuiTextAlignment vertical=GuiTextAlignment::Start){
         if(!std::isfinite(size)||size<=0)return;
+        if(const auto* rect=EffectiveGui<RectTransform>(item.Owner)){const auto p=rect->Padding*item.Scale;item.Bounds.Position=item.Bounds.Position+Vec2{p.X,p.Y};item.Bounds.Size={std::max(0.f,item.Bounds.Size.X-p.X-p.Z),std::max(0.f,item.Bounds.Size.Y-p.Y-p.W)};item.Clip=Intersect(item.Clip,item.Bounds);}
         if(auto* page=FontAtlas(font,face,std::uint32_t(std::ceil(std::clamp(size*item.Scale,1.f,512.f))))){
             const auto shaped=page->Face.Layout(text,wrap?item.Bounds.Size.X:0,letterSpacing*item.Scale,lineSpacing,kerning);
             for(const auto& placed:shaped.Glyphs){
                 if(placed.Y>=item.Bounds.Size.Y)continue;
                 const auto& glyph=Glyph(*page,placed.Index);
-                const float x=item.Bounds.Position.X+placed.X,y=item.Bounds.Position.Y+placed.Y;
+                const auto align=[](GuiTextAlignment a,float remaining){return std::max(0.f,remaining)*(a==GuiTextAlignment::Center?.5f:a==GuiTextAlignment::End?1.f:0.f);};
+                const float x=item.Bounds.Position.X+placed.X+align(horizontal,item.Bounds.Size.X-shaped.LineWidths[placed.Line]),y=item.Bounds.Position.Y+placed.Y+align(vertical,item.Bounds.Size.Y-shaped.Size.Y);
                 if(glyph.Baked)Quad(batches,item,{{x+glyph.Metrics.Left,y+page->Face.GetAscender()-glyph.Metrics.Top},{float(glyph.Metrics.Width),float(glyph.Metrics.Height)}},color,page->Texture,glyph.UV,spatial);
                 else Quad(batches,item,{{x,y},{size*.625f*item.Scale,size*.875f*item.Scale}},color,Atlas,{120.f/128,56.f/64,125.f/128,63.f/64},spatial);
             }return;
         }
-        if(!std::isfinite(size)||size<=0)return;size=std::clamp(size*item.Scale,1.f,512.f);const float advance=size*.75f;
-        float x=item.Bounds.Position.X,y=item.Bounds.Position.Y;
-        for(std::size_t offset=0;offset<text.size();){unsigned char c=text[offset++];if((c&0x80)!=0){while(offset<text.size()&&(static_cast<unsigned char>(text[offset])&0xc0)==0x80)++offset;c=127;}
-            if(c=='\n'){x=item.Bounds.Position.X;y+=size;continue;}if(c<32)continue;
-            if(wrap&&x+advance>item.Bounds.Position.X+item.Bounds.Size.X&&x>item.Bounds.Position.X){x=item.Bounds.Position.X;y+=size;}
-            if(y>=item.Bounds.Position.Y+item.Bounds.Size.Y)break;
-            if(c!=' ')Quad(batches,item,{{x,y},{size*.625f,size*.875f}},color,Atlas,{float((c%16)*8)/128,float((c/16)*8)/64,float((c%16)*8+5)/128,float((c/16)*8+7)/64},spatial);
-            x+=advance;
-        }
+        if(!std::isfinite(size)||size<=0)return;size=std::clamp(size*item.Scale,1.f,512.f);const float advance=std::max(.01f,size*.75f+letterSpacing*item.Scale),lineHeight=size*std::clamp(lineSpacing,.1f,10.f);
+        std::vector<std::string> lines(1);const auto capacity=std::max(1,int(item.Bounds.Size.X/advance));
+        for(std::size_t offset=0;offset<text.size();){unsigned char c=text[offset++];if(c&0x80){while(offset<text.size()&&(static_cast<unsigned char>(text[offset])&0xc0)==0x80)++offset;c=127;}if(c=='\n'){lines.emplace_back();continue;}if(c<32)continue;if(wrap&&lines.back().size()>=capacity)lines.emplace_back();lines.back()+=char(c);}
+        const auto align=[](GuiTextAlignment a,float remaining){return std::max(0.f,remaining)*(a==GuiTextAlignment::Center?.5f:a==GuiTextAlignment::End?1.f:0.f);};
+        float y=item.Bounds.Position.Y+align(vertical,item.Bounds.Size.Y-lines.size()*lineHeight);
+        for(const auto& line:lines){float x=item.Bounds.Position.X+align(horizontal,item.Bounds.Size.X-line.size()*advance);for(unsigned char c:line){if(c!=' ')Quad(batches,item,{{x,y},{size*.625f,size*.875f}},color,Atlas,{float((c%16)*8)/128,float((c/16)*8)/64,float((c%16)*8+5)/128,float((c/16)*8+7)/64},spatial);x+=advance;}y+=lineHeight;if(y>=item.Bounds.Position.Y+item.Bounds.Size.Y)break;}
+
     }
     void Build(Bazzalt::Scene& scene,std::vector<Batch>& output,bool spatial,UUID camera={}){
         UsedFonts.clear();
@@ -176,7 +178,7 @@ struct GuiRendererModule::Impl {
             const auto& frame=item.Root.GetComponent<Frame>();
             if(camera&&(frame.Mode!=FrameMode::CameraBound||frame.Camera!=camera))continue;
             if(!camera&&!spatial&&frame.Mode==FrameMode::CameraBound){const auto owner=scene.GetEntity(frame.Camera);const auto* source=owner.TryGetComponent<Camera>();const auto* target=owner.TryGetComponent<CameraRenderTarget>();if((source&&source->RenderTarget)||(target&&target->Enabled))continue;}
-            if(std::none_of(output.begin(),output.end(),[&](const Batch& b){return b.Owner==item.Root.GetUUID();})){auto computed=system.Computed.find(item.Root.GetUUID());if(computed!=system.Computed.end()&&(!computed->second.Paint.Filters.empty()||!computed->second.Paint.Backdrop.empty())){Batch marker;marker.Texture=Atlas;marker.Owner=item.Root.GetUUID();output.push_back(std::move(marker));}}
+            if(std::none_of(output.begin(),output.end(),[&](const Batch& b){return b.Owner==item.Root.GetUUID();})){auto computed=system.Computed.find(item.Root.GetUUID());const auto* element=EffectiveGui<GuiElement>(item.Root);if((element&&element->Enabled&&element->MaterialAsset&&element->MaterialIncludesChildren)||(computed!=system.Computed.end()&&(!computed->second.Paint.Filters.empty()||!computed->second.Paint.Backdrop.empty()))){Batch marker;marker.Texture=Atlas;marker.Owner=item.Root.GetUUID();output.push_back(std::move(marker));}}
             const auto state=GUI::GetInteraction(item.Owner);auto bounds=item.Bounds;
             const auto computed=system.Computed.find(item.Owner.GetUUID());
             GuiPaint paint;if(computed!=system.Computed.end())paint=computed->second.Paint;
@@ -205,9 +207,9 @@ struct GuiRendererModule::Impl {
             ActivePaint.RadiusX=ActivePaint.RadiusY={};
             if(const auto* text=item.Owner.TryGetComponent<GuiText>();text&&text->Enabled){
                 auto clipped=item;clipped.Clip=Intersect(item.Clip,item.Bounds);
-                auto resolved=GUI::ResolveText(item.Owner);if(computed!=system.Computed.end()&&computed->second.Cascade.Properties.contains("opacity"))resolved.Color.W*=computed->second.Style.Opacity;Text(output,clipped,text->Value,resolved.FontSize,resolved.Color,resolved.Wrap,spatial,resolved.Font,resolved.FontFace,resolved.LetterSpacing,resolved.LineSpacing,resolved.Kerning);
+                auto resolved=GUI::ResolveText(item.Owner);if(computed!=system.Computed.end()&&computed->second.Cascade.Properties.contains("opacity"))resolved.Color.W*=computed->second.Style.Opacity;Text(output,clipped,text->Value,resolved.FontSize,resolved.Color,resolved.Wrap,spatial,resolved.Font,resolved.FontFace,resolved.LetterSpacing,resolved.LineSpacing,resolved.Kerning,resolved.HorizontalAlignment,resolved.VerticalAlignment);
             }
-            if(const auto* input=EffectiveGui<GuiTextInput>(item.Owner);input&&input->Enabled){auto clipped=item;clipped.Clip=Intersect(item.Clip,item.Bounds);const auto& local=item.Owner.GetComponent<GuiTextInput>();std::string value=local.Value.empty()?local.Placeholder:local.Value;if(input->Password&&!local.Value.empty()){value.clear();for(unsigned char c:local.Value)if((c&0xc0)!=0x80)value+='*';}Vec4 color=computed!=system.Computed.end()?computed->second.Text.Color:Vec4{1,1,1,1};if(local.Value.empty())color.W*=.5f;if(computed!=system.Computed.end()&&computed->second.Cascade.Properties.contains("opacity"))color.W*=computed->second.Style.Opacity;Text(output,clipped,value,input->FontSize,color,false,spatial,input->Font,input->FontFace);}
+            if(const auto* input=EffectiveGui<GuiTextInput>(item.Owner);input&&input->Enabled){auto clipped=item;clipped.Clip=Intersect(item.Clip,item.Bounds);const auto& local=item.Owner.GetComponent<GuiTextInput>();std::string value=local.Value.empty()?local.Placeholder:local.Value;if(input->Password&&!local.Value.empty()){value.clear();for(unsigned char c:local.Value)if((c&0xc0)!=0x80)value+='*';}Vec4 color=computed!=system.Computed.end()?computed->second.Text.Color:Vec4{1,1,1,1};if(local.Value.empty())color.W*=.5f;if(computed!=system.Computed.end()&&computed->second.Cascade.Properties.contains("opacity"))color.W*=computed->second.Style.Opacity;Text(output,clipped,value,input->FontSize,color,false,spatial,input->Font,input->FontFace,0,1,true,input->HorizontalAlignment,input->VerticalAlignment);}
             if(output.empty()||output.back().Owner!=item.Owner.GetUUID()){Batch marker;marker.Texture=Atlas;marker.Owner=item.Owner.GetUUID();output.push_back(std::move(marker));}
         }
         FlushFonts();
@@ -248,16 +250,28 @@ struct GuiRendererModule::Impl {
         if(!filters.empty()&&input.Color==initial){auto next=NewCanvas(surface);PaintState copy;copy.Mode=2;Pass(surface,next,TextureQuad(item,input.Color,{{0,0},surface.Size},copy,surface.Size),true);input=next;}
         return input;
     }
-    bool PrepareEffects(Surface& surface,Bazzalt::Scene& scene,Vec2 size,std::vector<Batch>& data,filament::RenderTarget* target,bool spatial=false,Entity spatialRoot={}){
+    Canvas ApplyCanvasMaterial(Surface& surface,GuiItem item,Canvas input,UUID material){
+        if(!material)return input;
+        auto* validation=Backend.GetAssets().CreateCanvasMaterial(material);if(!validation){if(ReportedMaterials.size()>=128)ReportedMaterials.clear();if(ReportedMaterials.insert(material).second)Console::Warning("Canvas material is unavailable or is not an unlit surface shader with source/sourceRect and compatible vertex attributes: "+material.ToString(),"GUI");return input;}Engine.destroy(validation);ReportedMaterials.erase(material);
+        auto output=NewCanvas(surface);PaintState paint;paint.Mode=2;auto batches=TextureQuad(item,input.Color,item.Bounds,paint,surface.Size);
+        for(auto& batch:batches){batch.CustomMaterial=material;batch.SourceRect={item.Bounds.Position.X/surface.Size.X,item.Bounds.Position.Y/surface.Size.Y,item.Bounds.Size.X/surface.Size.X,item.Bounds.Size.Y/surface.Size.Y};for(auto& vertex:batch.Data){vertex.U=vertex.LX;vertex.V=vertex.LY;}}
+        Pass(surface,output,std::move(batches),true);return output;
+    }
+    bool PrepareEffects(Surface& surface,Bazzalt::Scene& scene,Vec2 size,std::vector<Batch>& data,filament::RenderTarget* target,bool spatial=false,Entity spatialRoot={},UUID cameraId={}){
         auto& system=scene.GetSystem<GuiSystem>();std::map<UUID,GuiItem> items;std::map<UUID,GuiPaint> paints;std::vector<UUID> order;std::size_t estimate=0;bool effects=false,backdrop=false;
         for(const auto& batch:data)if(batch.Owner&&!items.contains(batch.Owner)){
             auto found=std::find_if(system.Items.begin(),system.Items.end(),[&](const GuiItem& item){return item.Owner.GetUUID()==batch.Owner||item.Root.GetUUID()==batch.Owner;});if(found==system.Items.end())continue;
             auto entry=*found;if(entry.Owner.GetUUID()!=batch.Owner){entry.Owner=entry.Root;entry.Bounds=entry.Clip=entry.Surface;}
             items[batch.Owner]=entry;order.push_back(batch.Owner);auto computed=system.Computed.find(batch.Owner);GuiPaint paint;if(computed!=system.Computed.end())paint=computed->second.Paint;
             const auto* rect=EffectiveGui<RectTransform>(entry.Owner);const bool clip=paint.HasRadius&&rect&&rect->ClipChildren;
+            if(const auto* element=EffectiveGui<GuiElement>(entry.Owner);element&&element->Enabled&&element->MaterialAsset){effects=true;estimate+=2;}
             if(!paint.Filters.empty()||!paint.Backdrop.empty()||clip){effects=true;if(!paint.Filters.empty()||clip)++estimate;const auto cost=[](const GuiFilter& filter){return filter.Kind==9?(filter.Amount>0?2u:1u):filter.Kind==10?(filter.Amount>0?3u:1u):1u;};for(const auto& filter:paint.Filters)estimate+=cost(filter);for(const auto& filter:paint.Backdrop)estimate+=cost(filter);}backdrop|=!paint.Backdrop.empty();paints[batch.Owner]=std::move(paint);
         }
-        if(!effects||order.empty()){if(surface.Effects){ClearSurface(surface);InitSurface(surface);}surface.Effects=false;surface.SceneInput=nullptr;surface.SceneClear=nullptr;return false;}
+        std::vector<Entity> cameras;
+        if(!spatial)for(auto handle:scene.GetRegistry().view<Bazzalt::Camera>()){auto entity=scene.GetEntity(static_cast<Entity::Id>(handle));const auto& camera=entity.GetComponent<Bazzalt::Camera>();if(!camera.Enabled||!camera.Active||!camera.PostProcessing.Enabled||!camera.PostProcessing.MaterialAsset)continue;if(cameraId?entity.GetUUID()!=cameraId:bool(camera.RenderTarget)||entity.HasComponent<CameraRenderTarget>())continue;cameras.push_back(entity);}
+        std::stable_sort(cameras.begin(),cameras.end(),[](Entity a,Entity b){return a.GetComponent<Bazzalt::Camera>().Priority<b.GetComponent<Bazzalt::Camera>().Priority;});
+        if(!cameras.empty()){effects=true;backdrop=true;estimate+=cameras.size()*2;}
+        if(!effects||(order.empty()&&cameras.empty())){if(surface.Effects){ClearSurface(surface);InitSurface(surface);}surface.Effects=false;surface.SceneInput=nullptr;surface.SceneClear=nullptr;return false;}
         if(!std::isfinite(size.X)||!std::isfinite(size.Y)||size.X<1||size.Y<1||size.X>16384||size.Y>16384||double(size.X)*size.Y>33554432){
             const std::string warning="GUI CSS effect destination exceeds the 16384-edge / 32M-pixel safety limit";if(system.StyleDiagnostics.size()<64)system.StyleDiagnostics.push_back(warning);if(!surface.ReportedFailure)Console::Warning(warning,"GUI");surface.ReportedFailure=true;surface.Failed=true;surface.Plan.clear();surface.SceneInput=nullptr;surface.SceneClear=nullptr;return true;
         }
@@ -266,14 +280,16 @@ struct GuiRendererModule::Impl {
         if(surface.RasterSize.X!=raster.X||surface.RasterSize.Y!=raster.Y||surface.Size.X!=size.X||surface.Size.Y!=size.Y){ClearSurface(surface);InitSurface(surface);}
         surface.Size=size;surface.RasterSize=raster;surface.Effects=true;surface.SceneInput=nullptr;surface.PassCount=surface.CanvasCount=0;surface.Plan.clear();surface.Failed=false;surface.SceneClear=nullptr;
         std::map<UUID,std::vector<Batch>> groups;for(auto& batch:data)groups[batch.Owner].push_back(std::move(batch));
-        auto item=items.at(order[0]);item.Clip={{0,0},size};item.Scale=1;
+        GuiItem item;if(!order.empty())item=items.at(order[0]);else{item.Owner=item.Root=cameras.front();item.Bounds=item.Surface={{0,0},size};}item.Clip={{0,0},size};item.Scale=1;
         const auto fullCanvas=[&](Canvas& canvas){if(!canvas.Color){canvas.Color=filament::Texture::Builder().width(std::uint32_t(size.X)).height(std::uint32_t(size.Y)).levels(1).sampler(filament::Texture::Sampler::SAMPLER_2D).format(filament::Texture::InternalFormat::RGBA8).usage(filament::Texture::Usage::COLOR_ATTACHMENT|filament::Texture::Usage::SAMPLEABLE).build(Engine);canvas.Target=filament::RenderTarget::Builder().texture(filament::RenderTarget::AttachmentPoint::COLOR,canvas.Color).build(Engine);}return canvas;};
         auto base=fullCanvas(surface.Base);std::vector<Batch> initial;
         if(backdrop&&!spatial){filament::Texture* source=nullptr;if(target)source=const_cast<filament::Texture*>(target->getTexture(filament::RenderTarget::AttachmentPoint::COLOR));else {fullCanvas(surface.Input);source=surface.Input.Color;surface.SceneInput=surface.Input.Target;Pass(surface,surface.Input,{},true);surface.SceneClear=surface.Plan.back().first;surface.SceneClear->View->setViewport({0,0,std::uint32_t(size.X),std::uint32_t(size.Y)});surface.Plan.pop_back();}PaintState paint;paint.Mode=2;initial=TextureQuad(item,source,{{0,0},size},paint,size);}
         Pass(surface,base,std::move(initial),true);
+        for(auto cameraEntity:cameras){const auto& camera=cameraEntity.GetComponent<Bazzalt::Camera>();auto region=item;region.Owner=cameraEntity;region.Bounds=cameraId?GuiBounds{{0,0},size}:GuiBounds{{camera.Viewport.X*size.X,(1-camera.Viewport.Y-camera.Viewport.Height)*size.Y},{camera.Viewport.Width*size.X,camera.Viewport.Height*size.Y}};region.Clip={{0,0},size};auto filtered=ApplyCanvasMaterial(surface,region,base,camera.PostProcessing.MaterialAsset);if(filtered.Color!=base.Color){PaintState mask;mask.Mode=3;Pass(surface,base,TextureQuad(region,filtered.Color,region.Bounds,mask,size),false);}}
+
         const auto descendant=[&](UUID identity,UUID parent){for(auto e=scene.GetEntity(identity);e;e=e.GetParent()){if(e.GetUUID()==parent)return true;if(e.HasComponent<Frame>())break;}return false;};
         const auto clips=[&](UUID identity){const auto* rect=EffectiveGui<RectTransform>(items.at(identity).Owner);return rect&&rect->ClipChildren;};
-        const auto grouped=[&](UUID identity){const auto& p=paints.at(identity);return !p.Filters.empty()||(p.HasRadius&&clips(identity));};
+        const auto grouped=[&](UUID identity){const auto& p=paints.at(identity);const auto* element=EffectiveGui<GuiElement>(items.at(identity).Owner);return !p.Filters.empty()||(p.HasRadius&&clips(identity))||(element&&element->Enabled&&element->MaterialAsset&&element->MaterialIncludesChildren);};
         std::function<void(Canvas,const std::vector<UUID>&,UUID,unsigned)> render;
         render=[&](Canvas destination,const std::vector<UUID>& list,UUID context,unsigned depth){
             if(depth>16){surface.Failed=true;return;}std::set<UUID> done;std::vector<Batch> pending;
@@ -282,10 +298,12 @@ struct GuiRendererModule::Impl {
                 if(group){flush();std::vector<UUID> members;for(auto candidate:list)if(descendant(candidate,group)){members.push_back(candidate);done.insert(candidate);}auto isolated=NewCanvas(surface);Pass(surface,isolated,{},true);
                     const auto& p=paints.at(group);auto owner=items.at(group);
                     if(!p.Backdrop.empty()){auto filtered=FilterChain(surface,owner,destination,p.Backdrop);PaintState mask;mask.Mode=3;mask.RadiusX=p.RadiusX*owner.Scale;mask.RadiusY=p.RadiusY*owner.Scale;Pass(surface,isolated,TextureQuad(owner,filtered.Color,owner.Bounds,mask,size),false);}
-                    render(isolated,members,group,depth+1);auto filtered=FilterChain(surface,owner,isolated,p.Filters);PaintState mask;mask.Mode=3;GuiBounds rect{{0,0},size};if(clips(group)){rect=owner.Bounds;mask.RadiusX=p.RadiusX*owner.Scale;mask.RadiusY=p.RadiusY*owner.Scale;}Pass(surface,destination,TextureQuad(owner,filtered.Color,rect,mask,size),false);
+                    render(isolated,members,group,depth+1);const auto* element=EffectiveGui<GuiElement>(owner.Owner);if(element&&element->Enabled&&element->MaterialIncludesChildren)isolated=ApplyCanvasMaterial(surface,owner,isolated,element->MaterialAsset);auto filtered=FilterChain(surface,owner,isolated,p.Filters);PaintState mask;mask.Mode=3;GuiBounds rect{{0,0},size};if(clips(group)){rect=owner.Bounds;mask.RadiusX=p.RadiusX*owner.Scale;mask.RadiusY=p.RadiusY*owner.Scale;}Pass(surface,destination,TextureQuad(owner,filtered.Color,rect,mask,size),false);
                 }else {const auto& p=paints.at(identity);auto owner=items.at(identity);
                     if(identity!=context&&!p.Backdrop.empty()){flush();auto filtered=FilterChain(surface,owner,destination,p.Backdrop);PaintState mask;mask.Mode=3;mask.RadiusX=p.RadiusX*owner.Scale;mask.RadiusY=p.RadiusY*owner.Scale;Pass(surface,destination,TextureQuad(owner,filtered.Color,owner.Bounds,mask,size),false);}
-                    auto found=groups.find(identity);if(found!=groups.end())for(auto& batch:found->second)pending.push_back(std::move(batch));done.insert(identity);
+                    auto found=groups.find(identity);const auto* element=EffectiveGui<GuiElement>(owner.Owner);
+                    if(found!=groups.end()&&element&&element->Enabled&&element->MaterialAsset&&!element->MaterialIncludesChildren){flush();auto isolated=NewCanvas(surface);Pass(surface,isolated,std::move(found->second),true);auto filtered=ApplyCanvasMaterial(surface,owner,isolated,element->MaterialAsset);PaintState mask;mask.Mode=3;Pass(surface,destination,TextureQuad(owner,filtered.Color,owner.Bounds,mask,size),false);}
+                    else if(found!=groups.end())for(auto& batch:found->second)pending.push_back(std::move(batch));done.insert(identity);
                 }if(surface.Failed)return;
             }flush();
         };
@@ -302,7 +320,9 @@ struct GuiRendererModule::Impl {
         while(cache.size()<generated.size()){Batch b;b.Entity=Engine.getEntityManager().create();Engine.getTransformManager().create(b.Entity);b.Material=Material->createInstance();b.Material->setDepthCulling(spatial);cache.push_back(std::move(b));}
         auto& manager=Engine.getRenderableManager();
         for(std::size_t i=0;i<generated.size();++i){auto& b=cache[i];auto& data=generated[i].Data;const auto count=static_cast<std::uint32_t>(data.size());if(!count){scene.remove(b.Entity);continue;}
-            b.Material->setParameter("image",generated[i].Texture,Backend.GetAssets().GetTextureSampler(generated[i].Texture));b.Texture=generated[i].Texture;
+            if(b.CustomMaterial!=generated[i].CustomMaterial){auto* previous=b.Material;b.CustomMaterial=generated[i].CustomMaterial;b.Material=b.CustomMaterial?Backend.GetAssets().CreateCanvasMaterial(b.CustomMaterial):nullptr;if(!b.Material){b.CustomMaterial={};b.Material=Material->createInstance();}if(manager.hasComponent(b.Entity))manager.setMaterialInstanceAt(manager.getInstance(b.Entity),0,b.Material);if(previous)Engine.destroy(previous);}
+            if(b.CustomMaterial&&!Backend.GetAssets().UpdateCanvasMaterial(b.Material,b.CustomMaterial,generated[i].Texture,generated[i].SourceRect)){auto* replacement=Backend.GetAssets().CreateCanvasMaterial(b.CustomMaterial);if(replacement){auto* previous=b.Material;b.Material=replacement;Backend.GetAssets().UpdateCanvasMaterial(b.Material,b.CustomMaterial,generated[i].Texture,generated[i].SourceRect);if(manager.hasComponent(b.Entity))manager.setMaterialInstanceAt(manager.getInstance(b.Entity),0,b.Material);Engine.destroy(previous);}}
+            if(!b.CustomMaterial){b.Material->setParameter("image",generated[i].Texture,Backend.GetAssets().GetTextureSampler(generated[i].Texture));b.Texture=generated[i].Texture;
             const auto& paint=generated[i].Paint;auto f4=[](Vec4 v){return filament::math::float4{v.X,v.Y,v.Z,v.W};};
             b.Material->setParameter("original",paint.Original?paint.Original:generated[i].Texture,Backend.GetAssets().GetTextureSampler(paint.Original?paint.Original:generated[i].Texture));
             b.Material->setParameter("mode",float(paint.Mode));b.Material->setParameter("panelSize",filament::math::float2{paint.Bounds.Size.X,paint.Bounds.Size.Y});
@@ -311,7 +331,7 @@ struct GuiRendererModule::Impl {
             const auto& gradient=paint.Gradient;b.Material->setParameter("gradient",filament::math::float4{float(gradient.Kind),gradient.Angle*3.14159265f/180,float(gradient.Count),gradient.Repeat?1.f:0.f});
             b.Material->setParameter("gradientGeometry",filament::math::float4{gradient.Center.X,gradient.Center.Y,gradient.Radius.X,gradient.Radius.Y});
             std::array<filament::math::float4,8> colors;for(int j=0;j<8;++j)colors[j]=f4(gradient.Colors[j]);b.Material->setParameter("stopColors",colors.data(),colors.size());b.Material->setParameter("stopPositions",gradient.Stops.data(),gradient.Stops.size());
-            b.Material->setParameter("effect",filament::math::float4{float(paint.Filter.Kind),paint.Filter.Amount,paint.Filter.Offset.X,paint.Filter.Offset.Y});b.Material->setParameter("effectColor",f4(paint.Filter.Color));
+            b.Material->setParameter("effect",filament::math::float4{float(paint.Filter.Kind),paint.Filter.Amount,paint.Filter.Offset.X,paint.Filter.Offset.Y});b.Material->setParameter("effectColor",f4(paint.Filter.Color));}
             if(b.Capacity<count){manager.destroy(b.Entity);if(b.Vertices)Engine.destroy(b.Vertices);if(b.Indices)Engine.destroy(b.Indices);b.Capacity=std::max<std::size_t>(64,count*2);
                 b.Vertices=filament::VertexBuffer::Builder().vertexCount(static_cast<std::uint32_t>(b.Capacity)).bufferCount(1)
                     .attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3,0,sizeof(Vertex))
@@ -359,7 +379,7 @@ void GuiRendererModule::RenderCameraOverlay(Bazzalt::Scene& scene,UUID camera,Ve
 }
 void GuiRendererModule::PrepareOverlay(Bazzalt::Scene& scene,Vec2 size,UUID camera,filament::RenderTarget* target){
     auto& system=scene.GetSystem<GuiSystem>();system.Layout(scene,size);std::vector<Impl::Batch> data;m_impl->Build(scene,data,false,camera);
-    auto& s=m_impl->GetSurface(camera);m_impl->PrepareEffects(s,scene,size,data,target);if(s.Failed){data.clear();m_impl->Build(scene,data,false,camera);s.Plan.clear();s.SceneInput=nullptr;s.Effects=false;}m_impl->Upload(s.Batches,data,*s.Scene,false);
+    auto& s=m_impl->GetSurface(camera);m_impl->PrepareEffects(s,scene,size,data,target,false,{},camera);if(s.Failed){data.clear();m_impl->Build(scene,data,false,camera);s.Plan.clear();s.SceneInput=nullptr;s.Effects=false;}m_impl->Upload(s.Batches,data,*s.Scene,false);
     s.Camera->setProjection(filament::Camera::Projection::ORTHO,0,size.X,-size.Y,0,.1,10);s.View->setViewport({0,0,static_cast<std::uint32_t>(size.X),static_cast<std::uint32_t>(size.Y)});s.View->setRenderTarget(target);
 }
 }

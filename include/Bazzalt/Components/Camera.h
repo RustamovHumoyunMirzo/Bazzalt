@@ -7,8 +7,10 @@
 #include "Bazzalt/Math.h"
 #include "Bazzalt/PostProcessing.h"
 #include "Bazzalt/Texture.h"
+#include "Bazzalt/Export.h"
 
 namespace Bazzalt {
+class Material;
 
 enum class CameraProjection { Perspective, Orthographic };
 enum class CameraAspectMode { Automatic, Fixed };
@@ -48,6 +50,9 @@ struct CameraViewport {
 };
 
 struct CameraPostProcessing {
+    UUID MaterialAsset{};
+    BAZZALT_API void SetMaterial(Material material);
+    [[nodiscard]] BAZZALT_API Material GetMaterial()const;
     bool Enabled = true;
     bool Bloom = true;
     bool AmbientOcclusion = true;

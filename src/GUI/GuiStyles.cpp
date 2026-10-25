@@ -58,6 +58,8 @@ void Apply(GuiComputed& value,const GuiComputed* parent){
             else if(name=="letter-spacing")text.LetterSpacing=source.Text.LetterSpacing;
             else if(name=="line-height")text.LineSpacing=source.Text.LineSpacing;
             else if(name=="white-space")text.Wrap=source.Text.Wrap;
+            else if(name=="text-align"){text.HorizontalAlignment=source.Text.HorizontalAlignment;value.Input.HorizontalAlignment=source.Input.HorizontalAlignment;}
+            else if(name=="vertical-align"){text.VerticalAlignment=source.Text.VerticalAlignment;value.Input.VerticalAlignment=source.Input.VerticalAlignment;}
             else if(name=="pointer-events")value.PointerEvents=source.PointerEvents;
             else if(name=="gap")value.Rect.Gap=source.Rect.Gap;
             else if(name=="padding")value.Rect.Padding=source.Rect.Padding;
@@ -101,6 +103,7 @@ void Apply(GuiComputed& value,const GuiComputed* parent){
         else if(name=="letter-spacing"){if(auto n=CSS::ResolveLength(data,value.Context);n&&std::fabs(*n)<=1000)text.LetterSpacing=float(*n);}
         else if(name=="line-height"){auto n=CSS::ResolveLength(data,value.Context);if(n&&*n>0&&*n<=512)text.LineSpacing=float(data.Tokens.size()==1&&data.Tokens[0].Kind==CSS::TokenKind::Number?*n:*n/text.FontSize);}
         else if(name=="white-space"&&keyword)text.Wrap=*keyword!="nowrap"&&*keyword!="pre";
+        else if((name=="text-align"||name=="vertical-align")&&keyword){const auto a=*keyword=="center"||*keyword=="middle"?GuiTextAlignment::Center:*keyword=="right"||*keyword=="bottom"||*keyword=="end"?GuiTextAlignment::End:GuiTextAlignment::Start;if(name=="text-align"){text.HorizontalAlignment=a;value.Input.HorizontalAlignment=a;}else{text.VerticalAlignment=a;value.Input.VerticalAlignment=a;}}
         else if(name=="font-kerning"&&keyword)text.Kerning=*keyword!="none";
         else if(name=="display"&&keyword){value.Hidden=*keyword=="none";if(*keyword=="flex")value.Rect.Layout=GuiLayoutMode::Row;else if(*keyword=="block")value.Rect.Layout=GuiLayoutMode::Absolute;}
         else if(name=="visibility"&&keyword)value.Hidden=value.Hidden||*keyword=="hidden"||*keyword=="collapse";
@@ -155,7 +158,7 @@ void GuiSystem::PrepareStyles(Entity root,GuiBounds surface,float scale){
         const auto* metadata=e.TryGetComponent<GuiElement>();if(metadata&&!metadata->Enabled)metadata=nullptr;
         const auto add=[&](UUID asset){if(!asset||scopes.size()>=16)return;if(std::any_of(scopes.begin(),scopes.end(),[&](const auto& s){return s.Asset==asset&&s.Owner==e.GetUUID();}))return;
             if(!loaded.contains(asset))loaded[asset]=ReadSheet(asset,StyleDiagnostics);auto sheet=loaded[asset];if(sheet&&!sheet->HasErrors())scopes.push_back({asset,e.GetUUID(),sheet});};
-        if(e==root)add(root.GetComponent<Frame>().Stylesheet);if(metadata)add(metadata->Stylesheet);
+        if(e==root&&(!metadata||!metadata->Stylesheet))add(root.GetComponent<Frame>().Stylesheet);if(metadata)add(metadata->Stylesheet);
         auto& node=nodes[e.GetUUID()];node.Type=Type(e);node.Parent=parent;node.PreviousSibling=previous;node.ChildIndex=index;node.ChildCount=siblings;node.TypeIndex=typeIndex;node.TypeCount=typeCount;
         if(metadata){node.ID=metadata->ID;for(const auto& word:Words(metadata->Classes))node.Classes.insert(word);node.Attributes=Attributes(metadata->Attributes);node.Attributes["tags"]=metadata->Tags;if(auto state=node.Attributes.find("state");state!=node.Attributes.end())node.States.insert(state->second);}
         if(node.ID.empty())node.ID=e.GetComponent<Name>().Value;
@@ -177,7 +180,7 @@ void GuiSystem::PrepareStyles(Entity root,GuiBounds surface,float scale){
             GuiComputed value;if(auto* r=e.TryGetComponent<RectTransform>())value.Rect=*r;value.Style=GUI::ResolveStyle(e);value.Text=GUI::ResolveText(e);value.Image=GUI::ResolveImage(e);if(button)value.Button=*button;if(input)value.Input=*input;
             value.Context.Width=surface.Size.X/scale;value.Context.Height=surface.Size.Y/scale;value.Context.FontSize=value.Text.FontSize;
             CSS::Limits limits;limits.ResolveWork=100000;value.Cascade=CSS::Compute(combined,node,value.Context,limits);
-            static const std::set<std::string> supported={"color","background-color","border-color","border-width","opacity","font-family","font-size","font-kerning","letter-spacing","line-height","white-space","display","visibility","pointer-events","flex-direction","align-items","justify-content","overflow","z-index","width","height","min-width","min-height","max-width","max-height","left","top","gap","flex-grow","flex-shrink","padding","margin","padding-left","padding-top","padding-right","padding-bottom","margin-left","margin-top","margin-right","margin-bottom","background-image"};
+            static const std::set<std::string> supported={"text-align","vertical-align","color","background-color","border-color","border-width","opacity","font-family","font-size","font-kerning","letter-spacing","line-height","white-space","display","visibility","pointer-events","flex-direction","align-items","justify-content","overflow","z-index","width","height","min-width","min-height","max-width","max-height","left","top","gap","flex-grow","flex-shrink","padding","margin","padding-left","padding-top","padding-right","padding-bottom","margin-left","margin-top","margin-right","margin-bottom","background-image"};
             for(const auto& [name,data]:value.Cascade.Properties)if(!supported.contains(name)&&!IsGuiPaintProperty(name)&&name!="position"&&name!="aspect-ratio"&&name!="right"&&name!="bottom"&&StyleDiagnostics.size()<64)StyleDiagnostics.push_back("Unsupported GUI CSS property: "+name);
             for(const auto& diagnostic:value.Cascade.Diagnostics)if(StyleDiagnostics.size()<64)StyleDiagnostics.push_back(diagnostic.Message);
             const GuiComputed* inherited=nullptr;if(parent){auto found=Computed.find(e.GetParent().GetUUID());if(found!=Computed.end())inherited=&found->second;}

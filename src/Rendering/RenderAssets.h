@@ -50,6 +50,8 @@ public:
     void EndEditorView();
     bool SetDebugMode(const std::string& mode);
     filament::Texture* GetGuiTexture(UUID id);
+    filament::MaterialInstance* CreateCanvasMaterial(UUID asset);
+    bool UpdateCanvasMaterial(filament::MaterialInstance*,UUID asset,filament::Texture* source,Vec4 sourceRect);
     void SetCameraTexture(UUID camera,filament::Texture* texture);
     std::vector<UUID> GetCameraDependencies() const;
     struct TextureTargets {filament::Texture* Color=nullptr;filament::Texture* History=nullptr;filament::Texture* Depth=nullptr;filament::RenderTarget* Target=nullptr;filament::RenderTarget* HistoryTarget=nullptr;filament::RenderTarget* ResolvedTarget=nullptr;filament::RenderTarget* ResolvedHistoryTarget=nullptr;};

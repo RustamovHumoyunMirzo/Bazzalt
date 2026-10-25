@@ -23,6 +23,7 @@
 #include <ktxreader/Ktx1Reader.h>
 #include "Bazzalt/AssetManager.h"
 #include "Bazzalt/Material.h"
+#include "Runtime/MaterialLibrary.h"
 
 #include <filament/Engine.h>
 #include <filament/Camera.h>
@@ -655,6 +656,11 @@ void RenderBackend::Render() {
         for(auto* view:m_activeViews)if(view&&view->getRenderTarget()){
             auto entry=std::find_if(m_cameraViews.begin(),m_cameraViews.end(),[&](const auto& entry){return entry.second==view;});if(entry==m_cameraViews.end())continue;
             cameras.push_back(entry->first);dependencies[entry->first]=worldSources;
+            const auto addMaterialSources=[&](UUID material){auto value=Bazzalt::Material::Load(material);if(!value.IsValid())return;for(const auto& parameter:value.GetParameters())if(parameter.Type==ShaderParameterType::Texture2D&&parameter.Name!="source"){auto source=GetMaterialCameraTexture(material,parameter.Name);if(!source)source=m_assets->GetTextureProducer(value.GetTexture(parameter.Name));if(source)dependencies[entry->first].push_back(source);}};
+            if(m_guiScene){
+                auto owner=m_guiScene->GetEntity(entry->first);if(auto* camera=owner.TryGetComponent<Bazzalt::Camera>();camera&&camera->Enabled&&camera->Active&&camera->PostProcessing.Enabled)addMaterialSources(camera->PostProcessing.MaterialAsset);
+                for(auto handle:m_guiScene->GetRegistry().view<GuiElement>()){auto entity=m_guiScene->GetEntity(static_cast<Entity::Id>(handle));const auto& element=entity.GetComponent<GuiElement>();if(!element.Enabled||!element.MaterialAsset)continue;auto root=entity.HasComponent<Frame>()?entity:GUI::GetFrame(entity);if(!root)continue;const auto& frame=root.GetComponent<Frame>();if(!frame.Enabled||!frame.Visible)continue;if(frame.Mode==FrameMode::Spatial)sharedFeeds=true;if(frame.Mode==FrameMode::Spatial||(frame.Mode==FrameMode::CameraBound&&frame.Camera==entry->first))addMaterialSources(element.MaterialAsset);}
+            }
             if(m_guiScene)for(auto handle:m_guiScene->GetRegistry().view<GuiImage>()){
                 auto image=m_guiScene->GetEntity(static_cast<Entity::Id>(handle));const auto& source=image.GetComponent<GuiImage>();const UUID sourceCamera=source.Camera?source.Camera:m_assets->GetTextureProducer(source.Texture);if(!source.Enabled||!sourceCamera)continue;
                 auto root=GUI::GetFrame(image);if(!root)continue;const auto& frame=root.GetComponent<Frame>();

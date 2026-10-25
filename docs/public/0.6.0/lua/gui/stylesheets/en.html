@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Stylesheets are imported .css assets. Assign their UUID to Frame.Stylesheet for a whole GUI Frame, or GuiElement.Stylesheet for a subtree. A nested Frame starts a new scope. Existing explicit component fields remain authored fallbacks.">
+  <meta name="description" content="Stylesheets are imported .css assets. Assign their UUID to GuiElement.Stylesheet for a whole GUI Frame, or GuiElement.Stylesheet for a subtree. A nested Frame starts a new scope. Existing explicit component fields remain authored fallbacks.">
   <title>GUI stylesheets in Lua | BAZZALT Docs</title>
   <link rel="stylesheet" href="../../../../assets/docs.css">
   <script src="../../../../assets/theme.js"></script>
@@ -27,7 +27,7 @@
     <main id="content" tabindex="-1">
       <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / GUI in Lua / GUI stylesheets in Lua</nav>
       <article class="doc"><h1>GUI stylesheets in Lua</h1>
-<p>Stylesheets are imported .css assets. Assign their UUID to Frame.Stylesheet for a whole GUI Frame, or GuiElement.Stylesheet for a subtree. A nested Frame starts a new scope. Existing explicit component fields remain authored fallbacks.</p>
+<p>Stylesheets are imported .css assets. Assign their UUID to GuiElement.Stylesheet for a whole GUI Frame, or GuiElement.Stylesheet for a subtree. A nested Frame starts a new scope. Existing explicit component fields remain authored fallbacks.</p>
 <h2 id="example">Assign metadata and styles</h2>
 <p>This example runs in a behavior callback. stylesheetUUID is an existing imported asset UUID selected by your game/editor code; it is not a path or source-code string.</p>
 <pre><code>local B = Bazzalt

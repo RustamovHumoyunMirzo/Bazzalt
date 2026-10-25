@@ -80,7 +80,7 @@ void BindLuaComponents(sol::table api){
      type["ToneMappingMode"]=&CameraPostProcessing::ToneMappingMode;
      type["Exposure"]=&CameraPostProcessing::Exposure;
      type["DepthOfField"]=&CameraPostProcessing::DepthOfField;
-     type["CustomEffects"]=&CameraPostProcessing::CustomEffects;
+     type["MaterialAsset"]=&CameraPostProcessing::MaterialAsset;type["SetMaterial"]=&CameraPostProcessing::SetMaterial;type["GetMaterial"]=&CameraPostProcessing::GetMaterial;type["CustomEffects"]=&CameraPostProcessing::CustomEffects;
     }
     {auto type=api.new_usertype<Light>("Light",sol::constructors<Light()>(),sol::base_classes,sol::bases<Component>());
      type["Type"]=&Light::Type;

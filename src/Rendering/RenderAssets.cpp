@@ -706,6 +706,20 @@ void RenderAssets::BeginEditorView(const std::unordered_set<UUID>& hidden){
 void RenderAssets::EndEditorView(){if(!m_impl)return;for(auto entity:m_impl->EditorSuspended)m_impl->Scene.addEntity(entity);m_impl->EditorSuspended.clear();}
 
 bool RenderAssets::SetDebugMode(const std::string& mode){if(!m_impl||mode!="lit"&&mode!="unlit"&&mode!="wireframe"&&mode!="lighting_only"&&mode!="overdraw")return false;m_impl->DebugMode=mode;for(auto& [_,instance]:m_impl->Instances)m_impl->ApplyDebug(instance);return true;}
+filament::MaterialInstance* RenderAssets::CreateCanvasMaterial(UUID asset){
+    if(!m_impl||!Bazzalt::Material::Load(asset).IsCanvasCompatible())return nullptr;
+    auto* shader=m_impl->LoadMaterial(Bazzalt::Material::Load(asset).GetShader().GetAssetUUID());
+    if(!shader||shader->getMaterialDomain()!=filament::MaterialDomain::SURFACE||shader->getShading()!=filament::Shading::UNLIT)return nullptr;
+    std::vector<filament::Material::ParameterInfo> parameters(shader->getParameterCount());shader->getParameters(parameters.data(),parameters.size());
+    bool source=false,rect=false;for(const auto& p:parameters){source|=std::string_view(p.name)=="source"&&p.isSampler&&p.samplerType==filament::Material::SamplerType::SAMPLER_2D&&p.count==1;rect|=std::string_view(p.name)=="sourceRect"&&!p.isSampler&&!p.isSubpass&&p.type==filament::Material::ParameterType::FLOAT4&&p.count==1;}if(!source||!rect)return nullptr;
+    constexpr auto allowed=(1u<<unsigned(filament::VertexAttribute::POSITION))|(1u<<unsigned(filament::VertexAttribute::UV0))|(1u<<unsigned(filament::VertexAttribute::UV1))|(1u<<unsigned(filament::VertexAttribute::COLOR));if(shader->getRequiredAttributes().getValue()&~allowed)return nullptr;
+    return shader->createInstance();
+}
+bool RenderAssets::UpdateCanvasMaterial(filament::MaterialInstance* instance,UUID asset,filament::Texture* source,Vec4 rect){
+    if(!m_impl||!instance||!source||!Bazzalt::Material::Load(asset).IsCanvasCompatible())return false;
+    auto* shader=m_impl->LoadMaterial(Bazzalt::Material::Load(asset).GetShader().GetAssetUUID());if(shader!=instance->getMaterial())return false;
+    m_impl->ApplyMaterialValues(instance,asset);instance->setParameter("source",source,m_impl->Sampler(source));instance->setParameter("sourceRect",filament::math::float4{rect.X,rect.Y,rect.Z,rect.W});instance->setDepthWrite(false);instance->setDepthCulling(false);instance->setCullingMode(filament::MaterialInstance::CullingMode::NONE);return true;
+}
 filament::Texture* RenderAssets::GetGuiTexture(UUID id){return m_impl?m_impl->LoadTexture(id,true):nullptr;}
 void RenderAssets::SetCameraTexture(UUID camera,filament::Texture* texture){
     if(!m_impl)return;

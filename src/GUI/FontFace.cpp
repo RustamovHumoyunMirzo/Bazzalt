@@ -137,7 +137,7 @@ ShapedText FontFace::Layout(const std::string& text,float wrapWidth,float letter
         for(const auto& [cluster,advance]:clusters){if(wrapWidth>0&&cluster>lineStart&&width+advance>wrapWidth){lines.emplace_back(lineStart,cluster);lineStart=cluster;width=0;}width+=advance;}
         lines.emplace_back(lineStart,contentEnd);
         for(const auto& [begin,end]:lines){auto glyphs=lines.size()==1?full:shapeLine(begin,end);float lineWidth=0;
-            for(auto& glyph:glyphs){lineWidth+=glyph.Advance;glyph.Y+=y;result.Glyphs.push_back(glyph);}
+            for(auto& glyph:glyphs){lineWidth+=glyph.Advance;glyph.Y+=y;glyph.Line=result.LineWidths.size();result.Glyphs.push_back(glyph);}result.LineWidths.push_back(lineWidth);
             result.Size.X=std::max(result.Size.X,lineWidth);y+=lineHeight;
         }
         paragraphOffset+=paragraphLength;

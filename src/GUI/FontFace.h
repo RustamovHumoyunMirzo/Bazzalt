@@ -10,8 +10,8 @@ struct FontGlyph {
     std::vector<std::uint8_t> Alpha;
 };
 struct FontPreviewImage {std::uint32_t Width=0,Height=0;std::vector<std::uint8_t> Pixels;};
-struct ShapedGlyph {std::uint32_t Index=0,Cluster=0;float X=0,Y=0,Advance=0;};
-struct ShapedText {std::vector<ShapedGlyph> Glyphs;Vec2 Size{};};
+struct ShapedGlyph {std::uint32_t Index=0,Cluster=0;float X=0,Y=0,Advance=0;std::size_t Line=0;};
+struct ShapedText {std::vector<ShapedGlyph> Glyphs;Vec2 Size{};std::vector<float> LineWidths;};
 class FontFace final {
 public:
     FontFace();~FontFace();

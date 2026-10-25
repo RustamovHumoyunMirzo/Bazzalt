@@ -25,11 +25,12 @@ template<class F> bool GuiDispatch(Entity e,const std::string& name,F function){
 inline void InspectGUI(Entity entity,py::list components,py::dict enabled,py::dict data){
     for(auto name:GuiNames){PropertyMap values;auto* descriptor=GuiRegistry().Find("Bazzalt."+std::string(name));if(!descriptor->Serialize(entity,values))continue;
         components.append(name);enabled[name]=values["Enabled"]=="true";py::dict fields;
-        for(const auto& [key,text]:values){if(key=="Enabled")continue;
-            if(key=="Value"||key=="Placeholder"||key=="Texture"||key=="Camera"||key=="Stylesheet"||key=="Font"||key=="ID"||key=="Classes"||key=="Tags"||key=="Attributes")fields[py::str(key)]=text;
+        for(const auto& [key,text]:values){if(key=="Enabled"||(std::string(name)=="Frame"&&key=="Stylesheet"))continue;
+            if(std::string(name)=="GuiElement"&&key=="Stylesheet"&&entity.HasComponent<Frame>()&&!entity.GetComponent<GuiElement>().Stylesheet){fields[py::str(key)]=entity.GetComponent<Frame>().Stylesheet.ToString();continue;}
+            if(key=="Value"||key=="Placeholder"||key=="MaterialAsset"||key=="Texture"||key=="Camera"||key=="Stylesheet"||key=="Font"||key=="ID"||key=="Classes"||key=="Tags"||key=="Attributes")fields[py::str(key)]=text;
             else if(text=="true"||text=="false")fields[py::str(key)]=text=="true";
             else if(text.find(',')!=std::string::npos){py::list vector;std::stringstream input(text);std::string part;while(std::getline(input,part,','))vector.append(std::stof(part));fields[py::str(key)]=py::tuple(vector);}
-            else if(key=="Mode"||key=="ScaleMode"||key=="Layout"||key=="Align"||key=="Justify"||key=="ZIndex"||key=="TabIndex"||key=="MaxLength"||key=="Width"||key=="Height"||key=="FontFace")fields[py::str(key)]=std::stoll(text);
+            else if(key=="HorizontalAlignment"||key=="VerticalAlignment"||key=="Mode"||key=="ScaleMode"||key=="Layout"||key=="Align"||key=="Justify"||key=="ZIndex"||key=="TabIndex"||key=="MaxLength"||key=="Width"||key=="Height"||key=="FontFace")fields[py::str(key)]=std::stoll(text);
             else fields[py::str(key)]=std::stof(text);
         }
         data[name]=fields;
@@ -41,6 +42,6 @@ inline bool SetGUIProperty(Entity entity,const std::string& type,const std::stri
     if(py::isinstance<py::bool_>(value))text=value.cast<bool>()?"true":"false";
     else if(py::isinstance<py::sequence>(value)&&!py::isinstance<py::str>(value)){for(auto part:py::reinterpret_borrow<py::sequence>(value)){if(!text.empty())text+=',';text+=py::str(part).cast<std::string>();}}
     else text=py::str(value).cast<std::string>();
-    values[key]=std::move(text);return descriptor->Deserialize(entity,values,descriptor->Version);
+    values[key]=std::move(text);const bool success=descriptor->Deserialize(entity,values,descriptor->Version);if(success&&type=="GuiElement"&&key=="Stylesheet"&&entity.HasComponent<Frame>())entity.GetComponent<Frame>().Stylesheet={};return success;
 }
 }

@@ -40,6 +40,7 @@ GUI()=delete;
 [[nodiscard]] static GuiImage ResolveImage(Entity entity);
 [[nodiscard]] static std::vector&lt;std::string&gt; GetStyleDiagnostics(Entity entity);
 static bool Focus(Entity entity);
+static bool SetParent(Entity entity,Entity parent,bool preservePosition=true);
 static void ClearFocus(Scene&amp; scene);
 [[nodiscard]] static bool IsPointerOverUI(Scene&amp; scene);
 };</code></pre>

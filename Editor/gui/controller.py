@@ -578,10 +578,13 @@ class EditorController(QObject):
         try:
             data=self.MaterialCompiler.ReadMaterial(path)
             section=self.Window.Properties.AddComponentSection("material",tr("materials.title"),removable=False)
-            section.AddField(tr("materials.shader"),self._AssetPicker(data["shader"],{".mat",".shad",".bshader"},lambda v:self._SetMaterialShader(path,data,v)))
+            from Editor.materials import CANVAS_SHADER
+            if data["shader"]==CANVAS_SHADER:section.AddField(tr("materials.shader"),QLabel(tr("materials.canvas")))
+            else:section.AddField(tr("materials.shader"),self._AssetPicker(data["shader"],{".mat",".shad",".bshader"},lambda v:self._SetMaterialShader(path,data,v)))
             if data["shader"]==ZERO:return
             reflection=self.MaterialCompiler.InspectShader(data["shader"])
             for parameter in reflection["parameters"]:
+                if parameter.get("engine_owned"):continue
                 name=parameter["name"];value=data["properties"].get(name,parameter["default"]);kind=parameter["kind"]
                 commit=lambda v,p=parameter:self._SetMaterialProperty(path,data,p,v)
                 if kind==6:editor=self._AssetPicker(value,{".png",".jpg",".jpeg",".hdr",".exr",".btexture"},commit)
@@ -626,6 +629,9 @@ class EditorController(QObject):
             entities=[entity for scene in scenes for entity in scene.get("entities",[])] if scenes else self.Runtime.Entities()
             for entity in entities:
                 details=entity
+                for component,field in (("GuiElement","MaterialAsset"),("Camera","Post Process Material")):
+                    material=details.get("component_data",{}).get(component,{}).get(field,ZERO)
+                    if details.get("component_enabled",{}).get(component,True) and material not in (ZERO,"0","",None):used.add(material)
                 primitive=details.get("component_data",{}).get("Primitive Object",{})
                 if details.get("component_enabled",{}).get("Primitive Object",True) and primitive.get("Material Asset",ZERO)!=ZERO:used.add(primitive["Material Asset"])
                 if not details.get("component_enabled",{}).get("Mesh",True):continue
@@ -732,6 +738,8 @@ class EditorController(QObject):
             if component=="RectTransform" and name in ("Layout","Align","Justify"):
                 keys={"Layout":("absolute","row","column"),"Align":("start","center","end","stretch"),"Justify":("start","center","end","space_between")}[name]
                 tr=self.Window.Localization.Translate;editor=EnumInput();editor.SetOptions(tuple((tr("gui.layout."+key),index) for index,key in enumerate(keys)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
+            if component in ("GuiText","GuiTextInput") and name in ("HorizontalAlignment","VerticalAlignment"):
+                tr=self.Window.Localization.Translate;editor=EnumInput();editor.SetOptions(tuple((tr("gui.layout."+key),index) for index,key in enumerate(("start","center","end"))));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
             if component=="Frame" and name in ("Mode","ScaleMode"):
                 tr=self.Window.Localization.Translate
                 options=((tr("gui.mode.viewport"),0),(tr("gui.mode.camera_bound"),1),(tr("gui.mode.spatial"),2)) if name=="Mode" else ((tr("gui.scale.constant"),0),(tr("gui.scale.responsive"),1))
@@ -766,6 +774,7 @@ class EditorController(QObject):
                 editor=ColorInput(QColor.fromRgbF(values[0],values[1],values[2],alpha));editor.ValueChanged.connect(lambda color:self._CommitComponent(entity_id,component,name,(color.redF(),color.greenF(),color.blueF(),color.alphaF()) if len(values)==4 else (color.redF(),color.greenF(),color.blueF())));return editor
             editor={2:Vec2Input,3:Vec3Input,4:Vec4Input}[len(value)](value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
         if isinstance(value, str):
+            if (component=="GuiElement" and name=="MaterialAsset") or (component=="Camera" and name=="Post Process Material"):return self._AssetPicker(value,{".matinst"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
             if component in ("Frame","GuiElement") and name=="Stylesheet":return self._AssetPicker(value,{".css"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
             if component in ("GuiText","GuiTextInput") and name=="Font":return self._AssetPicker(value,FONT_EXTENSIONS,lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
             if component in ("Frame","GuiImage") and name=="Camera":
@@ -1079,6 +1088,8 @@ class EditorController(QObject):
             if kind in {"camera_bound","spatial"}:
                 if not self.Runtime.SetComponentProperty(entity_id,"Frame","Mode",1 if kind=="camera_bound" else 2):raise RuntimeError("Could not configure GUI Frame")
             if kind in {"text","button"}:self.Runtime.SetComponentProperty(entity_id,"GuiText","Value",title)
+            if kind=="button":
+                for axis in ("HorizontalAlignment","VerticalAlignment"):self.Runtime.SetComponentProperty(entity_id,"GuiText",axis,1)
             self.History.Commit();self.SetDirty(True,[scene_id]);self.SelectEntity(entity_id,force=True)
         except Exception:
             if created_root:self.Runtime.DestroyEntity(created_root)

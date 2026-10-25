@@ -1,5 +1,45 @@
 # Runtime GUI architecture
 
+## Alignment and canvas materials
+
+ABI 5 extends GuiText/GuiTextInput with horizontal and vertical alignment,
+GuiElement with a canvas material and subtree flag, and camera post-processing
+with a material UUID. GUI text serialization is version 4, input version 3,
+GuiElement version 2 and Camera version 3. Older records migrate to start text
+alignment (input remains vertically centered), with no material assigned.
+Per-line shaping widths drive alignment; text is clipped inside RectTransform
+padding. The fallback bitmap font follows the same alignment and spacing rules.
+
+Scene::SetParent routes GUI children between Frame ancestors through
+GUI::SetParent. Absolute containers preserve the resolved rectangle, accounting
+for anchor span, pivot, padding and destination scale. Flow containers retain
+ownership of placement. Transparent non-RectTransform parents inherit their
+nearest layout container. Non-GUI hierarchy operations still preserve world
+Transform through the ordinary scene path.
+
+GuiElement is the stylesheet authoring point, including on Frame roots. The
+legacy Frame.Stylesheet field stays serialized but is hidden in the editor.
+Its assignment is exposed through the root GuiElement picker and is cleared
+when that picker changes. A new GuiElement stylesheet takes precedence.
+
+Canvas materials are unlit SURFACE packages requiring `source` sampler2d and
+`sourceRect` float4, with only the vertex attributes our quads provide. Validate
+actual compiled reflection before creating GPU batches; never trust source
+reflection alone. The embedded Canvas preset uses the stable built-in shader
+namespace with low ID 5. Editor.materials recognizes this package without
+invoking matc. The reserved source parameters are hidden in the inspector.
+
+Element effects isolate its layers (or subtree when requested) into a distinct
+texture, apply the material with local UV0, then composite through the ordinary
+GUI clipping path. Camera effects copy the completed world image and run before
+UI, including when no Frame exists. Direct split-screen effects use the camera
+viewport; capture effects use their destination. No material pass samples its
+own attachment. Disabled camera/post-processing paths skip the pass. Additional
+material camera samplers participate in capture dependencies/history rules.
+Material parameters update live; GPU instances are rebound before old instances
+are destroyed. Post-lighting output and an independent non-postprocessed GUI
+view keep screen widgets independent of world exposure and environment.
+
 Public contract: `include/Bazzalt/GUI.h`, forwarding component headers in
 `Components/GUI`, and `CameraRenderTarget.h`. Gameplay never initializes GUI or
 gets Filament/SDL objects. C++ and Lua must remain in parity (`LuaGUI.cpp`).
@@ -23,9 +63,9 @@ Ship matching binaries/compiler/CRT; this is not a third-party plugin ABI. Keep
 the module resident until process exit because component descriptors retain its
 callbacks. RenderBackend destroys GUI GPU resources before its Filament engine.
 Missing/incompatible modules produce an explicit runtime error, not silent GUI
-fallbacks. Current release manifests declare `gui_abi: 4`; Hub accepts historical 1/2/3 and current 4
+fallbacks. Current release manifests declare `gui_abi: 5`; Hub accepts historical 1/2/3/4 and current 5
 for complete, internally matching historical/new packages, but never mixes core
-and GUI modules from different builds. The native loader requires ABI 4. Hub
+and GUI modules from different builds. The native loader requires ABI 5. Hub
 validates new packages but
 still accepts older editor releases that do not declare this module.
 

@@ -82,9 +82,9 @@ void BindLuaAssets(sol::table api){
     auto shader=api.new_usertype<Shader>("Shader",sol::constructors<Shader()>());shader["Load"]=&Shader::Load;shader["GetAssetUUID"]=&Shader::GetAssetUUID;shader["IsValid"]=&Shader::IsValid;shader["GetParameters"]=[](Shader value){return sol::as_table(value.GetParameters());};
     auto material=api.new_usertype<Material>("Material",sol::constructors<Material()>());
     material["Load"]=&Material::Load;
-    material["Create"]=sol::overload([](){return Material::Create();},[](Shader shader){return Material::Create(shader);},[](ShaderPreset preset){return Material::Create(preset);});
+    material["IsCanvasCompatible"]=&Material::IsCanvasCompatible;material["Create"]=sol::overload([](){return Material::Create();},[](Shader shader){return Material::Create(shader);},[](ShaderPreset preset){return Material::Create(preset);});
     auto presets=api.create_named("ShaderPreset");
-    presets["StandardLit"]=ShaderPreset::StandardLit;presets["Unlit"]=ShaderPreset::Unlit;
+    presets["Canvas"]=ShaderPreset::Canvas;presets["StandardLit"]=ShaderPreset::StandardLit;presets["Unlit"]=ShaderPreset::Unlit;
     presets["StandardLitTransparent"]=ShaderPreset::StandardLitTransparent;presets["UnlitTransparent"]=ShaderPreset::UnlitTransparent;
     shader["Builtin"]=[](sol::optional<ShaderPreset> preset){return Shader::Builtin(preset.value_or(ShaderPreset::StandardLit));};
     auto culling=api.create_named("MaterialCulling");culling["None"]=MaterialCulling::None;culling["Front"]=MaterialCulling::Front;culling["Back"]=MaterialCulling::Back;culling["FrontAndBack"]=MaterialCulling::FrontAndBack;

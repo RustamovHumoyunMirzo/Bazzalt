@@ -19,6 +19,8 @@ import tempfile
 import uuid
 
 ZERO = str(uuid.UUID(int=0))
+# Stable core ShaderPreset.Canvas identity; its package ships inside the runtime.
+CANVAS_SHADER = str(uuid.UUID(int=(0xba22a17000000002 << 64) | 5))
 TYPES = {"float":0,"float2":1,"float3":2,"float4":3,"int":4,"bool":5,"sampler2d":6,"mat3":7,"mat4":8}
 COUNTS = {0:1,1:2,2:3,3:4,4:1,5:1,6:1,7:9,8:16}
 
@@ -164,6 +166,8 @@ class MaterialCompiler:
         reflection["requires"]=requires
         return translated,reflection
     def InspectShader(self,reference)->dict:
+        if str(reference)==CANVAS_SHADER:
+            return {"shader":CANVAS_SHADER,"parameters":[{"name":"source","kind":6,"default":ZERO,"engine_owned":True},{"name":"sourceRect","kind":3,"default":[0,0,1,1],"engine_owned":True},{"name":"baseColor","kind":3,"default":[1,1,1,1]}],"requires":["uv0","color"]}
         asset=self.runtime.AssetInfo(reference)
         if not asset:raise MaterialError("Shader asset is not registered")
         source=Path(asset["path"]);suffix=source.suffix.lower()
@@ -181,6 +185,7 @@ class MaterialCompiler:
         self._reflections[stamp]=reflection
         return reflection
     def CompileShader(self,reference)->dict:
+        if str(reference)==CANVAS_SHADER:return self.InspectShader(reference)
         reflection=self.InspectShader(reference);asset=self.runtime.AssetInfo(reference);cache=Path(asset["cache"])
         source=Path(str(cache)+".translated.mat");output=Path(str(cache)+".filamat");state=Path(str(cache)+".build.json");tool=self._Tool("matc")
         digest=hashlib.sha256(source.read_bytes()+str(tool.stat().st_mtime_ns).encode()+b"bazzalt-material-v3").hexdigest()

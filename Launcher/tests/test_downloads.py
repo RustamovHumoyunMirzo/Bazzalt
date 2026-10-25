@@ -125,11 +125,11 @@ class DownloadTests(unittest.TestCase):
         archive=self.EditorZip()
         with zipfile.ZipFile(archive) as source:files={name:source.read(name) for name in source.namelist()}
         files.update({"Editor/bazzalt_gui.dll":PE(),"ScriptSDK/lib/bazzalt_gui.dll":PE()})
-        for abi in (2,3,4,99,"2"):
+        for abi in (2,3,4,5,99,"2"):
             with self.subTest(abi=abi):
                 files["editor.json"]=json.dumps({"version":"0.5.0","architecture":"x64","executable":"Bazzalt.exe","gui_abi":abi})
                 archive=self.Zip(files)
-                if abi in (2,3,4):
+                if abi in (2,3,4,5):
                     target=Install(self.MakeEntry(archive.read_bytes()),archive,self.Root/f"versions-new-gui-{abi}")
                     self.assertTrue((target/"Editor/bazzalt_gui.dll").is_file())
                 else:

@@ -5,6 +5,7 @@
 #include "Bazzalt/Entity.h"
 #include "Bazzalt/RenderTexture.h"
 #include "Bazzalt/Font.h"
+#include "Bazzalt/Material.h"
 
 namespace Bazzalt {
 enum class FrameMode { Viewport, CameraBound, Spatial };
@@ -12,6 +13,7 @@ enum class GuiScaleMode { ConstantPixels, ScaleWithViewport };
 enum class GuiLayoutMode { Absolute, Row, Column };
 enum class GuiAlignment { Start, Center, End, Stretch };
 enum class GuiJustify { Start, Center, End, SpaceBetween };
+enum class GuiTextAlignment { Start, Center, End };
 
 struct GuiBounds {
     Vec2 Position{}, Size{};
@@ -31,12 +33,17 @@ struct Frame : Component {
     int ZIndex=0;
     bool Visible=true;
     bool Interactable=true;
+    // Legacy scene compatibility. Assign new styles to GuiElement::Stylesheet.
     UUID Stylesheet{};
 };
 // Common GUI selector metadata and an optional stylesheet scoped to this subtree.
 struct GuiElement : Component {
     UUID Stylesheet{};
     std::string ID,Classes,Tags,Attributes;
+    UUID MaterialAsset{};
+    bool MaterialIncludesChildren=false;
+    void SetMaterial(Bazzalt::Material material){if(material.GetAssetUUID()&&!material.IsCanvasCompatible())throw std::invalid_argument("GUI requires a canvas-compatible material");MaterialAsset=material.GetAssetUUID();}
+    [[nodiscard]] Bazzalt::Material GetMaterial()const{return Bazzalt::Material::Load(MaterialAsset);}
 };
 // Top-left coordinates, anchor fractions relative to parent, pixel offsets.
 struct RectTransform : Component {
@@ -53,6 +60,8 @@ struct RectTransform : Component {
     GuiAlignment Align=GuiAlignment::Start;
     GuiJustify Justify=GuiJustify::Start;
     bool IgnoreLayout=false;
+    void SetCentered(Vec2 size){AnchorMin=AnchorMax=Pivot={.5f,.5f};Position={};Size=size;}
+    void SetStretch(Vec4 offsets={}){AnchorMin=Pivot={};AnchorMax={1,1};Position={offsets.X,offsets.Y};Size={-offsets.X-offsets.Z,-offsets.Y-offsets.W};}
 };
 struct GuiStyle {
     Vec4 Color{0.22f,0.24f,0.28f,1};
@@ -82,6 +91,7 @@ struct GuiText : Component {
     UUID Font{};std::uint32_t FontFace=0;
     float LetterSpacing=0,LineSpacing=1;
     bool Kerning=true,InheritFont=false;
+    GuiTextAlignment HorizontalAlignment=GuiTextAlignment::Start,VerticalAlignment=GuiTextAlignment::Start;
     void SetFont(Bazzalt::Font font){Font=font.GetAssetUUID();FontFace=font.GetFaceIndex();}
 };
 struct GuiButton : Component { bool Interactable=true; int TabIndex=0; };
@@ -94,6 +104,7 @@ struct GuiTextInput : Component {
     int TabIndex=0;
     UUID Font{};std::uint32_t FontFace=0;
     float FontSize=16;
+    GuiTextAlignment HorizontalAlignment=GuiTextAlignment::Start,VerticalAlignment=GuiTextAlignment::Center;
 };
 struct GuiInteraction {
     bool Hovered=false,Pressed=false,Focused=false;
@@ -113,6 +124,7 @@ public:
     [[nodiscard]] static GuiImage ResolveImage(Entity entity);
     [[nodiscard]] static std::vector<std::string> GetStyleDiagnostics(Entity entity);
     static bool Focus(Entity entity);
+    static bool SetParent(Entity entity,Entity parent,bool preservePosition=true);
     static void ClearFocus(Scene& scene);
     [[nodiscard]] static bool IsPointerOverUI(Scene& scene);
 };

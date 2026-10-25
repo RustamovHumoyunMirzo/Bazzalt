@@ -7,7 +7,7 @@
 #include "Bazzalt/UUID.h"
 
 namespace Bazzalt {
-enum class ShaderPreset : std::uint8_t { StandardLit, Unlit, StandardLitTransparent, UnlitTransparent };
+enum class ShaderPreset : std::uint8_t { StandardLit, Unlit, StandardLitTransparent, UnlitTransparent, Canvas };
 enum class ShaderParameterType : std::uint32_t { Float, Float2, Float3, Float4, Integer, Boolean, Texture2D, Matrix3, Matrix4 };
 struct ShaderParameter {
     std::string Name;

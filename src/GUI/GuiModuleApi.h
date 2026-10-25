@@ -5,7 +5,7 @@
 #include "GUI/FontFace.h"
 namespace Bazzalt { class ComponentSerializationRegistry; }
 namespace Bazzalt::Runtime {
-inline constexpr std::uint32_t GuiModuleVersion=4;
+inline constexpr std::uint32_t GuiModuleVersion=5;
 // Private, versioned interface. Modules are built with the matching core/toolchain.
 struct GuiModuleApi {
     std::uint32_t Version,Size;

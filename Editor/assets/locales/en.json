@@ -767,5 +767,11 @@
   "field.InheritFont": "Inherit font",
   "component.GuiElement": "GUI Element",
   "common.yes": "Yes",
-  "common.no": "No"
+  "common.no": "No",
+  "field.HorizontalAlignment": "Horizontal Alignment",
+  "field.VerticalAlignment": "Vertical Alignment",
+  "field.MaterialAsset": "Material",
+  "field.MaterialIncludesChildren": "Include Children",
+  "field.Post Process Material": "Post Process Material",
+  "materials.canvas": "Canvas Material"
 }

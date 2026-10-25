@@ -32,6 +32,10 @@
 <pre><code class="language-cpp">struct GuiElement {
 UUID Stylesheet{};
 std::string ID,Classes,Tags,Attributes;
+UUID MaterialAsset{};
+bool MaterialIncludesChildren=false;
+void SetMaterial(Bazzalt::Material material);
+[[nodiscard]] Bazzalt::Material GetMaterial()const;
 };</code></pre>
 <!-- API-SOURCE-END --></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../GuiButton/en.html"><small>Previous</small>GuiButton</a>

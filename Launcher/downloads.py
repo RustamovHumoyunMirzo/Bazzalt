@@ -129,7 +129,7 @@ def Install(entry: dict, archive: Path, versions: Path) -> Path:
                 for name in ("Editor/bazzalt_lua.dll","ScriptSDK/lib/bazzalt_lua.dll"):
                     if not (payload/name).is_file():raise ValueError("Missing Lua runtime library: "+name)
             if manifest.get("gui_abi"):
-                if type(manifest["gui_abi"]) is not int or manifest["gui_abi"] not in (1,2,3,4):raise ValueError("Unsupported GUI runtime ABI")
+                if type(manifest["gui_abi"]) is not int or manifest["gui_abi"] not in (1,2,3,4,5):raise ValueError("Unsupported GUI runtime ABI")
                 for name in ("Editor/bazzalt_gui.dll","ScriptSDK/lib/bazzalt_gui.dll"):
                     if not (payload/name).is_file():raise ValueError("Missing GUI runtime library: "+name)
             for required in ("Bazzalt.exe", "Editor/Bazzalt.dll", "Editor/bshad.dll", "ScriptSDK/lib/Bazzalt.lib", "ScriptSDK/include/Bazzalt/Scene.h"):
