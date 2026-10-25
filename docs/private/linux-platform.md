@@ -63,6 +63,12 @@ patch_sol2_clang18.py; CMake also applies it for existing Clang 18 checkouts.
 Only two member-variable callback entry points change, and only Clang 18 sees
 the omitted noexcept. Other compilers retain the upstream specification.
 Linux CI compiles Sol2CompatibilityProbe.cpp before building the engine.
+All UNIX static dependencies must be compiled with PIC before linking them
+into shared core/GUI libraries. CMAKE_POSITION_INDEPENDENT_CODE is set before
+dependency targets are created, including rapidyaml and c4core. Linux x86 CI
+also needs amd64 EGL/GL/XKB libraries for the host Python/Qt SVG generators;
+these are build-host tools, not 32-bit game dependencies. Run those generators
+with QT_QPA_PLATFORM=offscreen, even though the native SDL smoke uses Xvfb.
 
 Filament's Linux universal BlueGL assembly selects x64 for every non-AArch64
 target. patch_filament_linux_x86.py adds a dedicated __i386__ branch and emits
