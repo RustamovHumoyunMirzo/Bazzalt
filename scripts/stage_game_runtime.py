@@ -10,7 +10,6 @@ def Stage(build,output,architecture,root=None,platform=None):
     output.mkdir(parents=True,exist_ok=True)
     names=['BazzaltPlayer.exe','Bazzalt.dll','bazzalt_lua.dll','bazzalt_gui.dll'] if not linux else ['BazzaltPlayer','libbazzalt_player.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so']
     if linux:
-        if architecture!='x64':raise ValueError('Linux requires x64')
         names+=sorted(p.name for p in native.glob('libbazzalt_lua.so.*'))
     for name in names:
         if Architecture(native/name)!=architecture:raise ValueError('Wrong runtime architecture: '+name)

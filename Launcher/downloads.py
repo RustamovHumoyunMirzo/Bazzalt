@@ -147,8 +147,8 @@ def Install(entry: dict, archive: Path, versions: Path) -> Path:
             if linux and path.is_file():
                 with path.open("rb") as stream:elf=stream.read(4)==b"\x7fELF"
                 if elf:
-                    from scripts.release_artifacts import Architecture
-                    if Architecture(path)!=entry["architecture"]:raise ValueError("Wrong ELF architecture")
+                    from scripts.release_artifacts import Architecture,PayloadArchitecture
+                    if Architecture(path)!=PayloadArchitecture(path.relative_to(payload),entry["architecture"],entry['platform']):raise ValueError("Wrong ELF architecture")
             if not linux and path.is_file() and path.suffix.lower() in {".exe", ".dll", ".pyd"} and _PEArchitecture(path) != entry["architecture"]:
                 raise ValueError("Package contains a binary of the wrong architecture")
         payload.rename(destination)  # Same-filesystem atomic publication, no partial discovery.

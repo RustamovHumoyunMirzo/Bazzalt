@@ -6,7 +6,7 @@ PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 FILAMENT_DIR="$PROJECT_DIR/deps/filament"
 VERSION="v1.77.0"
 
-if [ -f "$FILAMENT_DIR/include/filament/Engine.h" ]; then
+if [ -d "$FILAMENT_DIR" ] && python3 "$SCRIPT_DIR/extract_filament_sdk.py" "$FILAMENT_DIR" 2>/dev/null; then
     printf 'Filament is already available at %s\n' "$FILAMENT_DIR"
     exit 0
 fi
@@ -34,7 +34,7 @@ fi
 [ "$ACTUAL_SHA256" = "$EXPECTED_SHA256" ] || {
     printf 'Error: Filament archive integrity check failed.\n' >&2; exit 1;
 }
-tar -xzf "$ARCHIVE" -C "$FILAMENT_DIR"
+python3 "$SCRIPT_DIR/extract_filament_sdk.py" "$FILAMENT_DIR" --archive "$ARCHIVE"
 test -f "$FILAMENT_DIR/include/filament/Engine.h" || {
     printf 'Downloaded Filament package has an unexpected layout.\n' >&2; exit 1;
 }

@@ -11,7 +11,8 @@ class PlatformTargetsTests(unittest.TestCase):
         with patch('bazzalt.platforms.HostPlatform',return_value='linux'),patch('bazzalt.platforms.platform.machine',return_value='x86_64'):
             self.assertEqual(TargetError({'platform':'linux','architecture':'x64'}),'')
             self.assertIn('Windows',TargetError({'platform':'windows','architecture':'x64'}))
-            self.assertIn('x64',TargetError({'platform':'linux','architecture':'x86'}))
+            self.assertEqual(TargetError({'platform':'linux','architecture':'x86'}),'')
+            self.assertIn('Unsupported',TargetError({'platform':'linux','architecture':'arm64'}))
             self.assertIn('protection',TargetError({'platform':'linux','architecture':'x64','key_storage':'dpapi_user'}))
         value=copy.deepcopy(DEFAULTS);value['target']['platform']='linux';self.assertEqual(Validate(value)['target']['platform'],'linux')
     def test_elf_inspection_and_linux_release_identity(self):
@@ -27,6 +28,16 @@ class PlatformTargetsTests(unittest.TestCase):
             (root/'BazzaltHub').write_bytes(header);Audit(root,'x64','hub','linux')
             (root/'wrong.dll').write_bytes(b'MZbad')
             with self.assertRaisesRegex(ValueError,'Windows binary'):Audit(root,'x64','hub','linux')
+
+    def test_x86_template_is_permitted_only_in_its_designated_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);header=bytearray(64);header[:6]=b'\x7fELF\x02\x01';struct.pack_into('<H',header,18,62)
+            for name in ('lib/libBazzalt.so','lib/libbazzalt_lua.so','lib/libbazzalt_gui.so','include/Bazzalt/Scene.h'):
+                path=root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(header)
+            header[4]=1;struct.pack_into('<H',header,18,3);path=root/'RuntimeTemplates/linux-x86/BazzaltPlayer';path.parent.mkdir(parents=True);path.write_bytes(header)
+            Audit(root,'x64','core','linux')
+            (root/'lib/libBazzalt.so').write_bytes(header)
+            with self.assertRaisesRegex(ValueError,'Wrong ELF architecture'):Audit(root,'x64','core','linux')
 
     @unittest.skipIf(os.name=='nt','POSIX permissions')
     def test_linux_archive_restores_executable_permissions(self):

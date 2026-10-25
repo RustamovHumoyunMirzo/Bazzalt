@@ -28,20 +28,20 @@
       <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../index.html">Docs</a> / What&#x27;s new in 0.7.0</nav>
       <article class="doc"><h1>What's new in 0.7.0</h1>
 <p>This release extends the 0.6.0 engine to Linux and makes game build targets explicit. Existing Windows projects and the public C++/Lua APIs remain compatible.</p>
-<h2 id="linux">Linux x64</h2>
+<h2 id="linux">Linux support</h2>
 <p>Hub, Editor, core SDK, game compiler, content cooker and standalone player now have Linux build and release paths. The editor and player use X11; Wayland desktops can run them through XWayland. Vulkan and OpenGL remain selectable. Linux games include native runtime libraries and cooked content, with no Python or editor dependency.</p>
 <p>The Linux player includes window modes, keyboard/mouse/text input, the startup logo, frame limiting and application lifecycle events. Content protection uses OpenSSL for the same AES-GCM, HKDF, SHA-256 and ECDSA scheme as Windows. Linux packages use Zstandard compression. See the <a href="../manual/linux/en.html">Linux installation and development guide</a>.</p>
 <h2 id="targets">Platform-aware build settings</h2>
-<p>Build Settings now includes Windows and Linux platform choices. A warning explains unsupported host/architecture/security combinations. Build and Build and Launch reject these combinations through the editor Console before cooking or launching anything. Build on the target OS using a matching runtime SDK. Windows x64/x86 output remains supported; Linux output currently targets x64.</p>
+<p>Build Settings now includes Windows and Linux platform choices. A warning explains unsupported host/architecture/security combinations. Build and Build and Launch reject these combinations through the editor Console before cooking or launching anything. Build on the target OS using a matching runtime SDK. Windows x64/x86 output remains supported; Linux output supports x64 and x86 through separate runtime SDKs.</p>
 <h2 id="distribution">CI and releases</h2>
 <p>A Linux badge and workflow cover native builds, editor and Hub tests, compiler tests, encrypted-package verification and GPU smoke tests under Xvfb. Release packaging creates separate Linux Core, Compiler, Editor and Hub ZIP archives and combines Windows/Linux entries into the Hub download catalog. ELF architecture and executable permissions are validated during installation.</p>
 <h2 id="boundaries">Platform differences</h2>
-<p>Native Wayland surfaces, Linux x86 and cross-OS game compilation are not supported in this release. Windows account-bound DPAPI keys remain Windows-only; choose embedded, file or environment key delivery on Linux. POSIX file leases are advisory and do not provide Windows deny-write semantics. Client-side content protection does not prevent an owner from patching their executable. Linux binaries require the libraries and baseline distribution listed in the Linux guide.</p>
+<p>Native Wayland surfaces and cross-OS game compilation are not supported in this release. Windows account-bound DPAPI keys remain Windows-only; choose embedded, file or environment key delivery on Linux. POSIX file leases are advisory and do not provide Windows deny-write semantics. Client-side content protection does not prevent an owner from patching their executable. Linux binaries require the libraries and baseline distribution listed in the Linux guide.</p>
 <h2 id="previous">Previous release</h2>
 <p>Read the <a href="../../0.6.0/manual/en.html">0.6.0 documentation</a> for the previous version. Its audio, GUI, stylesheet, material, scene, scripting and editor workflows continue in 0.7.0.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="next" href="../manual/en.html"><small>Next</small>Start here</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#linux">Linux x64</a><a class="toc-link" href="#targets">Platform-aware build settings</a><a class="toc-link" href="#distribution">CI and releases</a><a class="toc-link" href="#boundaries">Platform differences</a><a class="toc-link" href="#previous">Previous release</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#linux">Linux support</a><a class="toc-link" href="#targets">Platform-aware build settings</a><a class="toc-link" href="#distribution">CI and releases</a><a class="toc-link" href="#boundaries">Platform differences</a><a class="toc-link" href="#previous">Previous release</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

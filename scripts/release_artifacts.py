@@ -29,6 +29,13 @@ def Architecture(path: Path) -> str:
         return MACHINES[machine]
 
 
+def PayloadArchitecture(relative: Path, architecture: str, platform: str) -> str:
+    parts=relative.parts
+    if len(parts)>2 and parts[0]=='RuntimeTemplates':
+        if parts[1]==platform+'-x86':return 'x86'
+        if parts[1]==platform+'-x64':return 'x64'
+    return architecture
+
 def Audit(root: Path, architecture: str, product: str, platform: str="windows") -> None:
     if platform=="linux":
         required={"editor":["Bazzalt","editor.json","Editor/libBazzalt.so","Editor/libbazzalt_gui.so","Editor/libbazzalt_lua.so","ScriptSDK/include/Bazzalt/Scene.h","ScriptSDK/lib/libBazzalt.so"],"core":["include/Bazzalt/Scene.h","lib/libBazzalt.so","lib/libbazzalt_lua.so","lib/libbazzalt_gui.so"],"hub":["BazzaltHub"],"compiler":["BazzaltCompiler","BazzaltCooker"]}.get(product,[])
@@ -45,7 +52,7 @@ def Audit(root: Path, architecture: str, product: str, platform: str="windows") 
             if magic==b"\x7fELF":binaries.append(path)
         if not binaries:raise ValueError("Payload has no ELF binaries")
         for path in binaries:
-            if Architecture(path)!=architecture:raise ValueError("Wrong ELF architecture: "+str(path))
+            if Architecture(path)!=PayloadArchitecture(path.relative_to(root),architecture,platform):raise ValueError("Wrong ELF architecture: "+str(path))
         if product in {"editor","hub"} and architecture!="x64":raise ValueError("Editor and Hub require x64")
         return
     if product in {"editor","hub"} and architecture != "x64":

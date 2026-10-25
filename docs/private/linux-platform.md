@@ -1,7 +1,7 @@
 # Linux platform and release contract
 
-0.7.0 targets Ubuntu 24.04 x86-64. Hub/Editor/Compiler are x64-only. Windows
-x86 output remains separate; Linux x86, native Wayland and implicit cross-OS
+0.7.0 targets Ubuntu 24.04 x86-64. Hub/Editor/Compiler are x64-only. Windows and Linux
+x86 game outputs use separate SDKs; native Wayland and implicit cross-OS
 compilation are rejected. bazzalt/platforms.py is the shared capability policy;
 Build Settings warns, GameBuildController logs and aborts, and Compiler.Build
 enforces the policy independently before opening the build lock or cooking.
@@ -40,6 +40,13 @@ signed inventory does it dlopen libbazzalt_player.so and its engine dependencies
 Do not add a direct Bazzalt dependency to the bootstrap: ELF constructors would
 otherwise execute before validation. The worker remains resident until exit.
 
-The official Filament SDK uses libc++; all native targets and generated C++
+The official x64 Filament SDK uses libc++; its native targets and generated C++
 script modules must compile with Clang -stdlib=libc++. Install libc++-dev and
 libc++abi-dev on build hosts; shipped games require the matching runtime libs.
+
+Linux x86 uses a CI-built Filament 1.77.0 SDK pinned to the same source commit
+as Win32, with -m32, USE_STATIC_LIBCXX=OFF and libstdc++. Its native library
+layout is lib/x86; no x64 archive can be substituted. Engine CMake and the
+script compiler select the same ABI. Editor/Hub/compiler stay x64. The release
+workflow embeds the x86 runtime template and publishes a separate x86 Core ZIP.
+The host needs IA32 execution and target libraries for package verification.

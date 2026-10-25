@@ -42,6 +42,8 @@ def main():
                 if not compiler.is_dir():raise ValueError('Package the Linux compiler before the editor')
                 shutil.copytree(compiler,stage/'tools/compiler');(stage/'editor.json').write_text(json.dumps(dict(version=versions['editor'],architecture='x64',platform='linux',executable='Bazzalt',project_format_max=1,lua_version='5.4.9',gui_abi=6)))
         Collect(stage/'licenses',ROOT,python=product!='core')
+        x86=ROOT/'build/LinuxX86Package/RuntimeTemplates/linux-x86'
+        if product in ('core','editor') and x86.is_dir():shutil.copytree(x86,stage/'RuntimeTemplates/linux-x86')
         if product=="hub":
             (stage/"share").mkdir(exist_ok=True);shutil.copy2(ROOT/"Launcher/BazzaltLogo.svg",stage/"share/BazzaltLogo.svg")
             shutil.copy2(ROOT/'scripts/install_linux.sh',stage/'install_linux.sh')
