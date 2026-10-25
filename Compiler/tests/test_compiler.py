@@ -6,6 +6,21 @@ from Compiler.pak import Pack,MAGIC,HEADER,SafeName
 from Compiler.build import KeyFor,Publish,BuildLock
 
 class CompilerTests(unittest.TestCase):
+    def test_cooker_validates_platform_architecture_and_execute_permission(self):
+        from Compiler.build import ValidateCooker
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'Cooker'
+            with self.assertRaisesRegex(ValueError,'missing'):ValidateCooker(path,'linux')
+            for architecture,machine in ((1,3),(2,62)):
+                header=bytearray(20);header[:4]=b'\x7fELF';header[4]=architecture;header[5]=1;header[18:20]=machine.to_bytes(2,'little');path.write_bytes(header)
+                with patch('Compiler.build.os.access',return_value=True):self.assertEqual(ValidateCooker(path,'linux'),path.resolve())
+                with patch('Compiler.build.os.access',return_value=False),self.assertRaisesRegex(ValueError,'not executable'):ValidateCooker(path,'linux')
+                with self.assertRaisesRegex(ValueError,'platform mismatch'):ValidateCooker(path,'windows')
+            header[18:20]=(183).to_bytes(2,'little');path.write_bytes(header)
+            with self.assertRaisesRegex(ValueError,'Unsupported ELF architecture'):ValidateCooker(path,'linux')
+            path.write_bytes(b'MZ'+bytes(100))
+            with self.assertRaisesRegex(ValueError,'platform mismatch'):ValidateCooker(path,'linux')
+
     def test_explicit_key_generator_requires_no_project(self):
         import subprocess,sys
         values=[]

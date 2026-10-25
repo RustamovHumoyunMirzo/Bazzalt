@@ -103,3 +103,10 @@ It must not push forwarded events back into SDL's native queue, poll window
 events from another host, or depend on SDL poll-sentinel timing. Focus changes
 clear the private queue. Linux x86 core links libatomic for 64-bit atomics;
 target systems need the corresponding libatomic1 package.
+
+The editor/compiler host remains x64. A Linux multilib host may run either an
+x64 or x86 native content cooker; the x86 CI pipeline uses its real x86 cooker
+for the encrypted-package/player integration test. Validate the tool's ELF
+platform, supported machine/class and executable permission before invoking it.
+Cooker word size does not determine game architecture: runtime-template and
+script-module checks still enforce the selected target architecture separately.

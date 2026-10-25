@@ -28,6 +28,20 @@ def Emit(stage,message,**fields):
 def Architecture(path):
     from scripts.release_artifacts import Architecture as Inspect
     return Inspect(path)
+
+def ValidateCooker(path,platform):
+    path=Path(path).resolve()
+    if not path.is_file():raise ValueError('The content cooker tool is missing')
+    with path.open('rb') as binary:magic=binary.read(4)
+    expected=b'\x7fELF' if platform=='linux' else b'MZ'
+    if not magic.startswith(expected):raise ValueError('Content cooker platform mismatch')
+    architecture=Architecture(path)
+    # A multilib Linux host can execute the x86 cooker built with its runtime.
+    # Cooking is content-only and independent of the target game's word size.
+    supported=('x64','x86') if platform=='linux' else ('x64',)
+    if architecture not in supported:raise ValueError('Content cooker architecture is incompatible with this host')
+    if platform=='linux' and not os.access(path,os.X_OK):raise ValueError('The content cooker tool is not executable')
+    return path
 @contextmanager
 def BuildLock(project):
     directory=Path(project)/'.bazzalt/Cache/Build';directory.mkdir(parents=True,exist_ok=True)
@@ -195,8 +209,7 @@ def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
     if error:raise ValueError(error)
     suffix='.exe' if platform=='windows' else ''
     runtime,files=ValidateRuntime(runtime,arch,platform)
-    cooker=Path(cooker).resolve()
-    if not cooker.is_file() or Architecture(cooker)!='x64':raise ValueError('The x64 content cooker tool is missing or incompatible')
+    cooker=ValidateCooker(cooker,platform)
     with BuildLock(project.parent) as cache, BuildWorkspace(cache/(arch if platform=='windows' else platform+'-'+arch)) as work:
         check=lambda:CheckCancelled(cancel)
         check()
