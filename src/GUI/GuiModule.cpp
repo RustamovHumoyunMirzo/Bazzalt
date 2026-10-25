@@ -3,6 +3,9 @@
 #include "GUI/FontFace.h"
 namespace Bazzalt::Runtime {
 void ModuleRegisterGuiComponents(ComponentSerializationRegistry&);
+std::vector<GuiStyleProperty> ModuleStylesheetProperties(UUID);
+std::string ModuleGetStyleProperty(Entity,const std::string&);
+bool ModuleSetStyleProperty(Entity,const std::string&,const std::string&);
 static const GuiModuleApi Api{
     GuiModuleVersion,sizeof(GuiModuleApi),
     [](GuiSystem& system,Scene& scene,Vec2 size){system.ModuleLayout(scene,size);},
@@ -19,7 +22,8 @@ static const GuiModuleApi Api{
     [](void* state,Scene& scene,UUID camera,Vec2 size,filament::RenderTarget* target){static_cast<GuiRendererModule*>(state)->RenderCameraOverlay(scene,camera,size,target);},
     ValidateGuiAsset,InspectFontAsset,MeasureFontAsset,StylesheetReferences,PreviewFontAsset,
     [](const void* state){return static_cast<const GuiRendererModule*>(state)->GetSceneInputTarget();},
-    [](void* state){static_cast<GuiRendererModule*>(state)->RenderSpatialEffects();}
+    [](void* state){static_cast<GuiRendererModule*>(state)->RenderSpatialEffects();},
+    ModuleStylesheetProperties,ModuleGetStyleProperty,ModuleSetStyleProperty
 };
 }
 #if defined(_WIN32)

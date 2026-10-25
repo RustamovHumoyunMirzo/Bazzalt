@@ -86,7 +86,8 @@ class Parser {
                 const bool block=Is("{");AtRule record{name,{prelude},{},block,at};
                 if(Is(";")){
                     ++At;
-                    if(name=="layer"){
+                    if(name=="require"){if(enclosed||!conditions.empty())Error("@require must be declared at stylesheet root");}
+                    else if(name=="layer"){
                         std::vector<Token> segment;
                         for(std::size_t i=0;i<=prelude.size();++i){if(i==prelude.size()||Symbol(prelude[i],",")){auto n=LayerName(segment);if(n.empty())Error("Invalid layer name");else AddLayer(layer.empty()?n:layer+"."+n);segment.clear();}else segment.push_back(prelude[i]);}
                     }else Sheet.Diagnostics.push_back({Severity::Warning,at,"At-rule retained but not executed: @"+name});
@@ -117,7 +118,7 @@ class Parser {
     }
 public:
     Parser(std::string_view source,const Limits& bounds):Bounds(bounds){Tokens=Tokenize(source,Sheet.Diagnostics,bounds);}
-    Stylesheet Run(){Rules({},"",0,false);return std::move(Sheet);}
+    Stylesheet Run(){Rules({},"",0,false);ParseRequirements(Sheet,Bounds);return std::move(Sheet);}
 };
 }
 Stylesheet Parse(std::string_view source,const Limits& limits){return Parser(source,limits).Run();}

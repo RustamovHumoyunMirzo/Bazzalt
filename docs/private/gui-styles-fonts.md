@@ -1,12 +1,46 @@
 # GUI stylesheets and font integration
 
+## Typed requirements
+
+`CSS/Requirements.cpp` owns root-level `@require(name, default, type, ...)`
+validation and token substitution. It has no engine, filesystem or editor
+dependency. Declarations are limited to 128; names must be unique. Numeric,
+integer, length, boolean, quoted string, color, vec2/3/4, enum and typed
+texture/font references are supported. Bounds apply in the declared units.
+Defaults are concrete literals; var()/require() defaults cannot form cycles.
+Unknown names and invalid declarations fail import. Expansion retains the
+parser's token/byte limits and emits diagnostics when exceeded.
+
+Each stylesheet scope binds its owning GuiElement's overrides before rules are
+combined, so the same name in separate scopes never leaks between them.
+GuiElement serialization version 3 adds `StyleProperties`, a bounded map of
+CSS literals. It is stored as an escaped object in the existing PropertyMap
+serialization contract; old component records migrate to an empty map. Invalid
+loaded values fall back to defaults; stale names remain dormant. The validated
+GUI setter additionally checks project asset readiness and importer type.
+Stylesheet dependency discovery includes asset defaults, including declarations
+not referenced by a rule. Scene-held asset overrides are ordinary serialized
+UUID references and participate in cooking's dependency scan.
+
+The matching private GUI ABI is 6. Its descriptor/get/set callbacks keep CSS
+types out of the public API and let the editor create fields without a second
+CSS parser. Lua exposes the same GUI service methods and GuiStyleProperty
+descriptors. CSS `content` sets GuiText's rendered text; `interactable` controls
+buttons/inputs, and boolean `visible` hides that subtree. The text resolver
+retains live component text only when CSS content has not supplied it.
+
+Editor fields use the selected asset's metadata, filtered project pickers,
+scene history and a reset-to-default context action. Stylesheet reimports
+rebuild the selected GuiElement inspector. Property edits change scene data;
+stylesheet source edits remain asset changes.
+
 ## Ownership and ABI
 
 FreeType 2.14.3 is pinned by commit in `get_freetype.ps1` / `.sh`, configured by
 `cmake/FreeType.cmake`, and linked privately into `BazzaltGui`. It is not part of
 the public SDK headers. GUI module ABI 3 extends the private dispatch table with
 asset validation, font metadata, measurement, preview and CSS dependency queries.
-GUI ABI 5 additionally supplies private scene-input and spatial-effect rendering hooks.
+GUI ABI 6 additionally supplies private scene-input and spatial-effect rendering hooks.
 Deploy matching core/GUI binaries. Production staging includes FreeType and its
 bundled zlib license notices. Font distribution rights remain the game's concern.
 
@@ -129,7 +163,7 @@ overlays can read their current world target while writing a separate scratch
 target, then composite back. Spatial Frames render GUI locally and place the
 result on their Frame plane; their backdrop is earlier plane-local GUI, rather
 than an arbitrary camera-dependent world sample. Render spatial plans before
-camera/world views. Core and GUI module must both use ABI 5.
+camera/world views. Core and GUI module must both use ABI 6.
 
 The optional GPU test reads actual border/radius/gradient pixels, invert,
 grayscale, blur, drop-shadow, backdrop, responsive @viewport and spatial effects.

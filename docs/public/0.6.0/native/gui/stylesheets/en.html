@@ -202,11 +202,40 @@ Button:hover { background-color: #467cb8; }
 
 <p>Used stylesheet/font files are watched in the editor. Saving them triggers targeted import and updates computed values and font atlases. Imported stylesheet dependency manifests retain referenced fonts/images in cooked games. Query GUI::GetStyleDiagnostics(entity) for application diagnostics; changed diagnostics also appear in the editor Console. Syntax-invalid assets are marked failed in the Asset Browser.</p>
 
-<p>Fonts use the same rendering path for Viewport, CameraBound and Spatial Frames. See <a href="../fonts/en.html">font assets and measurement</a>. CSS opacity currently affects each entity's own layers, not an offscreen composited group. This dialect does not implement CSS Grid, flex wrapping, auto content sizing, animation, browser DOM or arbitrary web stylesheets. Resource and traversal limits may use the built-in fallback glyph instead of allocating without bounds.</p></article>
+<p>Fonts use the same rendering path for Viewport, CameraBound and Spatial Frames. See <a href="../fonts/en.html">font assets and measurement</a>. CSS opacity currently affects each entity's own layers, not an offscreen composited group. This dialect does not implement CSS Grid, flex wrapping, auto content sizing, animation, browser DOM or arbitrary web stylesheets. Resource and traversal limits may use the built-in fallback glyph instead of allocating without bounds.</p><h2 id="required-properties">Typed stylesheet inputs</h2>
+<p>A stylesheet can declare editable inputs. Select the stylesheet in a GuiElement component: its declarations appear underneath as inspector fields. Values belong to that GuiElement, are saved with its scene and support editor undo/redo. Sharing the stylesheet does not share instance overrides.</p>
+<pre><code>@require(accent, #4da3ff, color, label("Accent color"));
+@require(spacing, 12px, length, min(0), max(64));
+@require(icon, none, texture);
+@require(face, none, font);
+@require(caption, "Continue", string);
+@require(enabled, true, bool);
+@require(alignment, center, enum, options(start, center, end));
+@require(insets, 8px 12px 8px 12px, vec4);
+Button {
+    background-color: require(accent);
+    background-image: require(icon);
+    font-family: require(face);
+    padding: require(insets);
+    gap: require(spacing);
+    content: require(caption);
+    interactable: require(enabled);
+    text-align: require(alignment);
+}</code></pre>
+<p>The spelling <code>require(-&gt; accent &lt;-)</code> also works. Declarations must be at the stylesheet root. Supported types are float (number), int (integer), bool (boolean), string, color, length, vec2, vec3, vec4, texture (image), font and enum. Vectors are whitespace-separated CSS numeric/length values. String defaults require quotes. Asset defaults use <code>none</code> or <code>asset("asset-uuid")</code>. Texture and font fields use filtered project asset pickers with drag/drop validation.</p>
+<p>Optional metadata is <code>min(value)</code>, <code>max(value)</code>, <code>label("Caption")</code>, <code>tooltip("Description")</code> and <code>options(first, second)</code>. Bounds apply to numeric values (or each vector element) in their declared units; enum defaults must be one of their options. The length field retains its declared unit. Right-click a generated field to reset it to the stylesheet default.</p>
+<p>Duplicate names, invalid defaults, unsupported types, invalid options and unknown require references fail import with a diagnostic. Invalid overrides loaded from data fall back to the current default. Requirements are scoped to the stylesheet-owning GuiElement; parent and child sheets may declare the same name independently. A nested Frame still starts a new GUI scope. Declaration changes refresh the inspector; removed/stale overrides are retained as dormant scene data but do not create fields or affect rendering.</p>
+<h3 id="required-properties-api">Programmatic values</h3>
+<pre><code>auto fields = Bazzalt::GUI::GetStylesheetProperties(stylesheetUUID);
+bool accepted = Bazzalt::GUI::SetStyleProperty(button, "accent", "#ff8844");
+Bazzalt::GUI::SetStyleProperty(button, "caption", "\"Start\"");
+auto value = Bazzalt::GUI::GetStyleProperty(button, "caption");
+Bazzalt::GUI::ResetStyleProperty(button, "accent");</code></pre>
+<p>SetStyleProperty validates the selected stylesheet declaration, range and asset type, returning false without modifying data if invalid. Its value is one CSS literal, never a declaration or a file path. GetStyleProperty returns an effective CSS literal or an empty string for an unknown name. GuiStyleProperty describes the name, type, default, label, tooltip, optional bounds and enum choices. GuiElement.StyleProperties is the persisted map; prefer the validated GUI setter when changing values at runtime.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../layout/en.html"><small>Previous</small>GUI layout and style inheritance</a>
 <a class="next" href="../../reference/en.html"><small>Next</small>C++ API reference</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#engine-model">Engine terms, familiar syntax</a><a class="toc-link" href="#selectors">Selectors</a><a class="toc-link" href="#cascade">Cascading and variables</a><a class="toc-link" href="#values">Values and conversion</a><a class="toc-link" href="#at-rules">At-rules</a><a class="toc-link" href="#borders">Rounded borders</a><a class="toc-link" href="#gradients">Gradient backgrounds</a><a class="toc-link" href="#filters">Element and backdrop filters</a><a class="toc-link" href="#placement">Additional placement controls</a><a class="toc-link" href="#diagnostics">Errors and safety</a><a class="toc-link" href="#assets">Assets, fonts and live editing</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#engine-model">Engine terms, familiar syntax</a><a class="toc-link" href="#selectors">Selectors</a><a class="toc-link" href="#cascade">Cascading and variables</a><a class="toc-link" href="#values">Values and conversion</a><a class="toc-link" href="#at-rules">At-rules</a><a class="toc-link" href="#borders">Rounded borders</a><a class="toc-link" href="#gradients">Gradient backgrounds</a><a class="toc-link" href="#filters">Element and backdrop filters</a><a class="toc-link" href="#placement">Additional placement controls</a><a class="toc-link" href="#diagnostics">Errors and safety</a><a class="toc-link" href="#assets">Assets, fonts and live editing</a><a class="toc-link" href="#required-properties">Typed stylesheet inputs</a><a class="toc-link sub" href="#required-properties-api">Programmatic values</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

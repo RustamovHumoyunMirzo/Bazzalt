@@ -773,5 +773,9 @@
   "field.MaterialAsset": "Material",
   "field.MaterialIncludesChildren": "Include Children",
   "field.Post Process Material": "Post Process Material",
-  "materials.canvas": "Canvas Material"
+  "materials.canvas": "Canvas Material",
+  "preferences.save_camera_position": "Remember Scene camera position",
+  "gui.edit_style_property": "Edit stylesheet property",
+  "gui.reset_style_property": "Reset to stylesheet default",
+  "gui.invalid_style_property": "The value does not match this stylesheet property."
 }

@@ -12,7 +12,7 @@
 namespace Bazzalt::Runtime {
 namespace {
 template<class F> void Fields(Frame& v,F f){f("Mode",v.Mode);f("ScaleMode",v.ScaleMode);f("ReferenceSize",v.ReferenceSize);f("MatchWidthOrHeight",v.MatchWidthOrHeight);f("PixelsPerUnit",v.PixelsPerUnit);f("Camera",v.Camera);f("ZIndex",v.ZIndex);f("Visible",v.Visible);f("Interactable",v.Interactable);f("Stylesheet",v.Stylesheet);}
-template<class F> void Fields(GuiElement& v,F f){f("Stylesheet",v.Stylesheet);f("ID",v.ID);f("Classes",v.Classes);f("Tags",v.Tags);f("Attributes",v.Attributes);f("MaterialAsset",v.MaterialAsset);f("MaterialIncludesChildren",v.MaterialIncludesChildren);}
+template<class F> void Fields(GuiElement& v,F f){f("Stylesheet",v.Stylesheet);f("ID",v.ID);f("Classes",v.Classes);f("Tags",v.Tags);f("Attributes",v.Attributes);f("MaterialAsset",v.MaterialAsset);f("MaterialIncludesChildren",v.MaterialIncludesChildren);f("StyleProperties",v.StyleProperties);}
 template<class F> void Fields(RectTransform& v,F f){f("AnchorMin",v.AnchorMin);f("AnchorMax",v.AnchorMax);f("Pivot",v.Pivot);f("Position",v.Position);f("Size",v.Size);f("MinSize",v.MinSize);f("MaxSize",v.MaxSize);f("ZIndex",v.ZIndex);f("Visible",v.Visible);f("ClipChildren",v.ClipChildren);f("Layout",v.Layout);f("Padding",v.Padding);f("Margin",v.Margin);f("Gap",v.Gap);f("FlexGrow",v.FlexGrow);f("FlexShrink",v.FlexShrink);f("Align",v.Align);f("Justify",v.Justify);f("IgnoreLayout",v.IgnoreLayout);}
 template<class F> void Fields(Rectangle& v,F f){f("Color",v.Style.Color);f("HoverColor",v.Style.HoverColor);f("PressedColor",v.Style.PressedColor);f("DisabledColor",v.Style.DisabledColor);f("BorderColor",v.Style.BorderColor);f("BorderWidth",v.Style.BorderWidth);f("Opacity",v.Style.Opacity);f("RaycastTarget",v.RaycastTarget);f("InheritColor",v.Style.InheritColor);f("InheritHoverColor",v.Style.InheritHoverColor);f("InheritPressedColor",v.Style.InheritPressedColor);f("InheritDisabledColor",v.Style.InheritDisabledColor);f("InheritBorderColor",v.Style.InheritBorderColor);f("InheritBorderWidth",v.Style.InheritBorderWidth);f("InheritOpacity",v.Style.InheritOpacity);}
 template<class F> void Fields(GuiImage& v,F f){f("Texture",v.Texture);f("Camera",v.Camera);f("Color",v.Color);f("RaycastTarget",v.RaycastTarget);f("InheritColor",v.InheritColor);}
@@ -22,6 +22,7 @@ template<class F> void Fields(GuiTextInput& v,F f){f("HorizontalAlignment",v.Hor
 template<class F> void Fields(CameraRenderTarget& v,F f){f("Width",v.Width);f("Height",v.Height);}
 template<class T> std::string Write(const T& value){
     if constexpr(std::is_same_v<T,std::string>)return value;
+    else if constexpr(std::is_same_v<T,std::map<std::string,std::string>>){std::string result="{";for(const auto& [key,text]:value){if(result.size()>1)result+=",";CSS::Value name{{CSS::Token{CSS::TokenKind::String,key}}},data{{CSS::Token{CSS::TokenKind::String,text}}};result+=name.ToString()+":"+data.ToString();}return result+"}";}
     else if constexpr(std::is_same_v<T,UUID>)return value.ToString();
     else if constexpr(std::is_same_v<T,bool>)return value?"true":"false";
     else if constexpr(std::is_enum_v<T>)return std::to_string(static_cast<int>(value));
@@ -29,6 +30,7 @@ template<class T> std::string Write(const T& value){
 }
 template<class T> bool Read(const std::string& text,T& value){
     if constexpr(std::is_same_v<T,std::string>){if(text.size()>256*1024)return false;value=text;return true;}
+    else if constexpr(std::is_same_v<T,std::map<std::string,std::string>>){if(text.size()>65536)return false;auto parsed=CSS::ParseValue(text);if(parsed.HasErrors())return false;std::vector<CSS::Token> tokens;for(const auto& t:parsed.Data.Tokens)if(t.Kind!=CSS::TokenKind::Space)tokens.push_back(t);std::size_t at=0;const auto take=[&](std::string_view text){if(at>=tokens.size()||tokens[at].Kind!=CSS::TokenKind::Symbol||tokens[at].Text!=text)return false;++at;return true;};if(!take("{"))return false;if(take("}"))return at==tokens.size();while(at<tokens.size()){if(value.size()>=128||tokens[at].Kind!=CSS::TokenKind::String)return false;auto key=tokens[at++].Text;if(key.empty()||key.size()>128||!take(":")||at>=tokens.size()||tokens[at].Kind!=CSS::TokenKind::String)return false;auto literal=tokens[at++].Text;if(literal.size()>8192||!value.emplace(key,literal).second)return false;if(take("}"))return at==tokens.size();if(!take(","))return false;}return false;}
     else if constexpr(std::is_same_v<T,UUID>)return UUID::TryParse(text,value);
     else if constexpr(std::is_same_v<T,bool>){if(text=="true"){value=true;return true;}if(text=="false"){value=false;return true;}return false;}
     else if constexpr(std::is_enum_v<T>){int number;auto result=std::from_chars(text.data(),text.data()+text.size(),number);constexpr int maximum=std::is_same_v<T,GuiAlignment>||std::is_same_v<T,GuiJustify>?3:std::is_same_v<T,FrameMode>||std::is_same_v<T,GuiLayoutMode>||std::is_same_v<T,GuiTextAlignment>?2:1;if(result.ec!=std::errc{}||result.ptr!=text.data()+text.size()||number<0||number>maximum)return false;value=static_cast<T>(number);return true;}
@@ -46,7 +48,7 @@ template<class T> bool Valid(const T& v){
     else return true;
 }
 template<class T> void Register(ComponentSerializationRegistry& registry,const char* name){
-    constexpr std::uint32_t current=std::is_same_v<T,GuiText>?4:std::is_same_v<T,GuiTextInput>?3:std::is_same_v<T,GuiElement>?2:std::is_same_v<T,Frame>||std::is_same_v<T,GuiTextInput>?2:std::is_same_v<T,RectTransform>||std::is_same_v<T,Rectangle>||std::is_same_v<T,GuiImage>||std::is_same_v<T,GuiText>?2:1;
+    constexpr std::uint32_t current=std::is_same_v<T,GuiText>?4:std::is_same_v<T,GuiTextInput>?3:std::is_same_v<T,GuiElement>?3:std::is_same_v<T,Frame>||std::is_same_v<T,GuiTextInput>?2:std::is_same_v<T,RectTransform>||std::is_same_v<T,Rectangle>||std::is_same_v<T,GuiImage>||std::is_same_v<T,GuiText>?2:1;
     registry.Register<T>(name,current,[](const T& source,PropertyMap& out){T copy=source;Fields(copy,[&](const char* key,auto& value){out[key]=Write(value);});},
         [](T& value,const PropertyMap& input,std::uint32_t version){
             if(version<1||version>current)return false;
@@ -59,7 +61,8 @@ template<class T> void Register(ComponentSerializationRegistry& registry,const c
                     const bool fonts=std::is_same_v<T,GuiText>&&version<3&&(name=="Font"||name=="FontFace"||name=="LetterSpacing"||name=="LineSpacing"||name=="Kerning"||name=="InheritFont");
                     const bool older=version<2&&((std::is_same_v<T,Frame>&&name=="Stylesheet")||(std::is_same_v<T,GuiTextInput>&&(name=="Font"||name=="FontFace"||name=="FontSize")));
                     const bool alignment=(std::is_same_v<T,GuiText>||std::is_same_v<T,GuiTextInput>)&&(name=="HorizontalAlignment"||name=="VerticalAlignment")&&version<current;const bool materials=std::is_same_v<T,GuiElement>&&version<2&&(name=="MaterialAsset"||name=="MaterialIncludesChildren");
-                    if(!(version==1&&added)&&!fonts&&!older&&!alignment&&!materials)valid=false;
+                    const bool properties=std::is_same_v<T,GuiElement>&&version<3&&name=="StyleProperties";
+                    if(!(version==1&&added)&&!fonts&&!older&&!alignment&&!materials&&!properties)valid=false;
                 }else if(!Read(found->second,field))valid=false;
             });
             if(!valid||!Valid(candidate))return false;

@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <string>
+#include <map>
 #include "Bazzalt/Component.h"
 #include "Bazzalt/Entity.h"
 #include "Bazzalt/RenderTexture.h"
@@ -42,8 +43,15 @@ struct GuiElement : Component {
     std::string ID,Classes,Tags,Attributes;
     UUID MaterialAsset{};
     bool MaterialIncludesChildren=false;
+    std::map<std::string,std::string> StyleProperties;
     void SetMaterial(Bazzalt::Material material){if(material.GetAssetUUID()&&!material.IsCanvasCompatible())throw std::invalid_argument("GUI requires a canvas-compatible material");MaterialAsset=material.GetAssetUUID();}
     [[nodiscard]] Bazzalt::Material GetMaterial()const{return Bazzalt::Material::Load(MaterialAsset);}
+};
+struct GuiStyleProperty {
+    std::string Name,Type,DefaultValue,Label,Tooltip;
+    bool HasMinimum=false,HasMaximum=false;
+    double Minimum=0,Maximum=0;
+    std::vector<std::string> Options;
 };
 // Top-left coordinates, anchor fractions relative to parent, pixel offsets.
 struct RectTransform : Component {
@@ -123,6 +131,10 @@ public:
     [[nodiscard]] static GuiText ResolveText(Entity entity);
     [[nodiscard]] static GuiImage ResolveImage(Entity entity);
     [[nodiscard]] static std::vector<std::string> GetStyleDiagnostics(Entity entity);
+    [[nodiscard]] static std::vector<GuiStyleProperty> GetStylesheetProperties(UUID stylesheet);
+    [[nodiscard]] static std::string GetStyleProperty(Entity entity,const std::string& name);
+    static bool SetStyleProperty(Entity entity,const std::string& name,const std::string& cssValue);
+    static bool ResetStyleProperty(Entity entity,const std::string& name);
     static bool Focus(Entity entity);
     static bool SetParent(Entity entity,Entity parent,bool preservePosition=true);
     static void ClearFocus(Scene& scene);

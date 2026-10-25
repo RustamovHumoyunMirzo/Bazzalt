@@ -119,6 +119,24 @@ class NativeRenderSurface(QWidget):
                self._target[2] + self._distance * cp * cos(yaw))
         self._eye=eye;self.Runtime.SetSceneCamera(self.ViewportId, eye, tuple(self._target));self.CameraChanged.emit(self._yaw,self._pitch)
 
+    def NavigationState(self)->dict:
+        return {"version":1,"target":list(self._target),"distance":self._distance,"yaw":self._yaw,"pitch":self._pitch}
+
+    def RestoreNavigationState(self,value)->bool:
+        if not self.IsScene or not isinstance(value,dict) or value.get("version")!=1:return False
+        try:
+            target=value["target"]
+            if not isinstance(target,(list,tuple)) or len(target)!=3:return False
+            numbers=[float(v) for v in (*target,value["distance"],value["yaw"],value["pitch"])]
+            if not all(isfinite(v) and abs(v)<=1e12 for v in numbers) or numbers[3]<.01 or numbers[3]>1e9 or abs(numbers[5])>89.9:return False
+        except (TypeError,ValueError,KeyError,OverflowError):return False
+        self._target=numbers[:3];self._distance=numbers[3];self._yaw=numbers[4]%360;self._pitch=numbers[5]
+        yaw,pitch=radians(self._yaw),radians(self._pitch)
+        self._eye=tuple(self._target[i]+self._distance*v for i,v in enumerate((cos(pitch)*sin(yaw),sin(pitch),cos(pitch)*cos(yaw))))
+        if self._attached:self._UpdateCamera()
+        else:self.CameraChanged.emit(self._yaw,self._pitch)
+        return True
+
     def _LookFromEye(self) -> None:
         """Rotate the view direction without orbiting the camera position."""
         yaw,pitch=radians(self._yaw),radians(self._pitch);cp=cos(pitch)

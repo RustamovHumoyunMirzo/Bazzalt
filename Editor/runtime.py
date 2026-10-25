@@ -154,6 +154,12 @@ class RuntimeService(QObject):
         return dict(self._host.audio_clip_info(str(path))) if self._host and hasattr(self._host,"audio_clip_info") else {}
     def FontInfo(self,path,face=0)->dict:
         return dict(self._host.font_info(str(path),int(face))) if self._host and hasattr(self._host,"font_info") else {}
+    def StylesheetProperties(self,entity_id)->list:
+        return [dict(value) for value in self._host.stylesheet_properties(str(entity_id))] if self._host and hasattr(self._host,"stylesheet_properties") else []
+    def SetStylesheetProperty(self,entity_id,name,value)->bool:
+        return bool(self._host and self._host.set_stylesheet_property(str(entity_id),str(name),str(value)))
+    def ResetStylesheetProperty(self,entity_id,name)->bool:
+        return bool(self._host and self._host.reset_stylesheet_property(str(entity_id),str(name)))
     def FontPreview(self,path,text,size=32,face=0,width=640)->dict:
         return dict(self._host.font_preview(str(path),int(face),str(text),float(size),max(64,min(1024,int(width))))) if self._host and hasattr(self._host,"font_preview") else {}
     def AudioWaveform(self,path,bins=512):

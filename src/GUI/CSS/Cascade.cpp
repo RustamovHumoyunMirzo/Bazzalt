@@ -93,6 +93,7 @@ bool EvaluateCondition(const Condition& condition,const Environment& environment
     return Conditions(condition.Expression,environment).Run();
 }
 ComputedStyle Compute(const Stylesheet& sheet,const Node& node,const Environment& environment,const Limits& limits){
+    if(!sheet.Requirements.empty()){auto bound=BindRequirements(sheet,{},limits);return Compute(bound,node,environment,limits);}
     ComputedStyle result;
     auto remaining=limits.ResolveWork;
     const auto exhausted=[](){ComputedStyle failed;failed.Diagnostics.push_back({Severity::Error,{},"CSS cascade work limit exceeded"});return failed;};

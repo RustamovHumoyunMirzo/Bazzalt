@@ -25,7 +25,8 @@ template<class F> bool GuiDispatch(Entity e,const std::string& name,F function){
 inline void InspectGUI(Entity entity,py::list components,py::dict enabled,py::dict data){
     for(auto name:GuiNames){PropertyMap values;auto* descriptor=GuiRegistry().Find("Bazzalt."+std::string(name));if(!descriptor->Serialize(entity,values))continue;
         components.append(name);enabled[name]=values["Enabled"]=="true";py::dict fields;
-        for(const auto& [key,text]:values){if(key=="Enabled"||(std::string(name)=="Frame"&&key=="Stylesheet"))continue;
+        for(const auto& [key,text]:values){if(key=="StyleProperties"){py::dict properties;if(auto* element=entity.TryGetComponent<GuiElement>())for(const auto& [name,value]:element->StyleProperties)properties[py::str(name)]=value;fields[py::str(key)]=properties;continue;}
+            if(key=="Enabled"||(std::string(name)=="Frame"&&key=="Stylesheet"))continue;
             if(std::string(name)=="GuiElement"&&key=="Stylesheet"&&entity.HasComponent<Frame>()&&!entity.GetComponent<GuiElement>().Stylesheet){fields[py::str(key)]=entity.GetComponent<Frame>().Stylesheet.ToString();continue;}
             if(key=="Value"||key=="Placeholder"||key=="MaterialAsset"||key=="Texture"||key=="Camera"||key=="Stylesheet"||key=="Font"||key=="ID"||key=="Classes"||key=="Tags"||key=="Attributes")fields[py::str(key)]=text;
             else if(text=="true"||text=="false")fields[py::str(key)]=text=="true";

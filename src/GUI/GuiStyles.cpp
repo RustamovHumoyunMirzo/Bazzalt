@@ -92,7 +92,10 @@ void Apply(GuiComputed& value,const GuiComputed* parent){
             else if(name=="visibility")value.Hidden=value.Hidden||source.Hidden;
             continue;
         }
-        if(name=="color"){text.Color=Color(data,text.Color);value.Image.Color=Color(data,value.Image.Color);}
+        if(name=="content"){if(auto value=CSS::ResolveString(data))text.Value=*value;}
+        else if(name=="interactable"){if(auto enabled=CSS::ResolveBoolean(data)){value.Button.Interactable=*enabled;value.Input.Interactable=*enabled;}}
+        else if(name=="visible"){if(auto visible=CSS::ResolveBoolean(data))value.Hidden=value.Hidden||!*visible;}
+        else if(name=="color"){text.Color=Color(data,text.Color);value.Image.Color=Color(data,value.Image.Color);}
         else if(name=="background-color"){style.Color=Color(data,style.Color);style.HoverColor=style.PressedColor=style.DisabledColor=style.Color;}
         else if(name=="border-color")style.BorderColor=Color(data,style.BorderColor);
         else if(name=="font-size"){auto env=value.Context;env.PercentageBase=parent?parent->Text.FontSize:16;if(auto n=CSS::ResolveLength(data,env);n&&*n>=1&&*n<=512)text.FontSize=float(*n);}
@@ -157,7 +160,9 @@ void GuiSystem::PrepareStyles(Entity root,GuiBounds surface,float scale){
         if(depth>128||++count>4096){if(StyleDiagnostics.size()<64)StyleDiagnostics.push_back("GUI stylesheet node/depth limit exceeded");return;}
         const auto* metadata=e.TryGetComponent<GuiElement>();if(metadata&&!metadata->Enabled)metadata=nullptr;
         const auto add=[&](UUID asset){if(!asset||scopes.size()>=16)return;if(std::any_of(scopes.begin(),scopes.end(),[&](const auto& s){return s.Asset==asset&&s.Owner==e.GetUUID();}))return;
-            if(!loaded.contains(asset))loaded[asset]=ReadSheet(asset,StyleDiagnostics);auto sheet=loaded[asset];if(sheet&&!sheet->HasErrors())scopes.push_back({asset,e.GetUUID(),sheet});};
+            if(!loaded.contains(asset))loaded[asset]=ReadSheet(asset,StyleDiagnostics);auto sheet=loaded[asset];if(sheet&&!sheet->HasErrors()){
+                if(!sheet->Requirements.empty()){sheet=std::make_shared<CSS::Stylesheet>(CSS::BindRequirements(*sheet,metadata?metadata->StyleProperties:std::map<std::string,std::string>{}));for(const auto& diagnostic:sheet->Diagnostics)if(StyleDiagnostics.size()<64)StyleDiagnostics.push_back(diagnostic.Message);}
+                scopes.push_back({asset,e.GetUUID(),sheet});}};
         if(e==root&&(!metadata||!metadata->Stylesheet))add(root.GetComponent<Frame>().Stylesheet);if(metadata)add(metadata->Stylesheet);
         auto& node=nodes[e.GetUUID()];node.Type=Type(e);node.Parent=parent;node.PreviousSibling=previous;node.ChildIndex=index;node.ChildCount=siblings;node.TypeIndex=typeIndex;node.TypeCount=typeCount;
         if(metadata){node.ID=metadata->ID;for(const auto& word:Words(metadata->Classes))node.Classes.insert(word);node.Attributes=Attributes(metadata->Attributes);node.Attributes["tags"]=metadata->Tags;if(auto state=node.Attributes.find("state");state!=node.Attributes.end())node.States.insert(state->second);}
@@ -180,7 +185,7 @@ void GuiSystem::PrepareStyles(Entity root,GuiBounds surface,float scale){
             GuiComputed value;if(auto* r=e.TryGetComponent<RectTransform>())value.Rect=*r;value.Style=GUI::ResolveStyle(e);value.Text=GUI::ResolveText(e);value.Image=GUI::ResolveImage(e);if(button)value.Button=*button;if(input)value.Input=*input;
             value.Context.Width=surface.Size.X/scale;value.Context.Height=surface.Size.Y/scale;value.Context.FontSize=value.Text.FontSize;
             CSS::Limits limits;limits.ResolveWork=100000;value.Cascade=CSS::Compute(combined,node,value.Context,limits);
-            static const std::set<std::string> supported={"text-align","vertical-align","color","background-color","border-color","border-width","opacity","font-family","font-size","font-kerning","letter-spacing","line-height","white-space","display","visibility","pointer-events","flex-direction","align-items","justify-content","overflow","z-index","width","height","min-width","min-height","max-width","max-height","left","top","gap","flex-grow","flex-shrink","padding","margin","padding-left","padding-top","padding-right","padding-bottom","margin-left","margin-top","margin-right","margin-bottom","background-image"};
+            static const std::set<std::string> supported={"content","interactable","visible","text-align","vertical-align","color","background-color","border-color","border-width","opacity","font-family","font-size","font-kerning","letter-spacing","line-height","white-space","display","visibility","pointer-events","flex-direction","align-items","justify-content","overflow","z-index","width","height","min-width","min-height","max-width","max-height","left","top","gap","flex-grow","flex-shrink","padding","margin","padding-left","padding-top","padding-right","padding-bottom","margin-left","margin-top","margin-right","margin-bottom","background-image"};
             for(const auto& [name,data]:value.Cascade.Properties)if(!supported.contains(name)&&!IsGuiPaintProperty(name)&&name!="position"&&name!="aspect-ratio"&&name!="right"&&name!="bottom"&&StyleDiagnostics.size()<64)StyleDiagnostics.push_back("Unsupported GUI CSS property: "+name);
             for(const auto& diagnostic:value.Cascade.Diagnostics)if(StyleDiagnostics.size()<64)StyleDiagnostics.push_back(diagnostic.Message);
             const GuiComputed* inherited=nullptr;if(parent){auto found=Computed.find(e.GetParent().GetUUID());if(found!=Computed.end())inherited=&found->second;}
@@ -195,4 +200,26 @@ void GuiSystem::PrepareStyles(Entity root,GuiBounds surface,float scale){
     };
     visit(root,nullptr,nullptr,{},1,1,1,1,0);
 }
+namespace {
+UUID PropertySheet(Entity entity){auto* element=entity.TryGetComponent<GuiElement>();if(element&&element->Stylesheet)return element->Stylesheet;if(auto* frame=entity.TryGetComponent<Frame>())return frame->Stylesheet;return {};}
+bool ValidPropertyAsset(const CSS::Requirement& r,const CSS::Value& value){
+    if(!CSS::ValidateRequirement(r,value))return false;if(r.Type!="font"&&r.Type!="texture")return true;
+    if(CSS::ResolveString(value)==std::optional<std::string>{"none"})return true;
+    auto ref=CSS::ResolveReference(value);if(!ref)return false;if(ref->starts_with("asset://"))ref->erase(0,8);UUID id;if(!UUID::TryParse(*ref,id))return false;if(!id)return true;auto asset=AssetManager::GetAsset(id);return asset&&asset->State==AssetState::Ready&&(r.Type=="font"?asset->Importer=="Bazzalt.Font":asset->Importer=="Bazzalt.Texture"||asset->Importer=="Bazzalt.RenderTexture");
+}
+}
+std::vector<GuiStyleProperty> ModuleStylesheetProperties(UUID asset){
+    std::vector<std::string> errors;auto sheet=ReadSheet(asset,errors);std::vector<GuiStyleProperty> result;if(!sheet||sheet->HasErrors())return result;
+    for(const auto& r:sheet->Requirements){GuiStyleProperty p;p.Name=r.Name;p.Type=r.Type;p.DefaultValue=r.Default.ToString();p.Label=r.Label;p.Tooltip=r.Tooltip;p.HasMinimum=r.Minimum.has_value();p.HasMaximum=r.Maximum.has_value();p.Minimum=r.Minimum.value_or(0);p.Maximum=r.Maximum.value_or(0);p.Options=r.Options;result.push_back(std::move(p));}return result;
+}
+std::string PropertyLiteral(const CSS::Requirement& r,const CSS::Value& value){if(r.Type=="color"){auto color=CSS::ResolveColor(value);if(color){std::ostringstream out;out.imbue(std::locale::classic());out.precision(9);out<<"rgba("<<color->R*255<<","<<color->G*255<<","<<color->B*255<<","<<color->A<<")";return out.str();}}return value.ToString();}
+std::string ModuleGetStyleProperty(Entity entity,const std::string& name){
+    std::vector<std::string> errors;auto sheet=ReadSheet(PropertySheet(entity),errors);if(!sheet||sheet->HasErrors())return {};
+    for(const auto& r:sheet->Requirements)if(r.Name==name){if(auto* element=entity.TryGetComponent<GuiElement>()){auto found=element->StyleProperties.find(name);if(found!=element->StyleProperties.end()){auto value=CSS::ParseValue(found->second);if(!value.HasErrors()&&ValidPropertyAsset(r,value.Data))return PropertyLiteral(r,value.Data);}}return PropertyLiteral(r,r.Default);}return {};
+}
+bool ModuleSetStyleProperty(Entity entity,const std::string& name,const std::string& text){
+    auto* element=entity.TryGetComponent<GuiElement>();if(!element||text.size()>8192||element->StyleProperties.size()>128)return false;std::vector<std::string> errors;auto sheet=ReadSheet(PropertySheet(entity),errors);if(!sheet||sheet->HasErrors())return false;
+    for(const auto& r:sheet->Requirements)if(r.Name==name){auto value=CSS::ParseValue(text);if(value.HasErrors()||!ValidPropertyAsset(r,value.Data))return false;if(!element->StyleProperties.contains(name)&&element->StyleProperties.size()>=128)return false;auto normalized=value.Data.ToString();if(normalized.size()>8192)return false;std::size_t bytes=2;auto cost=[&](const std::string& key,const std::string& text){return CSS::Value{{CSS::Token{CSS::TokenKind::String,key}}}.ToString().size()+CSS::Value{{CSS::Token{CSS::TokenKind::String,text}}}.ToString().size()+2;};for(const auto& [key,text]:element->StyleProperties)if(key!=name)bytes+=cost(key,text);if(bytes+cost(name,normalized)>65536)return false;element->StyleProperties[name]=std::move(normalized);return true;}return false;
+}
+
 }

@@ -2,10 +2,10 @@
 
 ## Alignment and canvas materials
 
-ABI 5 extends GuiText/GuiTextInput with horizontal and vertical alignment,
+ABI 6 extends GuiText/GuiTextInput with horizontal and vertical alignment,
 GuiElement with a canvas material and subtree flag, and camera post-processing
 with a material UUID. GUI text serialization is version 4, input version 3,
-GuiElement version 2 and Camera version 3. Older records migrate to start text
+GuiElement version 3 and Camera version 3. Older records migrate to start text
 alignment (input remains vertically centered), with no material assigned.
 Per-line shaping widths drive alignment; text is clipped inside RectTransform
 padding. The fallback bitmap font follows the same alignment and spacing rules.
@@ -63,9 +63,9 @@ Ship matching binaries/compiler/CRT; this is not a third-party plugin ABI. Keep
 the module resident until process exit because component descriptors retain its
 callbacks. RenderBackend destroys GUI GPU resources before its Filament engine.
 Missing/incompatible modules produce an explicit runtime error, not silent GUI
-fallbacks. Current release manifests declare `gui_abi: 5`; Hub accepts historical 1/2/3/4 and current 5
+fallbacks. Current release manifests declare `gui_abi: 6`; Hub accepts historical 1/2/3/4/5 and current 6
 for complete, internally matching historical/new packages, but never mixes core
-and GUI modules from different builds. The native loader requires ABI 5. Hub
+and GUI modules from different builds. The native loader requires ABI 6. Hub
 validates new packages but
 still accepts older editor releases that do not declare this module.
 

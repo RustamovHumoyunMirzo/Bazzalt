@@ -212,6 +212,7 @@ class EditorController(QObject):
         )
 
     def RefreshHierarchy(self) -> None:
+        if callable(getattr(self.Window,"_SyncSceneCamera",None)):self.Window._SyncSceneCamera()
         if self.ScriptAttachments and not self.Runtime.IsPlaying():self.ScriptAttachments.MergeLuaSceneBindings(self.Runtime.LuaSceneScripts())
         self.Window.Output.SetGameCameraAvailable(self.Runtime.HasGameOutput())
         selected = list(self.SelectedEntities) or ([self.InspectedScene] if self.InspectedScene else [])
@@ -303,6 +304,15 @@ class EditorController(QObject):
                 for property_name, value in dict(component_data.get(component, {})).items():
                     editor = self._ComponentEditor(inspected_entity, component, property_name, value)
                     if editor is not None: section.AddField(property_name, editor)
+                if component=="GuiElement":
+                    from .stylesheet_fields import Field
+                    for property in getattr(self.Runtime,"StylesheetProperties",lambda _:[])(inspected_entity):
+                        editor=Field(self,inspected_entity,property);key="Style."+property["name"];section.AddField(key,editor);section.SetFieldTitle(key,property["label"])
+                        editor.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                        def menu(position,widget=editor,name=property["name"]):
+                            actions=QMenu(widget);reset=actions.addAction(self.Window.Localization.Translate("gui.reset_style_property"))
+                            if actions.exec(widget.mapToGlobal(position)) is reset and self._Mutate("Reset stylesheet property",lambda:self.Runtime.ResetStylesheetProperty(inspected_entity,name)):self.SetDirty(True);self.SelectEntity(inspected_entity,force=True)
+                        editor.customContextMenuRequested.connect(menu)
         if self.ScriptAttachments is not None:
             for script in self.ScriptAttachments.For(inspected_entity):
                 name=str(script.get("type","Script"));section=self.Window.Properties.AddComponentSection(f"script.{name}",name,expanded=False,enabled=bool(script.get("enabled",True)))
@@ -425,6 +435,7 @@ class EditorController(QObject):
         self.Window.AssetBrowser.UpdateAssetIssues()
         inspected=getattr(self,'_inspected_asset',None)
         if inspected and not self.SelectedEntity and str(Path(inspected).resolve()) in paths:self.SelectAsset(inspected)
+        elif self.SelectedEntity and "GuiElement" in self.Runtime.EntityDetails(self.SelectedEntity).get("components",()):self.SelectEntity(self.SelectedEntity,force=True)
 
     def _InspectFont(self,path)->None:
         from .widgets.font_preview import FontPreview
@@ -730,6 +741,7 @@ class EditorController(QObject):
             minimum,maximum=bounds.get(name,(-1e9,1e9));editor=FloatInput(minimum=minimum,maximum=maximum,value=value);editor.valueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
         if component=="Audio Source" and name=="Priority":
             editor=IntInput(minimum=0,maximum=256,value=value);editor.valueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
+        if component=="GuiElement" and name=="StyleProperties":return None
         if name=="Material Slots":return None  # Slot UUIDs are not numeric vector fields.
         if component=="Camera" and name=="Render Target":return self._AssetPicker(value,{".btexture"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
         if isinstance(value, bool):
@@ -902,6 +914,7 @@ class EditorController(QObject):
         if not self._updating_inspector and entity_id==self.SelectedEntity and self._Mutate(f"Edit {component}",lambda:self.Runtime.SetComponentProperty(entity_id,component,name,value)):
             self.SetDirty(True)
             if component=="Light" and name!="Type":self._RefreshInspectorValues()
+            if component=="GuiElement" and name=="Stylesheet":self.SelectEntity(entity_id,force=True)
 
     def _CommitLightType(self,entity_id:str,value:int)->None:
         self._CommitComponent(entity_id,"Light","Type",value)

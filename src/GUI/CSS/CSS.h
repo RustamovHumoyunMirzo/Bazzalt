@@ -44,16 +44,26 @@ struct Selector {std::vector<Compound> Parts;Specificity Weight;Location Source;
 struct Condition {std::string Directive;Value Expression;Location Source;};
 struct Rule {std::vector<Selector> Selectors;std::vector<Declaration> Declarations;std::vector<Condition> Conditions;std::string Layer;Location Source;};
 struct AtRule {std::string Name;Value Prelude,Body;bool HasBlock=false;Location Source;};
+struct Requirement {
+    std::string Name,Type,Label,Tooltip;Value Default;
+    std::optional<double> Minimum,Maximum;
+    std::vector<std::string> Options;
+    Location Source;
+};
 struct Stylesheet {
     std::vector<Rule> Rules;
     std::vector<AtRule> AtRules;
     std::vector<std::string> Layers;
+    std::vector<Requirement> Requirements;
     std::vector<Diagnostic> Diagnostics;
     [[nodiscard]] bool HasErrors() const;
 };
 struct ParseResult {Value Data;std::vector<Diagnostic> Diagnostics;[[nodiscard]] bool HasErrors() const;};
 [[nodiscard]] std::vector<Token> Tokenize(std::string_view source,std::vector<Diagnostic>& diagnostics,const Limits& limits={});
 [[nodiscard]] Stylesheet Parse(std::string_view source,const Limits& limits={});
+void ParseRequirements(Stylesheet& sheet,const Limits& limits={});
+[[nodiscard]] bool ValidateRequirement(const Requirement& requirement,const Value& value);
+[[nodiscard]] Stylesheet BindRequirements(const Stylesheet& sheet,const std::map<std::string,std::string>& values={},const Limits& limits={});
 [[nodiscard]] ParseResult ParseValue(std::string_view source,const Limits& limits={});
 [[nodiscard]] std::vector<Selector> ParseSelectors(std::string_view source,std::vector<Diagnostic>& diagnostics,const Limits& limits={});
 

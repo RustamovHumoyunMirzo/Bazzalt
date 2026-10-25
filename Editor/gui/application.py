@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Callable
 
 from PySide6.QtCore import Qt, QTimer
@@ -64,6 +65,8 @@ class Editor(QMainWindow):
         self._settings_saver=settings_saver
         self.ThemeManager.ThemeChanged.connect(self._RememberTheme)
         self._layout_save_timer=QTimer(self);self._layout_save_timer.setSingleShot(True);self._layout_save_timer.setInterval(400);self._layout_save_timer.timeout.connect(self._SaveWorkspace)
+        self._scene_camera_key="";self._camera_restoring=False
+        self._camera_save_timer=QTimer(self);self._camera_save_timer.setSingleShot(True);self._camera_save_timer.setInterval(500);self._camera_save_timer.timeout.connect(self._SaveSceneCamera)
         self.setWindowTitle(self.Localization.Translate("app.title"))
         self.Localization.LocaleChanged.connect(
             lambda _: self.setWindowTitle(self.Localization.Translate("app.title"))
@@ -83,6 +86,7 @@ class Editor(QMainWindow):
         self.Console = ConsolePanel(self.Localization,self.Resources,self.ThemeManager,install_shortcuts=False)
         self.Output = ViewportPanel(self.Runtime, False, self.Localization, self.Resources,self.ThemeManager)
         self.Scene = ViewportPanel(self.Runtime, True, self.Localization, self.Resources,self.ThemeManager)
+        self.Scene.Surface.CameraChanged.connect(self._SceneCameraChanged)
         self.Hierarchy = HierarchyPanel(self.Localization, install_shortcuts=False)
         self.Properties = PropertiesPanel(self.Localization)
         self.AssetBrowser = AssetBrowserPanel(self.Localization, self.Resources)
@@ -144,6 +148,33 @@ class Editor(QMainWindow):
         if self.Hierarchy.Tree.topLevelItemCount()==0:self.Controller.RefreshHierarchy()
         for control,signal,key in ((self.Scene.HighLevelToggle,"toggled","high_level_selection"),(self.Scene.PivotMode,"currentIndexChanged","pivot_center"),(self.Scene.LocalToggle,"toggled","local_space"),(self.Scene.GridToggle,"toggled","grid_visible"),(self.Scene.GridPlane,"currentIndexChanged","grid_plane"),(self.Scene.GizmoToggle,"toggled","gizmos_visible"),(self.Scene.StatsToggle,"toggled","stats_visible"),(self.Scene.ShadingMode,"currentIndexChanged","shading_mode"),(self.MenuBar.IconsAction,"toggled","icons_visible")):
             getattr(control,signal).connect(lambda value,k=key:self._SaveScenePreference(k,bool(value) if k=="pivot_center" else value))
+
+    def _SceneCameraKey(self)->str:
+        project=self.Runtime.ProjectInfo().get("project_path","");scene=self.Runtime.SceneInfo().get("uuid","")
+        if not isinstance(project,str) or not isinstance(scene,str) or not project or not scene:return ""
+        import os
+        return os.path.normcase(str(Path(project).resolve()))+"::"+str(scene)
+
+    def _SyncSceneCamera(self)->None:
+        key=self._SceneCameraKey()
+        if key==self._scene_camera_key:return
+        self._camera_save_timer.stop();self._SaveSceneCamera();self._scene_camera_key=key
+        if key and self.PreferenceValue("scene","save_camera_position",True):
+            values=self._settings.get("scene_cameras",{});value=values.get(key) if isinstance(values,dict) else None
+            self._camera_restoring=True
+            try:self.Scene.Surface.RestoreNavigationState(value)
+            finally:self._camera_restoring=False
+
+    def _SceneCameraChanged(self,*_)->None:
+        if not self._camera_restoring and self.PreferenceValue("scene","save_camera_position",True):self._camera_save_timer.start()
+
+    def _SaveSceneCamera(self)->None:
+        if not self._scene_camera_key or self._camera_restoring or not self.PreferenceValue("scene","save_camera_position",True):return
+        values=self._settings.get("scene_cameras",{});values=dict(values) if isinstance(values,dict) else {};values.pop(self._scene_camera_key,None);values[self._scene_camera_key]=self.Scene.Surface.NavigationState()
+        self._settings["scene_cameras"]=dict(list(values.items())[-128:])
+        if self._settings_saver:
+            try:self._settings_saver(self._settings)
+            except (OSError,ValueError):pass
 
     def _SaveScenePreference(self,key,value)->None:
         if getattr(self,"_applying_preferences",False):return
@@ -263,6 +294,9 @@ class Editor(QMainWindow):
         self.Scene.Surface.SetOrientationVisible(bool(scene["orientation_visible"]))
         self.Controller.History.Configure(value["history"]["command_limit"],int(value["history"]["memory_mb"])*1024*1024)
         self._applying_preferences=False
+        if hasattr(self,"_scene_camera_key"):
+            if not scene["save_camera_position"]:self._camera_save_timer.stop()
+            elif save:self._SceneCameraChanged()
         if save and self._settings_saver is not None:self._settings_saver(self._settings)
 
     def SetViewportMaximized(self,maximized:bool,panel_id:str="scene")->None:
@@ -400,6 +434,7 @@ class Editor(QMainWindow):
         self.ObjectTools.Close()
         self.Scene.Surface._fly_timer.stop();self.Output.Surface._fly_timer.stop()
         self.Scene.Surface.ClearTransformTrail();self.AudioMixer.SyncTimer.stop()
+        self._camera_save_timer.stop();self._SaveSceneCamera()
         self._layout_save_timer.stop();self._SaveWorkspace()
         self.Scene.Detach(); self.Output.Detach()
         self.Controller.Stop()

@@ -47,11 +47,17 @@ local bounds = B.GUI.GetBounds(self.Entity)
 local diagnostics = B.GUI.GetStyleDiagnostics(self.Entity)</code></pre>
 <h2 id="rules">Rules and scope</h2>
 <p>Classes/tags are space-separated tokens, without leading dots. Attributes use presence/exact forms such as [disabled] or [state="active"]. Node types are Frame, Button, TextInput, Image, Text, Rectangle and Container. An empty ID uses the entity name. Tags are queried with [tags~="action"]. Actual input supplies hover, active, focus and disabled states.</p>
-<p>See the <a href="../../../native/gui/stylesheets/en.html">complete stylesheet language/application contract</a> for supported properties, asset references, inheritance and diagnostics. C++ and Lua receive the same computed results; there is no Lua-only CSS renderer.</p></article>
+<p>See the <a href="../../../native/gui/stylesheets/en.html">complete stylesheet language/application contract</a> for supported properties, asset references, inheritance and diagnostics. C++ and Lua receive the same computed results; there is no Lua-only CSS renderer.</p><h2 id="required-properties">Typed stylesheet inputs</h2><p>Declare <code>@require(name, default, type, ...);</code> at a stylesheet root, then use <code>require(name)</code> in its rules. Assign that stylesheet to GuiElement to generate inspector fields, including typed project asset pickers. Scene saves retain per-element overrides. See the <a href="../../../native/gui/stylesheets/en.html#required-properties">stylesheet input syntax and types</a> for all declarations, bounds, vectors and enum options.</p>
+<pre><code>local B = Bazzalt
+local fields = B.GUI.GetStylesheetProperties(stylesheetUUID)
+assert(B.GUI.SetStyleProperty(entity, "accent", "#ff8844"))
+assert(B.GUI.SetStyleProperty(entity, "caption", '\"Start\"'))
+local value = B.GUI.GetStyleProperty(entity, "caption")
+B.GUI.ResetStyleProperty(entity, "accent")</code></pre><p>Values are CSS literals. String literals include their quotes; textures/fonts use asset("uuid") or none. Invalid values return false. These service methods update the actual entity directly; no component copy/write-back is needed. Field descriptors contain Name, Type, DefaultValue, Label, Tooltip, HasMinimum, HasMaximum, Minimum, Maximum and Options.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../layout/en.html"><small>Previous</small>GUI layout and inheritance in Lua</a>
 <a class="next" href="../../reference/en.html"><small>Next</small>Lua API reference</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Assign metadata and styles</a><a class="toc-link" href="#rules">Rules and scope</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Assign metadata and styles</a><a class="toc-link" href="#rules">Rules and scope</a><a class="toc-link" href="#required-properties">Typed stylesheet inputs</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

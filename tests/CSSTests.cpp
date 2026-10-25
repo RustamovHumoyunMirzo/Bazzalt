@@ -115,4 +115,12 @@ static void RecoveryAndFuzz(){
     Limits limits;limits.Bytes=512;limits.Tokens=512;limits.Nesting=8;
     for(int sample=0;sample<1000;++sample){std::string source;for(std::size_t n=random()%256;n;--n)source+=alphabet[random()%alphabet.size()];auto parsed=Parse(source,limits);auto value=ParseValue(source,limits);(void)parsed;(void)value;}
 }
-int main(){try{std::cerr<<"Lexical\n";Lexical();std::cerr<<"Selectors\n";Selectors();std::cerr<<"Values\n";Values();std::cerr<<"Cascade\n";Cascade();std::cerr<<"Fuzz\n";RecoveryAndFuzz();std::cout<<"CSS lexer, selectors, values, variables, cascade, conditions, recovery and fuzz regressions passed\n";return 0;}catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}
+static void Requirements(){
+    auto sheet=Parse(R"(@require(accent, red, color, label("Accent")); @require(size, 12px, length, min(1), max(64)); @require(choice, center, enum, options(start, center, end)); @require(icon, none, texture); Button {color:require(accent);width:calc(require(-> size <-) * 2);text-align:require(choice)})");
+    CHECK(!sheet.HasErrors()&&sheet.Requirements.size()==4);Node node;node.Type="Button";auto style=Compute(sheet,node);CHECK(Property(style,"color")=="red");CHECK(ResolveLength(style.Properties.at("width"))==24);
+    auto bound=BindRequirements(sheet,{{"accent","blue"},{"size","24px"},{"choice","end"}});style=Compute(bound,node);CHECK(Property(style,"color")=="blue"&&ResolveLength(style.Properties.at("width"))==48&&Property(style,"text-align")=="end");
+    bound=BindRequirements(sheet,{{"size","999px"},{"choice","invalid"}});CHECK(!bound.Diagnostics.empty());CHECK(ResolveLength(Compute(bound,node).Properties.at("width"))==24);
+    CHECK(Parse("@require(large,\""+std::string(8193,'a')+"\",string);").HasErrors());
+    for(auto bad:{"@require(a, 1, unknown);","@require(a, 1, float);@require(a,2,float);","@require(a, red, float);","@require(a, 2, int, min(3));","@require(a, x, enum, options(y));","@viewport(width>1px){@require(a,1,float);}","Button{color:require(missing)}","@require(icon,url(https://bad),texture);"})CHECK(Parse(bad).HasErrors());
+}
+int main(){try{Requirements();std::cerr<<"Lexical\n";Lexical();std::cerr<<"Selectors\n";Selectors();std::cerr<<"Values\n";Values();std::cerr<<"Cascade\n";Cascade();std::cerr<<"Fuzz\n";RecoveryAndFuzz();std::cout<<"CSS lexer, selectors, values, variables, cascade, conditions, recovery and fuzz regressions passed\n";return 0;}catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

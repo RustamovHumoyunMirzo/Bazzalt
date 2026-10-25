@@ -38,7 +38,7 @@ const GuiModuleApi* Load(){
 #endif
     const auto* api=get?get(GuiModuleVersion,sizeof(GuiModuleApi)):nullptr;
     if(!api||api->Version!=GuiModuleVersion||api->Size!=sizeof(GuiModuleApi)||!api->Layout||!api->ProcessInput||!api->Focus||!api->RegisterComponents||!api->CreateRenderer||!api->DestroyRenderer||!api->ClearRenderer||!api->BatchCount||!api->PrepareSpatial||!api->PrepareOverlay||!api->RenderOverlay||!api->RenderCameraOverlay)throw std::runtime_error("Incompatible GUI runtime. Core and bazzalt_gui must come from the same build.");
-    if(!api->ValidateAsset||!api->InspectFont||!api->MeasureFont||!api->StylesheetReferences||!api->PreviewFont||!api->SceneInputTarget||!api->RenderSpatialEffects)throw std::runtime_error("Incomplete GUI module");
+    if(!api->ValidateAsset||!api->InspectFont||!api->MeasureFont||!api->StylesheetReferences||!api->PreviewFont||!api->SceneInputTarget||!api->RenderSpatialEffects||!api->StylesheetProperties||!api->GetStyleProperty||!api->SetStyleProperty)throw std::runtime_error("Incomplete GUI module");
     return api;
 }
 }
@@ -64,6 +64,10 @@ void GuiRenderer::RenderCameraOverlay(Scene& scene,UUID camera,Vec2 size,filamen
 namespace Bazzalt {
 namespace { Runtime::GuiSystem* SystemFor(Entity entity){auto* scene=entity.GetScene();return entity&&scene&&scene->HasSystem<Runtime::GuiSystem>()?&scene->GetSystem<Runtime::GuiSystem>():nullptr;} }
 GuiInteraction GUI::GetInteraction(Entity entity){auto* system=SystemFor(entity);if(!system)return {};auto it=system->Interactions.find(entity.GetUUID());return it==system->Interactions.end()?GuiInteraction{}:it->second;}
+std::vector<GuiStyleProperty> GUI::GetStylesheetProperties(UUID sheet){return Runtime::GuiModule().StylesheetProperties(sheet);}
+std::string GUI::GetStyleProperty(Entity entity,const std::string& name){return Runtime::GuiModule().GetStyleProperty(entity,name);}
+bool GUI::SetStyleProperty(Entity entity,const std::string& name,const std::string& value){return Runtime::GuiModule().SetStyleProperty(entity,name,value);}
+bool GUI::ResetStyleProperty(Entity entity,const std::string& name){auto* element=entity.TryGetComponent<GuiElement>();return element&&element->StyleProperties.erase(name)!=0;}
 GuiBounds GUI::GetBounds(Entity entity){auto* system=SystemFor(entity);if(system)for(const auto& item:system->Items)if(item.Owner==entity)return item.Bounds;return {};}
 Entity GUI::GetFrame(Entity entity){auto current=entity.GetParent();for(std::size_t depth=0;current&&depth<128;++depth){if(current.HasComponent<Frame>())return current;current=current.GetParent();}return {};}
 bool GUI::SetParent(Entity child,Entity parent,bool preservePosition){
@@ -102,7 +106,7 @@ GuiStyle GUI::ResolveStyle(Entity entity){
     return value;
 }
 GuiText GUI::ResolveText(Entity entity){
-    if(auto* system=SystemFor(entity)){auto found=system->Computed.find(entity.GetUUID());if(found!=system->Computed.end()){auto value=found->second.Text;if(auto* local=entity.TryGetComponent<GuiText>())value.Value=local->Value;return value;}}
+    if(auto* system=SystemFor(entity)){auto found=system->Computed.find(entity.GetUUID());if(found!=system->Computed.end()){auto value=found->second.Text;if(auto* local=entity.TryGetComponent<GuiText>();local&&!found->second.Cascade.Properties.contains("content"))value.Value=local->Value;return value;}}
     auto* local=entity.TryGetComponent<GuiText>();GuiText value=local?*local:GuiText{};
     if(!entity||entity.HasComponent<Frame>())return value;
     auto flags=value;

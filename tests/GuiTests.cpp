@@ -111,6 +111,17 @@ static void TestStylesheetsAndFonts(){
     assert(GUI::ResolveStyle(button).Color.X==1);gui.Interactions[button.GetUUID()].Hovered=true;gui.Layout(scene,{500,200});assert(GUI::ResolveStyle(button).Color.Y==1);
     gui.Layout(scene,{300,200});assert(GUI::GetBounds(button).Size.X==140&&GUI::GetBounds(button).Size.Y==27);
     element.Classes="primary ghost";gui.Layout(scene,{300,200});assert(!GUI::Focus(button));element.Classes="primary";
+    {
+        const std::string original="Frame{display:flex;padding:10px} Button{width:50%;height:30px;background-color:red} .primary[tags~=action][state=active]{height:35px} .primary:hover{background-color:lime} .hidden{display:none} .ghost{pointer-events:none} @viewport(width<400px){#play{height:27px}}";
+        write(css,"@require(width,120px,length,min(1),max(400));@require(tint,red,color);@require(caption,\"Play\",string);#play{width:require(width);background-color:require(tint);content:require(caption)}");assert(engine.RefreshAssets());
+        frame.Stylesheet={};element.Stylesheet=asset->Id;auto properties=GUI::GetStylesheetProperties(asset->Id);assert(properties.size()==3&&properties[0].HasMaximum);
+        assert(GUI::SetStyleProperty(button,"width","240px"));assert(!GUI::SetStyleProperty(button,"width","999px"));assert(!GUI::SetStyleProperty(button,"missing","1"));assert(!GUI::SetStyleProperty(button,"tint","nonsense"));assert(GUI::SetStyleProperty(button,"tint","lime"));
+        const auto validProperties=element.StyleProperties;for(int i=0;i<5;++i)element.StyleProperties["dormant"+std::to_string(i)]=std::string(8192,'"');assert(!GUI::SetStyleProperty(button,"caption","\"Too much saved data\""));element.StyleProperties=validProperties;
+        button.AddComponent<GuiText>();assert(GUI::SetStyleProperty(button,"caption","\"Hello \\\"World\\\"\""));gui.Layout(scene,{500,200});assert(GUI::GetBounds(button).Size.X==240&&GUI::ResolveStyle(button).Color.Y==1);assert(GUI::ResolveText(button).Value=="Hello \"World\"");
+        hidden.GetComponent<GuiElement>().Stylesheet=asset->Id;gui.Layout(scene,{500,200});assert(GUI::GetStyleProperty(hidden,"width")=="120px");
+        const auto saved=folder/"Inputs.bscene";assert(engine.SaveSceneAsset(scene,saved));auto restored=engine.LoadSceneAsset(saved);assert(restored&&restored->GetEntity(button.GetUUID()).GetComponent<GuiElement>().StyleProperties==element.StyleProperties);
+        assert(GUI::ResetStyleProperty(button,"width"));assert(GUI::GetStyleProperty(button,"width")=="120px");button.RemoveComponent<GuiText>();element.StyleProperties.clear();element.Stylesheet={};hidden.GetComponent<GuiElement>().Stylesheet={};frame.Stylesheet=asset->Id;write(css,original);assert(engine.RefreshAssets());
+    }
     auto nested=scene.CreateEntity("Nested frame");nested.SetParent(root,false);nested.AddComponent<Frame>().ScaleMode=GuiScaleMode::ConstantPixels;
     auto independent=scene.CreateEntity("Independent");independent.SetParent(nested,false);independent.AddComponent<RectTransform>();independent.AddComponent<Rectangle>();independent.AddComponent<GuiButton>();gui.Layout(scene,{300,200});assert(GUI::GetBounds(independent).Size.X==160);
     if(!font.empty()){

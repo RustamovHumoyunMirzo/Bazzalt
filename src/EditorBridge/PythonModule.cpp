@@ -144,6 +144,12 @@ public:
     void ConsoleAdd(const std::string& text,unsigned level,const std::string& source,bool icon){Console::Log(text,static_cast<ConsoleLevel>(level),source,icon);}
     void ConsoleClear(){Console::Clear();}
     void ConsoleRemove(const std::vector<std::uint64_t>& ids){Console::ClearMessages(ids);}
+    py::list StylesheetProperties(const std::string& identity){
+        py::list result;auto [scene,entity]=FindEntity(identity);if(!entity)return result;auto* element=entity.TryGetComponent<GuiElement>();if(!element)return result;UUID sheet=element->Stylesheet;if(!sheet)if(auto* frame=entity.TryGetComponent<Frame>())sheet=frame->Stylesheet;
+        for(const auto& p:GUI::GetStylesheetProperties(sheet)){py::dict value;value["name"]=p.Name;value["type"]=p.Type;value["label"]=p.Label;value["tooltip"]=p.Tooltip;value["default"]=p.DefaultValue;value["value"]=GUI::GetStyleProperty(entity,p.Name);value["overridden"]=element->StyleProperties.contains(p.Name);value["options"]=p.Options;if(p.HasMinimum)value["min"]=p.Minimum;if(p.HasMaximum)value["max"]=p.Maximum;result.append(value);}return result;
+    }
+    bool SetStylesheetProperty(const std::string& identity,const std::string& name,const std::string& value){auto [scene,entity]=FindEntity(identity);return entity&&GUI::SetStyleProperty(entity,name,value);}
+    bool ResetStylesheetProperty(const std::string& identity,const std::string& name){auto [scene,entity]=FindEntity(identity);return entity&&GUI::ResetStyleProperty(entity,name);}
     py::dict FontPreview(const std::string& path,std::uint32_t face,const std::string& text,float size,std::uint32_t width){
         UUID id;auto asset=UUID::TryParse(path,id)?AssetManager::GetAsset(id):AssetManager::GetAsset(std::filesystem::u8path(path));py::dict result;
         if(!asset||asset->Importer!="Bazzalt.Font"||asset->State!=AssetState::Ready)return result;
@@ -842,6 +848,9 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("set_scene_camera", &Bazzalt::EditorBridge::EditorHost::SetSceneCamera)
         .def("audio_clip_info", &Bazzalt::EditorBridge::EditorHost::AudioClipDetails)
         .def("font_info", &Bazzalt::EditorBridge::EditorHost::FontDetails,py::arg("path"),py::arg("face")=0)
+        .def("stylesheet_properties", &Bazzalt::EditorBridge::EditorHost::StylesheetProperties)
+        .def("set_stylesheet_property", &Bazzalt::EditorBridge::EditorHost::SetStylesheetProperty)
+        .def("reset_stylesheet_property", &Bazzalt::EditorBridge::EditorHost::ResetStylesheetProperty)
         .def("font_preview", &Bazzalt::EditorBridge::EditorHost::FontPreview)
         .def("audio_preview", &Bazzalt::EditorBridge::EditorHost::PreviewAudio)
         .def("audio_stop_preview", &Bazzalt::EditorBridge::EditorHost::StopAudioPreview)
