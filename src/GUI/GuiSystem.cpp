@@ -159,7 +159,7 @@ void GuiSystem::ModuleLayout(Scene& scene,Vec2 size){
     std::sort(StyleDiagnostics.begin(),StyleDiagnostics.end());StyleDiagnostics.erase(std::unique(StyleDiagnostics.begin(),StyleDiagnostics.end()),StyleDiagnostics.end());
     for(const auto& message:StyleDiagnostics)if(std::find(ReportedStyleDiagnostics.begin(),ReportedStyleDiagnostics.end(),message)==ReportedStyleDiagnostics.end())Console::Warning(message,"GUI");ReportedStyleDiagnostics=StyleDiagnostics;
     std::erase_if(Interactions,[&](const auto& pair){return !alive.contains(pair.first);});
-    const auto eligible=[&](UUID id){return std::any_of(Items.begin(),Items.end(),[&](const auto& item){return item.Owner.GetUUID()==id&&item.Root.GetComponent<Frame>().Interactable&&Enabled(item.Owner)&&VisibleArea(item)&&DirectInput(item);});};
+    const auto eligible=[&](UUID id){return std::any_of(Items.begin(),Items.end(),[&](const GuiItem& item){return item.Owner.GetUUID()==id&&item.Root.GetComponent<Frame>().Interactable&&Enabled(item.Owner)&&VisibleArea(item)&&DirectInput(item);});};
     if(!alive.contains(Focused)||!eligible(Focused))Focused={};if(!alive.contains(Captured)||!eligible(Captured))Captured={};
 }
 bool GuiSystem::ModuleFocus(Scene&,Entity entity){

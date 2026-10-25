@@ -71,6 +71,12 @@ jobs:
           cmake -S . -B build/linux-x86 -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DBAZZALT_BUILD_EDITOR_BRIDGE=OFF -DBAZZALT_FILAMENT_DIR="$PWD/build/linux32-bootstrap/filament-x86" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_ASM_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32 -DCMAKE_SHARED_LINKER_FLAGS=-m32 -DCMAKE_LIBRARY_PATH=/usr/lib/i386-linux-gnu -DOPENSSL_CRYPTO_LIBRARY=/usr/lib/i386-linux-gnu/libcrypto.so
           cmake --build build/linux-x86 --parallel 2
           ctest --test-dir build/linux-x86 --output-on-failure
+      - name: Preserve engine compiler cache even after a failed build
+        if: always() && steps.objects.outputs.cache-primary-key != ''
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: build/.ccache-x86
+          key: ${{ steps.objects.outputs.cache-primary-key }}-core
       - name: Stage and audit x86 runtime template and Core SDK
         run: python scripts/package_linux_x86.py
       - name: Verify an encrypted x86 game and render its native window
