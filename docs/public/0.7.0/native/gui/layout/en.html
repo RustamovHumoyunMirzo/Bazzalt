@@ -1,0 +1,186 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A GUI container can position its children automatically in a row or column. Layout and style inheritance use the same entity hierarchy in viewport, camera-bound and spatial Frames. The engine owns layout and rendering; gameplay only edits components.">
+  <title>GUI layout and style inheritance | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / C++ / GUI in C++ / GUI layout and style inheritance</nav>
+      <article class="doc"><h1>GUI layout and style inheritance</h1>
+
+<p>A GUI container can position its children automatically in a row or column. Layout and style inheritance use the same entity hierarchy in viewport, camera-bound and spatial Frames. The engine owns layout and rendering; gameplay only edits components.</p>
+
+<h2 id="absolute">Absolute layout remains the default</h2>
+
+<p>Include <code>Bazzalt/GUI.h</code>. <a href="../../reference/RectTransform/en.html">RectTransform</a> defaults to Layout = Absolute. Anchors, Position, Size and Pivot retain their existing behavior. MinSize and MaxSize constrain the final dimensions. All pixel-like values are logical GUI units multiplied by the Frame scale. A spatial Frame uses its reference surface and PixelsPerUnit for world placement.</p>
+
+<h2 id="flow">Rows and columns</h2>
+
+<p>Set Layout on the parent's RectTransform to GuiLayoutMode::Row or Column. Only direct children with an enabled, visible RectTransform participate. Children with IgnoreLayout use ordinary anchored placement instead. A nested Frame is an independent render root and never a layout item. An entity without RectTransform still passes its inherited parent rectangle to its descendants, but is not a flow item.</p>
+
+<pre><code>#include &lt;Bazzalt/GUI.h&gt;
+
+
+
+// scene is an existing Scene reference supplied by your behavior/service.
+
+auto hud = scene.CreateEntity("HUD");
+
+hud.AddComponent&lt;Bazzalt::Frame&gt;();
+
+auto&amp; row = hud.AddComponent&lt;Bazzalt::RectTransform&gt;();
+
+row.Layout = Bazzalt::GuiLayoutMode::Row;
+
+row.Padding = {16, 12, 16, 12};
+
+row.Gap = 8;
+
+row.Align = Bazzalt::GuiAlignment::Stretch;
+
+
+
+auto panel = scene.CreateEntity("Panel");
+
+panel.SetParent(hud, false);
+
+auto&amp; item = panel.AddComponent&lt;Bazzalt::RectTransform&gt;();
+
+item.Size = {240, 80};
+
+item.MinSize = {120, 40};
+
+item.FlexGrow = 1;
+
+panel.AddComponent&lt;Bazzalt::Rectangle&gt;();</code></pre>
+
+<p>A RectTransform on the Frame entity configures its children's layout and padding; it does not change the Frame surface or make widgets on that root render. On an ordinary container, its own box is determined by its parent and its Layout controls the next level down.</p>
+
+<h2 id="fields">Layout field contracts</h2>
+
+<table><thead><tr><th>Field</th><th>Meaning</th></tr></thead><tbody>
+
+<tr><td>Layout</td><td>Absolute (0), Row (1), Column (2). Row's main axis is X, Column's is Y.</td></tr>
+
+<tr><td>Padding</td><td>Vec4 left, top, right, bottom. Nonnegative; defaults to zero. Insets the content box for both anchored and flow children.</td></tr>
+
+<tr><td>Margin</td><td>Vec4 left, top, right, bottom on the child. Nonnegative; defaults to zero. Reserves space in flow layout only.</td></tr>
+
+<tr><td>Gap</td><td>Nonnegative spacing between participating children, not before the first or after the last; default zero.</td></tr>
+
+<tr><td>FlexGrow</td><td>Child's nonnegative share of spare main-axis space, default zero. Two unconstrained children with weights 1 and 2 receive one-third and two-thirds of the spare space.</td></tr>
+
+<tr><td>FlexShrink</td><td>Nonnegative shrink weight, default 1. Shortage is distributed by weight times the child's original constrained preferred size. Zero prevents shrinking.</td></tr>
+
+<tr><td>Align</td><td>Cross-axis Start, Center, End or Stretch. Stretch fills the available cross-axis area after margins, subject to the child's min/max. Default Start.</td></tr>
+
+<tr><td>Justify</td><td>Main-axis Start, Center, End or SpaceBetween. Applied to positive space remaining after flex sizing. Default Start. SpaceBetween adds spacing between two or more items.</td></tr>
+
+<tr><td>IgnoreLayout</td><td>False by default. True opts this child out of its parent's row/column while retaining its own child layout.</td></tr>
+
+</tbody></table>
+
+<p>In flow, Size is the preferred size and min/max still apply. The parent owns final child positions, so the participating child's anchors, Position and Pivot do not affect placement. Flow order follows hierarchy sibling order; ZIndex affects drawing and hit testing only. Disabled or hidden RectTransform children reserve no space. Flex constraints are redistributed after a child reaches min/max. If minimum sizes, margins or gaps exceed the available box, children overflow from Start rather than acquiring negative sizes. ClipChildren controls clipping; layout never silently changes it.</p>
+
+<h2 id="inherit">Explicit style inheritance</h2>
+
+<p>Inheritance is opt-in per property. The renderer resolves effective values each frame; the child retains its authored local value so disabling inheritance restores it immediately. Use the inspector checkboxes or the same C++ fields. Stylesheets use the same inheritance contract through computed copies; authored local values remain unchanged.</p>
+
+<table><thead><tr><th>Component/value</th><th>Flags and sources</th></tr></thead><tbody>
+
+<tr><td>Rectangle.Style (GuiStyle)</td><td>InheritColor, InheritHoverColor, InheritPressedColor, InheritDisabledColor, InheritBorderColor, InheritBorderWidth, InheritOpacity. Each searches ancestor Rectangle components.</td></tr>
+
+<tr><td>GuiText</td><td>InheritColor, InheritFontSize, InheritWrap. Each searches ancestor GuiText components. Value remains the child's own text.</td></tr>
+
+<tr><td>GuiImage</td><td>InheritColor searches ancestor GuiImage components. Texture and Camera are never implicitly inherited.</td></tr>
+
+</tbody></table>
+
+<p>Traversal skips ancestors without the matching component and disabled matching components. It stops at and includes the nearest Frame entity, never crossing into an outer Frame. If an ancestor also requests inheritance, resolution continues for that property. If no further source exists, the last matching source's local value is the fallback; with no matching source at all, the child's local value is the fallback. Colors are assigned, not multiplied; opacity inheritance is not group compositing. Text color does not accidentally inherit a Rectangle's background color. A Frame root can provide styles even though widgets on the root itself are not drawn.</p>
+
+<pre><code>auto&amp; parentStyle = hud.AddComponent&lt;Bazzalt::Rectangle&gt;().Style;
+
+parentStyle.Opacity = 0.8f;
+
+auto&amp; localStyle = panel.GetComponent&lt;Bazzalt::Rectangle&gt;().Style;
+
+localStyle.InheritOpacity = true;
+
+
+
+// Read an effective snapshot without modifying authored component data.
+
+auto effective = Bazzalt::GUI::ResolveStyle(panel);</code></pre>
+
+<p><a href="../../reference/GUI/en.html">GUI::ResolveStyle, ResolveText and ResolveImage</a> return effective copies. A missing/invalid entity returns the corresponding default value. ResolveText preserves the child's Value and ResolveImage its source. These operations do not require a rendered frame and reflect live parent edits/reparenting. Do not commit an effective snapshot back when you want to preserve local authored values.</p>
+
+<h2 id="persistence">Persistence and boundaries</h2>
+
+<p>RectTransform, Rectangle, GuiText and GuiImage now serialize as component version 2. Version-1 scenes load with absolute layout, zero insets/gap and inheritance disabled. Invalid enum values, negative insets/flex weights and nonfinite numbers are rejected by editor/scene deserialization without replacing the old component. Programmatic invalid layout data is excluded from layout. Layout and inheritance traversal are bounded to 128 hierarchy levels. Invalid or zero presentation sizes clear stale bounds and interaction state.</p>
+
+<p>This step provides a single-line row/column flex foundation, not full CSS Flexbox or Grid. Wrapping, content measurement/auto sizing, baseline alignment and scrolling are not implemented. <a href="../stylesheets/en.html">CSS assets and cascade</a> and <a href="../fonts/en.html">FreeType font assets</a> are available, including HarfBuzz shaping and bidirectional text. See the <a href="../../../manual/gui/en.html">editor authoring instructions</a> or <a href="../../../lua/gui/layout/en.html">Lua examples</a>.</p><h2 id="alignment-materials">Alignment, parenting and materials</h2>
+
+<p>A button is one entity with RectTransform, Rectangle, GuiText and GuiButton. To center its label, set GuiText.HorizontalAlignment and VerticalAlignment to GuiTextAlignment::Center. Text alignment positions lines inside the element’s padded content box; Align and Justify position child entities in row/column layouts. Text uses per-line widths, including shaped Unicode text. The editor creates buttons with centered labels.</p>
+
+<pre><code>auto&amp; rect = button.GetComponent&lt;Bazzalt::RectTransform&gt;();
+
+rect.SetCentered({200, 48}); // Center anchors and pivot; zero offset.
+
+rect.Padding = {12, 6, 12, 6}; // Left, top, right, bottom.
+
+auto&amp; text = button.GetComponent&lt;Bazzalt::GuiText&gt;();
+
+text.HorizontalAlignment = Bazzalt::GuiTextAlignment::Center;
+
+text.VerticalAlignment = Bazzalt::GuiTextAlignment::Center;
+
+auto tint = Bazzalt::Material::Create(Bazzalt::ShaderPreset::Canvas);
+
+tint.SetColor("baseColor", {0.5f, 1, 1, 1});
+
+button.GetComponent&lt;Bazzalt::GuiElement&gt;().SetMaterial(tint);
+
+camera.GetComponent&lt;Bazzalt::Camera&gt;().PostProcessing.SetMaterial(tint);</code></pre>
+
+<p>SetStretch({left, top, right, bottom}) fills the parent content box with the specified insets. GUI::SetParent(child, parent, true), and Entity::SetParent’s default preservation mode, preserve the visible rectangle between absolute GUI containers, including padding and Frame scale. Row/column containers own child placement and reflow normally. Widgets need a Frame ancestor to render; detaching them outside a Frame does not create a new Frame.</p>
+
+<p>GuiElement.MaterialAsset applies to that element’s own rendered layers. MaterialIncludesChildren additionally processes its subtree as one image. Camera.PostProcessing.MaterialAsset processes the camera’s finished image before screen UI, only while the camera and post-processing are enabled. C++ and Lua Material setters update parameters live. Assign an empty Material to remove the effect.</p>
+
+<p>Use ShaderPreset::Canvas for an embedded tint material. A custom canvas-compatible material must be an unlit surface shader with a sampler2d named source and a float4 named sourceRect. The engine owns both parameters. UV0 is local 0–1; sample source at sourceRect.xy + UV0 * sourceRect.zw using the renderer’s render-target UV helper. Output premultiplied RGBA through postLightingColor with postLightingBlending:opaque, disable depth writes, and require UV0 and color only. Scene-lit and post-process-domain shaders are not valid canvas materials. Invalid GPU material contracts produce a GUI warning and preserve the unmodified image.</p>
+
+<p>Viewport and Camera-Bound GUI use a separate unlit display-space view with no world exposure or post-processing. Spatial GUI uses the same component, layout and material system, but is placed in the world. Author styles on GuiElement, including on the Frame root; Frame.Stylesheet remains a legacy scene-loading fallback and is hidden in the inspector. Root widgets still do not render on the Frame entity itself.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../fonts/en.html"><small>Previous</small>Font assets and text rendering</a>
+<a class="next" href="../stylesheets/en.html"><small>Next</small>GUI stylesheets</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#absolute">Absolute layout remains the default</a><a class="toc-link" href="#flow">Rows and columns</a><a class="toc-link" href="#fields">Layout field contracts</a><a class="toc-link" href="#inherit">Explicit style inheritance</a><a class="toc-link" href="#persistence">Persistence and boundaries</a><a class="toc-link" href="#alignment-materials">Alignment, parenting and materials</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

@@ -106,3 +106,12 @@ dependency licenses. Audit the actual packaged Qt plugins and Python wheel
 metadata, not just the direct requirements list. A game containing only the native
 runtime should carry runtime notices; it should not acquire Python/Qt merely to
 make license collection convenient. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Linux system dependencies
+
+The Linux player links the system OpenSSL libcrypto for SHA-256, HMAC/HKDF,
+AES-256-GCM and ECDSA verification ([Apache-2.0 license](https://github.com/openssl/openssl/blob/openssl-3.0/LICENSE.txt)).
+Linux presentation uses the system X11 libraries (MIT/X11 licenses) through SDL3.
+These system libraries are installed by the distribution package manager, not
+embedded into the core. Zstandard, already included in the Filament SDK notices,
+also supplies portable Linux BPAK compression.

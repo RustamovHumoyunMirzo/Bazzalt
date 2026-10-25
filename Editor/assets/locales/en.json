@@ -777,5 +777,9 @@
   "preferences.save_camera_position": "Remember Scene camera position",
   "gui.edit_style_property": "Edit stylesheet property",
   "gui.reset_style_property": "Reset to stylesheet default",
-  "gui.invalid_style_property": "The value does not match this stylesheet property."
+  "gui.invalid_style_property": "The value does not match this stylesheet property.",
+  "build.field.platform": "Platform",
+  "build.option.windows": "Windows",
+  "build.option.linux": "Linux",
+  "build.unsupported_target": "Unsupported build target: {error}"
 }

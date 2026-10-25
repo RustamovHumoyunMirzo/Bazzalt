@@ -49,7 +49,7 @@ def Pack(source,destination,chunk_mb=64,key=None,*,hashes=None,check=lambda:None
                         raw=file.read(MAX_SEGMENT);raw_size=len(raw)
                         if total and not raw:raise ValueError('Asset changed while packaging')
                         packaged_hash.update(raw)
-                        data,compressed=codec.Encode(raw);flags=2 if compressed else 0
+                        data,compressed=codec.Encode(raw);flags=(2|getattr(codec,"CodecFlag",0)) if compressed else 0
                     flags|=int(bool(aes))
                     header=HEADER.pack(len(encoded)+(28 if aes else 0),len(data),raw_size,offset,total,flags)
                     stored_name=encoded

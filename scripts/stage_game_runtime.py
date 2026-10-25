@@ -4,10 +4,14 @@ from pathlib import Path
 try:from .release_artifacts import Architecture
 except ImportError:from release_artifacts import Architecture
 
-def Stage(build,output,architecture,root=None):
-    build=Path(build).resolve();output=Path(output).resolve();root=Path(root or Path(__file__).resolve().parents[1]);native=build/'Editor/Release'
+def Stage(build,output,architecture,root=None,platform=None):
+    platform=platform or ("windows" if os.name=="nt" else "linux");linux=platform=="linux"
+    build=Path(build).resolve();output=Path(output).resolve();root=Path(root or Path(__file__).resolve().parents[1]);native=build/('Editor' if linux else 'Editor/Release')
     output.mkdir(parents=True,exist_ok=True)
-    names=['BazzaltPlayer.exe','Bazzalt.dll','bazzalt_lua.dll','bazzalt_gui.dll']
+    names=['BazzaltPlayer.exe','Bazzalt.dll','bazzalt_lua.dll','bazzalt_gui.dll'] if not linux else ['BazzaltPlayer','libbazzalt_player.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so']
+    if linux:
+        if architecture!='x64':raise ValueError('Linux requires x64')
+        names+=sorted(p.name for p in native.glob('libbazzalt_lua.so.*'))
     for name in names:
         if Architecture(native/name)!=architecture:raise ValueError('Wrong runtime architecture: '+name)
         shutil.copy2(native/name,output/name)
@@ -34,7 +38,10 @@ def Stage(build,output,architecture,root=None):
     sdk=output/'ScriptSDK';shutil.copytree(build/'ScriptSDK/include',sdk/'include',dirs_exist_ok=True);(sdk/'lib').mkdir(parents=True,exist_ok=True)
     library=build/'ScriptSDK/lib/Release/Bazzalt.lib'
     if not library.exists():library=build/'ScriptSDK/lib/Bazzalt.lib'
-    shutil.copy2(library,sdk/'lib/Bazzalt.lib')
+    if linux:
+        for name in names:
+            if name!='BazzaltPlayer':shutil.copy2(native/name,sdk/'lib'/name)
+    else:shutil.copy2(library,sdk/'lib/Bazzalt.lib')
     licenses=output/'licenses';licenses.mkdir(exist_ok=True)
     try:from .collect_third_party import Collect
     except ImportError:from collect_third_party import Collect
@@ -44,7 +51,7 @@ def Stage(build,output,architecture,root=None):
     for source,name in ((root/'LICENSE','Bazzalt.txt'),(root/'deps/lua/README','Lua.txt'),(root/'deps/sol2/LICENSE.txt','Sol2.txt'),(root/'deps/filament/LICENSE','Filament.txt'),(root/'deps/SDL3/LICENSE.txt','SDL3.txt')):
         if source.is_file():shutil.copy2(source,licenses/name)
     versions=json.loads((root/'releases/versions.json').read_text())
-    (output/'runtime.json').write_text(json.dumps(dict(format_version=1,game_format_version=3,core_version=versions['core'],architecture=architecture,files=names),indent=2),encoding='utf-8')
+    (output/'runtime.json').write_text(json.dumps(dict(format_version=1,game_format_version=3,core_version=versions['core'],platform=platform,architecture=architecture,files=names),indent=2),encoding='utf-8')
     return output
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--build',type=Path,default=Path('build'));parser.add_argument('--output',type=Path,required=True);parser.add_argument('--architecture',choices=('x64','x86'),required=True);args=parser.parse_args();Stage(args.build,args.output,args.architecture)
+    parser=argparse.ArgumentParser();parser.add_argument('--platform',choices=('windows','linux'));parser.add_argument('--build',type=Path,default=Path('build'));parser.add_argument('--output',type=Path,required=True);parser.add_argument('--architecture',choices=('x64','x86'),required=True);args=parser.parse_args();Stage(args.build,args.output,args.architecture,platform=args.platform)

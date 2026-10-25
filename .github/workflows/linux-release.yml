@@ -1,0 +1,30 @@
+name: Linux Release Suite
+on:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  test:
+    uses: ./.github/workflows/linux-64-bit.yml
+  package:
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libc++-dev libc++abi-dev ninja-build pkg-config libssl-dev libx11-dev libx11-xcb-dev libxcb1-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev libxkbcommon-x11-0 libxcb-cursor0 fonts-dejavu-core libgl1-mesa-dev libvulkan-dev patchelf
+          python -m pip install -r requirements-build.txt PySide6==6.10.2 pybind11==3.0.2
+          for dependency in entt rapidyaml filament sdl3 lua sol2 miniaudio freetype text_shaping pybind11; do sh "scripts/get_${dependency}.sh"; done
+          CC=clang CXX=clang++ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel 2
+          python scripts/build_linux_release.py --base-url "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-products-x64
+          path: dist/releases/*

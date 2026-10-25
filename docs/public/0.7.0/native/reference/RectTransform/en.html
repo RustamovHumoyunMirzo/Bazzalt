@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="GUI layout in top-left coordinates. Anchor fractions are relative to the parent; Position and Size are pixel offsets. Pivot determines the layout origin, not a 3D Transform pivot.">
+  <title>RectTransform | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / C++ / C++ API reference / RectTransform</nav>
+      <article class="doc"><h1>RectTransform</h1><p>GUI layout in top-left coordinates. Anchor fractions are relative to the parent; Position and Size are pixel offsets. Pivot determines the layout origin, not a 3D Transform pivot.</p><p>See the <a href="../../gui/en.html">GUI guide</a> for layout, rendering, component write-back and input examples.</p><h2 id="flow-layout">Flow layout</h2>Layout field contracts</h2>
+<table><thead><tr><th>Field</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>Layout</td><td>Absolute (0), Row (1), Column (2). Row's main axis is X, Column's is Y.</td></tr>
+<tr><td>Padding</td><td>Vec4 left, top, right, bottom. Nonnegative; defaults to zero. Insets the content box for both anchored and flow children.</td></tr>
+<tr><td>Margin</td><td>Vec4 left, top, right, bottom on the child. Nonnegative; defaults to zero. Reserves space in flow layout only.</td></tr>
+<tr><td>Gap</td><td>Nonnegative spacing between participating children, not before the first or after the last; default zero.</td></tr>
+<tr><td>FlexGrow</td><td>Child's nonnegative share of spare main-axis space, default zero. Two unconstrained children with weights 1 and 2 receive one-third and two-thirds of the spare space.</td></tr>
+<tr><td>FlexShrink</td><td>Nonnegative shrink weight, default 1. Shortage is distributed by weight times the child's original constrained preferred size. Zero prevents shrinking.</td></tr>
+<tr><td>Align</td><td>Cross-axis Start, Center, End or Stretch. Stretch fills the available cross-axis area after margins, subject to the child's min/max. Default Start.</td></tr>
+<tr><td>Justify</td><td>Main-axis Start, Center, End or SpaceBetween. Applied to positive space remaining after flex sizing. Default Start. SpaceBetween adds spacing between two or more items.</td></tr>
+<tr><td>IgnoreLayout</td><td>False by default. True opts this child out of its parent's row/column while retaining its own child layout.</td></tr>
+</tbody></table>
+<p>In flow, Size is the preferred size and min/max still apply. The parent owns final child positions, so the participating child's anchors, Position and Pivot do not affect placement. Flow order follows hierarchy sibling order; ZIndex affects drawing and hit testing only. Disabled or hidden RectTransform children reserve no space. Flex constraints are redistributed after a child reaches min/max. If minimum sizes, margins or gaps exceed the available box, children overflow from Start rather than acquiring negative sizes. ClipChildren controls clipping; layout never silently changes it.</p>
+<p>See the <a href="../../gui/layout/en.html">layout and inheritance guide</a> for working examples and migration rules.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Public declarations</h2>
+<p>Header: <code>Bazzalt/GUI.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
+<pre><code class="language-cpp">struct RectTransform {
+Vec2 AnchorMin{},AnchorMax{},Pivot{};
+Vec2 Position{},Size{160,40};
+Vec2 MinSize{},MaxSize{100000,100000};
+int ZIndex=0;
+bool Visible=true;
+bool ClipChildren=false;
+// Layout controls direct RectTransform children. Insets are left/top/right/bottom.
+    GuiLayoutMode Layout=GuiLayoutMode::Absolute;
+Vec4 Padding{},Margin{};
+float Gap=0,FlexGrow=0,FlexShrink=1;
+GuiAlignment Align=GuiAlignment::Start;
+GuiJustify Justify=GuiJustify::Start;
+bool IgnoreLayout=false;
+void SetCentered(Vec2 size);
+void SetStretch(Vec4 offsets={});
+};</code></pre>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../Rectangle/en.html"><small>Previous</small>Rectangle</a>
+<a class="next" href="../RenderTexture/en.html"><small>Next</small>RenderTexture</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#flow-layout">Flow layout</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

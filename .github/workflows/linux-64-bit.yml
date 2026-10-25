@@ -1,0 +1,63 @@
+name: Linux 64-bit
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: linux-x64-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONUTF8: '1'
+      CC: clang
+      CXX: clang++
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+      - name: Install Linux build and presentation dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libc++-dev libc++abi-dev ninja-build pkg-config libssl-dev libx11-dev libx11-xcb-dev libxcb1-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev libxkbcommon-x11-0 libxcb-cursor0 fonts-dejavu-core libgl1-mesa-dev libvulkan-dev mesa-vulkan-drivers xvfb libasound2-dev patchelf
+          python -m pip install -r requirements-build.txt PySide6==6.10.2 pybind11==3.0.2
+      - name: Download pinned source dependencies and prebuilt Filament SDK
+        run: |
+          for dependency in entt rapidyaml filament sdl3 stb_image lua sol2 miniaudio freetype text_shaping pybind11; do
+            if [ -f "scripts/get_${dependency}.sh" ]; then sh "scripts/get_${dependency}.sh"; fi
+          done
+      - name: Configure and build core, editor bridge, player and cooker
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DPython_EXECUTABLE="$(command -v python)"
+          cmake --build build --parallel 2
+      - name: Native regression suite
+        run: ctest --test-dir build --output-on-failure --output-junit build/native-tests.xml
+      - name: Editor, Hub, compiler and documentation regressions
+        run: |
+          python -m unittest discover -s Editor/tests
+          python -m unittest discover -s Launcher/tests
+          python -m unittest discover -s Compiler/tests
+          python -m unittest discover -s tests
+          python scripts/sync_api_reference.py --check
+          python scripts/build_public_docs.py --check
+      - name: Native Linux packaged game and GPU smoke
+        env:
+          QT_QPA_PLATFORM: xcb
+          BAZZALT_GUI_GPU_TEST: '1'
+        run: |
+          xvfb-run -a ctest --test-dir build -R BazzaltGuiTests --output-on-failure
+          xvfb-run -a python -m unittest Compiler.tests.test_linux_build -v
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: test-logs-linux-x64
+          path: |
+            build/native-tests.xml
+            build/Testing/Temporary/*.log

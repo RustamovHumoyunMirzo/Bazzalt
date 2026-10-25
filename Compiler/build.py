@@ -66,7 +66,7 @@ def BuildWorkspace(directory):
     with tempfile.TemporaryDirectory(prefix='work-',dir=directory) as temporary:
         work=Path(temporary);(work/marker).write_bytes(b'BazzaltBuildWorkspace-v1')
         yield work
-def ValidateRuntime(runtime,architecture):
+def ValidateRuntime(runtime,architecture,platform="windows"):
     runtime=Path(runtime).resolve()
     manifest=json.loads((runtime/'runtime.json').read_text(encoding='utf-8-sig'))
     if manifest.get('format_version')!=1 or manifest.get('architecture')!=architecture:raise ValueError('Runtime template version or architecture mismatch')
@@ -74,13 +74,16 @@ def ValidateRuntime(runtime,architecture):
     versions=Path(__file__).resolve().parents[1]/'releases/versions.json'
     core_version=json.loads(versions.read_text(encoding='utf-8-sig'))['core']
     if manifest.get('core_version')!=core_version:raise ValueError('Runtime template does not match this compiler/core version')
-    required=['BazzaltPlayer.exe','Bazzalt.dll','bazzalt_lua.dll','bazzalt_gui.dll']
+    if manifest.get('platform','windows')!=platform:raise ValueError('Runtime platform mismatch')
+    required=['BazzaltPlayer.exe','Bazzalt.dll','bazzalt_lua.dll','bazzalt_gui.dll'] if platform=='windows' else ['BazzaltPlayer','libbazzalt_player.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so']
     files=manifest.get('files',required)
     if not set(required)<=set(files):raise ValueError('Incomplete runtime template')
     for name in files:
-        if Path(name).name!=name or Path(name).suffix.lower() not in {'.exe','.dll'}:raise ValueError('Unsafe runtime manifest')
+        if Path(name).name!=name or (platform=='windows' and Path(name).suffix.lower() not in {'.exe','.dll'}):raise ValueError('Unsafe runtime manifest')
+        with (runtime/name).open('rb') as binary:magic=binary.read(4)
+        if (platform=='linux' and magic!=b'\x7fELF') or (platform=='windows' and magic[:2]!=b'MZ'):raise ValueError('Runtime binary platform mismatch: '+name)
         if Architecture(runtime/name)!=architecture:raise ValueError('Runtime binary architecture mismatch: '+name)
-        if name.lower().startswith(('python','pyside','qt6','bazzalthub','_bazzalt')):raise ValueError('Editor/Python binaries are forbidden in game output')
+        if name.lower().startswith(('python','libpython','pyside','libpyside','qt6','libqt6','bazzalthub','_bazzalt')):raise ValueError('Editor/Python binaries are forbidden in game output')
     return runtime,files
 def KeyFor(settings):
     security=settings['security']
@@ -96,6 +99,11 @@ def CompileScripts(project,runtime,architecture,cache,compiler_path=''):
     class GameScriptCompiler(ScriptCompiler):
         def _Validate(self,paths):return super()._Validate([*paths,*(p for p in assets.rglob('*') if p.is_file() and p.suffix.lower() in {'.cpp','.lua'})])
         def _compiler(self):
+            if os.name!='nt':
+                if compiler_path:
+                    value=Path(compiler_path);value=value/'bin/clang++' if value.is_dir() else value
+                    return value if value.is_file() else None
+                found=shutil.which('clang++');return Path(found) if found else None
             if compiler_path:
                 value=Path(compiler_path)
                 if value.is_dir():value=value/'bin/clang++.exe'
@@ -142,7 +150,7 @@ def CompileScripts(project,runtime,architecture,cache,compiler_path=''):
     if any(not Path(path).resolve().is_relative_to(project.parent) for path in sources):raise ValueError('Script attachments must reference sources inside the project')
     result=compiler.Build([p for p in sources if Path(p).suffix.lower()!='.lua'])
     if not result.success:raise ValueError('\n'.join(d.message for d in result.diagnostics))
-    return [binding for binding in attachments.RuntimeBindings(result.outputs) if Path(binding['module']).suffix.lower()=='.dll']
+    return [binding for binding in attachments.RuntimeBindings(result.outputs) if Path(binding['module']).suffix.lower() in {'.dll','.so'}]
 def CookShaders(cooked,cooker,check=lambda:None):
     import yaml
     from Editor.materials import MaterialCompiler
@@ -152,7 +160,7 @@ def CookShaders(cooked,cooker,check=lambda:None):
         def AssetInfo(self,reference):return by_id.get(str(reference),{})
     class ShaderCompiler(MaterialCompiler):
         def _Tool(self,name):
-            path=cooker.parent/'filament'/(name+'.exe')
+            path=cooker.parent/'filament'/(name+('.exe' if os.name=='nt' else ''))
             return path if path.is_file() else super()._Tool(name)
     compiler=ShaderCompiler(Assets(),app_root=cooker.parent)
     for record in records:
@@ -182,10 +190,14 @@ def Publish(staged,output,owner):
 def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
     project=Path(project).resolve();settings=Validate(Load(project));arch=settings['target']['architecture']
     if not project.is_file() or project.suffix!='.bproject':raise ValueError('Select a valid project file')
-    runtime,files=ValidateRuntime(runtime,arch)
+    from bazzalt.platforms import TargetError
+    platform=settings['target']['platform'];error=TargetError({**settings['target'],'key_storage':settings['security']['key_storage']})
+    if error:raise ValueError(error)
+    suffix='.exe' if platform=='windows' else ''
+    runtime,files=ValidateRuntime(runtime,arch,platform)
     cooker=Path(cooker).resolve()
     if not cooker.is_file() or Architecture(cooker)!='x64':raise ValueError('The x64 content cooker tool is missing or incompatible')
-    with BuildLock(project.parent) as cache, BuildWorkspace(cache/arch) as work:
+    with BuildLock(project.parent) as cache, BuildWorkspace(cache/(arch if platform=='windows' else platform+'-'+arch)) as work:
         check=lambda:CheckCancelled(cancel)
         check()
         cooked=work/'Cooked';cooked.mkdir()
@@ -207,12 +219,12 @@ def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
         for path in cooked.rglob('*'):
             if path.is_file() and path.suffix.lower() in forbidden:raise ValueError('Source file leaked into cooked content: '+str(path))
         destination=project.parent/'bin';destination.mkdir(exist_ok=True)
-        name=settings['production']['name'];output=destination/f'{name}-windows-{arch}'
+        name=settings['production']['name'];output=destination/f'{name}-{platform}-{arch}'
         with tempfile.TemporaryDirectory(prefix='.bazzalt-build-',dir=destination) as temp:
             root=Path(temp)/'Game';root.mkdir()
-            for filename in files:shutil.copy2(runtime/filename,root/(name+'.exe' if filename=='BazzaltPlayer.exe' else filename))
+            for filename in files:shutil.copy2(runtime/filename,root/(name+suffix if filename=='BazzaltPlayer'+suffix else filename))
             from .pe_resources import Apply
-            Apply(root/(name+'.exe'),settings['production'])
+            if platform=='windows':Apply(root/(name+suffix),settings['production'])
             from .security import SecurityContext
             security=SecurityContext(settings,KeyFor(settings));packages=[];content_hashes={}
             if settings['packaging']['format']=='pak':
@@ -225,13 +237,13 @@ def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
             (root/'LICENSE.txt').write_text(settings['production']['license'],encoding='utf-8')
             if (runtime/'licenses').is_dir():shutil.copytree(runtime/'licenses',root/'licenses')
             from .integrity import Seal
-            Seal(root,root/(name+'.exe'),security=security,content=content_hashes)
+            Seal(root,root/(name+suffix),security=security,content=content_hashes)
             check()
             Emit('verify','Verifying the packaged game')
-            Run([root/(name+'.exe'),'--verify-package'],cwd=root,timeout=120)
+            Run([root/(name+suffix),'--verify-package'],cwd=root,timeout=120)
             check()
             if settings['packaging']['archive']:
-                archive=destination/f'{name}-windows-{arch}.zip';temporary=work/'Game.zip'
+                archive=destination/f'{name}-{platform}-{arch}.zip';temporary=work/'Game.zip'
                 with zipfile.ZipFile(temporary,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as zipped:
                     for path in root.rglob('*'):
                         check()
@@ -245,12 +257,12 @@ def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
                 if launch:
                     # The game outlives the disposable cook workspace. Keep one
                     # compiler-owned launch image rather than one per build.
-                    launch_output=cache/arch/'Launch'
-                    Publish(root,launch_output,owner);launch_path=launch_output/(name+'.exe')
+                    launch_output=cache/(arch if platform=='windows' else platform+'-'+arch)/'Launch'
+                    Publish(root,launch_output,owner);launch_path=launch_output/(name+suffix)
             else:
                 check();Emit('publish','Publishing verified game output')
                 Publish(root,output,hashlib.sha256(str(project).encode('utf-8')).hexdigest());result=output
-                if launch:launch_path=output/(name+'.exe')
+                if launch:launch_path=output/(name+suffix)
     # Exit both the staging context and build lock before reporting success or
     # launching. Cleanup failures must never arrive after a game was launched.
     Emit('complete','Game build completed',output=str(result))

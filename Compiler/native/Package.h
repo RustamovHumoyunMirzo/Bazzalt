@@ -13,6 +13,8 @@
 #include <cstring>
 #include <ryml.hpp>
 
+extern "C" size_t ZSTD_decompress(void*,size_t,const void*,size_t);
+extern "C" unsigned ZSTD_isError(size_t);
 namespace Bazzalt::Game {
 inline void Require(bool value,const char* error){if(!value)throw std::runtime_error(error);}
 inline std::string Text(ryml::ConstNodeRef n){auto v=n.val();return {v.str,v.len};}
@@ -81,7 +83,7 @@ inline void Extract(const std::filesystem::path& folder,const std::filesystem::p
             Require(++records<=1000000,"Package record limit exceeded");std::vector<unsigned char> header(modern?29:25);Bytes(f,header.data(),header.size());
             auto u32=[&](int i){std::uint32_t v;std::memcpy(&v,header.data()+i,4);return v;};auto u64=[&](int i){std::uint64_t v;std::memcpy(&v,header.data()+i,8);return v;};
             auto names=u32(0),size=u32(4),rawSize=modern?u32(8):size;auto offset=u64(modern?12:8),total=u64(modern?20:16);auto flags=header[modern?28:24];const bool encrypted=flags&1,compressed=flags&2,alias=flags&4;
-            Require(names>0&&names<=4096u+(version3&&encrypted?28u:0u)&&size<=4u*1024u*1024u&&rawSize<=4u*1024u*1024u&&total<=8ull*1024*1024*1024&&offset<=total&&flags<=(modern?7:1)&&encrypted==!key.empty(),"Invalid package record");
+            Require(names>0&&names<=4096u+(version3&&encrypted?28u:0u)&&size<=4u*1024u*1024u&&rawSize<=4u*1024u*1024u&&total<=8ull*1024*1024*1024&&offset<=total&&flags<=(modern?15:1)&&(!(flags&8)||compressed)&&encrypted==!key.empty(),"Invalid package record");
             Require(alias?(!compressed&&offset==0&&rawSize==0&&size>0&&size<=4096):(rawSize<=total-offset&&(rawSize>0||total==0)&&(!compressed?size==rawSize:size>0)),"Invalid package payload framing");
             std::string encodedName(names,'\0');Bytes(f,encodedName.data(),names);std::string name=encodedName;
             if(version3&&encrypted){
@@ -109,7 +111,7 @@ inline void Extract(const std::filesystem::path& folder,const std::filesystem::p
                 Require(std::filesystem::is_regular_file(output/target)&&std::filesystem::file_size(output/target)==total,"Missing package alias target");
                 std::filesystem::copy_file(output/target,output/path);item.Offset=total;continue;
             }
-            if(compressed){std::vector<unsigned char> plain(rawSize);SIZE_T count=0;Require(Decompress(codec.Value,data.data(),data.size(),plain.data(),plain.size(),&count)!=0&&count==rawSize,"Invalid compressed package payload");data=std::move(plain);}
+            if(compressed){std::vector<unsigned char> plain(rawSize);SIZE_T count=0;if(flags&8){count=ZSTD_decompress(plain.data(),plain.size(),data.data(),data.size());Require(!ZSTD_isError(count)&&count==rawSize,"Invalid Zstd package payload");}else Require(Decompress(codec.Value,data.data(),data.size(),plain.data(),plain.size(),&count)!=0&&count==rawSize,"Invalid compressed package payload");data=std::move(plain);}
             std::ofstream file(output/path,std::ios::binary|(offset?std::ios::app:std::ios::trunc));file.write(reinterpret_cast<const char*>(data.data()),std::streamsize(data.size()));Require(bool(file),"Could not extract game content");item.Offset+=rawSize;
         }
     }

@@ -12,6 +12,13 @@ MACHINES = {0x014c: "x86", 0x8664: "x64", 0xaa64: "arm64"}
 
 def Architecture(path: Path) -> str:
     with path.open("rb") as stream:
+        header=stream.read(20)
+        if header[:4]==b"\x7fELF":
+            if len(header)<20 or header[5]!=1 or header[4] not in (1,2):raise ValueError("Unsupported ELF format")
+            machine=int.from_bytes(header[18:20],"little")
+            if machine not in (3,62) or header[4]!=(2 if machine==62 else 1):raise ValueError("Unsupported ELF architecture")
+            return "x64" if machine==62 else "x86"
+        stream.seek(0)
         if stream.read(2) != b"MZ": raise ValueError(f"Not a Windows executable: {path}")
         stream.seek(0x3c)
         offset = struct.unpack("<I", stream.read(4))[0]
@@ -22,7 +29,25 @@ def Architecture(path: Path) -> str:
         return MACHINES[machine]
 
 
-def Audit(root: Path, architecture: str, product: str) -> None:
+def Audit(root: Path, architecture: str, product: str, platform: str="windows") -> None:
+    if platform=="linux":
+        required={"editor":["Bazzalt","editor.json","Editor/libBazzalt.so","Editor/libbazzalt_gui.so","Editor/libbazzalt_lua.so","ScriptSDK/include/Bazzalt/Scene.h","ScriptSDK/lib/libBazzalt.so"],"core":["include/Bazzalt/Scene.h","lib/libBazzalt.so","lib/libbazzalt_lua.so","lib/libbazzalt_gui.so"],"hub":["BazzaltHub"],"compiler":["BazzaltCompiler","BazzaltCooker"]}.get(product,[])
+        for name in required:
+            if not (root/name).is_file():raise ValueError("Missing Linux file: "+name)
+        if product=="hub":
+            for path in root.rglob("*"):
+                if path.name.lower() in {"versions","scriptsdk","libbazzalt.so","libbazzalt_lua.so","libbazzalt_gui.so","toolchain"} or path.name.startswith("_bazzalt_runtime"):raise ValueError("Hub contains editor/core files: "+str(path))
+        binaries=[]
+        for path in root.rglob("*"):
+            if not path.is_file():continue
+            with path.open("rb") as stream:magic=stream.read(4)
+            if magic[:2]==b"MZ":raise ValueError("Windows binary in Linux payload: "+str(path))
+            if magic==b"\x7fELF":binaries.append(path)
+        if not binaries:raise ValueError("Payload has no ELF binaries")
+        for path in binaries:
+            if Architecture(path)!=architecture:raise ValueError("Wrong ELF architecture: "+str(path))
+        if product in {"editor","hub"} and architecture!="x64":raise ValueError("Editor and Hub require x64")
+        return
     if product in {"editor","hub"} and architecture != "x64":
         raise ValueError("Hub and Editor require 64-bit; x86 is a game-runtime target only")
     binaries = list(root.rglob("*.exe")) + list(root.rglob("*.dll")) + list(root.rglob("*.pyd"))
@@ -49,29 +74,30 @@ def Archive(root: Path, output: Path) -> None:
             if path.is_file(): archive.write(path, path.relative_to(root).as_posix())
 
 
-def Entry(path: Path, product: str, version: str, architecture: str, base_url: str) -> dict:
+def Entry(path: Path, product: str, version: str, architecture: str, base_url: str, platform: str="windows") -> dict:
     with path.open("rb") as stream:
         digest = hashlib.file_digest(stream, "sha256").hexdigest()
-    return {"id": f"{product}-{version}-windows-{architecture}", "product": product,
-            "version": version, "platform": "windows", "architecture": architecture,
+    return {"id": f"{product}-{version}-{platform}-{architecture}", "product": product,
+            "version": version, "platform": platform, "architecture": architecture,
             "url": base_url.rstrip("/") + "/" + path.name, "sha256": digest,
             "size": path.stat().st_size, "filename": path.name}
 
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--platform",choices=("windows","linux"),default="windows")
     parser.add_argument("--root", type=Path)
-    parser.add_argument("--product", choices=("editor", "core", "hub", "llvm"), required=True)
+    parser.add_argument("--product", choices=("editor", "core", "hub", "compiler", "llvm"), required=True)
     parser.add_argument("--architecture", choices=("x64", "x86"), required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--base-url", default="")
     args = parser.parse_args()
     if args.root:
-        Audit(args.root, args.architecture, args.product)
+        Audit(args.root, args.architecture, args.product,args.platform)
         Archive(args.root, args.output)
     if not args.output.is_file(): parser.error("Artifact does not exist")
-    entry = Entry(args.output, args.product, args.version, args.architecture, args.base_url)
+    entry = Entry(args.output, args.product, args.version, args.architecture, args.base_url,args.platform)
     args.output.with_suffix(args.output.suffix + ".json").write_text(json.dumps(entry, indent=2), encoding="utf-8")
 
 

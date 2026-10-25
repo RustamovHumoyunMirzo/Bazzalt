@@ -1,13 +1,74 @@
 {
-  "sections": ["manual", "native", "lua", "bshader"],
+  "sections": [
+    "whats-new",
+    "manual",
+    "native",
+    "lua",
+    "bshader"
+  ],
   "navigation": {
     "manual": {
       "title": "Editor manual",
-      "order": ["first-launch", "workspace", "first-scene", "panels", "menus", "assets", "scenes", "audio", "settings", "glossary"]
+      "order": [
+        "first-launch",
+        "workspace",
+        "first-scene",
+        "panels",
+        "menus",
+        "assets",
+        "scenes",
+        "audio",
+        "settings",
+        "glossary"
+      ]
     },
-    "manual/panels": {"title": "Panels", "order": ["hierarchy", "properties", "scene", "game", "assets", "console"]},
-    "native": {"title": "C++", "order": ["basics", "behaviors", "entities", "materials", "audio", "gui", "reference"]},
-    "lua": {"title": "Lua", "order": ["basics", "api", "audio", "gui", "reference"]},
-    "bshader": {"title": "Shaders", "order": ["language", "builtins", "pipeline", "cookbook", "troubleshooting", "compiler"]}
+    "manual/panels": {
+      "title": "Panels",
+      "order": [
+        "hierarchy",
+        "properties",
+        "scene",
+        "game",
+        "assets",
+        "console"
+      ]
+    },
+    "native": {
+      "title": "C++",
+      "order": [
+        "basics",
+        "behaviors",
+        "entities",
+        "materials",
+        "audio",
+        "gui",
+        "reference"
+      ]
+    },
+    "lua": {
+      "title": "Lua",
+      "order": [
+        "basics",
+        "api",
+        "audio",
+        "gui",
+        "reference"
+      ]
+    },
+    "bshader": {
+      "title": "Shaders",
+      "order": [
+        "language",
+        "builtins",
+        "pipeline",
+        "cookbook",
+        "troubleshooting",
+        "compiler"
+      ]
+    },
+    "whats-new": {
+      "title": "What's new",
+      "order": []
+    }
   }
 }

@@ -16,6 +16,7 @@ def PlayerHash(executable):
     # Match the native reader: PE checksum and certificate-directory entries
     # change during Authenticode signing; executable code/resources do not.
     data=bytearray(Path(executable).read_bytes())
+    if data[:4]==b'\x7fELF':return hashlib.sha256(data).hexdigest()
     if len(data)<64 or data[:2]!=b'MZ':raise ValueError('Invalid player executable')
     pe=struct.unpack_from('<I',data,60)[0];optional=pe+24
     if optional+152>len(data) or data[pe:pe+4]!=b'PE\0\0':raise ValueError('Invalid player PE header')

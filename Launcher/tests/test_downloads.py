@@ -26,6 +26,7 @@ class Response(io.BytesIO):
 
 class DownloadTests(unittest.TestCase):
     def setUp(self):
+        host=patch("Launcher.downloads.HostPlatform",return_value="windows");host.start();self.addCleanup(host.stop)
         base=Path(__file__).resolve().parents[2]/"build";base.mkdir(exist_ok=True)
         self.Temporary=tempfile.TemporaryDirectory(dir=base);self.addCleanup(self.Temporary.cleanup);self.Root=Path(self.Temporary.name)
 

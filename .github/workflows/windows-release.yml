@@ -7,6 +7,8 @@ permissions:
   contents: read
   actions: read
 jobs:
+  linux:
+    uses: ./.github/workflows/linux-release.yml
   editor:
     uses: ./.github/workflows/windows-product.yml
     with:
@@ -46,7 +48,7 @@ jobs:
           if-no-files-found: error
   publish:
     if: startsWith(github.ref, 'refs/tags/release-v')
-    needs: [editor, core, hub, tools]
+    needs: [editor, core, hub, tools, linux]
     runs-on: windows-2022
     permissions:
       contents: write
@@ -61,6 +63,10 @@ jobs:
           pattern: windows-*
           path: release
           merge-multiple: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: linux-products-x64
+          path: release
       - name: Publish verified packages and Hub catalog
         shell: pwsh
         env:
@@ -71,5 +77,5 @@ jobs:
           python scripts/make_download_catalog.py --output release/downloads.json --base-url "https://github.com/${{ github.repository }}/releases/download/$env:RELEASE_TAG" @entries
           if ($LASTEXITCODE -ne 0) { throw 'Invalid download catalog' }
           $files=Get-ChildItem release -File | ForEach-Object { $_.FullName }
-          gh release create $env:RELEASE_TAG @files --title "BAZZALT $env:RELEASE_TAG" --notes "Independent Windows x64 and Win32 Editor/Core packages and Hub-only installers. See downloads.json for versions and checksums. Shared LLVM is a separate download."
+          gh release create $env:RELEASE_TAG @files --title "BAZZALT $env:RELEASE_TAG" --notes "Windows and Linux x64 Editor/Hub/Core/Compiler packages; Win32 game runtime support. See downloads.json for versions and checksums. Shared LLVM is a separate download."
           if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }

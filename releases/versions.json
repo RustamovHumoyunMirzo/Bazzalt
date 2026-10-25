@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "editor": "0.6.0",
-  "core": "0.6.0",
-  "hub": "1.0.0",
+  "editor": "0.7.0",
+  "core": "0.7.0",
+  "hub": "1.1.0",
   "python": "3.13.2",
   "pyside": "6.10.2",
   "llvm": "22.1.0",

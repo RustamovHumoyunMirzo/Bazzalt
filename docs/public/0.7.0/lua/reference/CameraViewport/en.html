@@ -1,0 +1,112 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A normalized rectangle on a presentation surface. The origin is bottom-left. A half-width viewport has Width 0.5, not a width in pixels.">
+  <title>CameraViewport | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / Lua API reference / CameraViewport</nav>
+      <article class="doc"><h1>CameraViewport</h1>
+<p class="lead">A normalized rectangle on a presentation surface. The origin is bottom-left. A half-width viewport has Width 0.5, not a width in pixels.</p>
+<p><strong>Underlying public header:</strong> <code>Bazzalt/Components/Camera.h</code>.</p>
+<p>Read signatures together with the behavior notes below. The <a href="../en.html">reference introduction</a> explains arguments, return values, value copies, and errors.</p>
+<p>In call notation, <code>argument = default</code> describes an optional argument and its default; Lua does not use named arguments here. Supply the value positionally or omit it. The C++ declaration below is comparison data, not Lua syntax.</p>
+<h2 id="construction">Construction</h2><pre><code>Bazzalt.CameraViewport.new()</code></pre><p>Each line is an accepted construction form. The argument names stand for values you supply; an empty call uses default values. Plain data types construct with their declared default fields.</p>
+<div class="notice"><p>Component values returned by Entity are copies. After changing fields or methods, call entity:SetComponent(typeName, value). Derived components inherit Component.Enabled, IsEnabled and SetEnabled; core Identity, Hierarchy, Name and Transform have entity-level restrictions.</p></div>
+<h2 id="example">Example</h2><p>Gameplay snippets run inside a behavior callback or helper. Variables such as scene, camera, savedText and assetUUID are existing values, not automatically declared global variables.</p><pre><code>local rectangle = Bazzalt.CameraViewport.LeftHalf()</code></pre>
+<h2 id="BottomHalf">BottomHalf</h2>
+<pre><code>Bazzalt.CameraViewport.BottomHalf()</code></pre>
+<p>Returns the bottom half rectangle (0, 0, 1, 0.5).</p>
+<p><strong>Returns:</strong> CameraViewport.</p>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>static constexpr CameraViewport BottomHalf()</code></pre></details>
+<h2 id="FullScreen">FullScreen</h2>
+<pre><code>Bazzalt.CameraViewport.FullScreen()</code></pre>
+<p>Returns normalized rectangle (0, 0, 1, 1), covering the whole presentation surface.</p>
+<p><strong>Returns:</strong> CameraViewport.</p>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>static constexpr CameraViewport FullScreen()</code></pre></details>
+<h2 id="Grid">Grid</h2>
+<pre><code>Bazzalt.CameraViewport.Grid(column, row, columns, rows)</code></pre>
+<p>Returns a normalized cell for zero-based column/row in columns×rows. Invalid dimensions/indices return an empty viewport, not an exception.</p>
+<p><strong>Returns:</strong> CameraViewport.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>std::uint32_t column</code></td><td>Zero-based column index.</td></tr>
+<tr><td><code>std::uint32_t row</code></td><td>Zero-based row index.</td></tr>
+<tr><td><code>std::uint32_t columns</code></td><td>Number of grid columns; must be positive.</td></tr>
+<tr><td><code>std::uint32_t rows</code></td><td>Number of grid rows; must be positive.</td></tr>
+</tbody></table>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>static constexpr CameraViewport Grid(std::uint32_t column, std::uint32_t row, std::uint32_t columns, std::uint32_t rows)</code></pre></details>
+<h2 id="Height">Height</h2>
+<pre><code>value.Height</code></pre>
+<p>Height fraction of full presentation surface, default 1.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>float Height = 1.0f</code></pre></details>
+<h2 id="LeftHalf">LeftHalf</h2>
+<pre><code>Bazzalt.CameraViewport.LeftHalf()</code></pre>
+<p>Returns the left half rectangle (0, 0, 0.5, 1).</p>
+<p><strong>Returns:</strong> CameraViewport.</p>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>static constexpr CameraViewport LeftHalf()</code></pre></details>
+<h2 id="RightHalf">RightHalf</h2>
+<pre><code>Bazzalt.CameraViewport.RightHalf()</code></pre>
+<p>Returns the right half rectangle (0.5, 0, 0.5, 1).</p>
+<p><strong>Returns:</strong> CameraViewport.</p>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>static constexpr CameraViewport RightHalf()</code></pre></details>
+<h2 id="TopHalf">TopHalf</h2>
+<pre><code>Bazzalt.CameraViewport.TopHalf()</code></pre>
+<p>Returns the top half rectangle (0, 0.5, 1, 0.5).</p>
+<p><strong>Returns:</strong> CameraViewport.</p>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>static constexpr CameraViewport TopHalf()</code></pre></details>
+<h2 id="Width">Width</h2>
+<pre><code>value.Width</code></pre>
+<p>Width fraction of full presentation surface, default 1.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>float Width = 1.0f</code></pre></details>
+<h2 id="X">X</h2>
+<pre><code>value.X</code></pre>
+<p>Normalized bottom-left X coordinate, default 0.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>float X = 0.0f</code></pre></details>
+<h2 id="Y">Y</h2>
+<pre><code>value.Y</code></pre>
+<p>Normalized bottom-left Y coordinate, default 0.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>float Y = 0.0f</code></pre></details><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Lua members and signatures</h2>
+<p>Use <code>Bazzalt.CameraViewport</code>. Each member below is actually registered in Lua. The adapter declarations are C++ binding notation, not Lua example code. <code>sol::property</code> exposes a field, <code>sol::overload</code> lists alternatives, <code>sol::optional</code> accepts an omitted/nil argument, and <code>std::make_tuple</code> returns multiple Lua values. <code>sol::as_table</code> returns a Lua table. Instance methods use <code>value:Method(...)</code>; service/static calls use <code>Bazzalt.CameraViewport.Method(...)</code> unless a colon overload is explicitly registered. An engine exception becomes a Lua script error. See the examples and behavior notes above for usage.</p><h3 id="lua-Height">Height</h3><pre><code>value.Height: number</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>float Height = 1.0f;</code></pre></details><h3 id="lua-Width">Width</h3><pre><code>value.Width: number</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>float Width = 1.0f;</code></pre></details><h3 id="lua-X">X</h3><pre><code>value.X: number</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>float X = 0.0f;</code></pre></details><h3 id="lua-Y">Y</h3><pre><code>value.Y: number</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>float Y = 0.0f;</code></pre></details><h3 id="lua-construction">Construction / enum values</h3><p>Construct a value with <code>Bazzalt.CameraViewport()</code>. Constructor overloads, when available, are shown in the binding details.</p><details><summary>Native declaration and binding adapter</summary><pre><code>api.new_usertype&lt;CameraViewport&gt;(&quot;CameraViewport&quot;,sol::constructors&lt;CameraViewport()&gt;());</code></pre></details><p>Binding source: <code>src/Script/LuaComponents.cpp</code>. Inherited component operations use the Entity component APIs.</p>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../CameraRenderTarget/en.html"><small>Previous</small>CameraRenderTarget</a>
+<a class="next" href="../Component/en.html"><small>Next</small>Component</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#construction">Construction</a><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#BottomHalf">BottomHalf</a><a class="toc-link" href="#FullScreen">FullScreen</a><a class="toc-link" href="#Grid">Grid</a><a class="toc-link" href="#Height">Height</a><a class="toc-link" href="#LeftHalf">LeftHalf</a><a class="toc-link" href="#RightHalf">RightHalf</a><a class="toc-link" href="#TopHalf">TopHalf</a><a class="toc-link" href="#Width">Width</a><a class="toc-link" href="#X">X</a><a class="toc-link" href="#Y">Y</a><a class="toc-link" href="#source-contract">Lua members and signatures</a><a class="toc-link sub" href="#lua-Height">Height</a><a class="toc-link sub" href="#lua-Width">Width</a><a class="toc-link sub" href="#lua-X">X</a><a class="toc-link sub" href="#lua-Y">Y</a><a class="toc-link sub" href="#lua-construction">Construction / enum values</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

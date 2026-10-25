@@ -3,12 +3,17 @@
 [![Windows 32-bit Game Runtime](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/windows-32-bit.yml/badge.svg?event=push)](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/windows-32-bit.yml)
 [![Windows 64-bit](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/windows-64-bit.yml/badge.svg?event=push)](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/windows-64-bit.yml)
 
+[![Linux 64-bit](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/linux-64-bit.yml/badge.svg?event=push)](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/linux-64-bit.yml)
+
 BAZZALT is an editor-first C++20 game engine in active alpha development. It
 combines a native runtime with a PySide6 editor and Hub while keeping low-level
 engine lifetime, rendering, importing, and persistence away from game code.
 
-Hub and Editor require a 64-bit machine. The core/game runtime retains 32-bit
-support for generating games; the Win32 CI badge covers that runtime only.
+Version 0.7.0 supports Windows and Linux x64 Hub, Editor, game compiler and runtime.
+Linux presentation uses X11/XWayland; see the [Linux guide](docs/public/0.7.0/manual/linux/en.html).
+Windows also supports x86 game output; Hub and Editor always require x64.
+Build games on their target OS with a matching prebuilt runtime SDK.
+See [what is new in 0.7.0](docs/public/0.7.0/whats-new/en.html).
 
 > **Alpha status:** core workflows are functional, but APIs and file formats may
 > still change. BAZZALT is not yet recommended for production projects.

@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="The Audio Mixer edits a project&#x27;s .bmixer asset. Open it from Window &gt; Audio Mixer, double-click a mixer in the Asset Browser, or choose Edit in Audio Mixer. The panel contains Mixers, Snapshots, Groups and Views on the left, and channel strips on the right. Its menus, divider and controls use the editor theme.">
+  <title>Audio Mixer panel | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Editor manual / Panels / Audio Mixer panel</nav>
+      <article class="doc"><h1>Audio Mixer panel</h1>
+<p>The Audio Mixer edits a project's .bmixer asset. Open it from Window &gt; Audio Mixer, double-click a mixer in the Asset Browser, or choose Edit in Audio Mixer. The panel contains Mixers, Snapshots, Groups and Views on the left, and channel strips on the right. Its menus, divider and controls use the editor theme.</p>
+<h2 id="choose">Choose an asset</h2>
+<p>Create a mixer through Asset Browser &gt; Create &gt; Audio Mixer. Select one in the panel's Mixers list, use the top asset picker, or drag a .bmixer into that picker. These are actual project assets; the panel does not save a separate JSON demo file. Bus UUIDs remain stable when groups are renamed.</p>
+<h2 id="channels">Channel strips and routing</h2>
+<p>Each strip has a colored header, a numeric gain field, a non-linear dB fader and stereo level meters. The gain range is −80 dB (silence) to +20 dB. Double-click the fader to return to 0 dB. Shift-wheel uses finer adjustment; wheel editing requires focus. M mutes, S solos, and B bypasses that group's effect rack without bypassing its gain. Ancestor gain and mute still apply.</p>
+<p>Use the Groups section's plus button to add a child. Drag a group onto another group to reroute its output. Cycles are rejected. Master is the root and cannot be removed or renamed. Group context menus provide rename, color, visibility, lock and deletion controls. Hiding a strip or locking its editor controls does not mute gameplay audio.</p>
+<h2 id="effects">Effects</h2>
+<p>Use Add.. on a strip to append an effect. Click an effect row for its parameters; use its context menu to enable/bypass, reorder or remove it. Audio flows through the rack in displayed order, after group attenuation, then into the parent group.</p>
+<table><thead><tr><th>Effect</th><th>Controls</th></tr></thead><tbody>
+<tr><td>Lowpass / Highpass</td><td>Cutoff Freq 10–22000 Hz; Resonance 1–10.</td></tr>
+<tr><td>Echo</td><td>Delay 10–5000 ms; Decay Ratio, Dry Mix and Wet Mix 0–1. Feedback is bounded below unity.</td></tr>
+<tr><td>Distortion</td><td>Level 0–1; 0 is transparent, increasing values blend soft saturation.</td></tr>
+<tr><td>Reverb</td><td>Dry Level and Room −80–0 dB; Decay Time 0.1–20 seconds; Density 0–100%.</td></tr>
+<tr><td>Equalizer</td><td>Center Freq 20–22000 Hz; Octave Range 0.2–5; Frequency Gain 0.05–3 (linear).</td></tr></tbody></table>
+<p>Processing is native, not a GUI simulation. There are at most 16 effects per group, 512 per mixer, and 64 stereo seconds of combined delay storage. Invalid parameters or excessive storage are rejected without replacing the saved asset.</p>
+<h2 id="snapshots">Snapshots and views</h2>
+<p>A snapshot stores group gain, mute, bypass and existing effect enabled/parameter values. Create snapshots with the plus button; select one to apply its mix. Editing updates the active snapshot. Solo is a session control, not a snapshot value. Renaming a group preserves its snapshots. Views store which strips are visible, without changing the audio mix. Both are saved in the mixer asset; favorites and group colors/locks are also retained.</p>
+<h2 id="preview">Preview and metering</h2>
+<p>The mixer asset's Properties inspector is read-only for authoring. It shows group/effect counts, a project Audio Clip picker, an audition output bus, preview volume and a horizontal waveform player. The graph shows the clip's high/low amplitude over its complete timeline. Click or drag the graph or seek bar to change playback position; use play, pause and stop for transport. Analysis runs in the background and is reused when revisiting a clip. Very long clips use bounded sampling across the timeline. The waveform describes the source clip, not the effect-processed output.</p>
+<p>Select a clip and press Play to audition through the chosen mixer bus. This does not require a gameplay listener. Preview transport and volume do not edit the saved mixer. Auditioning is unavailable during Play, so it cannot replace the game's active mixer.</p>
+<p>The panel meters show actual post-effect peaks from playback or audition. They are idle when there is no signal; no random demo signal is generated. During gameplay assign the mixer asset to the active Audio Listener and set Audio Source output buses as needed.</p>
+<h2 id="saving">Saving</h2>
+<p>Edits autosave after a short pause; Save flushes immediately. Switching assets and closing the editor flush pending changes. Reload discards pending local edits. If the file changes externally while local edits are pending, the panel refuses to overwrite it. Editing the currently playing mixer updates playback without restarting voices. Gain-only edits retain DSP histories; changing effect configuration replaces its processor histories. Browser selection is preserved during refreshes.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../console/en.html"><small>Previous</small>Console</a>
+<a class="next" href="../../menus/en.html"><small>Next</small>Menus and play controls</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#choose">Choose an asset</a><a class="toc-link" href="#channels">Channel strips and routing</a><a class="toc-link" href="#effects">Effects</a><a class="toc-link" href="#snapshots">Snapshots and views</a><a class="toc-link" href="#preview">Preview and metering</a><a class="toc-link" href="#saving">Saving</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

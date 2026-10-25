@@ -7,6 +7,11 @@ class Compressor:
     def __init__(self):
         self.handle = ctypes.c_void_p()
         self.api = None
+        self.CodecFlag=0
+        self.zstd=None
+        if os.name!="nt":
+            import zstandard
+            self.zstd=zstandard.ZstdCompressor(level=6);self.CodecFlag=8
         if os.name == 'nt':
             self.api = ctypes.WinDLL('cabinet', use_last_error=True)
             self.api.CreateCompressor.argtypes = [ctypes.c_uint, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)]
@@ -18,6 +23,9 @@ class Compressor:
                 raise ctypes.WinError(ctypes.get_last_error())
 
     def Encode(self, data):
+        if self.zstd and data:
+            encoded=self.zstd.compress(data)
+            return (encoded,True) if len(encoded)<len(data) else (data,False)
         if not self.api or not data:
             return data, False
         size = ctypes.c_size_t()

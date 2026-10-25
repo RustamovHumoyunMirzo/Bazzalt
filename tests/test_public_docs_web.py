@@ -113,7 +113,8 @@ class PublicDocsWebTests(unittest.TestCase):
         self.assertEqual(self.js("document.body.hasAttribute('data-page')"),False)
         self.assertEqual(self.js("document.documentElement.lang"),'en')
         self.assertEqual(self.js("document.getElementById('version').value"),'0.6.0')
-        self.assertEqual(self.js("document.querySelectorAll('#version option').length"),2)
+        versions=[path for path in ROOT.iterdir() if path.is_dir() and (path/'manual/en.html').is_file()]
+        self.assertEqual(self.js("document.querySelectorAll('#version option').length"),len(versions))
         self.assertIn('0.6.0',self.js("document.querySelector('[data-doc-footer]').textContent"))
         self.assertEqual(self.js("document.querySelector('.nav-link[aria-current=page]').textContent"),'C++ audio')
         self.assertTrue(self.js("document.querySelector('.pager a').getAttribute('href').indexOf('0.6.0')===-1"))

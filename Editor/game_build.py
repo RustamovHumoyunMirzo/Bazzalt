@@ -24,14 +24,18 @@ class GameBuildController(QObject):
         if self.Editor.Controller.IsDirty:
             self._Message(tr('build.save_first'),True);return
         try:
-            project=Path(self.Editor.Runtime.ProjectInfo()['project_path']);settings=Load(project);arch=settings['target']['architecture'];root=Path(__file__).resolve().parents[1];app=Path(sys.executable).parent
-            runtime=Path(settings['target']['runtime_directory']) if settings['target']['runtime_directory'] else app/'RuntimeTemplates'/('windows-'+arch)
-            if not runtime.is_dir():runtime=root/'build/RuntimeTemplates'/('windows-'+arch) if not settings['target']['runtime_directory'] else runtime
-            tool=app/'tools/compiler/BazzaltCompiler.exe';cooker=app/'tools/compiler/BazzaltCooker.exe'
+            project=Path(self.Editor.Runtime.ProjectInfo()['project_path']);settings=Load(project);
+            from bazzalt.platforms import TargetError
+            error=TargetError({**settings['target'],'key_storage':settings['security']['key_storage']})
+            if error:raise ValueError(tr('build.unsupported_target',error=error))
+            platform=settings['target']['platform'];suffix='.exe' if platform=='windows' else '';arch=settings['target']['architecture'];root=Path(__file__).resolve().parents[1];app=Path(sys.executable).parent
+            runtime=Path(settings['target']['runtime_directory']) if settings['target']['runtime_directory'] else app/'RuntimeTemplates'/(platform+'-'+arch)
+            if not runtime.is_dir():runtime=root/'build/RuntimeTemplates'/(platform+'-'+arch) if not settings['target']['runtime_directory'] else runtime
+            tool=app/('tools/compiler/BazzaltCompiler'+suffix);cooker=app/('tools/compiler/BazzaltCooker'+suffix)
             if tool.is_file():program=str(tool);arguments=[]
             else:
                 if getattr(sys,'frozen',False) or '__compiled__' in globals():raise ValueError(tr('build.tools_missing'))
-                program=sys.executable;arguments=['-m','Compiler.build'];cooker=root/'build/Editor/Release/BazzaltCooker.exe'
+                program=sys.executable;arguments=['-m','Compiler.build'];cooker=root/('build/Editor/Release/BazzaltCooker.exe' if platform=='windows' else 'build/Editor/BazzaltCooker')
             arguments+=['--project',str(project),'--runtime',str(runtime),'--cooker',str(cooker)]
             compiler=self.Editor.PreferenceValue('tools','compiler_path','')
             if compiler:arguments+=['--script-compiler',compiler]

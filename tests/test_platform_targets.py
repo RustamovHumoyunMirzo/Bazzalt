@@ -1,0 +1,38 @@
+import copy,os,stat,struct,tempfile,unittest,zipfile
+from pathlib import Path
+from unittest.mock import patch
+from Compiler.settings import DEFAULTS,Validate
+from bazzalt.platforms import TargetError
+from scripts.release_artifacts import Architecture,Entry,Audit
+from Launcher.downloads import Extract
+
+class PlatformTargetsTests(unittest.TestCase):
+    def test_native_target_support_and_explicit_rejection(self):
+        with patch('bazzalt.platforms.HostPlatform',return_value='linux'),patch('bazzalt.platforms.platform.machine',return_value='x86_64'):
+            self.assertEqual(TargetError({'platform':'linux','architecture':'x64'}),'')
+            self.assertIn('Windows',TargetError({'platform':'windows','architecture':'x64'}))
+            self.assertIn('x64',TargetError({'platform':'linux','architecture':'x86'}))
+            self.assertIn('protection',TargetError({'platform':'linux','architecture':'x64','key_storage':'dpapi_user'}))
+        value=copy.deepcopy(DEFAULTS);value['target']['platform']='linux';self.assertEqual(Validate(value)['target']['platform'],'linux')
+    def test_elf_inspection_and_linux_release_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'Game';header=bytearray(64);header[:6]=b'\x7fELF\x02\x01';struct.pack_into('<H',header,18,62);path.write_bytes(header)
+            self.assertEqual(Architecture(path),'x64');entry=Entry(path,'core','0.7.0','x64','https://example.org','linux');self.assertEqual(entry['platform'],'linux')
+            header[5]=2;path.write_bytes(header)
+            with self.assertRaises(ValueError):Architecture(path)
+
+    def test_linux_payload_rejects_windows_libraries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);header=bytearray(64);header[:6]=b'\x7fELF\x02\x01';struct.pack_into('<H',header,18,62)
+            (root/'BazzaltHub').write_bytes(header);Audit(root,'x64','hub','linux')
+            (root/'wrong.dll').write_bytes(b'MZbad')
+            with self.assertRaisesRegex(ValueError,'Windows binary'):Audit(root,'x64','hub','linux')
+
+    @unittest.skipIf(os.name=='nt','POSIX permissions')
+    def test_linux_archive_restores_executable_permissions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);archive=root/'hub.zip'
+            with zipfile.ZipFile(archive,'w') as output:
+                item=zipfile.ZipInfo('BazzaltHub');item.create_system=3;item.external_attr=(stat.S_IFREG|0o4755)<<16;output.writestr(item,b'ELF')
+            Extract(archive,root/'out')
+            self.assertEqual(stat.S_IMODE((root/'out/BazzaltHub').stat().st_mode),0o755)

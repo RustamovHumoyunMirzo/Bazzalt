@@ -6,7 +6,7 @@ import re
 
 DEFAULTS={
     'version':1,'production':{'name':'Game','company':'','version':'1.0.0','copyright':'','license':'','description':''},
-    'target':{'architecture':'x64','startup_scene':'','runtime_directory':''},
+    'target':{'platform':'windows','architecture':'x64','startup_scene':'','runtime_directory':''},
     'window':{'title':'Game','width':1280,'height':720,'resizable':True,'mode':'windowed','backend':'automatic'},
     'intro':{'enabled':True,'duration_ms':2000,'logo_size':144,'allow_skip':False},
     'packaging':{'format':'pak','archive':False,'chunk_mb':64,'decoy_kb':0,'include_assets':'**','exclude_assets':''},
@@ -42,7 +42,7 @@ def Validate(value):
         if not isinstance(field,str) or '\0' in field or len(field)>65535:raise ValueError('Invalid production metadata: '+key)
     version=value['production']['version']
     if not re.fullmatch(r'\d+(?:\.\d+){1,3}',version) or any(int(part)>65535 for part in version.split('.')):raise ValueError('Product version must contain 2 to 4 numeric parts between 0 and 65535')
-    choices={'target':{'architecture':('x64','x86')},'window':{'mode':('windowed','maximized','borderless','fullscreen'),'backend':('automatic','vulkan','opengl')},'packaging':{'format':('loose','pak')},'security':{'preset':tuple(PRESETS)+('custom',),'encryption':('none','aes-256-gcm'),'key_storage':('embedded','file','environment','dpapi_user')}}
+    choices={'target':{'platform':('windows','linux'),'architecture':('x64','x86')},'window':{'mode':('windowed','maximized','borderless','fullscreen'),'backend':('automatic','vulkan','opengl')},'packaging':{'format':('loose','pak')},'security':{'preset':tuple(PRESETS)+('custom',),'encryption':('none','aes-256-gcm'),'key_storage':('embedded','file','environment','dpapi_user')}}
     for section,fields in choices.items():
         for key,items in fields.items():
             if value[section][key] not in items:raise ValueError(f'Invalid {section}.{key}')

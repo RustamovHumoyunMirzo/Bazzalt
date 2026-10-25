@@ -12,6 +12,7 @@ import tempfile
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 import zipfile
+from bazzalt.platforms import HostPlatform
 
 from PySide6.QtCore import QThread, Signal
 from bazzalt.settings import DataPaths, Version
@@ -40,7 +41,7 @@ def FetchCatalog(url: str) -> list[dict]:
     result = []
     for entry in value["downloads"]:
         ValidateEntry(entry)
-        if entry["platform"] == "windows" and (entry["architecture"] == "x64" or entry["product"] == "core"):
+        if entry["product"]!="compiler" and entry["platform"] == HostPlatform() and (entry["architecture"] == "x64" or entry["product"] == "core"):
             # x86 core SDKs are cross-build targets, not editor installations.
             if entry["product"] in {"editor","hub"} and entry["architecture"] != "x64":continue
             result.append(entry)
@@ -49,9 +50,9 @@ def FetchCatalog(url: str) -> list[dict]:
 
 def ValidateEntry(entry: dict) -> None:
     if not isinstance(entry, dict): raise ValueError("Invalid download entry")
-    if entry.get("product") not in {"editor", "core", "llvm", "hub", "windows-build-tools"}: raise ValueError("Unknown product")
+    if entry.get("product") not in {"editor", "core", "llvm", "hub", "compiler", "windows-build-tools"}: raise ValueError("Unknown product")
     Version.Parse(entry.get("version", ""))
-    if entry.get("platform") != "windows" or entry.get("architecture") not in {"x86", "x64"}: raise ValueError("Unsupported target")
+    if entry.get("platform") not in {"windows","linux"} or entry.get("architecture") not in {"x86", "x64"}: raise ValueError("Unsupported target")
     if not re.fullmatch(r"[a-zA-Z0-9_.-]+", entry.get("id", "")): raise ValueError("Unsafe download identifier")
     _Https(entry.get("url", ""))
     if not re.fullmatch(r"[a-fA-F0-9]{64}", entry.get("sha256", "")): raise ValueError("Missing SHA-256")
@@ -95,6 +96,7 @@ def Extract(archive: Path, target: Path) -> None:
             else:
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 with source.open(item) as stream, destination.open("xb") as output: shutil.copyfileobj(stream, output)
+                if os.name!="nt":destination.chmod((item.external_attr>>16)&0o755 or 0o644)
 
 
 def _PEArchitecture(path: Path) -> str:
@@ -113,7 +115,7 @@ def Install(entry: dict, archive: Path, versions: Path) -> Path:
         digest=hashlib.file_digest(stream,"sha256").hexdigest()
     if archive.stat().st_size != entry["size"] or digest.lower() != entry["sha256"].lower():
         raise ValueError("Package changed or failed its integrity check before installation")
-    product = entry["product"]
+    product = entry["product"];linux=entry["platform"]=="linux";executable="Bazzalt" if linux else "Bazzalt.exe";core="libBazzalt.so" if linux else "Bazzalt.dll";lua="libbazzalt_lua.so" if linux else "bazzalt_lua.dll";gui="libbazzalt_gui.so" if linux else "bazzalt_gui.dll"
     if product not in {"editor", "llvm", "core"}: raise ValueError("This download is not an installable ZIP package")
     parent = versions if product == "editor" else DataPaths.Tools() if product == "llvm" else DataPaths.Root() / "SDKs"
     name = "bazzalt_" + entry["version"].replace(".", "_") if product == "editor" else "llvm" if product == "llvm" else entry["id"]
@@ -123,26 +125,31 @@ def Install(entry: dict, archive: Path, versions: Path) -> Path:
         payload = Path(temporary) / "payload"; payload.mkdir(); Extract(archive, payload)
         if product == "editor":
             manifest = json.loads((payload / "editor.json").read_text(encoding="utf-8-sig"))
-            if manifest.get("version") != entry["version"] or manifest.get("architecture") != entry["architecture"] or manifest.get("executable") != "Bazzalt.exe":
+            if manifest.get("version") != entry["version"] or manifest.get("architecture") != entry["architecture"] or manifest.get("executable") != executable or manifest.get("platform","windows")!=entry["platform"]:
                 raise ValueError("Editor manifest does not match download catalog")
             if manifest.get("lua_version"):
-                for name in ("Editor/bazzalt_lua.dll","ScriptSDK/lib/bazzalt_lua.dll"):
+                for name in ("Editor/"+lua,"ScriptSDK/lib/"+lua):
                     if not (payload/name).is_file():raise ValueError("Missing Lua runtime library: "+name)
             if manifest.get("gui_abi"):
                 if type(manifest["gui_abi"]) is not int or manifest["gui_abi"] not in (1,2,3,4,5,6):raise ValueError("Unsupported GUI runtime ABI")
-                for name in ("Editor/bazzalt_gui.dll","ScriptSDK/lib/bazzalt_gui.dll"):
+                for name in ("Editor/"+gui,"ScriptSDK/lib/"+gui):
                     if not (payload/name).is_file():raise ValueError("Missing GUI runtime library: "+name)
-            for required in ("Bazzalt.exe", "Editor/Bazzalt.dll", "Editor/bshad.dll", "ScriptSDK/lib/Bazzalt.lib", "ScriptSDK/include/Bazzalt/Scene.h"):
+            for required in (executable, "Editor/"+core, "Editor/libbshad.so" if linux else "Editor/bshad.dll", "ScriptSDK/lib/"+(core if linux else "Bazzalt.lib"), "ScriptSDK/include/Bazzalt/Scene.h"):
                 if not (payload / required).is_file(): raise ValueError("Incomplete editor package: " + required)
-            if not list((payload/"Editor").glob("_bazzalt_runtime*.pyd")):raise ValueError("Editor package has no native runtime")
+            if not list((payload/"Editor").glob("_bazzalt_runtime*.so" if linux else "_bazzalt_runtime*.pyd")):raise ValueError("Editor package has no native runtime")
         elif product == "llvm":
-            if not (payload / "bin/clang++.exe").is_file(): raise ValueError("LLVM package lacks bin/clang++.exe")
+            if not (payload / ("bin/clang++" if linux else "bin/clang++.exe")).is_file(): raise ValueError("LLVM package lacks bin/clang++.exe")
         else:
-            if not (payload / "include/Bazzalt/Scene.h").is_file() or not (payload / "lib/Bazzalt.dll").is_file(): raise ValueError("Incomplete Core SDK package")
+            if not (payload / "include/Bazzalt/Scene.h").is_file() or not (payload / ("lib/"+core)).is_file(): raise ValueError("Incomplete Core SDK package")
             metadata=payload/"core.json"
-            if metadata.is_file() and json.loads(metadata.read_text(encoding="utf-8-sig")).get("gui_abi") and not (payload/"lib/bazzalt_gui.dll").is_file():raise ValueError("Missing GUI runtime library: lib/bazzalt_gui.dll")
+            if metadata.is_file() and json.loads(metadata.read_text(encoding="utf-8-sig")).get("gui_abi") and not (payload/("lib/"+gui)).is_file():raise ValueError("Missing GUI runtime library: lib/bazzalt_gui.dll")
         for path in payload.rglob("*"):
-            if path.is_file() and path.suffix.lower() in {".exe", ".dll", ".pyd"} and _PEArchitecture(path) != entry["architecture"]:
+            if linux and path.is_file():
+                with path.open("rb") as stream:elf=stream.read(4)==b"\x7fELF"
+                if elf:
+                    from scripts.release_artifacts import Architecture
+                    if Architecture(path)!=entry["architecture"]:raise ValueError("Wrong ELF architecture")
+            if not linux and path.is_file() and path.suffix.lower() in {".exe", ".dll", ".pyd"} and _PEArchitecture(path) != entry["architecture"]:
                 raise ValueError("Package contains a binary of the wrong architecture")
         payload.rename(destination)  # Same-filesystem atomic publication, no partial discovery.
     return destination

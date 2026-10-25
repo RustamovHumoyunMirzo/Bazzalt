@@ -11,7 +11,7 @@ class BuildSettingsDialog(QDialog):
         root=QVBoxLayout(self);body=QHBoxLayout();self.Sections=QListWidget();self.Sections.setFixedWidth(160);self.Pages=QStackedWidget();body.addWidget(self.Sections);body.addWidget(self.Pages,1);root.addLayout(body,1)
         for section,keys in (('production',tuple(self.Values['production'])),('target',tuple(self.Values['target'])),('window',tuple(self.Values['window'])),('intro',tuple(self.Values['intro'])),('packaging',('archive','include_assets','exclude_assets')),('security',tuple(self.Values['security'])+('format','chunk_mb','decoy_kb'))):
             self.Sections.addItem(self.Tr('build.section.'+section));page=QWidget();form=QFormLayout(page);form.setContentsMargins(14,12,14,12);form.setHorizontalSpacing(20);form.setVerticalSpacing(10);scroll=QScrollArea();scroll.setWidgetResizable(True);scroll.setWidget(page);self.Pages.addWidget(scroll)
-            options={'architecture':('x64','x86'),'mode':('windowed','maximized','borderless','fullscreen'),'backend':('automatic','vulkan','opengl'),'format':('pak','loose'),'preset':('low','medium','high','very_high','custom'),'encryption':('none','aes-256-gcm'),'key_storage':('embedded','file','environment','dpapi_user')}
+            options={'platform':('windows','linux'),'architecture':('x64','x86'),'mode':('windowed','maximized','borderless','fullscreen'),'backend':('automatic','vulkan','opengl'),'format':('pak','loose'),'preset':('low','medium','high','very_high','custom'),'encryption':('none','aes-256-gcm'),'key_storage':('embedded','file','environment','dpapi_user')}
             for key in keys:
                 storage='packaging' if key in ('format','chunk_mb','decoy_kb') else section
                 value=self.Values[storage][key]
@@ -31,8 +31,15 @@ class BuildSettingsDialog(QDialog):
             field=self.Controls[pair]
             (field.currentIndexChanged if isinstance(field,QComboBox) else field.toggled if isinstance(field,QCheckBox) else field.valueChanged).connect(self._Custom)
         self.Sections.currentRowChanged.connect(self.Pages.setCurrentIndex);self.Sections.setCurrentRow(0)
+        self.TargetWarning=QLabel();self.TargetWarning.setWordWrap(True);self.TargetWarning.setObjectName("BuildTargetWarning");root.addWidget(self.TargetWarning)
+        for pair in (("target","platform"),("target","architecture"),("security","key_storage")):self.Controls[pair].currentIndexChanged.connect(self._TargetWarning)
+        self._TargetWarning()
         self.Error=QLabel();self.Error.setWordWrap(True);root.addWidget(self.Error)
         buttons=QHBoxLayout();buttons.addStretch();cancel=QPushButton(self.Tr('preferences.cancel'));apply=QPushButton(self.Tr('preferences.apply'));buttons.addWidget(cancel);buttons.addWidget(apply);root.addLayout(buttons);cancel.clicked.connect(self.reject);apply.clicked.connect(self._Apply)
+    def _TargetWarning(self,*_):
+        from bazzalt.platforms import TargetError
+        value=self.GetValues();target={**value['target'],'key_storage':value['security']['key_storage']};error=TargetError(target)
+        self.TargetWarning.setText(self.Tr('build.unsupported_target',error=error) if error else '');self.TargetWarning.setVisible(bool(error))
     def GetValues(self):
         value=Load(self.Project)
         for (section,key),field in self.Controls.items():value[section][key]=field.currentData() if isinstance(field,QComboBox) else field.isChecked() if isinstance(field,QCheckBox) else field.value() if isinstance(field,QSpinBox) else field.toPlainText() if isinstance(field,QPlainTextEdit) else field.text()

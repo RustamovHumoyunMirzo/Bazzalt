@@ -1,6 +1,10 @@
 #!/usr/bin/env sh
 set -eu
-VERSION="${1:-0.6.0}"
+if [ "$(uname -s)" = Linux ]; then
+  ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+  exec python "$ROOT/scripts/build_linux_release.py" --product all
+fi
+VERSION="${1:-0.7.0}"
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 BUILD="$ROOT/build"
 OUTPUT="$ROOT/dist/production"

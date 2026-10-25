@@ -2,6 +2,7 @@
 from __future__ import annotations
 import os
 from pathlib import Path
+import shutil
 from .settings import DataPaths
 
 
@@ -14,4 +15,7 @@ def FindCompiler(override: str = "", roots=()) -> Path | None:
         return path if path.is_file() else None  # Invalid overrides must not silently fall back.
     candidates = [DataPaths.Tools() / "llvm" / "bin" / name]
     candidates.extend(Path(root) / "toolchain" / "llvm" / "bin" / name for root in roots)
-    return next((path for path in candidates if path.is_file()), None)
+    found=next((path for path in candidates if path.is_file()),None)
+    if found is None and os.name!="nt":
+        system=shutil.which("clang++");found=Path(system) if system else None
+    return found

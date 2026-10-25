@@ -11,6 +11,13 @@ from Editor.gui.build_settings import BuildSettingsDialog
 from Compiler.settings import Load
 
 class GameBuildTests(unittest.TestCase):
+    def test_unsupported_target_warning_and_console_error(self):
+        with tempfile.TemporaryDirectory() as folder,patch('bazzalt.platforms.HostPlatform',return_value='windows'):
+            project=Path(folder)/'Game.bproject';editor=QWidget();editor.Runtime=Mock();editor.Runtime.ProjectInfo.return_value={'project_path':str(project)};editor.Localization=LocalizationManager(ResourceManager())
+            dialog=BuildSettingsDialog(editor);platform=dialog.Controls[('target','platform')];platform.setCurrentIndex(platform.findData('linux'));self.assertIn('Unsupported',dialog.TargetWarning.text());dialog._Apply()
+            from Editor.game_build import GameBuildController
+            editor.MenuBar=Mock();editor.Console=Mock();editor.Controller=SimpleNamespace(IsDirty=False);editor.Runtime.IsPlaying.return_value=False
+            controller=GameBuildController(editor);controller.Build(False);self.assertIsNone(controller.Process);self.assertIn('Unsupported',editor.Console.AddMessage.call_args.args[0]);dialog.deleteLater();editor.deleteLater()
     @classmethod
     def setUpClass(cls):cls.App=QApplication.instance() or QApplication([])
     def test_modal_settings_and_preset_persistence(self):

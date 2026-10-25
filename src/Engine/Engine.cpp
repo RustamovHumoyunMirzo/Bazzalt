@@ -423,7 +423,7 @@ bool Engine::StartScripts(bool resetTime){
                 ScriptBinding binding;binding.Module=asset->CachePath;binding.TypeName=script.TypeName;
                 binding.Entity=m_scene->GetEntity(static_cast<Entity::Id>(handle)).GetUUID().ToString();
                 for(const auto& property:script.Properties)binding.Properties[property.Name]=property.Value;
-                if(nativeModule){if(asset->CachePath.extension()!=".dll"){m_lastError="Native game script has not been compiled";return false;}native.push_back(std::move(binding));}
+                if(nativeModule){if((asset->CachePath.extension()!=".dll"&&asset->CachePath.extension()!=".so"&&asset->CachePath.extension()!=".dylib")){m_lastError="Native game script has not been compiled";return false;}native.push_back(std::move(binding));}
                 else bindings.push_back(std::move(binding));
             }
         }

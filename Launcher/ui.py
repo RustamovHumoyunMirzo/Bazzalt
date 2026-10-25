@@ -1,5 +1,6 @@
 """Independent, platform-native Qt Widgets interface for BAZZALT Hub."""
 from __future__ import annotations
+import sys
 
 from pathlib import Path
 from PySide6.QtCore import QByteArray, QDateTime, QEvent, QLocale, QSize, QSortFilterProxyModel, Qt, QUrl
@@ -134,6 +135,7 @@ class NativeHubWindow(QMainWindow):
         self.DownloadProgress=QProgressBar(downloads);self.DownloadProgress.setRange(0,100);self.DownloadProgress.hide();dl.addWidget(self.DownloadProgress)
         dl.addWidget(Muted("Editors include the Core SDK. LLVM is installed separately and shared by all editor versions. Windows also requires Microsoft's C++ Build Tools and Windows SDK.",downloads));layout.addWidget(downloads)
         self.DownloadWorker=None;self.CheckDownloads.clicked.connect(self.FetchDownloads);self.InstallDownload.clicked.connect(self.InstallSelectedDownload);self.CancelDownload.clicked.connect(self.CancelInstall)
+        windows_tools.setVisible(sys.platform=="win32")
         windows_tools.clicked.connect(lambda:QDesktopServices.openUrl(QUrl("https://visualstudio.microsoft.com/visual-cpp-build-tools/")))
 
     def BuildPreferences(self):

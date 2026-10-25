@@ -9,8 +9,8 @@ from pathlib import Path
 from bazzalt.settings import DataPaths, ReadProjectMetadata, SettingsStore, Version
 
 HUB_SCHEMA_VERSION = 2
-CURRENT_EDITOR_VERSION = "0.6.0"
-HUB_VERSION = "1.0.0"
+CURRENT_EDITOR_VERSION = "0.7.0"
+HUB_VERSION = "1.1.0"
 # Existing source-development projects used the unreleased 1.0.0 placeholder.
 # Keep that development registration compatible; shipped versions come from editor.json.
 DEVELOPMENT_EDITOR_VERSION = "1.0.0"
@@ -54,6 +54,8 @@ class HubCatalog:
                     # forms so editor discovery also survives manifests from older installers.
                     value = json.loads((root / "editor.json").read_text(encoding="utf-8-sig"))
                     if value.get("architecture") in {"x86","win32","32"}:continue
+                    from bazzalt.platforms import HostPlatform
+                    if value.get("platform","windows" if value.get("executable","").endswith(".exe") else "linux")!=HostPlatform():continue
                     version = str(value["version"]); Version.Parse(version)
                     executable = str(value.get("executable", "Bazzalt.exe" if os.name == "nt" else "Bazzalt"))
                     target = (root / executable).resolve()

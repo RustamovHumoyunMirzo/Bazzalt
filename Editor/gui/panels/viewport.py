@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from math import cos, isfinite, radians, sin, tan
+import sys
 
 from PySide6.QtCore import QPoint, QPointF, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QGuiApplication, QKeyEvent, QMouseEvent, QPainter, QPen, QWheelEvent
@@ -91,6 +92,8 @@ class NativeRenderSurface(QWidget):
         # These Qt plugins provide synthetic WIds, not native presentation surfaces.
         # Passing one to a graphics driver can abort the entire process.
         if QGuiApplication.platformName().casefold() in {"offscreen","minimal","minimalegl"}:return
+        # Filament's Linux native surface is an X11 Window, never a Wayland WId.
+        if sys.platform.startswith("linux") and QGuiApplication.platformName().casefold() != "xcb":return
         # Delay native-window promotion until docking has finished constructing
         # and reparenting its tab hierarchy.
         self.setAttribute(Qt.WidgetAttribute.WA_NativeWindow)
