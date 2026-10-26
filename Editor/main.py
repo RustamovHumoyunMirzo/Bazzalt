@@ -161,6 +161,10 @@ class EditorSession(QObject):
         # Process queued native/Qt input while the dialog, disabled window and
         # input filter still block it. Do not run a nested render tick here.
         self.App.processEvents(QEventLoop.ProcessEventsFlag.AllEvents)
+        # Nested platform event pumping need not deliver every posted event.
+        # Flush input explicitly through the still-installed blocker before
+        # enabling widgets. Leave timers, signals and deletion events alone.
+        for kind in StartupInputBlocker.Inputs:self.App.sendPostedEvents(None,int(kind))
         if self._startupFailed:return
         self._ReleaseStartupInput()
         window.Controller.FrameCompleted.disconnect(self._StartupFrame)

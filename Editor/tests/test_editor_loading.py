@@ -108,3 +108,17 @@ class EditorLoadingTests(unittest.TestCase):
             self.assertFalse(window.Controller.Timer.isActive());self.assertIsNone(session._startupInput)
             self.assertIn('Renderer initialization failed',(Path(folder)/'editor-startup.log').read_text(encoding='utf-8'))
             message.assert_called_once();quit.assert_called_once()
+
+    def test_completion_flushes_posted_input_when_native_event_pump_defers_it(self):
+        window=self._Open();session=self.Session;session._finishing=True
+        callbacks=[];QTimer.singleShot(0,lambda:callbacks.append('preserved'))
+        for kind,buttons in ((QEvent.Type.MouseButtonPress,Qt.MouseButton.LeftButton),(QEvent.Type.MouseButtonRelease,Qt.MouseButton.NoButton)):
+            self.App.postEvent(window.Button,QMouseEvent(kind,QPointF(4,4),QPointF(4,4),Qt.MouseButton.LeftButton,buttons,Qt.KeyboardModifier.NoModifier))
+        # A platform dispatcher can defer posted events during nested pumping.
+        # Force that ordering so the regression also reproduces on Windows.
+        with patch.object(self.App,'processEvents'):session._FinishStartup()
+        self.App.processEvents()
+        self.assertTrue(window.isEnabled());self.assertEqual(window.Clicks,0)
+        self.assertEqual(callbacks,['preserved'])
+        QTest.mouseClick(window.Button,Qt.MouseButton.LeftButton)
+        self.assertEqual(window.Clicks,1)

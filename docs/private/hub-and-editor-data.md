@@ -34,7 +34,10 @@ GUI thread. Native graphics objects are not moved to a worker thread.
 
 Startup input is discarded by an application event filter. Before enabling the
 editor, the session pauses its tick timer and drains queued events while that
-filter and modal dialog are still active. Clicks and shortcuts made during
+filter and modal dialog are still active. It explicitly dispatches posted input
+through that blocker too: nested native event pumping alone can defer posted
+events on Linux. Timers, queued signals and deletion events are not removed.
+Clicks and shortcuts made during
 initialization therefore cannot replay against the ready editor. Escape and
 close cannot dismiss the loading dialog early. A failed initial frame keeps the
 editor disabled, logs the failure, shows an error and exits instead of exposing
