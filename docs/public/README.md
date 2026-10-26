@@ -7,7 +7,7 @@ docs/public/
   index.html                  Home page
   site.json                   Optional section names and reading order
   templateExample.html        Shared page layout
-  assets/                     Shared CSS/JS; automatic search index
+  assets/                     Shared CSS/JS and generated data bundles
   0.5.0/                      One folder per documentation version
     manual/
       en.html                 Edit this page directly
@@ -84,7 +84,8 @@ declaration.** No version list needs updating. The highest version is the
 home-page default. Historical articles remain independent: do not share mutable
 article files between releases, or a new API edit would rewrite older docs.
 
-Adding a version or translation updates `assets/catalog.js` and the new files,
+Adding a version or translation updates the small `assets/catalog.js` manifest
+and its generated navigation/search bundles, plus the new HTML files,
 not the selectors/footer/title of every existing page. Previous/next links are
 relative within a release, so copying it does not leave links to the old one.
 Articles with deliberately written release-specific examples or links remain
@@ -101,10 +102,15 @@ python -m unittest discover -s tests -p test_public_docs.py -v
 ```
 
 The first command refreshes the shared layout, relative URLs,
-table of contents, previous/next links, and `assets/catalog.js` navigation/search
-index. The sidebar, version/language selectors, footer identity and home-page
-destinations are rendered from that shared local index, not copied
-into every page. Adding a guide updates the shared index and adjacent pager
+table of contents, previous/next links, and generated data under `assets/`.
+`catalog.js` contains only release/language manifests and home-page destinations.
+Guides load one `assets/navigation/<version>/<language>.js` bundle; the home page
+loads no navigation bundle. Full-text data in
+`assets/search/<version>/<language>.js` loads only when search opens and is reused
+for subsequent searches. Search results are limited to 60 visible entries; refine
+a query to find more matches. These generated scripts work with both HTTP and
+`file://`, without fetching unrelated releases on startup. Do not edit them by
+hand. Adding a guide updates its release bundles and adjacent pager
 links; unrelated pages no longer change merely because the tree changed.
 Commit refreshed files. The article text remains unchanged. No
 packages or engine compilation are needed.

@@ -28,6 +28,7 @@ namespace Bazzalt::Runtime {
 
 class RenderAssets;
 class GuiRenderer;
+class GraphicsRenderer;
 
 // Owns Filament's low-level objects. No Filament type crosses the public API.
 class RenderBackend final {
@@ -64,7 +65,7 @@ public:
     void Render();
     std::unordered_map<std::string,double> GetStatistics() const;
     void SetEditorStatisticsText(std::string text,bool visible){m_statisticsText=std::move(text);m_statisticsVisible=visible;}
-    void RenderCameraView(filament::View* view);
+    void RenderCameraView(filament::View* view,std::uint64_t viewport=0);
     void SetGuiScene(Bazzalt::Scene* scene);
     void ClearGuiResources();
     filament::Texture* GetCameraTexture(UUID id) const;
@@ -122,6 +123,7 @@ private:
     std::uint32_t m_presentationHeight = 720;
     std::unordered_map<filament::View*, std::vector<CustomPostProcessEffect>> m_postProcessEffects;
     std::unique_ptr<RenderAssets> m_assets;
+    std::unique_ptr<GraphicsRenderer> m_graphics;
     std::unique_ptr<GuiRenderer> m_guiRenderer;
     std::unique_ptr<GuiRenderer> m_statisticsRenderer;
     std::unique_ptr<Bazzalt::Scene> m_statisticsScene;

@@ -51,6 +51,7 @@ extern "C" void stbi_image_free(void*);
 #include "editor_overdraw_filamat.h"
 #include "editor_wireframe_filamat.h"
 #include "primitive_lit_filamat.h"
+#include "graphics_unlit_filamat.h"
 
 namespace Bazzalt::Runtime {
 namespace {
@@ -218,6 +219,7 @@ struct RenderAssets::Impl {
     filament::Texture* BlackTexture=nullptr;
     filament::Material* DebugUnlit=nullptr;filament::Material* DebugLighting=nullptr;filament::Material* DebugOverdraw=nullptr;filament::Material* DebugWireframe=nullptr;
     filament::Material* PrimitiveMaterial=nullptr;
+    filament::Material* GraphicsMaterial=nullptr;
     filament::MaterialInstance* DebugUnlitInstance=nullptr;filament::MaterialInstance* DebugLightingInstance=nullptr;filament::MaterialInstance* DebugOverdrawInstance=nullptr;filament::MaterialInstance* DebugWireframeInstance=nullptr;
     std::string DebugMode="lit";
 
@@ -235,6 +237,7 @@ struct RenderAssets::Impl {
         DebugUnlit=filament::Material::Builder().package(Embedded::EditorUnlitFilamat,Embedded::EditorUnlitFilamatSize).build(Engine);DebugLighting=filament::Material::Builder().package(Embedded::EditorLightingOnlyFilamat,Embedded::EditorLightingOnlyFilamatSize).build(Engine);DebugOverdraw=filament::Material::Builder().package(Embedded::EditorOverdrawFilamat,Embedded::EditorOverdrawFilamatSize).build(Engine);DebugWireframe=filament::Material::Builder().package(Embedded::EditorWireframeFilamat,Embedded::EditorWireframeFilamatSize).build(Engine);
         if(DebugUnlit)DebugUnlitInstance=DebugUnlit->createInstance();if(DebugLighting)DebugLightingInstance=DebugLighting->createInstance();if(DebugOverdraw)DebugOverdrawInstance=DebugOverdraw->createInstance();if(DebugWireframe)DebugWireframeInstance=DebugWireframe->createInstance();
         PrimitiveMaterial=filament::Material::Builder().package(Embedded::PrimitiveLitFilamat,Embedded::PrimitiveLitFilamatSize).build(Engine);
+        GraphicsMaterial=filament::Material::Builder().package(Embedded::GraphicsUnlitFilamat,Embedded::GraphicsUnlitFilamatSize).build(Engine);
     }
 
     filament::Material* LoadMaterial(UUID id) {
@@ -706,6 +709,20 @@ void RenderAssets::BeginEditorView(const std::unordered_set<UUID>& hidden){
 void RenderAssets::EndEditorView(){if(!m_impl)return;for(auto entity:m_impl->EditorSuspended)m_impl->Scene.addEntity(entity);m_impl->EditorSuspended.clear();}
 
 bool RenderAssets::SetDebugMode(const std::string& mode){if(!m_impl||mode!="lit"&&mode!="unlit"&&mode!="wireframe"&&mode!="lighting_only"&&mode!="overdraw")return false;m_impl->DebugMode=mode;for(auto& [_,instance]:m_impl->Instances)m_impl->ApplyDebug(instance);return true;}
+filament::MaterialInstance* RenderAssets::CreateGraphicsMaterial(){return m_impl&&m_impl->GraphicsMaterial?m_impl->GraphicsMaterial->createInstance():nullptr;}
+filament::MaterialInstance* RenderAssets::CreateSurfaceMaterial(UUID asset){
+    if(!m_impl||!Bazzalt::Material::Load(asset).IsValid())return nullptr;
+    auto* shader=m_impl->LoadMaterial(Bazzalt::Material::Load(asset).GetShader().GetAssetUUID());
+    if(!shader||shader->getMaterialDomain()!=filament::MaterialDomain::SURFACE)return nullptr;
+    constexpr auto allowed=(1u<<unsigned(filament::VertexAttribute::POSITION))|(1u<<unsigned(filament::VertexAttribute::TANGENTS))|(1u<<unsigned(filament::VertexAttribute::UV0))|(1u<<unsigned(filament::VertexAttribute::UV1))|(1u<<unsigned(filament::VertexAttribute::COLOR));
+    if(shader->getRequiredAttributes().getValue()&~allowed)return nullptr;
+    auto* instance=shader->createInstance();m_impl->ApplyMaterialValues(instance,asset);return instance;
+}
+bool RenderAssets::UpdateSurfaceMaterial(filament::MaterialInstance* instance,UUID asset){
+    if(!m_impl||!instance||!Bazzalt::Material::Load(asset).IsValid())return false;
+    auto* shader=m_impl->LoadMaterial(Bazzalt::Material::Load(asset).GetShader().GetAssetUUID());if(shader!=instance->getMaterial())return false;
+    m_impl->ApplyMaterialValues(instance,asset);return true;
+}
 filament::MaterialInstance* RenderAssets::CreateCanvasMaterial(UUID asset){
     if(!m_impl||!Bazzalt::Material::Load(asset).IsCanvasCompatible())return nullptr;
     auto* shader=m_impl->LoadMaterial(Bazzalt::Material::Load(asset).GetShader().GetAssetUUID());
@@ -769,6 +786,7 @@ void RenderAssets::Shutdown() {
     for(auto* material:m_impl->RetiredMaterials)m_impl->Engine.destroy(material);
     for(auto* instance:{m_impl->DebugUnlitInstance,m_impl->DebugLightingInstance,m_impl->DebugOverdrawInstance,m_impl->DebugWireframeInstance})if(instance)m_impl->Engine.destroy(instance);
     for(auto* material:{m_impl->DebugUnlit,m_impl->DebugLighting,m_impl->DebugOverdraw,m_impl->DebugWireframe})if(material)m_impl->Engine.destroy(material);
+    if(m_impl->GraphicsMaterial)m_impl->Engine.destroy(m_impl->GraphicsMaterial);
     if(m_impl->PrimitiveMaterial)m_impl->Engine.destroy(m_impl->PrimitiveMaterial);
     m_impl->Textures.clear(); m_impl->Materials.clear();
     if (m_impl->GltfLoader) filament::gltfio::AssetLoader::destroy(&m_impl->GltfLoader);

@@ -1,4 +1,5 @@
 #include "Runtime/NativeScriptRuntime.h"
+#include "Runtime/GraphicsAccess.h"
 #include "Runtime/ApplicationEventsAccess.h"
 #include "Runtime/BehaviorAccess.h"
 #include "Bazzalt/Script.h"
@@ -22,8 +23,9 @@ namespace {
 struct ModuleScope {
     std::shared_ptr<void> Previous;
     const void* PreviousOwner;
-    explicit ModuleScope(std::shared_ptr<void> module,const void* owner=nullptr) : Previous(Detail::SetCurrentGameplayModule(std::move(module))),PreviousOwner(ApplicationEventsAccess::SetOwner(owner)) {}
-    ~ModuleScope() { Detail::SetCurrentGameplayModule(std::move(Previous));ApplicationEventsAccess::SetOwner(PreviousOwner); }
+    const void* PreviousGraphicsOwner;
+    explicit ModuleScope(std::shared_ptr<void> module,const void* owner=nullptr) : Previous(Detail::SetCurrentGameplayModule(std::move(module))),PreviousOwner(ApplicationEventsAccess::SetOwner(owner)),PreviousGraphicsOwner(GraphicsAccess::SetScope(owner)) {}
+    ~ModuleScope() { Detail::SetCurrentGameplayModule(std::move(Previous));ApplicationEventsAccess::SetOwner(PreviousOwner);GraphicsAccess::SetScope(PreviousGraphicsOwner); }
 };
 Detail::EntityServices EntityHostServices{
     [](UUID id, Transform* value) {
@@ -148,5 +150,5 @@ void NativeScriptRuntime::Update(float deltaTime){for(auto& instance:m_instances
 void NativeScriptRuntime::FixedUpdate(float deltaTime){for(auto& instance:m_instances)if(instance.OnFixedUpdate){ModuleScope scope(instance.Lease,instance.Object);instance.OnFixedUpdate(instance.Object,deltaTime);}}
 void NativeScriptRuntime::LateUpdate(float deltaTime){for(auto& instance:m_instances)if(instance.OnLateUpdate){ModuleScope scope(instance.Lease,instance.Object);instance.OnLateUpdate(instance.Object,deltaTime);}}
 void NativeScriptRuntime::ApplicationEvent(const Bazzalt::ApplicationEvent& event){for(auto& instance:m_instances)if(instance.OnApplicationEvent){ModuleScope scope(instance.Lease,instance.Object);instance.OnApplicationEvent(instance.Object,&event);}}
-void NativeScriptRuntime::Stop() noexcept{for(auto it=m_instances.rbegin();it!=m_instances.rend();++it)if(it->Object&&it->Api){ModuleScope scope(it->Lease,it->Object);BehaviorAccess::Remove(it->BehaviorObject);try{if(!it->Application)it->Api->OnDestroy(it->Object);}catch(...){}ApplicationEventsAccess::DisconnectOwner(it->Object);try{it->Api->Destroy(it->Object);}catch(...){}}m_instances.clear();}
+void NativeScriptRuntime::Stop() noexcept{for(auto it=m_instances.rbegin();it!=m_instances.rend();++it)if(it->Object&&it->Api){ModuleScope scope(it->Lease,it->Object);BehaviorAccess::Remove(it->BehaviorObject);try{if(!it->Application)it->Api->OnDestroy(it->Object);}catch(...){}GraphicsAccess::DisconnectScope(it->Object);ApplicationEventsAccess::DisconnectOwner(it->Object);try{it->Api->Destroy(it->Object);}catch(...){}}m_instances.clear();}
 }

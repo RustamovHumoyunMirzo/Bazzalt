@@ -72,6 +72,7 @@ void BindLuaComponents(sol::table api){
      type["Width"]=&CameraViewport::Width;
      type["Height"]=&CameraViewport::Height;
     }
+    {auto pass=api.new_usertype<CameraMaterialPass>("CameraMaterialPass",sol::constructors<CameraMaterialPass()>());pass["MaterialAsset"]=&CameraMaterialPass::MaterialAsset;pass["Enabled"]=&CameraMaterialPass::Enabled;}
     {auto type=api.new_usertype<CameraPostProcessing>("CameraPostProcessing",sol::constructors<CameraPostProcessing()>());
      type["Enabled"]=&CameraPostProcessing::Enabled;
      type["Bloom"]=&CameraPostProcessing::Bloom;
@@ -80,7 +81,7 @@ void BindLuaComponents(sol::table api){
      type["ToneMappingMode"]=&CameraPostProcessing::ToneMappingMode;
      type["Exposure"]=&CameraPostProcessing::Exposure;
      type["DepthOfField"]=&CameraPostProcessing::DepthOfField;
-     type["MaterialAsset"]=&CameraPostProcessing::MaterialAsset;type["SetMaterial"]=&CameraPostProcessing::SetMaterial;type["GetMaterial"]=&CameraPostProcessing::GetMaterial;type["CustomEffects"]=&CameraPostProcessing::CustomEffects;
+     type["MaterialAsset"]=&CameraPostProcessing::MaterialAsset;type["AddMaterial"]=[](CameraPostProcessing& v,Material m,sol::optional<bool> enabled){return v.AddMaterial(m,enabled.value_or(true));};type["SetMaterialAt"]=&CameraPostProcessing::SetMaterialAt;type["SetMaterialEnabled"]=&CameraPostProcessing::SetMaterialEnabled;type["RemoveMaterial"]=&CameraPostProcessing::RemoveMaterial;type["MoveMaterial"]=&CameraPostProcessing::MoveMaterial;type["ClearMaterials"]=&CameraPostProcessing::ClearMaterials;type["GetMaterials"]=[](const CameraPostProcessing& v){return sol::as_table(v.GetMaterials());};type["SetMaterials"]=[](CameraPostProcessing& v,sol::table table){if(table.size()>CameraPostProcessing::MaxMaterials)throw std::length_error("Too many camera materials");std::vector<CameraMaterialPass> passes;for(std::size_t i=1;i<=table.size();++i)passes.push_back(table.get<CameraMaterialPass>(i));v.SetMaterials(std::move(passes));};type["Materials"]=sol::property([](const CameraPostProcessing& v){return sol::as_table(v.GetMaterials());},[](CameraPostProcessing& v,sol::table table){if(table.size()>CameraPostProcessing::MaxMaterials)throw std::length_error("Too many camera materials");std::vector<CameraMaterialPass> passes;for(std::size_t i=1;i<=table.size();++i)passes.push_back(table.get<CameraMaterialPass>(i));v.SetMaterials(std::move(passes));});type["MaxMaterials"]=sol::var(CameraPostProcessing::MaxMaterials);type["SetMaterial"]=&CameraPostProcessing::SetMaterial;type["GetMaterial"]=&CameraPostProcessing::GetMaterial;type["CustomEffects"]=&CameraPostProcessing::CustomEffects;
     }
     {auto type=api.new_usertype<Light>("Light",sol::constructors<Light()>(),sol::base_classes,sol::bases<Component>());
      type["Type"]=&Light::Type;

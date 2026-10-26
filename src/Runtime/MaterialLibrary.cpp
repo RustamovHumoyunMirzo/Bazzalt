@@ -149,8 +149,20 @@ MaterialShaderPackage GetBuiltinMaterialPackage(UUID shader){
 }
 
 namespace Bazzalt {
-void CameraPostProcessing::SetMaterial(Material material){if(material.GetAssetUUID()&&!material.IsCanvasCompatible())throw std::invalid_argument("Camera post-processing requires a canvas-compatible material");MaterialAsset=material.GetAssetUUID();}
-Material CameraPostProcessing::GetMaterial()const{return Material::Load(MaterialAsset);}
+void CameraPostProcessing::SetMaterial(Material material){if(material.GetAssetUUID()&&!material.IsCanvasCompatible())throw std::invalid_argument("Camera post-processing requires a canvas-compatible material");MaterialAsset=material.GetAssetUUID();Materials.clear();}
+Material CameraPostProcessing::GetMaterial()const{return Material::Load(MaterialAsset?MaterialAsset:Materials.empty()?UUID{}:Materials.front().MaterialAsset);}
+std::vector<CameraMaterialPass> CameraPostProcessing::GetMaterials()const{auto result=Materials;if(MaterialAsset)result.insert(result.begin(),{MaterialAsset,true});return result;}
+void CameraPostProcessing::SetMaterials(std::vector<CameraMaterialPass> passes){
+    if(passes.size()>MaxMaterials)throw std::length_error("Camera supports at most 32 material passes");
+    for(const auto& pass:passes)if(pass.MaterialAsset&&!Material::Load(pass.MaterialAsset).IsCanvasCompatible())throw std::invalid_argument("Camera post-processing requires canvas-compatible materials");
+    Materials=std::move(passes);MaterialAsset={};
+}
+std::size_t CameraPostProcessing::AddMaterial(Material material,bool enabled){auto values=GetMaterials();values.push_back({material.GetAssetUUID(),enabled});SetMaterials(std::move(values));return Materials.size()-1;}
+void CameraPostProcessing::SetMaterialAt(std::size_t index,Material material){auto values=GetMaterials();values.at(index).MaterialAsset=material.GetAssetUUID();SetMaterials(std::move(values));}
+void CameraPostProcessing::SetMaterialEnabled(std::size_t index,bool enabled){auto values=GetMaterials();values.at(index).Enabled=enabled;SetMaterials(std::move(values));}
+void CameraPostProcessing::RemoveMaterial(std::size_t index){auto values=GetMaterials();(void)values.at(index);values.erase(values.begin()+index);SetMaterials(std::move(values));}
+void CameraPostProcessing::MoveMaterial(std::size_t from,std::size_t to){auto values=GetMaterials();auto value=values.at(from);(void)values.at(to);values.erase(values.begin()+from);values.insert(values.begin()+to,value);SetMaterials(std::move(values));}
+void CameraPostProcessing::ClearMaterials(){Materials.clear();MaterialAsset={};}
 Shader Shader::Builtin(ShaderPreset preset){const auto value=static_cast<unsigned>(preset);if(value>4)throw std::invalid_argument("Invalid built-in shader preset");return Load({Runtime::BuiltinShaderNamespace,value+1});}
 Material Material::Create(ShaderPreset preset){return Create(Shader::Builtin(preset));}
 bool Material::IsCanvasCompatible() const {if(!IsValid())return false;bool source=false,rect=false;for(const auto& p:GetParameters()){source|=p.Name=="source"&&p.Type==ShaderParameterType::Texture2D;rect|=p.Name=="sourceRect"&&p.Type==ShaderParameterType::Float4;}return source&&rect;}

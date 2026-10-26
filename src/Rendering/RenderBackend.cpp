@@ -4,6 +4,8 @@
 #include <Windows.h>
 #endif
 #include "Rendering/RenderBackend.h"
+#include "Rendering/GraphicsRenderer.h"
+#include "Runtime/GraphicsAccess.h"
 #include "Rendering/CaptureGraph.h"
 #include "GUI/GuiRenderer.h"
 #include "GUI/GuiSystem.h"
@@ -607,15 +609,17 @@ std::unordered_map<std::string,double> RenderBackend::GetStatistics() const{
     if(m_scene&&m_engine)m_scene->forEach([&](utils::Entity entity){auto& manager=m_engine->getRenderableManager();auto instance=manager.getInstance(entity);if(instance&&(manager.getLayerMask(instance)&0x7f)){++result["renderables"];result["render_primitives"]+=manager.getPrimitiveCount(instance);}});
     return result;
 }
-void RenderBackend::SetGuiScene(Bazzalt::Scene* scene){if(m_guiScene!=scene)ClearGuiResources();m_guiScene=scene;}
+void RenderBackend::SetGuiScene(Bazzalt::Scene* scene){GraphicsAccess::BindScene(scene);if(m_guiScene!=scene)ClearGuiResources();m_guiScene=scene;}
 void RenderBackend::ClearGuiResources(){if(m_guiRenderer)m_guiRenderer->Clear();}
-void RenderBackend::RenderCameraView(filament::View* view){
+void RenderBackend::RenderCameraView(filament::View* view,std::uint64_t viewport){
     if(!view)return;
+    if(m_graphics)m_graphics->BeforeCamera(view,viewport);
     auto* scene=view->getScene();auto* sky=scene?scene->getSkybox():nullptr;
     const bool clearTarget=view->getRenderTarget()&&scene&&!sky;
     if(clearTarget){if(!m_targetClearSky)m_targetClearSky=filament::Skybox::Builder().color({0,0,0,1}).showSun(false).build(*m_engine);scene->setSkybox(m_targetClearSky);}
     try{m_renderer->render(view);}catch(...){if(clearTarget)scene->setSkybox(sky);throw;}
     if(clearTarget)scene->setSkybox(sky);
+    if(m_graphics)m_graphics->AfterCamera(view,viewport);
 }
 filament::Texture* RenderBackend::GetCameraTexture(UUID id) const {
     if(!m_guiScene)return nullptr;const auto entity=m_guiScene->GetEntity(id);const auto* camera=entity.TryGetComponent<Camera>();if(!camera||!camera->Enabled||!camera->Active)return nullptr;
@@ -644,6 +648,16 @@ void RenderBackend::Render() {
     // Scripts may change camera targets/descriptors after Scene.Update systems.
     if(m_guiScene&&m_guiScene->HasSystem<CameraSystem>())m_guiScene->GetSystem<CameraSystem>().Synchronize(*m_guiScene);
     m_assets->SynchronizeTextures();
+    if(!m_graphics)m_graphics=std::make_unique<GraphicsRenderer>(*this);
+    m_graphics->BeginFrame();
+    struct GraphicsFrameScope {GraphicsRenderer& Renderer;~GraphicsFrameScope(){Renderer.EndFrame();}} graphicsFrame{*m_graphics};
+    auto cameraId=[&](filament::View* view){for(const auto& [id,stored]:m_cameraViews)if(stored==view)return id;return UUID{};};
+    for(auto* view:m_activeViews)if(view&&view->getRenderTarget())m_graphics->AddCamera(view,cameraId(view),0,false);
+    for(const auto& [id,resource]:m_viewports){
+        if(resource->Kind==ViewportKind::Scene)m_graphics->AddCamera(resource->View,{},id,true);
+        else for(auto* view:m_activeViews)if(view&&!view->getRenderTarget())m_graphics->AddCamera(view,cameraId(view),id,false);
+    }
+    m_graphics->Prepare();
     if(m_guiScene&&m_guiRenderer){auto& system=m_guiScene->GetSystem<GuiSystem>();system.Layout(*m_guiScene,{float(m_presentationWidth),float(m_presentationHeight)});if(!Input::IsActive())system.ProcessInput(*m_guiScene);m_guiRenderer->PrepareSpatial(*m_guiScene);}
     // Capture once per tick, independent of visible Qt / game windows. Prepare
     // all mutable resources before beginFrame, as required by Filament.
@@ -657,8 +671,9 @@ void RenderBackend::Render() {
             auto entry=std::find_if(m_cameraViews.begin(),m_cameraViews.end(),[&](const auto& entry){return entry.second==view;});if(entry==m_cameraViews.end())continue;
             cameras.push_back(entry->first);dependencies[entry->first]=worldSources;
             const auto addMaterialSources=[&](UUID material){auto value=Bazzalt::Material::Load(material);if(!value.IsValid())return;for(const auto& parameter:value.GetParameters())if(parameter.Type==ShaderParameterType::Texture2D&&parameter.Name!="source"){auto source=GetMaterialCameraTexture(material,parameter.Name);if(!source)source=m_assets->GetTextureProducer(value.GetTexture(parameter.Name));if(source)dependencies[entry->first].push_back(source);}};
+            const auto graphicsFeeds=dependencies[entry->first].size();for(const auto& draw:GraphicsAccess::Commands())addMaterialSources(draw.Material);if(dependencies[entry->first].size()!=graphicsFeeds)sharedFeeds=true;
             if(m_guiScene){
-                auto owner=m_guiScene->GetEntity(entry->first);if(auto* camera=owner.TryGetComponent<Bazzalt::Camera>();camera&&camera->Enabled&&camera->Active&&camera->PostProcessing.Enabled)addMaterialSources(camera->PostProcessing.MaterialAsset);
+                auto owner=m_guiScene->GetEntity(entry->first);if(auto* camera=owner.TryGetComponent<Bazzalt::Camera>();camera&&camera->Enabled&&camera->Active&&camera->PostProcessing.Enabled)for(const auto& pass:camera->PostProcessing.GetMaterials())if(pass.Enabled)addMaterialSources(pass.MaterialAsset);
                 for(auto handle:m_guiScene->GetRegistry().view<GuiElement>()){auto entity=m_guiScene->GetEntity(static_cast<Entity::Id>(handle));const auto& element=entity.GetComponent<GuiElement>();if(!element.Enabled||!element.MaterialAsset)continue;auto root=entity.HasComponent<Frame>()?entity:GUI::GetFrame(entity);if(!root)continue;const auto& frame=root.GetComponent<Frame>();if(!frame.Enabled||!frame.Visible)continue;if(frame.Mode==FrameMode::Spatial)sharedFeeds=true;if(frame.Mode==FrameMode::Spatial||(frame.Mode==FrameMode::CameraBound&&frame.Camera==entry->first))addMaterialSources(element.MaterialAsset);}
             }
             if(m_guiScene)for(auto handle:m_guiScene->GetRegistry().view<GuiImage>()){
@@ -740,7 +755,7 @@ void RenderBackend::Render() {
             m_assets->BeginEditorView(m_editorHidden);
             std::vector<utils::Entity> suspendedLights;
             for(const auto& [owner,entity]:m_editorLights)if(m_editorHidden.contains(owner)&&m_scene->hasEntity(entity)){m_scene->remove(entity);suspendedLights.push_back(entity);}
-            if (resource->View) m_renderer->render(resource->View);
+            if (resource->View) RenderCameraView(resource->View,id);
             for(auto entity:suspendedLights)m_scene->addEntity(entity);
             m_assets->EndEditorView();
             m_renderer->setClearOptions({.clearColor={0,0,0,0},.clear=false});
@@ -765,7 +780,7 @@ void RenderBackend::Render() {
                 m_renderer->setClearOptions({.clearColor={0.055,0.065,0.085,1.0},.clear=true});
             }
             for (filament::View* view : m_activeViews)
-                if (view&&!view->getRenderTarget()) {view->setRenderTarget(guiInput);try{m_renderer->render(view);}catch(...){view->setRenderTarget(nullptr);throw;}view->setRenderTarget(nullptr);}
+                if (view&&!view->getRenderTarget()) {view->setRenderTarget(guiInput);try{RenderCameraView(view,id);}catch(...){view->setRenderTarget(nullptr);throw;}view->setRenderTarget(nullptr);}
         }
         if(resource->Kind==ViewportKind::Game&&m_guiScene&&m_guiRenderer){m_guiRenderer->RenderOverlay(*m_guiScene,{float(resource->Width),float(resource->Height)});m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});}
         m_renderer->endFrame();m_presentedViewports.insert(id);
@@ -779,6 +794,7 @@ bool RenderBackend::WaitForViewportFrame(std::uint64_t id){
 
 void RenderBackend::Shutdown() {
     if (m_engine == nullptr) return;
+    GraphicsAccess::BindScene(nullptr);m_graphics.reset();
     m_guiScene=nullptr;m_guiRenderer.reset();m_cameraViews.clear();
     m_statisticsRenderer.reset();m_statisticsScene.reset();
     m_cameraOutputs.clear();

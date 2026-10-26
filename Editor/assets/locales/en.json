@@ -791,5 +791,11 @@
   "loading.editor_failed": "Editor Could Not Be Opened",
   "loading.viewport_failed": "A viewport could not be initialized.",
   "loading.scanning_empty": "Scanning empty asset directory",
-  "loading.native_failed": "Native project loading failed: {error}"
+  "loading.native_failed": "Native project loading failed: {error}",
+  "field.Post Process Materials": "Post Process Materials",
+  "camera.material_add": "Add Material Pass",
+  "camera.material_enabled": "Enable material pass",
+  "camera.material_up": "Move pass earlier",
+  "camera.material_down": "Move pass later",
+  "camera.material_remove": "Remove material pass"
 }

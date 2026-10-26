@@ -3,6 +3,7 @@
 #include "Bazzalt/Audio.h"
 #include "Bazzalt/Font.h"
 #include "Script/LuaBindings.h"
+#include "Runtime/GraphicsAccess.h"
 #include "Script/LuaSystems.h"
 #include "Bazzalt/EntityReference.h"
 #include <fstream>
@@ -32,7 +33,7 @@ struct VM {
     Memory MemoryState;
     lua_State* State=lua_newstate(Allocate,&MemoryState);
     VM(){if(!State)throw std::runtime_error("Could not allocate Lua VM");}
-    ~VM(){ApplicationEventsAccess::DisconnectOwner(State);lua_close(State);}
+    ~VM(){GraphicsAccess::DisconnectScope(State);ApplicationEventsAccess::DisconnectOwner(State);lua_close(State);}
 };
 void SetProperty(sol::table object,const std::string& name,const std::string& value){
     // Editor properties are scalars or explicitly declared vector/entity values.
@@ -108,7 +109,7 @@ bool LuaRuntime::Start(std::string& error){
         sol::state_view lua(instance->Vm->State);
         lua.open_libraries(sol::lib::base,sol::lib::math,sol::lib::string,sol::lib::table,sol::lib::utf8);
         for(const char* key:{"dofile","loadfile","load","collectgarbage"})lua[key]=sol::nil;
-        auto api=lua.create_named_table("Bazzalt");BindLuaMath(api);BindLuaComponents(api);BindLuaGUI(api);BindLuaServices(api);
+        auto api=lua.create_named_table("Bazzalt");BindLuaMath(api);BindLuaComponents(api);BindLuaGUI(api);BindLuaServices(api);BindLuaGraphics(api,owner);
         auto declared=std::make_shared<sol::table>();
         lua.set_function("COMPONENT",[declared,lua,typeName=binding.TypeName](const std::string& name) mutable {
             if(declared->valid()||name!=typeName)throw std::invalid_argument("COMPONENT must declare the attached type exactly once");

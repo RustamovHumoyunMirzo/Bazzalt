@@ -1,0 +1,10 @@
+material {
+    name: BazzaltGraphics, shadingModel: unlit, doubleSided: true,
+    blending: transparent, depthWrite: true, requires: [color]
+}
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = getColor();
+    }
+}

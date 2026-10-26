@@ -17,6 +17,7 @@
         "menus",
         "assets",
         "scenes",
+        "camera-materials",
         "audio",
         "settings",
         "glossary"
@@ -40,6 +41,7 @@
         "behaviors",
         "entities",
         "materials",
+        "graphics",
         "audio",
         "gui",
         "reference"
@@ -50,6 +52,7 @@
       "order": [
         "basics",
         "api",
+        "graphics",
         "audio",
         "gui",
         "reference"

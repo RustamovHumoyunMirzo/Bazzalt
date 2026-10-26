@@ -177,8 +177,27 @@ def outputs(root):
         translated=json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
         if set(translated)-set(english): raise ValueError(f'Unknown landing translation keys: {path}')
         landing[language]=dict(english,**translated)
-    public=dict(defaultVersion=default,defaultLanguage=default_language,versions=versions,languages=labels,landing=landing,navigation=navigation,pages=[{k:v for k,v in p.items() if k!='body'} for p in records])
-    result[root/'assets/catalog.js']='// Generated navigation/search data. Edit HTML pages, not this file.\nwindow.BazzaltDocs = '+json.dumps(public,ensure_ascii=False,separators=(',',':')).replace('<','\\u003c')+';\n'
+    # Keep first paint independent of full-text indexes and other releases.
+    # Script bundles (rather than fetch/JSON) also work under file://.
+    def script(value, target):
+        return '// Generated docs data. Edit HTML pages, not this file.\n'+target+' = '+json.dumps(value,ensure_ascii=False,separators=(',',':')).replace('<','\\u003c')+';\n'
+    manifests={'navigation':{},'search':{}};entrypoints={}
+    for version,translations in navigation.items():
+        for language,nodes in translations.items():
+            available=[p for p in records if p['version']==version and p['language']==language]
+            key=json.dumps(version+'/'+language)
+            pages=[{**{k:p[k] for k in ('id','title','url','anchors')},
+                'languages':sorted({r['language'] for r in records if r['version']==version and r['id']==p['id']})} for p in available]
+            for kind,data,registry in (
+                ('navigation',dict(navigation=nodes,pages=pages),'BazzaltDocsNavigation'),
+                ('search',[{k:p[k] for k in ('id','title','description','text','headings','url')} for p in available],'BazzaltDocsSearch')):
+                url=f'assets/{kind}/{version}/{language}.js'
+                manifests[kind].setdefault(version,{})[language]=url
+                result[root/url]='window.'+registry+' = window.'+registry+' || {};\n'+script(data,'window.'+registry+'['+key+']')
+            entrypoints.setdefault(version,{})[language]={p['id']:p['url'] for p in available if '/' not in p['id']}
+    public=dict(defaultVersion=default,defaultLanguage=default_language,versions=versions,languages=labels,landing=landing,
+        entrypoints=entrypoints,**manifests)
+    result[root/'assets/catalog.js']=script(public,'window.BazzaltDocs')
     return result
 
 
@@ -214,7 +233,7 @@ def main():
     if args.check and stale:
         for path in stale: print(f'Refresh needed: {path.relative_to(DEFAULT_ROOT)}')
         return 1
-    print(f'Docs {"checked" if args.check else "refreshed"}: {len(generated)-2} editable pages.');return 0
+    print(f'Docs {"checked" if args.check else "refreshed"}: {sum(path.suffix==".html" for path in generated)} editable pages.');return 0
 
 
 if __name__=='__main__': raise SystemExit(main())

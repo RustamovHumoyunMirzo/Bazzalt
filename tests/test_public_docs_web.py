@@ -68,9 +68,22 @@ class PublicDocsWebTests(unittest.TestCase):
             self.view.loadFinished.connect(finished)
             self.view.load(QUrl.fromLocalFile(str(ROOT / path)))
         self.assertTrue(self.await_callback(start))
+        if path != 'index.html':
+            self.wait_js("document.documentElement.dataset.navigationReady === 'true'")
 
     def js(self, source):
         return self.await_callback(lambda done: self.page.runJavaScript(source, done))
+
+    def wait_js(self, expression):
+        # Poll observable completion rather than assuming async scripts load
+        # within one fixed delay on every CI machine.
+        for _ in range(150):
+            if self.js(expression):return
+            self.await_callback(lambda done:QTimer.singleShot(20,lambda:done(True)))
+        self.fail('Browser condition timed out: '+expression)
+
+    def wait_search(self):
+        self.wait_js("!document.getElementById('search-status').textContent.startsWith('Loading') && document.getElementById('search-status').textContent.length > 0")
 
     def test_file_mode_search_theme_and_navigation(self):
         self.load("index.html")
@@ -82,6 +95,7 @@ class PublicDocsWebTests(unittest.TestCase):
         self.assertNotEqual(self.js("document.documentElement.classList.contains('dark')"), original)
         self.js("document.querySelector('[data-search-open]').click();var input=document.getElementById('search-input');input.value='roughness';input.dispatchEvent(new Event('input'))")
         self.assertTrue(self.js("document.getElementById('search-dialog').open"))
+        self.wait_search()
         self.assertGreater(self.js("document.querySelectorAll('#search-results a').length"), 0)
         self.assertTrue(self.js("[...document.querySelectorAll('#search-results a')].some(a=>a.href.includes('/native/materials/en.html'))"))
         self.js("document.querySelector('[data-search-close]').click()")
@@ -95,6 +109,29 @@ class PublicDocsWebTests(unittest.TestCase):
         self.assertEqual(self.js("location.hash"), "#assignment")
         self.assertTrue(self.js("document.documentElement.scrollWidth<=window.innerWidth"))
 
+    def test_search_is_lazy_release_scoped_and_reused(self):
+        self.load('index.html')
+        self.assertFalse(any('/assets/navigation/' in u or '/assets/search/' in u for u in self.requests.urls))
+        self.load('0.6.0/native/audio/en.html')
+        self.assertFalse(any('/assets/search/' in u for u in self.requests.urls))
+        self.assertEqual(sum('/assets/navigation/' in u for u in self.requests.urls),1)
+        self.js("document.querySelector('[data-search-open]').click()")
+        self.wait_search()
+        self.assertLessEqual(self.js("document.querySelectorAll('#search-results a').length"),60)
+        self.assertEqual(sum('/assets/search/' in u for u in self.requests.urls),1)
+        self.assertTrue(any('/assets/search/0.6.0/en.js' in u for u in self.requests.urls))
+        self.js("document.querySelector('[data-search-close]').click();document.querySelector('[data-search-open]').click()")
+        self.wait_search()
+        self.assertEqual(sum('/assets/search/' in u for u in self.requests.urls),1)
+
+    def test_failed_search_bundle_can_be_retried(self):
+        self.load('index.html')
+        self.js("var v=BazzaltDocs.defaultVersion,l=BazzaltDocs.defaultLanguage;var source=BazzaltDocs.search[v][l];BazzaltDocs.search[v][l]='assets/not-present.js';document.querySelector('[data-search-open]').click()")
+        self.wait_js("document.getElementById('search-status').textContent.includes('Could not load')")
+        self.js("document.querySelector('[data-search-close]').click();BazzaltDocs.search[v][l]=source;document.querySelector('[data-search-open]').click()")
+        self.wait_search()
+        self.assertGreater(self.js("document.querySelectorAll('#search-results a').length"),0)
+
     def test_mobile_navigation_and_empty_search(self):
         self.view.resize(390, 844)
         self.load("0.5.0/lua/en.html")
@@ -104,6 +141,7 @@ class PublicDocsWebTests(unittest.TestCase):
         self.assertEqual(self.js("document.querySelector('.nav-toggle').getAttribute('aria-expanded')"), "true")
         self.assertNotEqual(self.js("getComputedStyle(document.getElementById('sidebar')).display"), "none")
         self.js("document.querySelector('[data-search-open]').click();var input=document.getElementById('search-input');input.value='zzzzmissing';input.dispatchEvent(new Event('input'))")
+        self.wait_js("document.getElementById('search-status').textContent.includes('No matching')")
         self.assertEqual(self.js("document.querySelectorAll('#search-results a').length"), 0)
         self.assertIn("No matching", self.js("document.getElementById('search-status').textContent"))
 

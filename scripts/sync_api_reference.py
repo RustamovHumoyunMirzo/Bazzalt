@@ -162,6 +162,7 @@ def section(title, text):
 def lua_type(value):
     value = re.sub(r'\b(const|static|constexpr|virtual|BAZZALT_API)\b|\[\[.*?\]\]|[&*]', '', value).strip()
     value = value.replace('std::string','string').replace('std::filesystem::path','string')
+    value = value.replace('sol::protected_function','function').replace('sol::function','function')
     value = re.sub(r'\b(?:std::)?(?:u?int\d+_t|size_t|float|double|int)\b','number',value)
     value = re.sub(r'\bbool\b','boolean',value)
     value = re.sub(r'(?:std::|sol::)(?:optional|as_table_t|vector)<(.+)>',r'\1',value)
@@ -179,6 +180,15 @@ def split_arguments(source):
 
 def lua_usage(name, member, binding, signatures):
     """Begin with Lua notation; retain the adapter only as optional detail."""
+    graphics_signatures = {
+        'CreateMesh': 'vertices: GraphicsVertex[], indices: number[] (optional), topology: GraphicsTopology (optional)) -> GraphicsMesh',
+        'DrawMesh': 'mesh: GraphicsMesh, material: Material (optional), transform: Mat4 (optional), options: GraphicsDrawOptions (optional))',
+        'DrawVertices': 'vertices: GraphicsVertex[], indices: number[] (optional), topology: GraphicsTopology (optional), material: Material (optional), transform: Mat4 (optional), options: GraphicsDrawOptions (optional))',
+        'DrawLine': 'from: Vec3, to: Vec3, color: Vec4 (optional), options: GraphicsDrawOptions (optional))',
+        'DrawTriangle': 'a: Vec3, b: Vec3, c: Vec3, color: Vec4 (optional), options: GraphicsDrawOptions (optional))',
+    }
+    if name == 'Graphics' and member in graphics_signatures:
+        return '<pre><code class="language-lua">'+html.escape('Bazzalt.Graphics.'+member+'('+graphics_signatures[member])+'</code></pre>'
     if member == 'construction':
         if 'create_named' in binding: return '<p>Global service table; do not construct an instance.</p>'
         if 'new_enum' in binding:

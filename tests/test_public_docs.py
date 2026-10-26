@@ -90,7 +90,7 @@ class PublicDocsTests(unittest.TestCase):
             self.assertNotIn(root/'0.6.0/manual/ru.html',built)
             self.assertNotIn('0.6.0',built[root/'index.html'])
             self.assertNotIn('class="nav-link"',built[root/'0.5.0/manual/en.html'])
-            self.assertIn('New guide',built[root/'assets/catalog.js'])
+            self.assertIn('New guide',built[root/'assets/navigation/0.5.0/en.js'])
 
     def test_new_versions_and_languages_do_not_rewrite_existing_pages(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -146,6 +146,20 @@ class PublicDocsTests(unittest.TestCase):
     def test_home_has_language_not_version_or_categories(self):
         source=(DEFAULT_ROOT/'index.html').read_text(encoding='utf-8')
         self.assertIn('id="language"',source);self.assertNotIn('id="version"',source);self.assertNotIn('category',source.lower());self.assertNotIn('cdn.',source)
+
+    def test_startup_catalog_excludes_full_text_and_routes_bundles(self):
+        source=self.generated[DEFAULT_ROOT/'assets/catalog.js']
+        catalog=json.loads(source.split('window.BazzaltDocs = ',1)[1].rstrip(';\n'))
+        self.assertLess(len(source.encode('utf-8')),16000)
+        self.assertNotIn('pages',catalog)
+        for kind in ('navigation','search'):
+            for version,languages in catalog[kind].items():
+                for language,url in languages.items():
+                    bundle=self.generated[DEFAULT_ROOT/url]
+                    self.assertIn(json.dumps(version+'/'+language),bundle)
+                    if kind=='navigation':self.assertNotIn('"text":',bundle)
+                    else:self.assertIn('"text":',bundle)
+        self.assertEqual(catalog['entrypoints'][catalog['defaultVersion']][catalog['defaultLanguage']]['manual'],catalog['defaultVersion']+'/manual/'+catalog['defaultLanguage']+'.html')
 
     def test_heading_ids_are_required_and_unique(self):
         for source in ('<h1>Title</h1><h2>Topic</h2>','<h1>Title</h1><h2 id="x">One</h2><h2 id="x">Two</h2>'):

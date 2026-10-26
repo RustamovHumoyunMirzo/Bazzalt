@@ -49,8 +49,23 @@ struct CameraViewport {
     }
 };
 
-struct CameraPostProcessing {
+struct CameraMaterialPass {
     UUID MaterialAsset{};
+    bool Enabled = true;
+};
+struct CameraPostProcessing {
+    // Legacy single pass is evaluated first. SetMaterials migrates it away.
+    UUID MaterialAsset{};
+    std::vector<CameraMaterialPass> Materials;
+    static constexpr std::size_t MaxMaterials = 32;
+    BAZZALT_API std::size_t AddMaterial(Material material, bool enabled = true);
+    BAZZALT_API void SetMaterials(std::vector<CameraMaterialPass> passes);
+    BAZZALT_API void SetMaterialAt(std::size_t index, Material material);
+    BAZZALT_API void SetMaterialEnabled(std::size_t index, bool enabled);
+    BAZZALT_API void RemoveMaterial(std::size_t index);
+    BAZZALT_API void MoveMaterial(std::size_t from, std::size_t to);
+    BAZZALT_API void ClearMaterials();
+    [[nodiscard]] BAZZALT_API std::vector<CameraMaterialPass> GetMaterials() const;
     BAZZALT_API void SetMaterial(Material material);
     [[nodiscard]] BAZZALT_API Material GetMaterial()const;
     bool Enabled = true;

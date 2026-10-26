@@ -18,38 +18,48 @@
   document.documentElement.lang = language;
   const read = key => { try { return localStorage.getItem(key); } catch (_) { return null; } };
   const save = (key, value) => { try { localStorage.setItem(key, value); } catch (_) {} };
-  const entries = (v, l) => catalog.pages.filter(p => p.version === v && p.language === l);
-  // A single local script contains the shared tree: no per-page copies, fetch
-  // polling, lazy asset loaders, or HTTP dependency (including under file://).
-  if (!landing) {
-    const sidebar = document.getElementById('sidebar');
-    const available = new Map(entries(version, language).map(p => [p.id, p]));
-    function renderNavigation(nodes) {
-      const fragment = document.createDocumentFragment();
-      for (const node of nodes) {
-        const record = available.get(node.id);
-        const children = renderNavigation(node.children || []);
-        if (!record && !children.childElementCount) continue;
-        let container = fragment;
-        if (children.childElementCount) {
-          const details = document.createElement('details');
-          const summary = document.createElement('summary');summary.textContent = node.title;
-          const containsCurrent = branch => branch.some(n => n.id === page || containsCurrent(n.children || []));
-          details.open = node.id === page || containsCurrent(node.children || []);
-          const list = document.createElement('div');list.className = 'tree-list';
-          details.append(summary, list);fragment.append(details);container = list;
-        }
-        if (record) {
-          const link = document.createElement('a');link.className = 'nav-link';
-          link.href = new URL(record.url, root).href;link.textContent = record.title;
-          if (record.id === page) link.setAttribute('aria-current', 'page');
-          container.append(link);
-        }
-        container.append(children);
+  // Load only the current release's tree. Search text is requested only when
+  // search opens. Script loading preserves offline file:// support.
+  const bundles = new Map();
+  function loadBundle(kind, v, l) {
+    const registry = kind === 'search' ? 'BazzaltDocsSearch' : 'BazzaltDocsNavigation';
+    const key = `${v}/${l}`, cacheKey = `${kind}/${key}`;
+    if (window[registry]?.[key]) return Promise.resolve(window[registry][key]);
+    if (bundles.has(cacheKey)) return bundles.get(cacheKey);
+    const url = catalog[kind]?.[v]?.[l];
+    if (!url) return Promise.reject(new Error('Documentation translation is unavailable.'));
+    const pending = new Promise((resolve, reject) => {
+      const script = document.createElement('script');script.src = new URL(url, root).href;
+      const fail = () => {bundles.delete(cacheKey);script.remove();reject(new Error('Could not load documentation data. Check the local files and retry.'));};
+      script.onload = () => {const data = window[registry]?.[key];if (data) resolve(data);else fail();};
+      script.onerror = fail;document.head.append(script);
+    });
+    bundles.set(cacheKey, pending);return pending;
+  }
+  function renderNavigation(nodes, available) {
+    const fragment = document.createDocumentFragment();
+    for (const node of nodes) {
+      const record = available.get(node.id);
+      const children = renderNavigation(node.children || [], available);
+      if (!record && !children.childElementCount) continue;
+      let container = fragment;
+      if (children.childElementCount) {
+        const details = document.createElement('details');
+        const summary = document.createElement('summary');summary.textContent = node.title;
+        const containsCurrent = branch => branch.some(n => n.id === page || containsCurrent(n.children || []));
+        details.open = node.id === page || containsCurrent(node.children || []);
+        const list = document.createElement('div');list.className = 'tree-list';
+        details.append(summary, list);fragment.append(details);container = list;
       }
-      return fragment;
+      if (record) {
+        const link = document.createElement('a');link.className = 'nav-link';
+        link.href = new URL(record.url, root).href;link.textContent = record.title;
+        if (record.id === page) link.setAttribute('aria-current', 'page');
+        container.append(link);
+      }
+      container.append(children);
     }
-    sidebar?.replaceChildren(renderNavigation(catalog.navigation?.[version]?.[language] || []));
+    return fragment;
   }
   const languageSelect = document.getElementById('language');
   const versionSelect = document.getElementById('version');
@@ -58,23 +68,37 @@
   };
   if (!landing) {
     versionSelect?.replaceChildren(...(catalog.versions || Object.keys(catalog.navigation)).map(v => new Option(v, v, false, v === version)));
-    const languages = [...new Set(catalog.pages.filter(p => p.version === version && p.id === page).map(p => p.language))];
-    languageSelect?.replaceChildren(...languages.map(l => new Option(languageName(l), l, false, l === language)));
+    languageSelect?.replaceChildren(new Option(languageName(language), language));
+    const sidebar = document.getElementById('sidebar');
+    loadBundle('navigation', version, language).then(data => {
+      sidebar?.replaceChildren(renderNavigation(data.navigation, new Map(data.pages.map(p => [p.id, p]))));
+      const languages = data.pages.find(p => p.id === page)?.languages || [language];
+      languageSelect?.replaceChildren(...languages.map(l => new Option(languageName(l), l, false, l === language)));
+      document.documentElement.dataset.navigationReady = 'true';
+    }).catch(error => {if (sidebar) sidebar.textContent = error.message;});
     const footer = document.querySelector('[data-doc-footer]');
     if (footer) footer.textContent = `BAZZALT ${version} documentation · ${languageName(language)}`;
     document.title += ` ${version}`;
   }
-  function destination(v, l, id) {
-    // Never invent a translation or a versioned URL that has not been built.
-    const pages = entries(v, l);
-    return pages.find(p => p.id === id) || entries(v, catalog.defaultLanguage).find(p => p.id === id) || pages.find(p => p.id === 'manual') || pages[0];
+  const availableLanguage = (v, l) => catalog.navigation[v]?.[l] ? l : catalog.navigation[v]?.[catalog.defaultLanguage] ? catalog.defaultLanguage : Object.keys(catalog.navigation[v] || {})[0];
+  async function destination(v, l, id) {
+    const pages = (await loadBundle('navigation', v, l)).pages;
+    const exact = pages.find(p => p.id === id);
+    if (exact) return exact;
+    if (l !== catalog.defaultLanguage && catalog.navigation[v]?.[catalog.defaultLanguage]) {
+      const fallback = (await loadBundle('navigation', v, catalog.defaultLanguage)).pages.find(p => p.id === id);
+      if (fallback) return fallback;
+    }
+    return pages.find(p => p.id === 'manual') || pages[0];
   }
-  function navigate(v, l) {
-    const target = destination(v, l, page) || destination(v, catalog.defaultLanguage, page);
-    if (!target) return;
-    const url = new URL(target.url, root);
-    if (target.id === page && target.anchors.includes(location.hash.slice(1))) url.hash = location.hash;
-    if (url.href !== location.href) location.assign(url.href);
+  async function navigate(v, l) {
+    try {
+      const target = await destination(v, availableLanguage(v, l), page);
+      if (!target) return;
+      const url = new URL(target.url, root);
+      if (target.id === page && target.anchors.includes(location.hash.slice(1))) url.hash = location.hash;
+      if (url.href !== location.href) location.assign(url.href);
+    } catch (error) {console.error(error.message);}
   }
   function landingLanguage(l) {
     language = catalog.landing[l] ? l : catalog.defaultLanguage;
@@ -86,8 +110,9 @@
     document.title = texts.title;
     languageSelect.value = language;
     document.querySelectorAll('[data-doc-link]').forEach(link => {
-      const target = destination(catalog.defaultVersion, language, link.dataset.docLink);
-      if (target) link.href = new URL(target.url, root).href;
+      const routes = catalog.entrypoints[catalog.defaultVersion];
+      const target = routes[language]?.[link.dataset.docLink] || routes[catalog.defaultLanguage]?.[link.dataset.docLink];
+      if (target) link.href = new URL(target, root).href;
     });
   }
   if (landing) {
@@ -117,13 +142,22 @@
   const results = document.getElementById('search-results');
   const status = document.getElementById('search-status');
   let previousFocus;
-  function search() {
+  let searchRequest = 0, searchTimer;
+  async function search() {
+    const request = ++searchRequest;
     const words = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    const hits = entries(version, language).filter(p => words.every(w => (p.title + ' ' + p.text).toLowerCase().includes(w)));
+    results.replaceChildren();status.textContent = 'Loading search…';
+    let pages;
+    try {pages = await loadBundle('search', version, availableLanguage(version, language));}
+    catch (error) {if (request === searchRequest) status.textContent = error.message;return;}
+    if (request !== searchRequest || !dialog.open) return;
+    const hits = pages.filter(p => words.every(w => (p.title + ' ' + p.text).toLowerCase().includes(w)));
     hits.sort((a, b) => Number(words.some(w => b.title.toLowerCase().includes(w))) - Number(words.some(w => a.title.toLowerCase().includes(w))));
-    results.replaceChildren();
-    status.textContent = hits.length ? `${hits.length} matching ${hits.length === 1 ? 'page' : 'pages'}` : 'No matching pages. Try a different term.';
-    hits.forEach(hit => {
+    // Bound DOM work even for empty/common queries in a large API reference.
+    const limit = 60;
+    status.textContent = hits.length ? `${hits.length} matching ${hits.length === 1 ? 'page' : 'pages'}${hits.length > limit ? `; showing the first ${limit}. Refine your search for more.` : ''}` : 'No matching pages. Try a different term.';
+    const fragment = document.createDocumentFragment();
+    hits.slice(0, limit).forEach(hit => {
       const li = document.createElement('li');
       const link = document.createElement('a');
       const detail = document.createElement('small');
@@ -132,21 +166,22 @@
       if (heading) url.hash = heading.id;
       link.href = url.href;link.textContent = hit.title;
       detail.textContent = heading ? heading.text : hit.description;
-      link.append(detail);li.append(link);results.append(li);
+      link.append(detail);li.append(link);fragment.append(li);
     });
+    results.replaceChildren(fragment);
   }
   function openSearch() {
     if (dialog.open) { input.focus();return; }
-    previousFocus = document.activeElement;input.value = '';search();dialog.showModal();input.focus();
+    clearTimeout(searchTimer);previousFocus = document.activeElement;input.value = '';dialog.showModal();input.focus();search();
   }
   document.querySelectorAll('[data-search-open]').forEach(b => b.addEventListener('click', openSearch));
   document.querySelector('[data-search-close]')?.addEventListener('click', () => dialog.close());
-  dialog?.addEventListener('close', () => previousFocus?.focus());
+  dialog?.addEventListener('close', () => {if (dialog.open) return; ++searchRequest;clearTimeout(searchTimer);previousFocus?.focus();});
   dialog?.addEventListener('click', event => {
     const rect = dialog.getBoundingClientRect();
     if (event.target === dialog && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) dialog.close();
   });
-  input?.addEventListener('input', search);
+  input?.addEventListener('input', () => {++searchRequest;clearTimeout(searchTimer);searchTimer = setTimeout(search, 100);});
   input?.addEventListener('keydown', event => {
     if (event.key === 'ArrowDown') {event.preventDefault();results.querySelector('a')?.focus();}
     if (event.key === 'Enter') {event.preventDefault();results.querySelector('a')?.click();}

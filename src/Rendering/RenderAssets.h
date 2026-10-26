@@ -51,6 +51,9 @@ public:
     bool SetDebugMode(const std::string& mode);
     filament::Texture* GetGuiTexture(UUID id);
     filament::MaterialInstance* CreateCanvasMaterial(UUID asset);
+    filament::MaterialInstance* CreateSurfaceMaterial(UUID asset);
+    filament::MaterialInstance* CreateGraphicsMaterial();
+    bool UpdateSurfaceMaterial(filament::MaterialInstance* instance,UUID asset);
     bool UpdateCanvasMaterial(filament::MaterialInstance*,UUID asset,filament::Texture* source,Vec4 sourceRect);
     void SetCameraTexture(UUID camera,filament::Texture* texture);
     std::vector<UUID> GetCameraDependencies() const;

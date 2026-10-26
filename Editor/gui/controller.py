@@ -307,7 +307,9 @@ class EditorController(QObject):
                 section.EnabledChanged.connect(lambda enabled,c=component:self._SetComponentEnabled([inspected_entity],str(c),enabled))
                 for property_name, value in dict(component_data.get(component, {})).items():
                     editor = self._ComponentEditor(inspected_entity, component, property_name, value)
-                    if editor is not None: section.AddField(property_name, editor)
+                    if editor is not None:
+                        if component=="Camera" and property_name=="Post Process Materials":section.AddWideWidget(editor);section._fields[property_name]=editor
+                        else:section.AddField(property_name,editor)
                 if component=="GuiElement":
                     from .stylesheet_fields import Field
                     for property in getattr(self.Runtime,"StylesheetProperties",lambda _:[])(inspected_entity):
@@ -355,7 +357,7 @@ class EditorController(QObject):
             section.EnabledChanged.connect(lambda enabled,c=component:self._SetComponentEnabled(unique,c,enabled))
             fields=[dict(value.get("component_data",{}).get(component,{})) for value in details]
             for name in set.intersection(*(set(value) for value in fields)) if fields else ():
-                values=[value[name] for value in fields];section.AddField(name,QLabel(str(values[0]) if all(v==values[0] for v in values) else "— Mixed —"))
+                values=[value[name] for value in fields];section.AddField(name,QLabel(str(values[0]) if all(v==values[0] for v in values) else "â€” Mixed â€”"))
         self.Window.Scene.Surface.SetSelection(center);self._UpdateGizmo()
 
     def _SetComponentEnabled(self,entities:list[str],component:str,enabled:bool)->None:
@@ -542,7 +544,7 @@ class EditorController(QObject):
         try:data=InspectEnvironment(path,info)
         except (OSError,ValueError) as error:self._MaterialError(error);return
         section=self.Window.Properties.AddComponentSection("asset.environment",tr("environment.asset"),removable=False)
-        section.AddField(tr("environment.resolution"),QLabel(f'{data["width"]} × {data["height"]}'))
+        section.AddField(tr("environment.resolution"),QLabel(f'{data["width"]} Ã— {data["height"]}'))
         section.AddField(tr("environment.ibl_status"),QLabel(tr("environment.ready" if data["ibl"].is_file() or path.suffix.lower()==".ktx" else "environment.missing")))
         settings=data["settings"]
         resolution=EnumInput();resolution.SetOptions([(str(value),str(value)) for value in (32,64,128,256,512,1024)]);resolution.SetValue(settings.get("Resolution","128"))
@@ -566,7 +568,7 @@ class EditorController(QObject):
         tr=self.Window.Localization.Translate;data=self.Runtime.TextureAssetInfo(path)
         if not data:self.Window.Console.AddMessage(self.Runtime.LastError(),ConsoleLevel.Error);return
         section=self.Window.Properties.AddComponentSection("asset.texture",tr("texture.title"),removable=False)
-        options={"Samples":(("1×",1),("2×",2),("4×",4),("8×",8)),"Color Format":(("RGBA8",0),("RGBA16F",1),("RGBA32F",2)),"Depth Format":((tr("texture.depth.none"),0),("Depth16",1),("Depth24",2),("Depth32F",3)),"Filter":tuple((tr("texture.filter."+key),index) for index,key in enumerate(("point","linear","trilinear"))),"Wrap":tuple((tr("texture.wrap."+key),index) for index,key in enumerate(("clamp","repeat","mirror")))}
+        options={"Samples":(("1Ã—",1),("2Ã—",2),("4Ã—",4),("8Ã—",8)),"Color Format":(("RGBA8",0),("RGBA16F",1),("RGBA32F",2)),"Depth Format":((tr("texture.depth.none"),0),("Depth16",1),("Depth24",2),("Depth32F",3)),"Filter":tuple((tr("texture.filter."+key),index) for index,key in enumerate(("point","linear","trilinear"))),"Wrap":tuple((tr("texture.wrap."+key),index) for index,key in enumerate(("clamp","repeat","mirror")))}
         def commit(name,value):
             updated=dict(data);updated[name]=value
             if not updated["Mipmaps"]:updated["Mip Levels"]=0
@@ -647,6 +649,9 @@ class EditorController(QObject):
                 for component,field in (("GuiElement","MaterialAsset"),("Camera","Post Process Material")):
                     material=details.get("component_data",{}).get(component,{}).get(field,ZERO)
                     if details.get("component_enabled",{}).get(component,True) and material not in (ZERO,"0","",None):used.add(material)
+                if details.get("component_enabled",{}).get("Camera",True):
+                    for effect in details.get("component_data",{}).get("Camera",{}).get("Post Process Materials",[]):
+                        if effect.get("enabled",True) and effect.get("asset",ZERO) not in (ZERO,"0","",None):used.add(effect["asset"])
                 primitive=details.get("component_data",{}).get("Primitive Object",{})
                 if details.get("component_enabled",{}).get("Primitive Object",True) and primitive.get("Material Asset",ZERO)!=ZERO:used.add(primitive["Material Asset"])
                 if not details.get("component_enabled",{}).get("Mesh",True):continue
@@ -747,6 +752,10 @@ class EditorController(QObject):
             editor=IntInput(minimum=0,maximum=256,value=value);editor.valueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor
         if component=="GuiElement" and name=="StyleProperties":return None
         if name=="Material Slots":return None  # Slot UUIDs are not numeric vector fields.
+        if component=="Camera" and name=="Post Process Materials":
+            from .widgets.post_materials import CameraMaterialsInput
+            editor=CameraMaterialsInput(value,self.Window.Localization,lambda asset,commit:self._AssetPicker(asset,{".matinst"},commit))
+            editor.ValueChanged.connect(lambda values:self._CommitComponent(entity_id,component,name,values));return editor
         if component=="Camera" and name=="Render Target":return self._AssetPicker(value,{".btexture"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
         if isinstance(value, bool):
             editor=BoolInput(value);editor.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return editor

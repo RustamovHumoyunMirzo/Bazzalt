@@ -1,4 +1,5 @@
 #include "Runtime/Engine.h"
+#include "Runtime/GraphicsAccess.h"
 #include "Runtime/ApplicationEventsAccess.h"
 #include "Runtime/ApplicationAccess.h"
 #include "Runtime/SubsystemRuntime.h"
@@ -437,7 +438,7 @@ bool Engine::StartScripts(bool resetTime){
     if(!m_luaRuntime->Start(m_lastError)){m_scriptRuntime->Stop();m_audioRuntime->Stop();return false;}
     m_scriptsRunning=true;ApplicationEventsAccess::Emit({ApplicationEventType::OnPlay});return true;
 }
-void Engine::StopScripts(){if(m_scriptsRunning){ApplicationEventsAccess::Emit({ApplicationEventType::OnStop});m_scriptsRunning=false;}m_audioRuntime->Stop();ApplicationAccess::SetAudioReady(false);m_luaRuntime->Stop();m_scriptRuntime->Stop();ResetRuntimeMaterials();ResetRuntimeTextures();}
+void Engine::StopScripts(){if(m_scriptsRunning){ApplicationEventsAccess::Emit({ApplicationEventType::OnStop});m_scriptsRunning=false;}m_audioRuntime->Stop();ApplicationAccess::SetAudioReady(false);m_luaRuntime->Stop();m_scriptRuntime->Stop();GraphicsAccess::CancelFrame();ResetRuntimeMaterials();ResetRuntimeTextures();}
 
 bool Engine::PrepareApplication(){
     if(m_applicationPrepared)return true;
