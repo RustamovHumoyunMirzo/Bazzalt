@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from PySide6.QtCore import QRect, Qt, Signal
 from PySide6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QPainter, QPaintEvent
-from PySide6.QtWidgets import QApplication, QMenu, QMenuBar, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QMenu, QMenuBar, QWidget
+from bazzalt.branding import LogoIcon
 
 from ...localization import LocalizationManager
 from ...theme import Theme, ThemeManager
@@ -102,6 +103,15 @@ class EditorMenuBar(QMenuBar):
         self._theme_manager = theme_manager
         self._localization = localization
         self._docking: DockingSystem | None = None
+        self.BrandLabel=QLabel(self)
+        self.BrandLabel.setObjectName("EditorBrandIcon")
+        self.BrandLabel.setAccessibleName("BAZZALT")
+        self.BrandLabel.setContentsMargins(10,0,10,0)
+        self.BrandLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.BrandLabel.setFixedWidth(40)
+        self.setCornerWidget(self.BrandLabel,Qt.Corner.TopLeftCorner)
+        self._UpdateBrandIcon()
+        theme_manager.ThemeChanged.connect(lambda _:self._UpdateBrandIcon())
 
         self.FileMenu = self._AddTopLevelMenu("")
         self.EditMenu = self._AddTopLevelMenu("")
@@ -123,6 +133,9 @@ class EditorMenuBar(QMenuBar):
         self._BuildHelpMenu()
         self._localization.LocaleChanged.connect(lambda _: self._Retranslate())
         self._Retranslate()
+
+    def _UpdateBrandIcon(self)->None:
+        self.BrandLabel.setPixmap(LogoIcon(self._theme_manager.GetTheme().text).pixmap(20,20))
 
     def SetDockingSystem(self, docking: DockingSystem | None) -> None:
         """Bind the panel list used by the Window menu."""

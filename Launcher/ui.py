@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMenu,
     QMessageBox, QPushButton, QStackedWidget, QStyle, QTableView, QVBoxLayout, QWidget, QProgressBar,
 )
-from bazzalt.branding import LogoIcon
+from bazzalt.branding import LogoIcon,WordmarkPixmap
 from bazzalt.resources import Package
 from bazzalt.settings import DataPaths, Version
 from .catalog import CURRENT_EDITOR_VERSION, HUB_VERSION
@@ -81,7 +81,7 @@ class NativeHubWindow(QMainWindow):
         self.setWindowIcon(LogoIcon(self.palette().color(QPalette.ColorRole.WindowText).name()))
         root=QWidget(self);layout=QHBoxLayout(root);layout.setContentsMargins(0,0,0,0);layout.setSpacing(0);self.setCentralWidget(root)
         sidebar=QWidget(root);sidebar.setMinimumWidth(170);sidebar.setMaximumWidth(210);side=QVBoxLayout(sidebar);side.setContentsMargins(18,24,18,20);side.setSpacing(12)
-        brand=QHBoxLayout();self.BrandIcon=QLabel(sidebar);self.BrandIcon.setPixmap(self.windowIcon().pixmap(30,30));brand.addWidget(self.BrandIcon);brand.addWidget(Heading("BAZZALT",sidebar));side.addLayout(brand);side.addWidget(Muted("Engine Hub",sidebar))
+        brand=QHBoxLayout();self.BrandIcon=QLabel(sidebar);self.BrandIcon.setPixmap(self.windowIcon().pixmap(30,30));brand.addWidget(self.BrandIcon);self.BrandText=QLabel(sidebar);self.BrandText.setAccessibleName("BAZZALT");self.BrandText.setPixmap(WordmarkPixmap(self.palette().color(QPalette.ColorRole.WindowText).name(),138));brand.addWidget(self.BrandText);brand.addStretch();side.addLayout(brand);side.addWidget(Muted("Engine Hub",sidebar))
         self.Navigation=QListWidget(sidebar);self.Navigation.setFrameShape(QFrame.Shape.NoFrame);self.Navigation.setSpacing(6)
         self.Navigation.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         for text,standard in (("Projects",QStyle.StandardPixmap.SP_DirIcon),("Editors",QStyle.StandardPixmap.SP_ComputerIcon),("Preferences",QStyle.StandardPixmap.SP_FileDialogDetailedView)):
@@ -315,6 +315,7 @@ class NativeHubWindow(QMainWindow):
         super().changeEvent(event)
         if event.type()==QEvent.Type.PaletteChange and hasattr(self,"BrandIcon"):
             icon=LogoIcon(self.palette().color(QPalette.ColorRole.WindowText).name());self.setWindowIcon(icon);self.BrandIcon.setPixmap(icon.pixmap(30,30))
+            self.BrandText.setPixmap(WordmarkPixmap(self.palette().color(QPalette.ColorRole.WindowText).name(),138))
             if hasattr(self,"ProjectModel"):
                 for row in range(self.ProjectModel.rowCount()):self.ProjectModel.item(row,0).setIcon(icon)
 

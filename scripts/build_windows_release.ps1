@@ -64,6 +64,9 @@ if ($Product -eq 'core') {
 } else {
     python (Join-Path $Root 'scripts/compile_resources.py') --build-directory (Join-Path $Build 'CompiledResources')
     if ($LASTEXITCODE -ne 0) { throw 'Resource compilation failed' }
+    $BrandIcon = Join-Path $Build 'Bazzalt.ico'
+    python (Join-Path $Root 'scripts/embed_game_logo.py') (Join-Path $Root 'bazzalt/assets/branding/BazzaltIcon.svg') $BrandIcon
+    if ($LASTEXITCODE -ne 0) { throw 'Brand icon generation failed' }
     $Entry = if ($Product -eq 'hub') {'bazzalt_hub'} else {'bazzalt_editor'}
     $Executable = if ($Product -eq 'hub') {'BazzaltHub.exe'} else {'Bazzalt.exe'}
     $Resource = if ($Product -eq 'hub') {'hub'} else {'editor'}
@@ -72,7 +75,7 @@ if ($Product -eq 'core') {
     python -m nuitka --mode=standalone --msvc=latest --assume-yes-for-downloads --enable-plugin=pyside6 `
         --nofollow-import-to=PySide6.QtWebEngineCore,PySide6.QtWebEngineWidgets,PySide6.QtWebChannel `
         "--include-module=bazzalt._${Resource}_resources_rc" --include-module=bazzalt._branding_resources_rc `
-        --windows-console-mode=disable "--output-filename=$Executable" "--output-dir=$NuitkaOutput" (Join-Path $Root "$Entry.py")
+        --windows-console-mode=disable "--windows-icon-from-ico=$BrandIcon" "--output-filename=$Executable" "--output-dir=$NuitkaOutput" (Join-Path $Root "$Entry.py")
     if ($LASTEXITCODE -ne 0) { throw 'Nuitka compilation failed' }
     Move-Item -LiteralPath (Join-Path $NuitkaOutput "$Entry.dist") -Destination $Stage
     if ($Product -eq 'editor') {

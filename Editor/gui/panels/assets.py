@@ -281,7 +281,7 @@ class AssetBrowserPanel(QWidget):
         self.Refresh(path);self.Browser.editItem(self.Browser.currentItem())
     def _Import(self)->None:
         if self._folder is None:return
-        dialog=QFileDialog(self,self._localization.Translate("assets.import"));dialog.setOption(QFileDialog.Option.DontUseNativeDialog);dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
+        dialog=QFileDialog(self,self._localization.Translate("assets.import"));dialog.setOption(QFileDialog.Option.DontUseNativeDialog,False);dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
         if not dialog.exec():return
         self.ImportPaths([Path(value) for value in dialog.selectedFiles()])
     def ImportPaths(self,paths,folder=None):

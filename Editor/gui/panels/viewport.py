@@ -36,6 +36,7 @@ class NativeRenderSurface(QWidget):
     GizmoDragFinished = Signal()
     CameraChanged = Signal(float, float)
     Attached = Signal()
+    AttachmentFailed = Signal(str)
     EntityPicked = Signal(str, bool)
     EntitiesBoxSelected = Signal(object, bool)
     SelectionBoxStarted = Signal(bool)
@@ -99,8 +100,12 @@ class NativeRenderSurface(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_NativeWindow)
         self.setCursor(Qt.CursorShape.ArrowCursor)
         width, height = self._PixelSize()
-        self._attached = self.Runtime.CreateViewport(
-            self.ViewportId, int(self.winId()), self.IsScene, width, height,self.devicePixelRatioF())
+        try:
+            self._attached = self.Runtime.CreateViewport(
+                self.ViewportId, int(self.winId()), self.IsScene, width, height,self.devicePixelRatioF())
+        except Exception as error:
+            self.AttachmentFailed.emit(str(error));return
+        if not self._attached:self.AttachmentFailed.emit(self.Runtime.LastError());return
         if self._attached and self.IsScene: self._UpdateCamera()
         if self._attached:self.Attached.emit()
 

@@ -10,7 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QFile
 from PySide6.QtWidgets import QApplication
 from bazzalt.resources import Package, ResourcePackage
-from bazzalt.branding import LogoIcon
+from bazzalt.branding import LogoIcon,WordmarkPixmap
 from Editor.resources import ResourceManager
 from Editor.localization import LocalizationManager
 from Editor.theme import BuildStyleSheet, Theme
@@ -51,11 +51,41 @@ class CompiledResourcesTests(unittest.TestCase):
 
     def test_native_hub_branding_is_compiled_without_html(self):
         hub=Package("hub",compiled=True)
-        url=hub.Url("BazzaltLogo.svg")
+        url=hub.Url("BazzaltIcon.svg")
         self.assertEqual(url.scheme(),"qrc")
         self.assertTrue(QFile.exists(":"+url.path()))
-        self.assertEqual(hub.ReadBytes("BazzaltLogo.svg"),(ROOT/"Launcher/BazzaltLogo.svg").read_bytes())
+        for name in ('BazzaltIcon.svg','BazzaltText.svg'):
+            self.assertEqual(hub.ReadBytes(name),(ROOT/'bazzalt/assets/branding'/name).read_bytes())
         with self.assertRaises(FileNotFoundError):hub.ReadText("index.html")
+
+    def test_brand_tints_proportions_and_menubar_position(self):
+        from Editor.gui.widgets.menu_bar import EditorMenuBar
+        from Editor.theme import ThemeManager
+        from PySide6.QtCore import Qt
+        theme=ThemeManager(self.App);bar=EditorMenuBar(theme,LocalizationManager(ResourceManager()))
+        bar.resize(900,28);bar.show();self.App.processEvents()
+        self.assertIs(bar.cornerWidget(Qt.Corner.TopLeftCorner),bar.BrandLabel)
+        self.assertGreaterEqual(bar.actionGeometry(bar.FileMenu.menuAction()).left(),bar.BrandLabel.geometry().right())
+        for color in ('#202020','#eeeeee'):
+            for pixmap in (LogoIcon(color).pixmap(128,128),WordmarkPixmap(color)):
+                image=pixmap.toImage();pixels=[image.pixelColor(x,y) for y in range(image.height()) for x in range(image.width()) if image.pixelColor(x,y).alpha()==255]
+                self.assertTrue(pixels);self.assertTrue(all(pixel.name()==color for pixel in pixels))
+            self.assertGreater(WordmarkPixmap(color).width()/WordmarkPixmap(color).height(),10)
+        theme.SetTheme(Theme.light());self.App.processEvents()
+        self.assertEqual(bar.BrandLabel.pixmap().toImage(),LogoIcon(Theme.light().text).pixmap(20,20).toImage())
+        theme.SetTheme(Theme.dark())
+        bar.close();bar.deleteLater()
+
+    def test_native_intro_and_executable_icon_use_symbol_proportions(self):
+        from scripts.embed_game_logo import Generate
+        from PySide6.QtGui import QImage
+        with tempfile.TemporaryDirectory() as folder:
+            header=Path(folder)/'GameLogo.h';icon=Path(folder)/'Bazzalt.ico'
+            source=ROOT/'bazzalt/assets/branding/BazzaltIcon.svg'
+            Generate(source,header);Generate(source,icon)
+            self.assertIn('GameLogoWidth=256,GameLogoHeight=202',header.read_text())
+            image=QImage(str(icon));self.assertFalse(image.isNull());self.assertEqual(image.width(),256)
+            self.assertEqual(image.pixelColor(0,0).alpha(),0)
 
     def test_unsafe_and_missing_paths_fail_in_both_modes(self):
         for compiled in (False,True):

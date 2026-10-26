@@ -37,10 +37,13 @@ if (-not $InnoCompiler) {
 if (-not $InnoCompiler) { throw "Inno Setup 6 was not found. Install it with: winget install JRSoftware.InnoSetup" }
 
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
+$BrandIcon = Join-Path $Output 'Bazzalt.ico'
+python (Join-Path $Root 'scripts/embed_game_logo.py') (Join-Path $Root 'bazzalt/assets/branding/BazzaltIcon.svg') $BrandIcon
+if ($LASTEXITCODE -ne 0) { throw 'Installer brand icon generation failed' }
 $Script = Join-Path $Root "installer/BazzaltHub.iss"
 $OutputName = "BazzaltHub-$Version-windows-$Architecture-Setup"
 & $InnoCompiler "/DAppVersion=$Version" "/DTargetArchitecture=$Architecture" "/DBundleDir=$Bundle" `
-    "/DInstallerOutputDir=$Output" "/F$OutputName" $Script
+    "/DInstallerOutputDir=$Output" "/DBrandIconFile=$BrandIcon" "/F$OutputName" $Script
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed with exit code $LASTEXITCODE" }
 
 $Installer = Join-Path $Output "$OutputName.exe"

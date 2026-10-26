@@ -68,5 +68,5 @@ class ResourcePackage:
 
 def Package(name: str, *, compiled: bool | None = None) -> ResourcePackage:
     root = Path(__file__).resolve().parent.parent
-    sources = {"editor": root / "Editor/assets", "hub": root / "Launcher", "branding": root / "Launcher"}
+    sources = {"editor": root / "Editor/assets", "hub": root / "bazzalt/assets/branding", "branding": root / "bazzalt/assets/branding"}
     return ResourcePackage(name, sources[name], compiled=compiled)

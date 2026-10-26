@@ -781,5 +781,15 @@
   "build.field.platform": "Platform",
   "build.option.windows": "Windows",
   "build.option.linux": "Linux",
-  "build.unsupported_target": "Unsupported build target: {error}"
+  "build.unsupported_target": "Unsupported build target: {error}",
+  "loading.title": "Loading BAZZALT Project",
+  "loading.validating": "Validating project…",
+  "loading.assets": "Loading asset database and scene…",
+  "loading.editor": "Preparing editor…",
+  "loading.viewports": "Initializing viewports and preparing the first frames…",
+  "loading.project_failed": "Project Could Not Be Loaded",
+  "loading.editor_failed": "Editor Could Not Be Opened",
+  "loading.viewport_failed": "A viewport could not be initialized.",
+  "loading.scanning_empty": "Scanning empty asset directory",
+  "loading.native_failed": "Native project loading failed: {error}"
 }

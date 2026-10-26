@@ -18,8 +18,8 @@ def Compile(root: Path = ROOT, build: Path | None = None) -> list[Path]:
     if not files: raise RuntimeError("Editor assets are missing")
     packages = {
         "editor": [(path.relative_to(assets).as_posix(), path) for path in files],
-        "hub": [("BazzaltLogo.svg", root / "Launcher/BazzaltLogo.svg")],
-        "branding": [("BazzaltLogo.svg", root / "Launcher/BazzaltLogo.svg")],
+        "hub": [(name, root / "bazzalt/assets/branding" / name) for name in ("BazzaltIcon.svg","BazzaltText.svg")],
+        "branding": [(name, root / "bazzalt/assets/branding" / name) for name in ("BazzaltIcon.svg","BazzaltText.svg")],
     }
     outputs = []
     for name, entries in packages.items():
@@ -44,7 +44,7 @@ def Audit(directory: Path) -> None:
     leaked = []
     for path in directory.rglob("*"):
         suffix = tuple(part.casefold() for part in path.relative_to(directory).parts[-2:])
-        if suffix in (("editor", "assets"), ("launcher", "index.html"), ("launcher", "bazzaltlogo.svg")):
+        if suffix in (("editor", "assets"), ("launcher", "index.html"), ("launcher", "bazzaltlogo.svg")) or path.relative_to(directory).as_posix().lower().endswith('bazzalt/assets/branding'):
             leaked.append(str(path))
     if leaked: raise RuntimeError("Raw application resources leaked into production: " + ", ".join(leaked))
 

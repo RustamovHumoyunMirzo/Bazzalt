@@ -12,6 +12,9 @@
 #endif
 
 [Setup]
+#ifdef BrandIconFile
+SetupIconFile={#BrandIconFile}
+#endif
 AppId={{D563105B-0545-4D36-8A48-6AE8EF8E6CB8}
 AppName=BAZZALT Hub
 AppVersion={#AppVersion}

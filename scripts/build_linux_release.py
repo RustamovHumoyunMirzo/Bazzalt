@@ -45,7 +45,7 @@ def main():
         x86=ROOT/'build/LinuxX86Package/RuntimeTemplates/linux-x86'
         if product in ('core','editor') and x86.is_dir():shutil.copytree(x86,stage/'RuntimeTemplates/linux-x86')
         if product=="hub":
-            (stage/"share").mkdir(exist_ok=True);shutil.copy2(ROOT/"Launcher/BazzaltLogo.svg",stage/"share/BazzaltLogo.svg")
+            (stage/"share").mkdir(exist_ok=True);shutil.copy2(ROOT/"bazzalt/assets/branding/BazzaltIcon.svg",stage/"share/BazzaltLogo.svg")
             shutil.copy2(ROOT/'scripts/install_linux.sh',stage/'install_linux.sh')
         Audit(stage,'x64',product,'linux')
         version=versions.get(product,versions['core']);output=args.output/f'Bazzalt-{product}-{version}-linux-x64.zip';Archive(stage,output);output.with_suffix('.zip.json').write_text(json.dumps(Entry(output,product,version,'x64',args.base_url,'linux'),indent=2))

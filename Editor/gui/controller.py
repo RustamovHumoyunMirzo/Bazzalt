@@ -6,7 +6,7 @@ from pathlib import Path
 from math import cos, sin
 from time import monotonic
 
-from PySide6.QtCore import QObject, QSignalBlocker, QTimer, Qt
+from PySide6.QtCore import QObject, QSignalBlocker, QTimer, Qt, Signal
 from PySide6.QtWidgets import QApplication, QFileDialog, QLabel, QMenu, QProgressDialog, QLineEdit, QWidgetAction, QDialog, QVBoxLayout, QListWidget, QListWidgetItem, QPushButton
 
 from ..runtime import RuntimeService
@@ -32,6 +32,8 @@ from .widgets import AssetPickerInput, ObjectPickerInput, BoolInput, ColorInput,
 
 
 class EditorController(QObject):
+    FrameCompleted = Signal()
+    FrameFailed = Signal(str)
     def __init__(self, window, runtime: RuntimeService) -> None:  # type: ignore[no-untyped-def]
         super().__init__(window)
         self.Window = window
@@ -145,7 +147,7 @@ class EditorController(QObject):
 
     def OpenSceneDialog(self) -> None:
         dialog=QFileDialog(self.Window,self.Window.Localization.Translate("dialog.open_scene"),self.Runtime.AssetDirectory(),self.Window.Localization.Translate("dialog.scene_filter"))
-        dialog.setOption(QFileDialog.Option.DontUseNativeDialog);dialog.setFileMode(QFileDialog.FileMode.ExistingFile);dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptOpen)
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog,False);dialog.setFileMode(QFileDialog.FileMode.ExistingFile);dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptOpen)
         path=dialog.selectedFiles()[0] if dialog.exec() and dialog.selectedFiles() else ""
         if path and self.Runtime.LoadScene(path): self.ScenePath = path
 
@@ -160,6 +162,7 @@ class EditorController(QObject):
         tick_start=monotonic()
         if self.Runtime.Tick() is False:
             self.Timer.stop()
+            self.FrameFailed.emit(self.Runtime.LastError())
             return
         tick_ms=(monotonic()-tick_start)*1000
         interval=self.Runtime.ApplicationTickInterval() if hasattr(self.Runtime,'ApplicationTickInterval') else 16
@@ -179,6 +182,7 @@ class EditorController(QObject):
         # This also covers transforms changed by systems or native user code.
         if self.SelectedEntity:self._UpdateGizmo()
         if self.SelectedEntity and self.Runtime.IsPlaying():self._RefreshInspectorValues(preserve_editing=True)
+        self.FrameCompleted.emit()
 
     def SaveScene(self) -> bool:
         if self.ScriptAttachments and not self._SyncLuaScripts():return False
@@ -190,7 +194,7 @@ class EditorController(QObject):
     def SaveSceneAsDialog(self) -> bool:
         if self.ScriptAttachments and not self._SyncLuaScripts():return False
         dialog=QFileDialog(self.Window,self.Window.Localization.Translate("dialog.save_scene"),self.Runtime.AssetDirectory(),self.Window.Localization.Translate("dialog.scene_filter"))
-        dialog.setOption(QFileDialog.Option.DontUseNativeDialog);dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog,False);dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
         path=dialog.selectedFiles()[0] if dialog.exec() and dialog.selectedFiles() else ""
         if path and self.Runtime.SaveScene(path): self.ScenePath = path; self.SetDirty(False);return True
         return False

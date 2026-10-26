@@ -311,8 +311,8 @@ if(WIN32)
     set(_game_logo_header "${_bazzalt_generated_dir}/game_logo.h")
     add_custom_command(OUTPUT "${_game_logo_header}"
         COMMAND "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_game_logo.py"
-            "${CMAKE_CURRENT_SOURCE_DIR}/Launcher/BazzaltLogo.svg" "${_game_logo_header}"
-        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Launcher/BazzaltLogo.svg" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_game_logo.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/bazzalt/assets/branding/BazzaltIcon.svg" "${_game_logo_header}"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/bazzalt/assets/branding/BazzaltIcon.svg" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_game_logo.py"
         VERBATIM COMMENT "Embedding shared Bazzalt startup logo")
     add_executable(BazzaltPlayer WIN32 Compiler/native/Player.cpp "${_game_logo_header}")
     target_include_directories(BazzaltPlayer PRIVATE src include Compiler/native "${_bazzalt_generated_dir}")
@@ -338,8 +338,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(_game_logo_header "${_bazzalt_generated_dir}/game_logo.h")
     add_custom_command(OUTPUT "${_game_logo_header}"
         COMMAND "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_game_logo.py"
-            "${CMAKE_CURRENT_SOURCE_DIR}/Launcher/BazzaltLogo.svg" "${_game_logo_header}"
-        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Launcher/BazzaltLogo.svg" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_game_logo.py")
+            "${CMAKE_CURRENT_SOURCE_DIR}/bazzalt/assets/branding/BazzaltIcon.svg" "${_game_logo_header}"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/bazzalt/assets/branding/BazzaltIcon.svg" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_game_logo.py")
     add_library(BazzaltLinuxPlayer SHARED Compiler/native/PlayerLinux.cpp "${_game_logo_header}")
     target_include_directories(BazzaltLinuxPlayer PRIVATE src include Compiler/native "${_bazzalt_generated_dir}")
     target_link_libraries(BazzaltLinuxPlayer PRIVATE Bazzalt ryml OpenSSL::Crypto SDL3::SDL3-static X11::X11 BazzaltFilament_zstd)

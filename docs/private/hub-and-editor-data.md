@@ -24,3 +24,18 @@ On launch, a small editor loading window validates metadata and recursively scan
 asset directory without following directory symlinks. It reports file-level progress, then opens
 the native asset database and startup scene. The full Editor window is constructed only after
 that succeeds; failures close the process with an error instead of revealing an empty editor.
+
+The loading dialog remains application-modal while the disabled editor is shown
+and its visible native viewports attach. The controller reports successful frame
+completion; two frames with all visible surfaces attached finish startup. Hidden
+viewport tabs attach later when opened. The dialog uses `show()`, not a nested
+`exec()` loop, so normal initialization and rendering callbacks continue on the
+GUI thread. Native graphics objects are not moved to a worker thread.
+
+Startup input is discarded by an application event filter. Before enabling the
+editor, the session pauses its tick timer and drains queued events while that
+filter and modal dialog are still active. Clicks and shortcuts made during
+initialization therefore cannot replay against the ready editor. Escape and
+close cannot dismiss the loading dialog early. A failed initial frame keeps the
+editor disabled, logs the failure, shows an error and exits instead of exposing
+a partially initialized session. Loading-window text lives in the locale catalog.
