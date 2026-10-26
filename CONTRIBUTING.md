@@ -19,6 +19,12 @@ Lua binding, C++/Lua reference pages, examples and API coverage checks together.
 See [Lua integration](docs/private/lua-scripting.md) and the relevant architecture
 guide in `docs/private`. Editor-only services must remain safe no-ops in games.
 
+Every user-visible API or editor change must update the current release's
+`docs/public/<version>/whats-new/en.html` in the same change. Include additions,
+changed behavior, fixes and migration requirements, and link to the relevant
+manual or C++/Lua reference. Update existing entries when refining the same
+feature; do not rewrite older release notes. Refresh the generated docs afterward.
+
 Use shared editor themes, resources, localized strings and widgets. Content tools
 must run without Qt; final games must not acquire an editor/Python dependency.
 Keep large dependency builds in the existing CI workflows. Build locally against

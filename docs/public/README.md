@@ -39,6 +39,16 @@ with another source or an API snapshot. Text in the page header/sidebar/footer
 comes from the shared template and is refreshed automatically. Keep one `h1`
 and stable, unique `id` attributes on every `h2`/`h3`.
 
+## Keep What's New current
+
+When changing a public API or user-visible editor behavior, update the current
+release's `whats-new/en.html` in the same change. Explain what users can now do,
+what changed, and whether existing code or scenes need migration. Link API
+additions to both C++ and Lua documentation and editor changes to the relevant
+manual. Keep refinements with their existing feature entry and preserve older
+release notes. Run the refresh/check commands below so navigation, headings and
+search include the updated notes.
+
 ## Add a page or subpage
 
 Copy an existing HTML page into a new folder, for example

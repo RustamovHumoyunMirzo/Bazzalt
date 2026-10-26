@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="This release extends the 0.6.0 engine to Linux and makes game build targets explicit. Existing Windows projects and the public C++/Lua APIs remain compatible.">
+  <meta name="description" content="This release adds Linux support, custom drawing through the C++ and Lua Graphics APIs, and ordered camera material effects. It also improves editor startup and documentation loading. Existing Windows projects remain compatible.">
   <title>What&#x27;s new in 0.7.0 | BAZZALT Docs</title>
   <link rel="stylesheet" href="../../assets/docs.css">
   <script src="../../assets/theme.js"></script>
@@ -27,7 +27,26 @@
     <main id="content" tabindex="-1">
       <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../index.html">Docs</a> / What&#x27;s new in 0.7.0</nav>
       <article class="doc"><h1>What's new in 0.7.0</h1>
-<p>This release extends the 0.6.0 engine to Linux and makes game build targets explicit. Existing Windows projects and the public C++/Lua APIs remain compatible.</p>
+<p>This release adds Linux support, custom drawing through the C++ and Lua Graphics APIs, and ordered camera material effects. It also improves editor startup and documentation loading. Existing Windows projects remain compatible.</p>
+<h2 id="graphics">Custom drawing in C++ and Lua</h2>
+<p>Use <code>#include &lt;Bazzalt/Graphics.h&gt;</code> in C++ or <code>Bazzalt.Graphics</code> in Lua to submit your own geometry without accessing renderer internals. A <code>GraphicsVertex</code> contains position, normal, UV coordinates and color. <code>GraphicsTopology</code> supports points, lines, line strips, triangles and triangle strips.</p>
+<ul>
+<li><code>CreateMesh</code> creates reusable geometry. <code>GraphicsMesh.SetGeometry</code> replaces its vertices and indices; getters expose geometry and revision information, and <code>Destroy</code> invalidates the shared mesh handle.</li>
+<li><code>DrawMesh</code> submits a mesh with a material and transform. <code>DrawVertices</code> submits geometry directly; <code>DrawLine</code> and <code>DrawTriangle</code> provide simple vertex-color drawing. Submissions last one rendered frame. <code>ClearDraws</code> clears queued submissions, and <code>IsAvailable</code> checks whether rendering is initialized.</li>
+<li><code>GraphicsDrawOptions</code> controls camera selection, layer masks, priority and shadow participation. Default drawing uses an unlit vertex-color material; compatible surface materials can supply custom shading.</li>
+<li><code>GraphicsEvent</code> exposes the scene, camera, viewport dimensions and camera matrices. Use these matrices to position custom 2D geometry or draw with an orthographic camera.</li>
+</ul>
+<h3 id="graphics-events">Rendering events</h3>
+<p>Subscribe through <code>Subscribe</code> or the named helpers: <code>OnBeginFrame</code>, <code>OnCameraResize</code>, <code>OnBeforeCamera</code>, <code>OnBeforeDraw</code>, <code>OnAfterDraw</code>, <code>OnAfterCamera</code> and <code>OnEndFrame</code>. <code>Unsubscribe</code> removes a listener. Supply an entity owner when the subscription should expire with that entity.</p>
+<p>Submit drawings during gameplay updates, <code>OnBeginFrame</code> or <code>OnBeforeCamera</code>. Camera callbacks automatically scope their submissions to that camera and viewport. Other callbacks are notifications; an after-render notification does not mean the GPU has finished. See the <a href="../native/graphics/en.html">C++ drawing guide</a> and <a href="../lua/graphics/en.html">Lua drawing guide</a> for examples, limits and callback lifetimes.</p>
+<h2 id="camera-materials">Ordered camera material effects</h2>
+<p>A camera can now apply up to 32 ordered material passes. Each <code>CameraMaterialPass</code> holds a material asset and an enabled flag. The output of one enabled pass becomes the input of the next, allowing effects to be combined for game views and camera render textures.</p>
+<p><code>CameraPostProcessing</code> adds <code>AddMaterial</code>, <code>SetMaterials</code>, <code>SetMaterialAt</code>, <code>SetMaterialEnabled</code>, <code>RemoveMaterial</code>, <code>MoveMaterial</code>, <code>ClearMaterials</code> and <code>GetMaterials</code> in both C++ and Lua. Method indices start at zero; arrays returned to Lua start at one. The existing <code>SetMaterial</code> API still works and replaces the stack with one material. Older scenes with a single material continue to load.</p>
+<p>In the camera inspector, use <strong>Post Process Materials</strong> to add a pass, choose a project material, enable or disable it, change its order, or remove it. These edits support undo/redo and preserve entity selection. Pass materials must be canvas-compatible. See <a href="../manual/camera-materials/en.html">camera material effects</a>, the <a href="../native/reference/CameraPostProcessing/en.html">C++ reference</a> and the <a href="../lua/reference/CameraPostProcessing/en.html">Lua reference</a>.</p>
+<h2 id="editor-workflow">Editor startup and native dialogs</h2>
+<p>Editor startup blocks interaction until initialization and the attached viewport are ready, discarding queued input before enabling the editor. File selection uses platform-native dialogs. Branding is shared across the editor and Hub.</p>
+<h2 id="documentation">Faster documentation loading</h2>
+<p>Pages no longer load the full search text for every release on startup. The home page uses a small catalog, guides load navigation only for their version and language, and search data loads when search is opened. Search results are bounded to keep large API references responsive. Navigation, language/version selection and search continue to work offline using local files.</p>
 <h2 id="linux">Linux support</h2>
 <p>Hub, Editor, core SDK, game compiler, content cooker and standalone player now have Linux build and release paths. The editor and player use X11; Wayland desktops can run them through XWayland. Vulkan and OpenGL remain selectable. Linux games include native runtime libraries and cooked content, with no Python or editor dependency.</p>
 <p>The Linux player includes window modes, keyboard/mouse/text input, the startup logo, frame limiting and application lifecycle events. Content protection uses OpenSSL for the same AES-GCM, HKDF, SHA-256 and ECDSA scheme as Windows. Linux packages use Zstandard compression. See the <a href="../manual/linux/en.html">Linux installation and development guide</a>.</p>
@@ -41,7 +60,7 @@
 <p>Read the <a href="../../0.6.0/manual/en.html">0.6.0 documentation</a> for the previous version. Its audio, GUI, stylesheet, material, scene, scripting and editor workflows continue in 0.7.0.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="next" href="../manual/en.html"><small>Next</small>Start here</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#linux">Linux support</a><a class="toc-link" href="#targets">Platform-aware build settings</a><a class="toc-link" href="#distribution">CI and releases</a><a class="toc-link" href="#boundaries">Platform differences</a><a class="toc-link" href="#previous">Previous release</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#graphics">Custom drawing in C++ and Lua</a><a class="toc-link sub" href="#graphics-events">Rendering events</a><a class="toc-link" href="#camera-materials">Ordered camera material effects</a><a class="toc-link" href="#editor-workflow">Editor startup and native dialogs</a><a class="toc-link" href="#documentation">Faster documentation loading</a><a class="toc-link" href="#linux">Linux support</a><a class="toc-link" href="#targets">Platform-aware build settings</a><a class="toc-link" href="#distribution">CI and releases</a><a class="toc-link" href="#boundaries">Platform differences</a><a class="toc-link" href="#previous">Previous release</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">
