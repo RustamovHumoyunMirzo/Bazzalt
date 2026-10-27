@@ -20,7 +20,7 @@ define a stable C ABI.
 |---|---|---|
 | Editor UI | Python 3, PySide6 | Initial editor files only |
 | Window/input | GLFW | Not implemented |
-| Physics | Jolt Physics | Not implemented |
+| Physics | Jolt Physics | [Dependency/integration preparation](physics-integration.md); simulation not implemented |
 | Audio | miniaudio | Not implemented |
 | Native scripts | Dynamically loaded game module | Not implemented |
 | Lua scripts | LuaJIT/precompiled bytecode | Not implemented |

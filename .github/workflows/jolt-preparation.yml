@@ -1,0 +1,51 @@
+name: Jolt dependency preparation
+on:
+  push:
+    paths: ['cmake/Jolt.cmake', 'scripts/get_jolt.*', 'scripts/dependencies/jolt.json', 'tests/jolt/**', '.github/workflows/jolt-preparation.yml']
+  pull_request:
+    paths: ['cmake/Jolt.cmake', 'scripts/get_jolt.*', 'scripts/dependencies/jolt.json', 'tests/jolt/**', '.github/workflows/jolt-preparation.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dependency:
+    name: ${{ matrix.os }} / ${{ matrix.architecture }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-24.04]
+        architecture: [x64, x86]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+      - name: Fetch verified source (no engine dependencies)
+        run: python scripts/get_jolt.py
+      - name: Configure Windows dependency probe
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $target = if ('${{ matrix.architecture }}' -eq 'x86') { 'Win32' } else { 'x64' }
+          cmake -S tests/jolt -B build/jolt-probe -G "Visual Studio 17 2022" -A $target -DBAZZALT_PREPARE_JOLT=ON
+          if ($LASTEXITCODE -ne 0) { throw 'Jolt configure failed' }
+      - name: Configure Linux dependency probe
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang ninja-build libc++-dev libc++abi-dev g++-multilib
+          flags=()
+          if [ '${{ matrix.architecture }}' = x86 ]; then flags+=(-DCMAKE_CXX_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32); fi
+          cmake -S tests/jolt -B build/jolt-probe -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++ -DBAZZALT_PREPARE_JOLT=ON "${flags[@]}"
+      - name: Build dependency and link probe on CI
+        run: cmake --build build/jolt-probe --config Release --parallel 2
+      - name: Check library registration and teardown
+        run: ctest --test-dir build/jolt-probe -C Release --output-on-failure
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: jolt-preparation-${{ matrix.os }}-${{ matrix.architecture }}
+          path: build/jolt-probe/Testing/Temporary/*.log

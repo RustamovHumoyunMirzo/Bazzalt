@@ -51,3 +51,5 @@ Applications may depend on public C++ types and serialized UUIDs. They should
 not persist EnTT entity identifiers, pointers, cache paths, or renderer handles.
 
 - [Extension packages, SDK lifetime and deployment](extensions.md)
+
+- [Jolt physics integration preparation](physics-integration.md) — private dependency, ownership, fixed-step and release contracts; no simulation yet.

@@ -8,6 +8,7 @@ import shutil
 import sys
 
 SOURCES = {
+    'Jolt.txt': 'deps/jolt/LICENSE',
     'EnTT.txt': 'deps/entt/LICENSE',
     'Filament.txt': 'deps/filament/LICENSE',
     'rapidyaml.txt': 'deps/rapidyaml/LICENSE.txt',

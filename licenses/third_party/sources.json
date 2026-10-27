@@ -538,5 +538,10 @@
     "file": "Filament/third_party/zstd/build/LICENSE",
     "source": "https://raw.githubusercontent.com/google/filament/v1.77.0/third_party/zstd/build/LICENSE",
     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "file": "Jolt/LICENSE",
+    "source": "https://raw.githubusercontent.com/jrouwe/JoltPhysics/0373ec0dd762e4bc2f6acdb08371ee84fa23c6db/LICENSE",
+    "sha256": "800abe35d64ad9defd636ff1ee8c961e06f0ebca3ef8d10083e8aa0e8ef86ac3"
   }
 ]

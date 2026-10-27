@@ -43,6 +43,14 @@ mutex operations and unrelated diagnostics unchanged.
 | [HarfBuzz](https://github.com/harfbuzz/harfbuzz), Google and other named authors | Private GUI OpenType shaping | [Old MIT and per-file notices](https://github.com/harfbuzz/harfbuzz/blob/main/COPYING) |
 | [SheenBidi](https://github.com/Tehreer/SheenBidi), Muhammad Tayyab Akram | Unicode bidirectional layout | [Apache-2.0](https://github.com/Tehreer/SheenBidi/blob/master/LICENSE) |
 
+## Prepared optional dependencies
+
+Jolt Physics 5.3.0, Jorrit Rouwe and contributors, is pinned for future physics
+integration under the [MIT license](https://github.com/jrouwe/JoltPhysics/blob/v5.3.0/LICENSE).
+It is not linked into or required by current engine/editor/game distributions.
+Its notice is preserved in `licenses/third_party/Jolt/LICENSE`; the dependency
+collector also copies `deps/jolt/LICENSE` when source is present.
+
 ## Filament SDK dependencies
 
 Filament ships code from other projects. Its SDK can contain more than the
