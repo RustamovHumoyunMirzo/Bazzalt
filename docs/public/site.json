@@ -11,6 +11,7 @@
       "title": "Editor manual",
       "order": [
         "first-launch",
+        "platforms",
         "workspace",
         "first-scene",
         "panels",
