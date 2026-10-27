@@ -56,6 +56,7 @@ void Scene::DestroyEntity(Entity entity) {
 }
 
 void Scene::Clear() {
+    m_extensionProperties.clear();
     m_environment={};
     m_registry.clear();
     m_uuidLookup.clear();

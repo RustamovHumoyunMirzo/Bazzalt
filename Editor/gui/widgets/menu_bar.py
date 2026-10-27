@@ -74,6 +74,8 @@ class EditorMenuBar(QMenuBar):
     RedoRequested = Signal()
     PreferencesRequested = Signal()
     ProjectSettingsRequested = Signal()
+    ExtensionsRequested = Signal()
+    BuildPackageRequested = Signal()
     GlobalSubsystemsRequested = Signal()
     BuildSettingsRequested = Signal()
     BuildRequested = Signal()
@@ -102,6 +104,7 @@ class EditorMenuBar(QMenuBar):
         self.setNativeMenuBar(False)
         self._theme_manager = theme_manager
         self._localization = localization
+        self._extension_window_actions=[]
         self._docking: DockingSystem | None = None
         self.BrandLabel=QLabel(self)
         self.BrandLabel.setObjectName("EditorBrandIcon")
@@ -126,6 +129,7 @@ class EditorMenuBar(QMenuBar):
         self.BuildMenu.addSeparator()
         self.BuildAction=self.BuildMenu.addAction("");self.BuildAction.triggered.connect(self.BuildRequested)
         self.BuildLaunchAction=self.BuildMenu.addAction("");self.BuildLaunchAction.triggered.connect(self.BuildLaunchRequested)
+        self.BuildPackageAction=self.BuildMenu.addAction("");self.BuildPackageAction.triggered.connect(self.BuildPackageRequested)
         self._BuildEditMenu()
         self._BuildViewMenu()
         self._BuildObjectMenu()
@@ -233,7 +237,9 @@ class EditorMenuBar(QMenuBar):
         self.WindowMenu.clear()
         reset = self.WindowMenu.addAction(self._localization.Translate("action.reset_workspace"))
         reset.triggered.connect(self.ResetWorkspaceRequested)
+        extensions=self.WindowMenu.addAction(self._localization.Translate('extensions.title'));extensions.triggered.connect(self.ExtensionsRequested)
         subsystems=self.WindowMenu.addAction(self._localization.Translate('subsystems.title'));subsystems.triggered.connect(self.GlobalSubsystemsRequested)
+        for action in self._extension_window_actions:self.WindowMenu.addAction(action)
 
         if self._docking is None or not self._docking.panels():
             self.WindowMenu.addSeparator()
@@ -259,6 +265,7 @@ class EditorMenuBar(QMenuBar):
         tr = self._localization.Translate
         self.FileMenu.setTitle(tr("menu.file"))
         self.BuildMenu.setTitle(tr('menu.build'));self.BuildSettingsAction.setText(tr('build.settings'));self.BuildAction.setText(tr('build.build'));self.BuildLaunchAction.setText(tr('build.launch'))
+        self.BuildPackageAction.setText(tr("extensions.build"))
         self.EditMenu.setTitle(tr("menu.edit"))
         self.ObjectMenu.setTitle(tr("menu.object"));self.ObjectModeMenu.setTitle(tr("object.modes"))
         for key,menu in self.ObjectMenus.items():menu.setTitle(tr("object.menu."+key))

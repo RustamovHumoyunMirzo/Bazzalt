@@ -215,6 +215,9 @@ def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
         check()
         cooked=work/'Cooked';cooked.mkdir()
         Emit('scripts','Compiling game scripts',architecture=arch)
+        from .extensions import LockedItems,MaterializeAssets
+        extension_items=LockedItems(project,platform,arch)
+        if extension_items:MaterializeAssets(project,extension_items)
         bindings=CompileScripts(project,runtime,arch,cache/arch,compiler_path)
         check()
         for binding in bindings:
@@ -227,6 +230,8 @@ def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
         Run([cooker,project,cooked,manifest],cwd=cooker.parent,env=environment)
         from .content import FilterCooked
         check();CookShaders(cooked,cooker,check);check();FilterCooked(cooked,settings['packaging']);check()
+        from .extensions import StageGame
+        StageGame(project,cooked,platform,arch,runtime,compiler_path);check()
         # No source code, import tools, or editor settings can enter the final game.
         forbidden={'.py','.pyc','.pyd','.cpp','.hpp','.h','.cc','.cxx','.lua'}
         for path in cooked.rglob('*'):

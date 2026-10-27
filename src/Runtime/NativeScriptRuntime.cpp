@@ -1,5 +1,6 @@
 #include "Runtime/NativeScriptRuntime.h"
 #include "Runtime/GraphicsAccess.h"
+#include "Runtime/ExtensionAccess.h"
 #include "Runtime/ApplicationEventsAccess.h"
 #include "Runtime/BehaviorAccess.h"
 #include "Bazzalt/Script.h"
@@ -24,8 +25,9 @@ struct ModuleScope {
     std::shared_ptr<void> Previous;
     const void* PreviousOwner;
     const void* PreviousGraphicsOwner;
-    explicit ModuleScope(std::shared_ptr<void> module,const void* owner=nullptr) : Previous(Detail::SetCurrentGameplayModule(std::move(module))),PreviousOwner(ApplicationEventsAccess::SetOwner(owner)),PreviousGraphicsOwner(GraphicsAccess::SetScope(owner)) {}
-    ~ModuleScope() { Detail::SetCurrentGameplayModule(std::move(Previous));ApplicationEventsAccess::SetOwner(PreviousOwner);GraphicsAccess::SetScope(PreviousGraphicsOwner); }
+    std::string PreviousExtension;
+    explicit ModuleScope(std::shared_ptr<void> module,const void* owner=nullptr,const std::string& type="") : Previous(Detail::SetCurrentGameplayModule(std::move(module))),PreviousOwner(ApplicationEventsAccess::SetOwner(owner)),PreviousGraphicsOwner(GraphicsAccess::SetScope(owner)),PreviousExtension(ExtensionAccess::SetCaller(ExtensionAccess::ComponentOwner(type))) {}
+    ~ModuleScope() { Detail::SetCurrentGameplayModule(std::move(Previous));ApplicationEventsAccess::SetOwner(PreviousOwner);GraphicsAccess::SetScope(PreviousGraphicsOwner);ExtensionAccess::SetCaller(std::move(PreviousExtension)); }
 };
 Detail::EntityServices EntityHostServices{
     [](UUID id, Transform* value) {
@@ -78,7 +80,7 @@ bool NativeScriptRuntime::Start(std::string& error,bool application){
     Stop();error.clear();
     for(const auto& binding:m_bindings){Instance instance;instance.Application=application;
 #ifdef _WIN32
-        instance.Library=LoadLibraryW(binding.Module.c_str());auto entry=instance.Library?reinterpret_cast<GetScriptModuleApi>(GetProcAddress(instance.Library,"BazzaltGetScriptModuleV1")):nullptr;
+        instance.Library=LoadLibraryExW(binding.Module.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);auto entry=instance.Library?reinterpret_cast<GetScriptModuleApi>(GetProcAddress(instance.Library,"BazzaltGetScriptModuleV1")):nullptr;
 #else
         instance.Library=dlopen(binding.Module.c_str(),RTLD_NOW|RTLD_LOCAL);auto entry=instance.Library?reinterpret_cast<GetScriptModuleApi>(dlsym(instance.Library,"BazzaltGetScriptModuleV1")):nullptr;
 #endif
@@ -90,7 +92,7 @@ bool NativeScriptRuntime::Start(std::string& error,bool application){
 #endif
         });
         if(!entry){error="Could not load script module: "+binding.Module.string();Stop();return false;}
-        ModuleScope moduleScope(instance.Lease);
+        ModuleScope moduleScope(instance.Lease,nullptr,binding.TypeName);
         instance.Api=entry();
         if(!instance.Api||instance.Api->AbiVersion!=ScriptAbiVersion||!instance.Api->TypeName||(!application&&binding.TypeName!=instance.Api->TypeName)){error="Incompatible script module: "+binding.Module.string();m_instances.push_back(instance);Stop();return false;}
         // Optional service binding preserves compatibility with existing V1 modules.
@@ -144,11 +146,11 @@ bool NativeScriptRuntime::Start(std::string& error,bool application){
         try{BehaviorAccess::Register(binding.Entity,binding.TypeName,instance.BehaviorObject);}catch(const std::exception& failure){error=failure.what();Stop();return false;}
     }
     if(application)for(auto& instance:m_instances)if(!instance.OnApplicationEvent){error="Application script must be rebuilt with application event support";Stop();return false;}
-    try{if(!application)for(auto& instance:m_instances){ModuleScope scope(instance.Lease,instance.Object);instance.Api->OnCreate(instance.Object);}}catch(const std::exception& e){error=std::string("Script OnCreate failed: ")+e.what();Stop();return false;}catch(...){error="Script OnCreate failed";Stop();return false;}return true;
+    try{if(!application)for(auto& instance:m_instances){ModuleScope scope(instance.Lease,instance.Object,instance.Api->TypeName);instance.Api->OnCreate(instance.Object);}}catch(const std::exception& e){error=std::string("Script OnCreate failed: ")+e.what();Stop();return false;}catch(...){error="Script OnCreate failed";Stop();return false;}return true;
 }
-void NativeScriptRuntime::Update(float deltaTime){for(auto& instance:m_instances){ModuleScope scope(instance.Lease,instance.Object);instance.Api->OnUpdate(instance.Object,deltaTime);}}
-void NativeScriptRuntime::FixedUpdate(float deltaTime){for(auto& instance:m_instances)if(instance.OnFixedUpdate){ModuleScope scope(instance.Lease,instance.Object);instance.OnFixedUpdate(instance.Object,deltaTime);}}
-void NativeScriptRuntime::LateUpdate(float deltaTime){for(auto& instance:m_instances)if(instance.OnLateUpdate){ModuleScope scope(instance.Lease,instance.Object);instance.OnLateUpdate(instance.Object,deltaTime);}}
-void NativeScriptRuntime::ApplicationEvent(const Bazzalt::ApplicationEvent& event){for(auto& instance:m_instances)if(instance.OnApplicationEvent){ModuleScope scope(instance.Lease,instance.Object);instance.OnApplicationEvent(instance.Object,&event);}}
-void NativeScriptRuntime::Stop() noexcept{for(auto it=m_instances.rbegin();it!=m_instances.rend();++it)if(it->Object&&it->Api){ModuleScope scope(it->Lease,it->Object);BehaviorAccess::Remove(it->BehaviorObject);try{if(!it->Application)it->Api->OnDestroy(it->Object);}catch(...){}GraphicsAccess::DisconnectScope(it->Object);ApplicationEventsAccess::DisconnectOwner(it->Object);try{it->Api->Destroy(it->Object);}catch(...){}}m_instances.clear();}
+void NativeScriptRuntime::Update(float deltaTime){for(auto& instance:m_instances){ModuleScope scope(instance.Lease,instance.Object,instance.Api->TypeName);instance.Api->OnUpdate(instance.Object,deltaTime);}}
+void NativeScriptRuntime::FixedUpdate(float deltaTime){for(auto& instance:m_instances)if(instance.OnFixedUpdate){ModuleScope scope(instance.Lease,instance.Object,instance.Api->TypeName);instance.OnFixedUpdate(instance.Object,deltaTime);}}
+void NativeScriptRuntime::LateUpdate(float deltaTime){for(auto& instance:m_instances)if(instance.OnLateUpdate){ModuleScope scope(instance.Lease,instance.Object,instance.Api->TypeName);instance.OnLateUpdate(instance.Object,deltaTime);}}
+void NativeScriptRuntime::ApplicationEvent(const Bazzalt::ApplicationEvent& event){for(auto& instance:m_instances)if(instance.OnApplicationEvent){ModuleScope scope(instance.Lease,instance.Object,instance.Api->TypeName);instance.OnApplicationEvent(instance.Object,&event);}}
+void NativeScriptRuntime::Stop() noexcept{for(auto it=m_instances.rbegin();it!=m_instances.rend();++it)if(it->Object&&it->Api){ModuleScope scope(it->Lease,it->Object,it->Api->TypeName);BehaviorAccess::Remove(it->BehaviorObject);try{if(!it->Application)it->Api->OnDestroy(it->Object);}catch(...){}GraphicsAccess::DisconnectScope(it->Object);ApplicationEventsAccess::DisconnectOwner(it->Object);try{it->Api->Destroy(it->Object);}catch(...){}}m_instances.clear();}
 }

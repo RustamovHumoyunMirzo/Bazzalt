@@ -519,6 +519,8 @@ class EditorController(QObject):
             except OSError:pass
         section.AddViewport(preview)
 
+        if getattr(self.Window,'Extensions',None):self.Window.Extensions.InspectScene(scene_id)
+
     def SetEntityEditorState(self,entity_id,key,value):
         if key not in {"locked","hidden"}:return
         state=self.Runtime.EditorEntityState.setdefault(str(entity_id),{});state[key]=bool(value)
@@ -730,6 +732,10 @@ class EditorController(QObject):
         else:self.SelectEntity(entity_id);self.Window.Hierarchy.SetSelectedData([entity_id])
 
     def _ComponentIcon(self, component: str):
+        extensions=getattr(self.Window,'Extensions',None)
+        if extensions:
+            icon=extensions.ComponentIcon(component)
+            if icon:return icon
         if component in ("Audio Source","Audio Listener"):return self.Window.Resources.Icon("icons/scene_asource.svg" if component=="Audio Source" else "icons/scene_alisten.svg")
         names={"Camera":"comp_cam.svg","Light":"comp_light.svg","Mesh":"comp_mesh.svg","Primitive Object":"comp_mesh.svg",
                "Scene Query Bounds":"comp_sqb.svg","Gaussian Blur":"comp_gblur.svg","Vignette":"comp_vign.svg"}
@@ -1144,7 +1150,7 @@ class EditorController(QObject):
             menu.addSeparator();script_menu=menu
             for descriptor in scripts:
                 if getattr(descriptor,'is_application',False) or getattr(descriptor,'is_subsystem',False) or descriptor.path.resolve() in registered_paths:continue
-                action=script_menu.addAction(descriptor.name);action.setToolTip(str(descriptor.path));action.setEnabled(not self.ScriptAttachments or not any(value.get("type")==descriptor.name for value in self.ScriptAttachments.For(self.SelectedEntity)));action.triggered.connect(lambda _=False,d=descriptor:self._AttachScript(d))
+                action=script_menu.addAction(descriptor.name);icon=self._ComponentIcon(descriptor.name);action.setIcon(icon) if icon else None;action.setToolTip(str(descriptor.path));action.setEnabled(not self.ScriptAttachments or not any(value.get("type")==descriptor.name for value in self.ScriptAttachments.For(self.SelectedEntity)));action.triggered.connect(lambda _=False,d=descriptor:self._AttachScript(d))
         button = self.Window.Properties.AddComponentButton
         search.textChanged.connect(lambda text:[action.setVisible(all(word in action.text().casefold() for word in text.casefold().split())) for action in menu.actions() if action is not search_action and not action.isSeparator()])
         QTimer.singleShot(0,search,search.setFocus)

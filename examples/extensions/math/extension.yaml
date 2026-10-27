@@ -1,0 +1,44 @@
+FormatVersion: 1
+General:
+  Id: example.math
+  Name: Example Math
+  ShortDescription: A portable Lua SDK and a themed editor tool.
+  Version: 1.0.0
+  Authors: [BAZZALT contributors]
+Compatibility:
+  MinEngineVersion: 0.7.0
+AssetRegistry:
+  - Id: math
+    Path: math.lua
+  - Id: panel
+    Path: tool.ui
+    Scope: Editor
+  - Id: controller
+    Path: controller.lua
+Scripts:
+  math:
+    Id: math
+    Public: true
+    ModuleName: ExampleMath
+    Scope: Runtime
+  controller:
+    Id: controller
+    Entry: true
+    Scope: Editor
+EditorRegistry:
+  panel:
+    Title: Example Math
+    Script: controller
+Extends:
+  Menubar:
+    - Menu: Tools
+      Title: Example Math
+      Script: controller
+      Function: Open
+  SceneSettings:
+    Multiplier:
+      Type: float
+      Label: Example multiplier
+      Default: 1.0
+      Min: 0.0
+      Max: 100.0

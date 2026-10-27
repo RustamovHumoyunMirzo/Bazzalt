@@ -18,6 +18,9 @@ engine-loop details private. Every public gameplay API change must update its
 Lua binding, C++/Lua reference pages, examples and API coverage checks together.
 See [Lua integration](docs/private/lua-scripting.md) and the relevant architecture
 guide in `docs/private`. Editor-only services must remain safe no-ops in games.
+Extension changes must also update the separate Extensions authoring reference,
+public C++/Lua SDK usage, package version/ABI checks and editor/game deployment
+tests. See [extension architecture](docs/private/extensions.md).
 
 Every user-visible API or editor change must update the current release's
 `docs/public/<version>/whats-new/en.html` in the same change. Include additions,

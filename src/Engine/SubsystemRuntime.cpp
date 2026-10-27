@@ -37,7 +37,7 @@ void SubsystemRuntime::ReachLevel(int level){
     for(const auto& binding:m_bindings)if(binding.Level>m_level&&binding.Level<=level){
         auto instance=std::make_unique<Instance>();instance->Level=binding.Level;
 #ifdef _WIN32
-        auto library=LoadLibraryW(binding.Module.c_str());if(library)instance->Library={library,[](void* value){FreeLibrary(static_cast<HMODULE>(value));}};
+        auto library=LoadLibraryExW(binding.Module.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);if(library)instance->Library={library,[](void* value){FreeLibrary(static_cast<HMODULE>(value));}};
         auto entry=library?reinterpret_cast<GetSubsystemModuleApi>(GetProcAddress(library,"BazzaltGetSubsystemModuleV1")):nullptr;
 #else
         auto library=dlopen(binding.Module.c_str(),RTLD_NOW|RTLD_LOCAL);if(library)instance->Library={library,[](void* value){dlclose(value);}};

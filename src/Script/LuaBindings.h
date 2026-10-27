@@ -1,5 +1,6 @@
 #pragma once
 #include <sol/sol.hpp>
+#include "Bazzalt/Extension.h"
 #include <map>
 #include <iostream>
 #include "Bazzalt/Script.h"
@@ -16,6 +17,8 @@
 #include "Bazzalt/Components/ModelNode.h"
 #include "Bazzalt/Components/ScriptComponent.h"
 namespace Bazzalt::Runtime {
+ExtensionValue LuaExtensionValue(sol::object value);
+void BindLuaExtensions(sol::table api);
 void BindLuaMath(sol::table api);
 void BindLuaComponents(sol::table api);
 void BindLuaGUI(sol::table api);

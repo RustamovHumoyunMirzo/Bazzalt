@@ -72,7 +72,7 @@ if ($Product -eq 'core') {
     $Resource = if ($Product -eq 'hub') {'hub'} else {'editor'}
     $NuitkaOutput = Join-Path $Output "nuitka-$Product-$Architecture"
     if (Test-Path -LiteralPath $NuitkaOutput) { throw 'Nuitka output must be clean' }
-    python -m nuitka --mode=standalone --msvc=latest --assume-yes-for-downloads --enable-plugin=pyside6 `
+    python -m nuitka --mode=standalone --msvc=latest --assume-yes-for-downloads --enable-plugin=pyside6 --include-module=PySide6.QtUiTools `
         --nofollow-import-to=PySide6.QtWebEngineCore,PySide6.QtWebEngineWidgets,PySide6.QtWebChannel `
         "--include-module=bazzalt._${Resource}_resources_rc" --include-module=bazzalt._branding_resources_rc `
         --windows-console-mode=disable "--windows-icon-from-ico=$BrandIcon" "--output-filename=$Executable" "--output-dir=$NuitkaOutput" (Join-Path $Root "$Entry.py")

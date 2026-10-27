@@ -4,7 +4,8 @@
     "manual",
     "native",
     "lua",
-    "bshader"
+    "bshader",
+    "extensions"
   ],
   "navigation": {
     "manual": {
@@ -21,6 +22,7 @@
         "camera-materials",
         "audio",
         "settings",
+        "extensions",
         "glossary"
       ]
     },
@@ -45,6 +47,7 @@
         "graphics",
         "audio",
         "gui",
+        "extensions",
         "reference"
       ]
     },
@@ -56,6 +59,7 @@
         "graphics",
         "audio",
         "gui",
+        "extensions",
         "reference"
       ]
     },
@@ -73,6 +77,15 @@
     "whats-new": {
       "title": "What's new",
       "order": []
+    },
+    "extensions": {
+      "title": "Extensions",
+      "order": [
+        "manifest",
+        "editor",
+        "native",
+        "packaging"
+      ]
     }
   }
 }

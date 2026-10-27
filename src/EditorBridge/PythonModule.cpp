@@ -4,6 +4,8 @@
 #include <array>
 #include <cmath>
 #include <functional>
+#include <sstream>
+#include <iomanip>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -22,8 +24,11 @@
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include <pybind11/functional.h>
 
 #include "Runtime/Engine.h"
+#include "Runtime/LuaRuntime.h"
+#include "Runtime/ExtensionAccess.h"
 #include "GUI/GuiAssetImport.h"
 #include "GUI/GuiSystem.h"
 #include "Runtime/ApplicationEventsAccess.h"
@@ -505,6 +510,8 @@ public:
         result["resolved_source"]=resolved.ToString();
         result["mode"]=static_cast<int>(value.Mode);result["source"]=value.SourceAsset.ToString();result["material"]=value.MaterialAsset.ToString();result["intensity"]=value.Intensity;result["rotation"]=py::make_tuple(value.Rotation.X,value.Rotation.Y,value.Rotation.Z);result["clear_color"]=py::make_tuple(value.ClearColor.X,value.ClearColor.Y,value.ClearColor.Z,value.ClearColor.W);result["ibl"]=value.ImageBasedLighting;result["skybox"]=value.SkyboxVisible;result["show_sun"]=value.ShowSun;result["lighting_ready"]=*index==m_activeScene&&m_engine->HasEnvironmentLighting();result["skybox_ready"]=*index==m_activeScene&&m_engine->HasEnvironmentSkybox();return result;
     }
+    std::map<std::string,std::string> SceneExtensionProperties(const std::string& id){auto index=FindLoadedScene(id);return index?SceneAt(*index).GetExtensionProperties():std::map<std::string,std::string>{};}
+    bool SetSceneExtensionProperty(const std::string& id,const std::string& extension,const std::string& name,const std::string& value){auto index=FindLoadedScene(id);return index&&SceneAt(*index).SetExtensionProperty(extension,name,value);}
     bool SetSceneEnvironment(const std::string& id,const py::dict& data){
         const auto index=FindLoadedScene(id);if(!index)return false;
         auto value=SceneAt(*index).GetEnvironment();
@@ -780,6 +787,23 @@ private:
 } // namespace Bazzalt::EditorBridge
 
 PYBIND11_MODULE(_bazzalt_runtime, module) {
+    module.def("compile_extension_lua",[](const std::string& source,const std::string& output){std::string error;if(!Bazzalt::Runtime::LuaRuntime::Import(std::filesystem::u8path(source),std::filesystem::u8path(output),error))throw std::runtime_error(error);});
+    module.def("extension_root",[](){auto text=Bazzalt::Runtime::ExtensionAccess::Root().generic_u8string();return std::string(text.begin(),text.end());});
+    module.def("extension_modules",&Bazzalt::Extensions::GetModules);
+    module.def("configure_extensions",[](const std::string& root){Bazzalt::Runtime::ExtensionAccess::Configure(std::filesystem::u8path(root));});
+    using EditorCommand=std::function<std::string(const std::string&,const std::string&,const std::string&)>;
+    py::class_<Bazzalt::Runtime::ExtensionScript>(module,"ExtensionScript")
+        .def(py::init([](const std::string& path,EditorCommand command,const std::string& owner){
+            const std::vector<std::string> methods{"SetText","GetText","GetValue","SetValue","SetEnabled","SetVisible","Log","OpenPanel","GetProject","BeginUndo","EndUndo","RefreshScene","RefreshAssets","SelectEntity"};
+            const auto text=[](const Bazzalt::ExtensionValue& value){return std::visit([](const auto& v)->std::string{using T=std::decay_t<decltype(v)>;if constexpr(std::is_same_v<T,std::string>)return v;else if constexpr(std::is_same_v<T,bool>)return v?"true":"false";else if constexpr(std::is_arithmetic_v<T>){std::ostringstream output;output.imbue(std::locale::classic());output<<std::setprecision(17)<<v;return output.str();}else if constexpr(std::is_same_v<T,std::monostate>)return "";else throw std::invalid_argument("Editor commands require scalar arguments");},value);};
+            return std::make_unique<Bazzalt::Runtime::ExtensionScript>(std::filesystem::u8path(path),"Editor",methods,[command,text](const std::string& method,const Bazzalt::ExtensionArguments& args)->Bazzalt::ExtensionValue{
+                if(args.size()>2)throw std::invalid_argument("Too many editor command arguments");auto result=command(method,args.empty()?"":text(args[0]),args.size()<2?"":text(args[1]));
+                if(method=="GetValue"){if(result.starts_with("b:"))return result=="b:true";if(result.starts_with("n:")){double value{};auto number=result.substr(2);auto [end,error]=std::from_chars(number.data(),number.data()+number.size(),value);if(error!=std::errc{}||end!=number.data()+number.size())throw std::runtime_error("Invalid widget numeric value");return value;}return result.starts_with("s:")?result.substr(2):result;}
+                return result;
+            },owner);
+        }),py::arg("path"),py::arg("command"),py::arg("owner")="")
+        .def("call",&Bazzalt::Runtime::ExtensionScript::Call,py::arg("function"),py::arg("argument")="");
+
     module.def("audio_waveform",[](const std::string& path,unsigned bins){return Bazzalt::Runtime::BuildAudioWaveform(std::filesystem::u8path(path),bins);},py::call_guard<py::gil_scoped_release>());
     module.doc() = "Private BAZZALT editor-to-runtime bridge";
     py::class_<Bazzalt::EditorBridge::EditorHost>(module, "EditorHost")
@@ -838,6 +862,8 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("console_clear", &Bazzalt::EditorBridge::EditorHost::ConsoleClear)
         .def("console_remove", &Bazzalt::EditorBridge::EditorHost::ConsoleRemove)
         .def("scene_environment", &Bazzalt::EditorBridge::EditorHost::SceneEnvironmentInfo)
+        .def("scene_extension_properties",&Bazzalt::EditorBridge::EditorHost::SceneExtensionProperties)
+        .def("set_scene_extension_property",&Bazzalt::EditorBridge::EditorHost::SetSceneExtensionProperty)
         .def("set_scene_environment", &Bazzalt::EditorBridge::EditorHost::SetSceneEnvironment)
         .def("set_environment_import_settings", &Bazzalt::EditorBridge::EditorHost::SetEnvironmentImportSettings)
         .def("capture_scene", &Bazzalt::EditorBridge::EditorHost::CaptureScene)

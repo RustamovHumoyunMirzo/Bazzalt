@@ -36,6 +36,7 @@ void BindLuaScene(sol::table api){
         sol::function set=entry["Set"];set(value,component);sol::function get=entry["Get"];return get(value).get<sol::object>();
     };
     auto scene=api.new_usertype<Scene>("Scene",sol::no_constructor);
+    scene["GetExtensionProperty"]=[](const Scene& v,const std::string& e,const std::string& n,sol::optional<std::string> fallback){return v.GetExtensionProperty(e,n,fallback.value_or(""));};scene["SetExtensionProperty"]=&Scene::SetExtensionProperty;scene["GetExtensionProperties"]=[](const Scene& v){return sol::as_table(v.GetExtensionProperties());};
     scene["CreateEntity"]=sol::overload([](Scene& s,sol::optional<std::string> name){return s.CreateEntity(name.value_or(""));},[](Scene& s,UUID id,sol::optional<std::string> name){return s.CreateEntity(id,name.value_or(""));});
     scene["DestroyEntity"]=&Scene::DestroyEntity;scene["Clear"]=&Scene::Clear;scene["FindEntityByName"]=&Scene::FindEntityByName;
     scene["GetEntities"]=[operations](Scene& value,sol::optional<std::string> component){

@@ -187,6 +187,14 @@ def lua_usage(name, member, binding, signatures):
         'DrawLine': 'from: Vec3, to: Vec3, color: Vec4 (optional), options: GraphicsDrawOptions (optional))',
         'DrawTriangle': 'a: Vec3, b: Vec3, c: Vec3, color: Vec4 (optional), options: GraphicsDrawOptions (optional))',
     }
+    extension_signatures = {
+        'Call': 'moduleName: string, functionName: string, arguments: table (optional)) -> value',
+        'GetAsset': 'extensionId: string, assetId: string) -> UUID',
+        'HasModule': 'name: string) -> boolean',
+        'GetModules': ') -> string[]',
+    }
+    if name == 'Extensions' and member in extension_signatures:
+        return '<pre><code class="language-lua">'+html.escape('Bazzalt.Extensions.'+member+'('+extension_signatures[member])+'</code></pre>'
     if name == 'Graphics' and member in graphics_signatures:
         return '<pre><code class="language-lua">'+html.escape('Bazzalt.Graphics.'+member+'('+graphics_signatures[member])+'</code></pre>'
     if member == 'construction':

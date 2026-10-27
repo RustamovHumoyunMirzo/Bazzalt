@@ -49,3 +49,5 @@ when tests or the editor include them:
 
 Applications may depend on public C++ types and serialized UUIDs. They should
 not persist EnTT entity identifiers, pointers, cache paths, or renderer handles.
+
+- [Extension packages, SDK lifetime and deployment](extensions.md)

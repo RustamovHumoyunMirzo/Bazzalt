@@ -1,5 +1,6 @@
 #include "Runtime/Engine.h"
 #include "Runtime/GraphicsAccess.h"
+#include "Runtime/ExtensionAccess.h"
 #include "Runtime/ApplicationEventsAccess.h"
 #include "Runtime/ApplicationAccess.h"
 #include "Runtime/SubsystemRuntime.h"
@@ -402,6 +403,7 @@ bool Engine::RefreshLuaAsset(const std::filesystem::path& source){
     const bool result=m_assetDatabase->RefreshSource(source);m_lastError=result?"":m_assetDatabase->GetLastError();return result;
 }
 bool Engine::StartScripts(bool resetTime){
+    try{if(ExtensionAccess::Root()!=std::filesystem::weakly_canonical(m_projectPath.parent_path()))ExtensionAccess::Configure(m_projectPath.parent_path());}catch(const std::exception& e){m_lastError=e.what();return false;}
     if(!PrepareApplication())return false;
     for(auto handle:m_scene->GetRegistry().view<ScriptComponents>())for(const auto& script:m_scene->GetRegistry().get<ScriptComponents>(handle).Values){
         UUID id;auto asset=UUID::TryParse(script.Source,id)?m_assetDatabase->Find(id):m_assetDatabase->Find(std::filesystem::u8path(script.Source).is_absolute()?std::filesystem::u8path(script.Source):m_projectPath.parent_path()/std::filesystem::u8path(script.Source));
@@ -443,6 +445,7 @@ void Engine::StopScripts(){if(m_scriptsRunning){ApplicationEventsAccess::Emit({A
 bool Engine::PrepareApplication(){
     if(m_applicationPrepared)return true;
     try{
+        if(ExtensionAccess::Root()!=std::filesystem::weakly_canonical(m_projectPath.parent_path()))ExtensionAccess::Configure(m_projectPath.parent_path());
         if(auto legacy=m_project.Properties.find("application.script");legacy!=m_project.Properties.end()&&!legacy->second.empty())throw std::runtime_error("Application Script has been replaced: register a C++ script in Window > Global Subsystems");
         ApplicationAccess::Reset(m_editorHost,m_project);m_subsystemAssets.clear();std::vector<SubsystemBinding> bindings;
         if(auto found=m_project.Properties.find("application.subsystems");found!=m_project.Properties.end()&&!found->second.empty()){
@@ -472,7 +475,7 @@ bool Engine::PrepareApplication(){
 void Engine::BeginShutdown(){if(m_applicationPrepared&&!m_preShutdown){m_preShutdown=true;Application::Quit(Application::GetExitCode());ApplicationEventsAccess::Emit({ApplicationEventType::OnPreShutdown});}}
 void Engine::EndApplication(){
     if(!m_applicationPrepared)return;BeginShutdown();ApplicationAccess::SetServicesReady(false);ApplicationAccess::SetSceneReady(false);ApplicationAccess::SetAudioReady(false);ApplicationEventsAccess::Emit({ApplicationEventType::OnShutdown});
-    ApplicationEventsAccess::DisconnectOwner(this);if(m_subsystems)m_subsystems->Stop();ApplicationEventsAccess::BindStageLoader({});m_applicationPrepared=false;
+    ApplicationEventsAccess::DisconnectOwner(this);if(m_subsystems)m_subsystems->Stop();ApplicationEventsAccess::BindStageLoader({});m_applicationPrepared=false;ExtensionAccess::Clear();
 }
 bool Engine::RefreshTextureAsset(const std::filesystem::path& source){if(!m_assetDatabase)return false;const bool result=m_assetDatabase->RefreshSource(source);if(!result)m_lastError=m_assetDatabase->GetLastError();return result;}
 

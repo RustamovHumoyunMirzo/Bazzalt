@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <map>
 #include <exception>
 #include <stdexcept>
 #include <string>
@@ -50,6 +51,10 @@ public:
     [[nodiscard]] const SceneEnvironment& GetEnvironment() const { return m_environment; }
     bool SetEnvironment(const SceneEnvironment& value) { if(!value.IsValid())return false;m_environment=value;return true; }
     [[nodiscard]] std::size_t GetEntityCount() const;
+    [[nodiscard]] std::string GetExtensionProperty(const std::string& extension,const std::string& name,const std::string& fallback="") const {auto found=m_extensionProperties.find(extension+":"+name);return found==m_extensionProperties.end()?fallback:found->second;}
+    bool SetExtensionProperty(const std::string& extension,const std::string& name,const std::string& value){if(extension.empty()||name.empty()||extension.find(':')!=std::string::npos||name.find(':')!=std::string::npos||extension.size()>128||name.size()>128||value.size()>4096)return false;auto key=extension+":"+name;if(!m_extensionProperties.contains(key)&&m_extensionProperties.size()>=1024)return false;m_extensionProperties[key]=value;return true;}
+    [[nodiscard]] const std::map<std::string,std::string>& GetExtensionProperties()const{return m_extensionProperties;}
+
 
     bool SetParent(Entity child, Entity parent, bool worldPositionStays = true);
     bool RemoveParent(Entity child, bool worldPositionStays = true);
@@ -168,6 +173,7 @@ private:
     friend void Detail::RetainGameplayModule(Scene*);
     void RetainGameplayModule();
     SceneEnvironment m_environment{};
+    std::map<std::string,std::string> m_extensionProperties;
     friend class SceneSerializer;
     friend class Runtime::Engine;
 

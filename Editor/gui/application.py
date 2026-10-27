@@ -127,6 +127,8 @@ class Editor(QMainWindow):
         from ..game_build import GameBuildController
         self.GameBuild=GameBuildController(self)
         self.ObjectTools=ObjectTools(self)
+        from ..extensions import ExtensionController
+        self.Extensions=ExtensionController(self)
         self.MenuBar.EditCommandRequested.connect(self.ExecuteEditCommand)
         self.MenuBar.EditMenu.aboutToShow.connect(self.RefreshEditActions)
         application.focusChanged.connect(self.RefreshEditActions)
@@ -440,6 +442,7 @@ class Editor(QMainWindow):
         self.Controller.Stop()
         # close() hides a Qt widget; it does not destroy it. Release native GPU
         # ownership now, before another editor can initialize its own runtime.
+        self.Extensions.Shutdown()
         self.Runtime.Release()
         application=QApplication.instance()
         if application is not None:application.removeEventFilter(self.CursorPolicy)

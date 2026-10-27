@@ -87,7 +87,8 @@ else {
 cmake --build build/bshader-tests --config Release
 ctest --test-dir build/bshader-tests -C Release --output-on-failure</code></pre>
 <p>This builds the small C11 translator without downloading renderer dependencies. Native tests cover parsing, defaults, validation, scope, loops, and callbacks. Editor material tests also compile real GPU packages using the installed Filament SDK; run them when changing generated code. A string-output assertion is not a substitute for that compiler check.</p></article>
-      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../troubleshooting/en.html"><small>Previous</small>Bshader diagnostics and limits</a></nav>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../troubleshooting/en.html"><small>Previous</small>Bshader diagnostics and limits</a>
+<a class="next" href="../../extensions/en.html"><small>Next</small>Creating extensions</a></nav>
     </main>
     <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#lifecycle">Context and result ownership</a><a class="toc-link" href="#functions">Lifecycle and compilation functions</a><a class="toc-link" href="#results">Result inspection</a><a class="toc-link" href="#extensions">Registering a high-level function</a><a class="toc-link" href="#arguments">Argument accessors</a><a class="toc-link" href="#emission">Builder and helper functions</a><a class="toc-link" href="#build">Building and testing the library</a></nav></aside>
   </div>

@@ -163,7 +163,17 @@ class ScriptCompiler:
         import struct
         compiler_stat=compiler.stat()
         compiler_identity=f"{compiler.resolve()}:{compiler_stat.st_size}:{compiler_stat.st_mtime_ns}:{self.Architecture or struct.calcsize('P')}".encode("utf-8")
-        sdk_digest=hashlib.sha256(headers+library.read_bytes()+compiler_identity).digest()
+        extension_includes=[];extension_libraries=[];extension_hash=b''
+        if (self.project/'Extensions.lock.json').is_file():
+            from Compiler.extensions import LockedItems
+            items=LockedItems(self.project,'windows' if os.name=='nt' else 'linux',self.Architecture or 'x64')
+            for item in items:
+                native=item['Manifest']['Native'];extension_hash+=item['Digest'].encode()
+                if native.get('Scope','Runtime')!='Runtime':continue
+                extension_includes.extend(item['Root']/p for p in native.get('IncludeDirs',[]))
+                for folder in native.get('LibDirsWin' if os.name=='nt' else 'LibDirsLinux',[]):
+                    for pattern in (('*.lib',) if os.name=='nt' else ('*.so','*.so.*','*.a')):extension_libraries.extend((item['Root']/folder).glob(pattern))
+        sdk_digest=hashlib.sha256(headers+library.read_bytes()+compiler_identity+extension_hash).digest()
         for descriptor in descriptors:
             wrapper_source=self._Wrapper(descriptor)
             project_headers=b''.join(str(path).encode('utf-8')+path.read_bytes() for path in sorted(dependencies[descriptor.path]))
@@ -174,6 +184,7 @@ class ScriptCompiler:
             wrapper=self.cache/f"{descriptor.name}-{digest[:12]}.module.cpp"
             wrapper.write_text(wrapper_source,encoding="utf-8")
             command=[str(compiler),"-std=c++20","-shared","-fvisibility=hidden",f"-I{sdk/'include'}",str(wrapper),str(library),"-o",str(output)]
+            command.extend('-I'+str(path) for path in extension_includes);command.extend(map(str,extension_libraries))
             if os.name=="nt":
                 import struct
                 command.append("--target=" + ("x86_64" if self.Architecture=='x64' or self.Architecture is None and struct.calcsize("P")==8 else "i686") + "-pc-windows-msvc")
