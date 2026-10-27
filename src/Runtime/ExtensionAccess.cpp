@@ -26,7 +26,16 @@ std::vector<std::shared_ptr<void>> Libraries;
 std::vector<std::shared_ptr<void>> NativeDirectories;
 std::filesystem::path ConfiguredRoot;
 std::string Text(ryml::ConstNodeRef n){auto v=n.val();return {v.str,v.len};}
-std::filesystem::path Path(const std::filesystem::path& root,const std::string& text){auto p=std::filesystem::u8path(text);if(p.empty()||p.is_absolute())throw std::runtime_error("Invalid extension runtime path");for(auto& part:p)if(part=="..")throw std::runtime_error("Extension path traversal");auto result=std::filesystem::weakly_canonical(root/p);auto relative=result.lexically_relative(std::filesystem::weakly_canonical(root));if(relative.empty()||*relative.begin()==".."||!std::filesystem::is_regular_file(result))throw std::runtime_error("Missing extension runtime file");return result;}
+std::filesystem::path Path(const std::filesystem::path& root,const std::string& text){
+    const auto path=std::filesystem::u8path(text);
+    if(path.empty()||path.is_absolute())throw std::runtime_error("Invalid extension runtime path");
+    // Filesystem iterators may return path components by value (libc++).
+    for(const auto& part:path)if(part=="..")throw std::runtime_error("Extension path traversal");
+    const auto result=std::filesystem::weakly_canonical(root/path);
+    const auto relative=result.lexically_relative(std::filesystem::weakly_canonical(root));
+    if(relative.empty()||*relative.begin()==".."||!std::filesystem::is_regular_file(result))throw std::runtime_error("Missing extension runtime file");
+    return result;
+}
 }
 void ExtensionRegistry::Export(const std::string& module,const std::string& name,ExtensionFunction function){
     static const std::regex identifier("[A-Za-z_][A-Za-z0-9_]*");
