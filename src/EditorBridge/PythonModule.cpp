@@ -29,6 +29,7 @@
 #include "Runtime/Engine.h"
 #include "Runtime/LuaRuntime.h"
 #include "Runtime/ExtensionAccess.h"
+#include "Utils/NumberParsing.h"
 #include "GUI/GuiAssetImport.h"
 #include "GUI/GuiSystem.h"
 #include "Runtime/ApplicationEventsAccess.h"
@@ -798,7 +799,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
             const auto text=[](const Bazzalt::ExtensionValue& value){return std::visit([](const auto& v)->std::string{using T=std::decay_t<decltype(v)>;if constexpr(std::is_same_v<T,std::string>)return v;else if constexpr(std::is_same_v<T,bool>)return v?"true":"false";else if constexpr(std::is_arithmetic_v<T>){std::ostringstream output;output.imbue(std::locale::classic());output<<std::setprecision(17)<<v;return output.str();}else if constexpr(std::is_same_v<T,std::monostate>)return "";else throw std::invalid_argument("Editor commands require scalar arguments");},value);};
             return std::make_unique<Bazzalt::Runtime::ExtensionScript>(std::filesystem::u8path(path),"Editor",methods,[command,text](const std::string& method,const Bazzalt::ExtensionArguments& args)->Bazzalt::ExtensionValue{
                 if(args.size()>2)throw std::invalid_argument("Too many editor command arguments");auto result=command(method,args.empty()?"":text(args[0]),args.size()<2?"":text(args[1]));
-                if(method=="GetValue"){if(result.starts_with("b:"))return result=="b:true";if(result.starts_with("n:")){double value{};auto number=result.substr(2);auto [end,error]=std::from_chars(number.data(),number.data()+number.size(),value);if(error!=std::errc{}||end!=number.data()+number.size())throw std::runtime_error("Invalid widget numeric value");return value;}return result.starts_with("s:")?result.substr(2):result;}
+                if(method=="GetValue"){if(result.starts_with("b:"))return result=="b:true";if(result.starts_with("n:")){double value{};auto number=result.substr(2);if(!Bazzalt::Detail::ParseNumber(number,value))throw std::runtime_error("Invalid widget numeric value");return value;}return result.starts_with("s:")?result.substr(2):result;}
                 return result;
             },owner);
         }),py::arg("path"),py::arg("command"),py::arg("owner")="")

@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 import yaml
 from PySide6.QtCore import QEvent,Qt
-from PySide6.QtWidgets import QApplication,QPushButton,QLabel,QSpinBox
+from PySide6.QtWidgets import QApplication,QPushButton,QLabel,QSpinBox,QDoubleSpinBox
 from Editor.extensions import ValidateUI
 from bazzalt.extensions import ExtensionError,BuildPackage,ExtensionStore
 from Compiler.extensions import BuildExtensionPackage
@@ -43,7 +43,7 @@ OnClicked=function(self,name)
  if name=='runButton' then Editor:SetText('resultLabel','Done') end
 end,
 Open=function(self) Editor:OpenPanel('panel') end,
-Values=function(self) Editor:SetValue('numberInput',7);assert(Editor:GetValue('numberInput')==7) end,
+Values=function(self) Editor:SetValue('numberInput',7);assert(Editor:GetValue('numberInput')==7);Editor:SetValue('decimalInput',-1.25);assert(Editor:GetValue('decimalInput')==-1.25) end,
 OnChanged=function(self,name) Editor:SetText('resultLabel','Changed') end,
 Create=function(self) Editor:BeginUndo('Extension create');local scene=Bazzalt.SceneManager.GetActiveScene();scene:CreateEntity('Extension cube');Editor:EndUndo() end,
 Fail=function(self) Editor:BeginUndo('Extension failed edit');Bazzalt.SceneManager.GetActiveScene():CreateEntity('Rolled back');error('Intentional failure') end
@@ -55,7 +55,8 @@ Fail=function(self) Editor:BeginUndo('Extension failed edit');Bazzalt.SceneManag
                 self.App.processEvents();self.assertEqual(len(window.Extensions.Panels),1)
                 panel=window.Extensions.Panels[('studio.tool','panel')];panel.findChild(QPushButton,'runButton').click();self.assertEqual(panel.findChild(QLabel,'resultLabel').text(),'Done')
                 number=QSpinBox(panel);number.setObjectName('numberInput');number.valueChanged.connect(lambda _:window.Extensions.Call('studio.tool','control','OnChanged','numberInput'))
-                window.Extensions.Call('studio.tool','control','Values');self.assertEqual(number.value(),7);self.assertEqual(panel.findChild(QLabel,'resultLabel').text(),'Done')
+                decimal=QDoubleSpinBox(panel);decimal.setObjectName('decimalInput');decimal.setRange(-100,100)
+                window.Extensions.Call('studio.tool','control','Values');self.assertEqual(decimal.value(),-1.25);self.assertEqual(number.value(),7);self.assertEqual(panel.findChild(QLabel,'resultLabel').text(),'Done')
                 before=len(window.Runtime.Entities());window.Extensions.Call('studio.tool','control','Create');self.assertEqual(len(window.Runtime.Entities()),before+1);self.assertTrue(window.Controller.History.Undo());self.assertEqual(len(window.Runtime.Entities()),before);self.assertTrue(window.Controller.History.Redo());self.assertEqual(len(window.Runtime.Entities()),before+1)
                 window.Extensions.Call('studio.tool','control','Fail');self.assertEqual(len(window.Runtime.Entities()),before+1);self.assertIn(('studio.tool','control'),window.Extensions.Failed)
                 scene=window.Runtime.SceneInfo()['uuid'];window.Controller.SelectEntity(scene);self.assertIn('extension.studio.tool',window.Properties._sections)
