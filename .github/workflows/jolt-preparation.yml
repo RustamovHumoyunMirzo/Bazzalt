@@ -42,6 +42,13 @@ jobs:
           cmake -S tests/jolt -B build/jolt-probe -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++ -DBAZZALT_PREPARE_JOLT=ON "${flags[@]}"
       - name: Build dependency and link probe on CI
         run: cmake --build build/jolt-probe --config Release --parallel 2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: jolt-library-${{ matrix.os }}-${{ matrix.architecture }}
+          path: |
+            build/jolt-probe/deps/jolt/**/Jolt.lib
+            build/jolt-probe/deps/jolt/**/libJolt.a
+          if-no-files-found: error
       - name: Check library registration and teardown
         run: ctest --test-dir build/jolt-probe -C Release --output-on-failure
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
