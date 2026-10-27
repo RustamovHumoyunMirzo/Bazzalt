@@ -74,6 +74,24 @@ class MaterialTests(unittest.TestCase):
             self.assertTrue(Path(assets.AssetInfo(shader)["cache"]+".filamat").exists())
             source=Path(assets.AssetInfo(shader)["cache"]+".translated.mat").read_text()
             self.assertIn("materialParams.roughnessFactor",source);self.assertNotIn("default :",source)
+    def test_browser_created_shader_is_valid_for_material_assignment(self):
+        if not (ROOT/"build/Editor/Release/bshad.dll").exists():self.skipTest("translator not built")
+        from Editor.gui.panels.assets import AssetBrowserPanel
+        app=QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory(dir=ROOT/"build") as folder:
+            resources=ResourceManager();panel=AssetBrowserPanel(LocalizationManager(resources),resources)
+            try:
+                panel.SetProjectRoot(folder);panel._Create("shader")
+                path=Path(folder)/"NewShader.shad";self.assertTrue(path.is_file())
+                assets=Assets(folder);shader=assets.Add(path.name,path.read_text(encoding="utf-8"))
+                compiler=MaterialCompiler(assets,ROOT);info=compiler.InspectShader(shader)
+                parameter=next(p for p in info["parameters"] if p["name"]=="roughnessFactor")
+                self.assertEqual(parameter["default"],0.5)
+                material=assets.Add("NewMaterial.matinst",json.dumps({"version":1,"shader":shader,"properties":{}}))
+                compiler.PrepareMaterial(material)
+                self.assertTrue(Path(assets.AssetInfo(shader)["cache"]+".filamat").is_file())
+            finally:panel.close();panel.deleteLater()
+
     def test_bshader_texture_and_builtin_transform_compile(self):
         if not (ROOT/"build/Editor/Release/bshad.dll").exists():self.skipTest("translator not built")
         with tempfile.TemporaryDirectory(dir=ROOT/"build") as folder:
