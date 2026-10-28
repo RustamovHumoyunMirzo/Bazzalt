@@ -32,6 +32,7 @@
 #include "Bazzalt/Detail/SubsystemAccess.h"
 #include "Runtime/ApplicationEventsAccess.h"
 #include <algorithm>
+#include <chrono>
 #include <map>
 #include <set>
 #include <mutex>
@@ -191,7 +192,13 @@ void World::Synchronize(){
         Transform local;if(!(rigid.Inversed()*matrix).Decompose(local.Position,local.Rotation,local.Scale)||local.Scale.X<=0||local.Scale.Y<=0||local.Scale.Z<=0)throw std::invalid_argument("Physics colliders require non-singular positive world scale");
         RequireVector(local.Position);RequireVector(local.Scale);(void)Q(local.Rotation);
         if(mesh){const auto& collider=entity.GetComponent<MeshCollider>();if(!collider.MeshAsset)if(auto* primitive=entity.TryGetComponent<PrimitiveObject>()){signature+=Stamp(primitive->Shape)+Stamp(primitive->Size)+Stamp(primitive->Radius)+Stamp(primitive->Height)+Stamp(primitive->Width)+Stamp(primitive->Depth)+Stamp(primitive->MajorRadius)+Stamp(primitive->MinorRadius)+Stamp(primitive->Segments)+Stamp(primitive->Rings);}
-            UUID asset=collider.MeshAsset;if(!asset)if(auto* component=entity.TryGetComponent<Mesh>()){asset=component->MeshAsset;signature+=std::to_string(component->ModelNodeIndex);}if(asset)if(auto info=AssetManager::GetAsset(asset)){const auto pathBytes=info->CachePath.generic_u8string();signature.append(reinterpret_cast<const char*>(pathBytes.data()),pathBytes.size());std::error_code error;auto stamp=std::filesystem::last_write_time(info->CachePath,error);if(!error)signature+=std::to_string(stamp.time_since_epoch().count());}}
+            UUID asset=collider.MeshAsset;if(!asset)if(auto* component=entity.TryGetComponent<Mesh>()){asset=component->MeshAsset;signature+=std::to_string(component->ModelNodeIndex);}if(asset)if(auto info=AssetManager::GetAsset(asset)){const auto pathBytes=info->CachePath.generic_u8string();signature.append(reinterpret_cast<const char*>(pathBytes.data()),pathBytes.size());std::error_code error;auto stamp=std::filesystem::last_write_time(info->CachePath,error);if(!error){
+                // libc++ file_clock can use a 128-bit count, unsupported by to_string.
+                const auto elapsed=stamp.time_since_epoch();
+                const auto seconds=std::chrono::duration_cast<std::chrono::seconds>(elapsed);
+                const auto fraction=std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed-seconds);
+                signature+=";mtime="+std::to_string(seconds.count())+":"+std::to_string(fraction.count());
+            }}}
         signature+=Stamp(PoseKey(local.Position))+";"+Stamp(PoseKey(local.Rotation))+";"+Stamp(PoseKey(local.Scale));
         groups[owner.GetUUID()].push_back({entity,owner.GetUUID(),mesh,local,signature});
     };
