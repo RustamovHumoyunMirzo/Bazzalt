@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <chrono>
 #include <cstdint>
 #include <utility>
 #include <vector>
@@ -44,7 +45,7 @@ class RenderBackend final {
 public:
     enum class ViewportKind { Scene, Game };
     struct EditorIcon { float X, Y, Z; bool Camera; int Audio=0; };
-    struct EditorGuide { float AX,AY,AZ,BX,BY,BZ,R,G,B,A; bool Outline=false; };
+    struct EditorGuide { float AX,AY,AZ,BX,BY,BZ,R,G,B,A; bool Outline=false; bool operator==(const EditorGuide&) const=default; };
     RenderBackend();
     ~RenderBackend();
     RenderBackend(const RenderBackend&) = delete;
@@ -71,7 +72,7 @@ public:
     void SetEditorOrientationVisible(bool visible) { m_orientationVisible=visible; }
     void SetEditorGuides(const std::vector<EditorGuide>& guides);
     void SetEditorOutline(std::unordered_set<UUID> selected,std::unordered_set<UUID> hovered){m_outlineSelected=std::move(selected);m_outlineHovered=std::move(hovered);}
-    void Render();
+    void Render(double materialTime=-1);
     std::unordered_map<std::string,double> GetStatistics() const;
     void SetEditorStatisticsText(std::string text,bool visible){m_statisticsText=std::move(text);m_statisticsVisible=visible;}
     void RenderCameraView(filament::View* view,std::uint64_t viewport=0);
@@ -145,6 +146,10 @@ private:
     std::unordered_map<UUID,filament::Texture*> m_captureReads;
     std::unordered_map<std::uint64_t, std::unique_ptr<ViewportResource>> m_viewports;
     std::unordered_set<std::uint64_t> m_presentedViewports;
+    double m_materialTime=0;
+    std::uint64_t m_guideUploads=0;
+    std::vector<EditorGuide> m_editorGuideCache;
+    std::chrono::steady_clock::time_point m_previewEpoch=std::chrono::steady_clock::now();
     std::unique_ptr<GizmoResource> m_gizmo;
     bool m_gizmoVisible = false;
     float m_gizmoX = 0, m_gizmoY = 0, m_gizmoZ = 0;

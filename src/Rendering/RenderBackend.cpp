@@ -509,6 +509,9 @@ void RenderBackend::SetEditorIcons(const std::vector<EditorIcon>& icons) {
 
 void RenderBackend::SetEditorGuides(const std::vector<EditorGuide>& guides){
     if(!m_gizmo||!m_engine)return;
+    if(m_editorGuideCache==guides)return;
+    m_editorGuideCache=guides;
+    ++m_guideUploads;
     // True GPU lines: world-space boxes become enormous near the camera when
     // a long frustum edge uses its distant midpoint to calculate thickness.
     // Native line rasterization clips segments and keeps them one pixel wide.
@@ -605,7 +608,7 @@ void RenderBackend::SetEnvironment(const SceneEnvironment& value) {
 bool RenderBackend::HasEnvironmentLighting() const{return m_scene&&m_scene->getIndirectLight()!=nullptr;}
 bool RenderBackend::HasEnvironmentSkybox() const{return m_scene&&m_scene->getSkybox()!=nullptr;}
 std::unordered_map<std::string,double> RenderBackend::GetStatistics() const{
-    std::unordered_map<std::string,double> result{{"renderables",0},{"render_primitives",0},{"viewports",double(m_viewports.size())},{"captures",double(m_cameraOutputs.size())},{"gui_batches",m_guiRenderer?double(m_guiRenderer->GetBatchCount()):0}};
+    std::unordered_map<std::string,double> result{{"material_time",m_materialTime},{"guide_uploads",double(m_guideUploads)},{"renderables",0},{"render_primitives",0},{"viewports",double(m_viewports.size())},{"captures",double(m_cameraOutputs.size())},{"gui_batches",m_guiRenderer?double(m_guiRenderer->GetBatchCount()):0}};
     if(m_scene&&m_engine)m_scene->forEach([&](utils::Entity entity){auto& manager=m_engine->getRenderableManager();auto instance=manager.getInstance(entity);if(instance&&(manager.getLayerMask(instance)&0x7f)){++result["renderables"];result["render_primitives"]+=manager.getPrimitiveCount(instance);}});
     return result;
 }
@@ -643,8 +646,13 @@ void RenderBackend::RegisterCameraOutput(UUID id,filament::Texture* color,filame
     m_assets->SetCameraTexture(id,camera&&camera->Active&&output.Ready?(output.HistoryFront?history:color):nullptr);
 }
 
-void RenderBackend::Render() {
+void RenderBackend::Render(double materialTime) {
     if (!m_renderer) return;
+    const auto frameTime=std::chrono::steady_clock::now();
+    const auto frameNanoseconds=std::chrono::duration_cast<std::chrono::nanoseconds>(frameTime.time_since_epoch()).count();
+    m_materialTime=materialTime>=0&&std::isfinite(materialTime)?materialTime:std::chrono::duration<double>(frameTime-m_previewEpoch).count();
+    const auto epoch=materialTime>=0&&std::isfinite(materialTime)?frameTime-std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(materialTime)):m_previewEpoch;
+    m_renderer->setMaterialTimeEpoch(epoch);
     // Scripts may change camera targets/descriptors after Scene.Update systems.
     if(m_guiScene&&m_guiScene->HasSystem<CameraSystem>())m_guiScene->GetSystem<CameraSystem>().Synchronize(*m_guiScene);
     m_assets->SynchronizeTextures();
@@ -703,7 +711,7 @@ void RenderBackend::Render() {
             for(auto id:group){auto* target=m_cameraViews.at(id)->getRenderTarget();m_captureReads[id]=const_cast<filament::Texture*>(target->getTexture(filament::RenderTarget::AttachmentPoint::COLOR));}
         }
         m_captureReads.clear();
-        if(m_captureSwapChain&&m_renderer->beginFrame(m_captureSwapChain)){
+        if(m_captureSwapChain&&m_renderer->beginFrame(m_captureSwapChain,frameNanoseconds)){
             if(m_guiRenderer){m_guiRenderer->RenderSpatialEffects();m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});}
             try{for(auto id:ordered){auto* view=m_cameraViews.at(id);auto* target=const_cast<filament::RenderTarget*>(view->getRenderTarget());const auto* color=target->getTexture(filament::RenderTarget::AttachmentPoint::COLOR);RenderCameraView(view);if(m_guiScene&&m_guiRenderer)m_guiRenderer->RenderCameraOverlay(*m_guiScene,id,{float(color->getWidth()),float(color->getHeight())},target);if(m_guiScene){const auto entity=m_guiScene->GetEntity(id);if(const auto* camera=entity.TryGetComponent<Camera>();camera&&camera->RenderTarget)m_assets->GenerateTextureMipmaps(camera->RenderTarget,const_cast<filament::Texture*>(color));}}}
             catch(...){m_renderer->endFrame();throw;}
@@ -743,7 +751,7 @@ void RenderBackend::Render() {
             }
             m_statisticsRenderer->PrepareOverlay(*m_statisticsScene,{float(resource->Width),float(resource->Height)});
         }
-        if (!resource->SwapChain || !m_renderer->beginFrame(resource->SwapChain)) continue;
+        if (!resource->SwapChain || !m_renderer->beginFrame(resource->SwapChain,frameNanoseconds)) continue;
         if(m_guiRenderer){m_guiRenderer->RenderSpatialEffects();m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});}
         if (resource->Kind == ViewportKind::Scene) {
             bool outlined=false;
@@ -834,6 +842,7 @@ void RenderBackend::Shutdown() {
         if(m_gizmo->FullscreenIndices)m_engine->destroy(m_gizmo->FullscreenIndices);
         if(m_gizmo->OverlayScene)m_engine->destroy(m_gizmo->OverlayScene);
         m_gizmo.reset();
+        m_editorGuideCache.clear();
     }
     if (m_scene != nullptr) m_engine->destroy(m_scene);
     if (m_renderer != nullptr) m_engine->destroy(m_renderer);

@@ -20,6 +20,7 @@ class PhysicsInspectorTests(unittest.TestCase):
         w.Controller.SelectEntity(e,force=True)
         self.assertIn('runtime.Rigidbody',w.Properties._sections)
         self.assertIn('runtime.Shape Collider',w.Properties._sections)
+        picker=w.Properties._sections['runtime.Mesh Collider']._fields['Mesh Asset'];self.assertIn('automatic',picker.Display.placeholderText());self.assertIsNone(picker.GetValue())
         self.assertNotIn('Gravity',r.EntityDetails(e)['component_data']['Rigidbody'])
         self.assertTrue(r.SetComponentProperty(e,'Rigidbody','Use Scene Gravity',False))
         self.assertIn('Gravity',r.EntityDetails(e)['component_data']['Rigidbody'])
@@ -35,3 +36,10 @@ class PhysicsInspectorTests(unittest.TestCase):
         dialog=CollisionLayersDialog(w,lambda key:key,[0xffffffff]*32)
         dialog.Table.item(2,7).setCheckState(__import__('PySide6.QtCore',fromlist=['Qt']).Qt.CheckState.Unchecked)
         self.assertFalse(dialog.Masks[2]&(1<<7));self.assertFalse(dialog.Masks[7]&(1<<2));dialog.deleteLater()
+
+    def test_material_clock_freezes_in_paused_play(self):
+        r=self.Window.Runtime;self.assertTrue(r.Play());r.Tick();before=r.Statistics()['material_time'];self.assertGreaterEqual(before,0)
+        r.Pause(True)
+        from PySide6.QtTest import QTest
+        QTest.qWait(20);r.Tick();paused=r.Statistics()['material_time'];QTest.qWait(20);r.Tick();self.assertEqual(r.Statistics()['material_time'],paused)
+        r.Pause(False);QTest.qWait(20);r.Tick();self.assertGreater(r.Statistics()['material_time'],paused);r.Stop()

@@ -963,5 +963,6 @@
   "field.Time Before Sleep": "Time Before Sleep",
   "field.Point Velocity Sleep Threshold": "Point Velocity Sleep Threshold",
   "field.Collision Masks": "Collision Masks",
-  "field.Use Scene Gravity": "Use Scene Gravity"
+  "field.Use Scene Gravity": "Use Scene Gravity",
+  "physics.attached_geometry": "Attached geometry (automatic)"
 }

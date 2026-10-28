@@ -168,7 +168,7 @@ void Engine::Update(bool renderFrame)
     ApplicationEventsAccess::ThrowIfFailed();
     ApplicationEventsAccess::Emit({ApplicationEventType::OnRender,m_deltaTime});
     ApplicationEventsAccess::ThrowIfFailed();
-    if(renderFrame){m_renderBackend->Render();ApplicationEventsAccess::Emit({ApplicationEventType::OnPostRender,m_deltaTime});}
+    if(renderFrame){m_renderBackend->Render(Time::GetTime());ApplicationEventsAccess::Emit({ApplicationEventType::OnPostRender,m_deltaTime});}
     ApplicationEventsAccess::ThrowIfFailed();
 }
 
@@ -196,7 +196,7 @@ void Engine::RenderEditorFrame()
     UpdateEditorOverlays();
     const auto overlays=std::chrono::steady_clock::now();
     m_renderBackend->SetEnvironment(m_scene->GetEnvironment());
-    m_renderBackend->Render();
+    m_renderBackend->Render(m_scriptsRunning?Time::GetTime():-1);
     if(profile){const auto end=std::chrono::steady_clock::now();const auto ms=[](auto a,auto b){return std::chrono::duration<double,std::milli>(b-a).count();};std::cout<<"FRAME systems="<<ms(start,systems)<<" overlays="<<ms(systems,overlays)<<" render="<<ms(overlays,end)<<" ms\n";}
 }
 
@@ -243,7 +243,7 @@ for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id
     }
     for(auto h:m_scene->GetRegistry().view<AudioListener>()){auto e=m_scene->GetEntity(static_cast<Entity::Id>(h));if(!e.GetComponent<AudioListener>().IsEnabled()||m_editorHidden.contains(e.GetUUID()))continue;auto p=e.GetWorldTransform().Position;icons.push_back({p.X,p.Y,p.Z,false,2});}
     m_renderBackend->SetEditorIcons(m_editorIconsVisible?icons:std::vector<RenderBackend::EditorIcon>{});
-    if(m_editorIconsVisible)for(auto selected:m_selectedObjects){auto entity=m_scene->GetEntity(selected);if(!entity||m_editorHidden.contains(selected)||(!entity.HasComponent<Rigidbody>()&&!entity.HasComponent<ShapeCollider>()&&!entity.HasComponent<MeshCollider>()))continue;try{for(const auto& p:PhysicsModule().Guides(*m_scene,selected))guides.push_back({p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9]});}catch(const std::exception& error){if(m_lastError!=error.what()){m_lastError=error.what();Console::Warning(m_lastError,"Physics");}}}
+    if(m_editorIconsVisible){bool synchronized=false;for(auto selected:m_selectedObjects){auto entity=m_scene->GetEntity(selected);if(!entity||m_editorHidden.contains(selected)||(!entity.HasComponent<Rigidbody>()&&!entity.HasComponent<ShapeCollider>()&&!entity.HasComponent<MeshCollider>()))continue;try{if(!synchronized){PhysicsModule().Synchronize(*m_scene);synchronized=true;}for(const auto& p:PhysicsModule().Guides(*m_scene,selected))guides.push_back({p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9],true});}catch(const std::exception& error){if(m_lastError!=error.what()){m_lastError=error.what();Console::Warning(m_lastError,"Physics");}}}}
     if(!m_editorIconsVisible)guides.clear();
     std::unordered_set<UUID> selectedOwners,hoveredOwners;
     auto objects=m_scene->GetRegistry().view<Transform>();
@@ -265,7 +265,7 @@ for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id
         if(selected)selectedOwners.insert(owner);else if(hovered)hoveredOwners.insert(owner);
     }
     m_renderBackend->SetEditorOutline(std::move(selectedOwners),std::move(hoveredOwners));
-    for(const auto& p:m_editorTransformTrail)guides.push_back({p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9]});
+    for(const auto& p:m_editorTransformTrail)guides.push_back({p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9],true});
     m_renderBackend->SetEditorGuides(guides);
 }
 void Engine::SetEditorTransformTrail(std::vector<std::array<float,10>> lines){

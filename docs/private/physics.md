@@ -157,3 +157,49 @@ controllers, joints or cross-platform deterministic networking. Native callbacks
 remain trusted C++ code. Jolt objects/streams/BodyID never become scene formats
 or gameplay ABI. Add public API changes to C++, Lua, generated references and
 What's New together.
+
+## Mesh authoring and hot paths
+
+An empty MeshAsset resolves attached primitive/mesh data, model-node metadata,
+or mesh descendants under a group. Traversal stops at nested Rigidbodies.
+Relative transforms are composed from local hierarchy matrices, avoiding world
+translation cancellation as a body moves. Explicit asset overrides retain their
+source-node semantics when the asset matches the attached mesh.
+
+Per-synchronization revision maps share filesystem checks. Binary comparison
+keys avoid per-field locale streams and canonicalize signed zero. CPU model
+geometry (128 MiB), flattened mesh inputs (64 MiB), cooked leaf snapshots
+(64 MiB), and local guide vertices (32 MiB) have bounded caches. Cooked snapshots
+use Jolt SaveBinaryState/RestoreBinaryState and explicit material references;
+they are process-local trusted data, never loaded from project files. Each
+restored collider receives its own user data for queries and contacts. Hull
+point deduplication removes exact duplicates only. Collision mesh fidelity and
+solver steps are not reduced.
+
+Editor overlays synchronize once for a selection batch. Guide tessellation is
+cached in local space; world points are recomputed when the pose changes.
+Dense diagnostic edges are sampled within a drawing budget. The renderer
+compares guide batches and skips identical GPU uploads. These limits affect
+visual debugging only. Selected physics guides bypass scene depth culling.
+
+Bshader time still uses Filament's material clock. Each frame supplies a shared
+steady-clock timestamp and an epoch derived from scaled Bazzalt Time. All
+captures/viewports therefore see the same paused/scaled shader time. Outside
+Play the editor uses an independent preview epoch.
+
+### Local performance check
+
+One Windows x64 Release run on an isolated copy of the 7.46 MB car model:
+
+| Workload | Before | After |
+| --- | ---: | ---: |
+| Initial collider preparation | 266.4 ms | 207.2 ms |
+| 50 stationary guide requests after synchronization | 8.34 ms | 0.22 ms |
+| 10 friction-only edits and synchronizations | 1430.2 ms | 1.02 ms |
+
+These are focused CPU benchmarks, not an overall editor FPS claim. Cold cooking
+still performs real mesh decoding/hull or BVH construction. Private guide callers
+synchronize once per selection batch. Regression fixtures verify node/subtree
+scope, exclusion of unrelated branches and nested bodies, transformed groups,
+geometry invalidation, cached queries, guide bounds, paused/scaled material time,
+and unchanged GPU upload suppression.

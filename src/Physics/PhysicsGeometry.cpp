@@ -1,31 +1,86 @@
+#include "Physics/PhysicsGeometry.h"
+#include "Physics/PhysicsKeys.h"
 #include "Bazzalt/Scene.h"
 #include "Bazzalt/AssetManager.h"
 #include "Bazzalt/Components/Mesh.h"
 #include "Bazzalt/Components/PrimitiveObject.h"
+#include "Bazzalt/Components/ModelNode.h"
 #include "Rendering/ModelGeometry.h"
 #include "Rendering/PrimitiveGeometry.h"
+#include <algorithm>
+#include <chrono>
 #include <fstream>
 #include <map>
 namespace Bazzalt::Runtime {
-bool ReadPhysicsMesh(Entity entity,UUID assetId,std::vector<Vec3>& vertices,std::vector<std::uint32_t>& indices){
-    if(!assetId)if(const auto* primitive=entity.TryGetComponent<PrimitiveObject>()){
-        auto geometry=BuildPrimitiveGeometry(*primitive);vertices.reserve(geometry.Vertices.size());for(const auto& v:geometry.Vertices)vertices.push_back({v.Position[0],v.Position[1],v.Position[2]});indices=std::move(geometry.Indices);return !indices.empty();
+namespace {
+struct Part {Entity Object;UUID Asset;std::uint32_t Node=Mesh::EntireAsset;Mat4 Local;bool Subtree=false;};
+void Parts(Entity entity,UUID asset,std::vector<Part>& parts,const Mat4& local={},int depth=0){
+    if(!entity||depth>256)return;
+    if(depth>0&&entity.HasComponent<Rigidbody>())return;
+    if(asset){
+        auto* mesh=entity.TryGetComponent<Mesh>();auto* node=entity.TryGetComponent<ModelNode>();
+        if(mesh&&mesh->MeshAsset==asset)parts.push_back({entity,asset,mesh->ModelNodeIndex,local});
+        else if(node&&node->ModelAsset==asset)parts.push_back({entity,asset,node->SourceIndex,local,!node->HasMesh});
+        else parts.push_back({entity,asset,Mesh::EntireAsset,local});
+        return;
     }
-    auto* mesh=entity.TryGetComponent<Mesh>();if(!assetId&&mesh)assetId=mesh->MeshAsset;if(!assetId)return false;
-    auto asset=AssetManager::GetAsset(assetId);if(!asset||asset->State!=AssetState::Ready)return false;
-    struct Cache {std::filesystem::path Path;std::filesystem::file_time_type Stamp;std::shared_ptr<ModelGeometryAsset> Geometry;};
-    static std::map<UUID,Cache> cache;std::error_code error;auto stamp=std::filesystem::last_write_time(asset->CachePath,error);if(error)return false;auto found=cache.find(assetId);
-    if(found==cache.end()||found->second.Path!=asset->CachePath||found->second.Stamp!=stamp){
-        std::ifstream file(asset->CachePath,std::ios::binary|std::ios::ate);auto size=file.tellg();if(size<=0||size>128*1024*1024)return false;std::vector<std::uint8_t> bytes(std::size_t(size),0);file.seekg(0);if(!file.read(reinterpret_cast<char*>(bytes.data()),size))return false;
-        auto geometry=ReadModelGeometry(bytes,asset->CachePath);if(cache.size()>128)cache.clear();found=cache.insert_or_assign(assetId,Cache{asset->CachePath,stamp,std::move(geometry)}).first;
+    if(entity.HasComponent<PrimitiveObject>()){parts.push_back({entity,{},Mesh::EntireAsset,local});return;}
+    if(auto* mesh=entity.TryGetComponent<Mesh>();mesh&&mesh->MeshAsset){parts.push_back({entity,mesh->MeshAsset,mesh->ModelNodeIndex,local});return;}
+    if(auto* node=entity.TryGetComponent<ModelNode>();node&&node->HasMesh&&node->ModelAsset){parts.push_back({entity,node->ModelAsset,node->SourceIndex,local});return;}
+    for(auto child:entity.GetChildren())Parts(child,{},parts,local*child.GetComponent<Transform>().GetMatrix(),depth+1);
+}
+std::string PrimitiveKey(const PrimitiveObject& p){std::string key="primitive";AppendPhysicsKey(key,p.Shape);AppendPhysicsKey(key,p.Size);for(float v:{p.Radius,p.Height,p.Width,p.Depth,p.MajorRadius,p.MinorRadius})AppendPhysicsKey(key,v);AppendPhysicsKey(key,p.Segments);AppendPhysicsKey(key,p.Rings);return key;}
+std::string Revision(UUID id){
+    auto info=AssetManager::GetAsset(id);if(!info||info->State!=AssetState::Ready)return "missing";
+    const auto path=info->CachePath.generic_u8string();std::string key(reinterpret_cast<const char*>(path.data()),path.size());
+    std::error_code error;auto time=std::filesystem::last_write_time(info->CachePath,error);if(error)return key+"missing";
+    const auto elapsed=time.time_since_epoch();const auto seconds=std::chrono::duration_cast<std::chrono::seconds>(elapsed);const auto fraction=std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed-seconds);
+    AppendPhysicsKey(key,seconds.count());AppendPhysicsKey(key,fraction.count());return key;
+}
+struct ModelEntry {std::string Revision;std::shared_ptr<ModelGeometryAsset> Geometry;std::size_t Bytes;};
+std::shared_ptr<ModelGeometryAsset> Model(UUID id){
+    static std::map<UUID,ModelEntry> cache;static std::size_t bytes=0;constexpr std::size_t Limit=128u*1024u*1024u;
+    auto revision=Revision(id);if(auto found=cache.find(id);found!=cache.end()&&found->second.Revision==revision)return found->second.Geometry;
+    auto asset=AssetManager::GetAsset(id);if(!asset||asset->State!=AssetState::Ready)return {};
+    std::ifstream file(asset->CachePath,std::ios::binary|std::ios::ate);auto size=file.tellg();if(size<=0||size>128*1024*1024)return {};
+    std::vector<std::uint8_t> data(std::size_t(size),0);file.seekg(0);if(!file.read(reinterpret_cast<char*>(data.data()),size))return {};
+    auto geometry=ReadModelGeometry(data,asset->CachePath);if(!geometry)return {};
+    std::size_t used=0;for(auto& node:geometry->SourceNodes)if(node)used+=node->Triangles.size()*sizeof(ModelGeometry::Triangle)+node->Nodes.size()*sizeof(ModelGeometry::Node)+node->Order.size()*sizeof(std::uint32_t);
+    if(auto found=cache.find(id);found!=cache.end()){bytes-=found->second.Bytes;cache.erase(found);}
+    if(used<=Limit){while(!cache.empty()&&(bytes+used>Limit||cache.size()>=128)){bytes-=cache.begin()->second.Bytes;cache.erase(cache.begin());}cache.emplace(id,ModelEntry{std::move(revision),geometry,used});bytes+=used;}
+    return geometry;
+}
+struct Geometry {std::vector<Vec3> Vertices;std::vector<std::uint32_t> Indices;};
+}
+std::string PhysicsMeshSignature(Entity entity,UUID asset,PhysicsMeshRevisions& revisions){
+    std::vector<Part> parts;Parts(entity,asset,parts);std::string key;
+    for(auto& part:parts){AppendPhysicsKey(key,part.Local);AppendPhysicsKey(key,part.Asset);AppendPhysicsKey(key,part.Node);AppendPhysicsKey(key,part.Subtree);
+        if(part.Asset){auto found=revisions.find(part.Asset);if(found==revisions.end())found=revisions.emplace(part.Asset,Revision(part.Asset)).first;AppendPhysicsKey(key,found->second.size());key+=found->second;}
+        else key+=PrimitiveKey(part.Object.GetComponent<PrimitiveObject>());
+    }return key;
+}
+bool ReadPhysicsMesh(Entity entity,UUID assetId,const std::string& signature,std::vector<Vec3>& vertices,std::vector<std::uint32_t>& indices){
+    static std::map<std::string,Geometry> cache;static std::size_t bytes=0;constexpr std::size_t Limit=64u*1024u*1024u;
+    if(auto found=cache.find(signature);found!=cache.end()){vertices=found->second.Vertices;indices=found->second.Indices;return !indices.empty();}
+    std::vector<Part> parts;Parts(entity,assetId,parts);
+    const auto add=[&](Vec3 point){if(vertices.size()>=3000000)throw std::length_error("MeshCollider exceeds one million triangles");indices.push_back(std::uint32_t(vertices.size()));vertices.push_back(point);};
+    for(auto& part:parts){
+        if(!part.Asset){auto geometry=BuildPrimitiveGeometry(part.Object.GetComponent<PrimitiveObject>());for(auto index:geometry.Indices){const auto& p=geometry.Vertices.at(index).Position;add(part.Local.TransformPoint({p[0],p[1],p[2]}));}continue;}
+        auto geometry=Model(part.Asset);if(!geometry)return false;
+        const auto append=[&](std::uint32_t node,const Mat4& transform){if(node>=geometry->SourceNodes.size()||!geometry->SourceNodes[node])return;for(auto& triangle:geometry->SourceNodes[node]->Triangles)for(auto point:{triangle.A,triangle.B,triangle.C})add(transform.TransformPoint(point));};
+        if(part.Node!=Mesh::EntireAsset&&!part.Subtree)append(part.Node,part.Local);
+        else if(auto model=AssetManager::LoadModel(part.Asset)){
+            const auto visit=[&](auto&& self,std::uint32_t index,const Mat4& parent,int depth)->void{if(index>=model->Nodes.size()||depth>256)return;const auto& node=model->Nodes[index];const auto world=parent*Mat4::Transform(node.Position,node.Rotation,node.Scale);if(node.HasMesh())append(node.SourceIndex,world);for(auto child:node.Children)self(self,child,world,depth+1);};
+            if(part.Subtree){
+                auto root=std::find_if(model->Nodes.begin(),model->Nodes.end(),[&](const auto& node){return node.SourceIndex==part.Node;});
+                if(root==model->Nodes.end())return false;
+                if(root->HasMesh())append(root->SourceIndex,part.Local);
+                for(auto child:root->Children)visit(visit,child,part.Local,0);
+            }else for(auto root:model->Roots)visit(visit,root,part.Local,0);
+        }else return false;
     }
-    auto geometry=found->second.Geometry;if(!geometry)return false;
-    const auto append=[&](std::uint32_t index,const Mat4& transform){if(index>=geometry->SourceNodes.size()||!geometry->SourceNodes[index])return;for(const auto& triangle:geometry->SourceNodes[index]->Triangles){if(vertices.size()>3000000)throw std::length_error("MeshCollider exceeds one million triangles");for(auto point:{triangle.A,triangle.B,triangle.C}){indices.push_back(std::uint32_t(vertices.size()));vertices.push_back(transform.TransformPoint(point));}}};
-    if(mesh&&mesh->MeshAsset==assetId&&mesh->ModelNodeIndex!=Mesh::EntireAsset)append(mesh->ModelNodeIndex,Mat4{});
-    else if(auto model=AssetManager::LoadModel(assetId)){
-        const auto visit=[&](auto&& self,std::uint32_t index,const Mat4& parent,int depth)->void{if(index>=model->Nodes.size()||depth>256)return;const auto& node=model->Nodes[index];const auto world=parent*Mat4::Transform(node.Position,node.Rotation,node.Scale);if(node.HasMesh())append(node.SourceIndex,world);for(auto child:node.Children)self(self,child,world,depth+1);};
-        for(auto root:model->Roots)visit(visit,root,Mat4{},0);
-    }else for(std::uint32_t i=0;i<geometry->SourceNodes.size();++i)append(i,Mat4{});
+    const auto used=vertices.size()*sizeof(Vec3)+indices.size()*sizeof(std::uint32_t);
+    if(!indices.empty()&&used<=Limit){while(!cache.empty()&&(bytes+used>Limit||cache.size()>=128)){bytes-=cache.begin()->second.Vertices.size()*sizeof(Vec3)+cache.begin()->second.Indices.size()*sizeof(std::uint32_t);cache.erase(cache.begin());}cache.emplace(signature,Geometry{vertices,indices});bytes+=used;}
     return !indices.empty();
 }
 }

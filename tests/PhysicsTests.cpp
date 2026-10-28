@@ -7,6 +7,10 @@
 #include <cmath>
 #include <filesystem>
 #include <limits>
+#include <fstream>
+#include <array>
+#include "Bazzalt/Components/ModelNode.h"
+#include "Bazzalt/AssetManager.h"
 using namespace Bazzalt;
 static_assert(((BodyConstraints::PositionX|BodyConstraints::PositionY)&BodyConstraints::PositionX)==BodyConstraints::PositionX);
 struct CleanupPhysics final:System {
@@ -16,6 +20,27 @@ struct CleanupPhysics final:System {
     void OnCreate(Scene& scene) override {Id=scene.GetPhysics().Subscribe(PhysicsEventType::CollisionEnter,[](const CollisionEvent&){});}
     void OnDestroy(Scene& scene) override {Cleaned=scene.GetPhysics().Unsubscribe(Id);}
 };
+void CheckAttachedMeshSources(){
+    const auto root=std::filesystem::temp_directory_path()/("bazzalt-collider-source-"+UUID::Generate().ToString());std::filesystem::create_directories(root/"Assets");
+    struct Cleanup{std::filesystem::path Path;~Cleanup(){std::error_code error;std::filesystem::remove_all(Path,error);}} cleanup{root};
+    {std::ofstream file(root/"Test.bproject");file<<"FormatVersion: 1\nProjectUUID: \"12345678-1234-4234-8234-123456789abc\"\nName: ColliderTest\nAssetDirectory: Assets\nStartupScene: \"\"\nProperties: {}\n";}
+    {std::ofstream file(root/"Assets/parts.gltf");file<<R"gltf({"asset":{"version":"2.0"},"buffers":[{"uri":"geometry.bin","byteLength":168}],"bufferViews":[{"buffer":0,"byteLength":96},{"buffer":0,"byteOffset":96,"byteLength":72}],"accessors":[{"bufferView":0,"componentType":5126,"count":8,"type":"VEC3","min":[-0.5,-0.5,-0.5],"max":[0.5,0.5,0.5]},{"bufferView":1,"componentType":5123,"count":36,"type":"SCALAR"}],"meshes":[{"primitives":[{"attributes":{"POSITION":0},"indices":1}]}],"nodes":[{"name":"Group","children":[1,2]},{"name":"Child A","mesh":0},{"name":"Child B","mesh":0,"translation":[6,0,0]},{"name":"Other branch","mesh":0,"translation":[20,0,0]}],"scenes":[{"nodes":[0,3]}],"scene":0})gltf";}
+    {const std::array<float,24> positions{-.5f,-.5f,-.5f,.5f,-.5f,-.5f,.5f,.5f,-.5f,-.5f,.5f,-.5f,-.5f,-.5f,.5f,.5f,-.5f,.5f,.5f,.5f,.5f,-.5f,.5f,.5f};const std::array<std::uint16_t,36> indices{0,2,1,0,3,2,4,5,6,4,6,7,0,4,7,0,7,3,1,2,6,1,6,5,0,1,5,0,5,4,3,7,6,3,6,2};std::ofstream file(root/"Assets/geometry.bin",std::ios::binary);file.write(reinterpret_cast<const char*>(positions.data()),sizeof(positions));file.write(reinterpret_cast<const char*>(indices.data()),sizeof(indices));}
+    Runtime::Engine engine;assert(engine.LoadProject(root/"Test.bproject",false));auto asset=AssetManager::GetAsset(root/"Assets/parts.gltf");assert(asset);auto& scene=engine.GetScene();scene.InstantiateModel(asset->Id);
+    auto group=scene.FindEntityByName("Group"),first=scene.FindEntityByName("Child A");assert(group&&first);auto world=scene.GetPhysics();
+    first.AddComponent<MeshCollider>();assert(world.Raycast({0,5,0},{0,-1,0},10).Object==first);assert(!world.Raycast({6,5,0},{0,-1,0},10));assert(!world.Raycast({20,5,0},{0,-1,0},10));
+    auto firstLines=Runtime::PhysicsModule().Guides(scene,first.GetUUID());assert(!firstLines.empty());for(auto& line:firstLines){assert(line[0]>=-.51f&&line[0]<=.51f);assert(line[3]>=-.51f&&line[3]<=.51f);}
+    first.SetComponentEnabled<MeshCollider>(false);auto& collider=group.AddComponent<MeshCollider>();collider.Convex=false;
+    assert(world.Raycast({0,5,0},{0,-1,0},10).Object==group);assert(world.Raycast({6,5,0},{0,-1,0},10).Object==group);assert(!world.Raycast({3,5,0},{0,-1,0},10));assert(!world.Raycast({20,5,0},{0,-1,0},10));
+    collider.Convex=true;assert(world.Raycast({3,5,0},{0,-1,0},10).Object==group);
+    for(int i=0;i<10;++i){collider.Friction=.1f+i*.01f;world.Synchronize();assert(world.Raycast({3,5,0},{0,-1,0},10).Object==group);}
+    collider.Convex=false;collider.MeshAsset=asset->Id;assert(world.Raycast({6,5,0},{0,-1,0},10).Object==group);assert(!world.Raycast({20,5,0},{0,-1,0},10));collider.MeshAsset={};assert(!world.Raycast({20,5,0},{0,-1,0},10));
+    group.GetComponent<Transform>().Position={100,0,0};assert(world.Raycast({106,5,0},{0,-1,0},10).Object==group);assert(!world.Raycast({6,5,0},{0,-1,0},10));
+    // Relative subtree edits invalidate cooked geometry without pulling in siblings.
+    scene.FindEntityByName("Child B").GetComponent<Transform>().Position.X=8;assert(world.Raycast({108,5,0},{0,-1,0},10).Object==group);assert(!world.Raycast({106,5,0},{0,-1,0},10));
+    first.AddComponent<Rigidbody>();assert(!world.Raycast({100,5,0},{0,-1,0},10));assert(world.Raycast({108,5,0},{0,-1,0},10).Object==group);first.RemoveComponent<Rigidbody>();assert(world.Raycast({100,5,0},{0,-1,0},10).Object==group);
+    auto empty=scene.CreateEntity("Awaiting geometry");empty.AddComponent<MeshCollider>();world.Synchronize();assert(!world.Raycast({200,5,0},{0,-1,0},10));
+}
 int main(){
     Rigidbody damping;damping.LinearDamping=10;damping.AngularDamping=10;assert(damping.IsValid());
     Scene scene;auto settings=scene.GetPhysicsSettings();settings.AutoSimulation=false;settings.WorkerThreads=0;assert(scene.SetPhysicsSettings(settings));
@@ -51,4 +76,5 @@ int main(){
     {auto temporary=std::make_unique<Scene>();auto stale=temporary->GetPhysics();temporary.reset();bool rejected=false;try{stale.GetBodyCount();}catch(const std::logic_error&){rejected=true;}assert(rejected);}
     bool cleaned=false;{Scene temporary;temporary.AddSystem<CleanupPhysics>(cleaned);}assert(cleaned);
     Runtime::PhysicsModule().Stop(scene);assert(!world.IsRunning());scene.Clear();assert(scene.GetPhysicsSettings().AutoSimulation);
+    CheckAttachedMeshSources();
 }

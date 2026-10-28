@@ -16,7 +16,8 @@ def ComponentField(controller,entity,component,name,value):
     if name=='Constraints':
         field=MultiSelectInput(tr('physics.none'));field.SetOptions([(tr('physics.constraint.'+key),1<<i) for i,key in enumerate(('position_x','position_y','position_z','rotation_x','rotation_y','rotation_z'))]);field.SetValues([1<<i for i in range(6) if value&(1<<i)])
         field.SelectionChanged.connect(lambda values:commit(sum(values)));return field
-    if name=='Mesh Asset':return controller._AssetPicker(value,{'.gltf','.glb'},lambda v:commit(v or '00000000-0000-0000-0000-000000000000'))
+    if name=='Mesh Asset':
+        field=controller._AssetPicker(value,{'.gltf','.glb'},lambda v:commit(v or '00000000-0000-0000-0000-000000000000'));field.Display.setPlaceholderText(tr('physics.attached_geometry'));return field
     if name=='Layer':
         field=EnumInput();field.SetOptions([(str(i),i) for i in range(32)]);field.SetValue(value);field.currentIndexChanged.connect(lambda _:commit(field.GetValue()));return field
     if isinstance(value,float):

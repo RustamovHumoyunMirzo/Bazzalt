@@ -3,6 +3,7 @@
 #include <Jolt/Core/Factory.h>
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Core/JobSystemThreadPool.h>
+#include <Jolt/Core/StreamWrapper.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyLock.h>
@@ -24,6 +25,8 @@
 #include <Jolt/Physics/Collision/Shape/OffsetCenterOfMassShape.h>
 #include "Physics/PhysicsModuleApi.h"
 #include "Physics/PhysicsFields.h"
+#include "Physics/PhysicsGeometry.h"
+#include "Physics/PhysicsKeys.h"
 #include "Bazzalt/Scene.h"
 #include "Bazzalt/AssetManager.h"
 #include "Bazzalt/Components/Mesh.h"
@@ -32,6 +35,8 @@
 #include "Bazzalt/Detail/SubsystemAccess.h"
 #include "Runtime/ApplicationEventsAccess.h"
 #include <algorithm>
+#include <bit>
+#include <unordered_set>
 #include <chrono>
 #include <map>
 #include <set>
@@ -42,7 +47,6 @@
 #include <stdexcept>
 
 namespace Bazzalt::Runtime {
-bool ReadPhysicsMesh(Entity,UUID,std::vector<Vec3>&,std::vector<std::uint32_t>&);
 namespace {
 JPH::Vec3 V(Vec3 v){return {v.X,v.Y,v.Z};}
 Vec3 V(JPH::Vec3Arg v){return {v.GetX(),v.GetY(),v.GetZ()};}
@@ -73,7 +77,8 @@ struct BroadLayers final:JPH::BroadPhaseLayerInterface {
 };
 struct PairFilter final:JPH::ObjectLayerPairFilter {const PhysicsSettings* Settings=nullptr;bool ShouldCollide(JPH::ObjectLayer a,JPH::ObjectLayer b)const override{if((a&32)&&(b&32))return false;if((a&64)||(b&64)||!Settings)return true;const auto first=a&31,second=b&31;return (Settings->CollisionMasks[first]&(1u<<second))&&(Settings->CollisionMasks[second]&(1u<<first));}};
 struct BroadFilter final:JPH::ObjectVsBroadPhaseLayerFilter {bool ShouldCollide(JPH::ObjectLayer a,JPH::BroadPhaseLayer b)const override{return !(a&32)||b.GetValue()==1;}};
-struct ColliderData {UUID Body,Collider;std::uint32_t Layer=0,Group=0;float Friction=.5f,Restitution=0;bool Trigger=false,DoubleSided=true;JPH::RefConst<JPH::Shape> NativeShape;Transform Local;};
+using GuideLines=std::vector<std::pair<Vec3,Vec3>>;
+struct ColliderData {std::string GeometryKey;std::shared_ptr<const GuideLines> GuideLocal;std::vector<std::array<float,10>> GuideWorld;Vec3 GuidePosition;Quaternion GuideRotation;bool GuideReady=false;UUID Body,Collider;std::uint32_t Layer=0,Group=0;float Friction=.5f,Restitution=0;bool Trigger=false,DoubleSided=true;JPH::RefConst<JPH::Shape> NativeShape;Transform Local;};
 struct PendingForce {UUID Owner;Entity::Id Generation;PhysicsCommand Command;Vec3 Value,Point;};
 struct BodyEntry {JPH::BodyID Id;UUID Owner;std::string Signature;Transform LastScene;Transform PreviousScene;Rigidbody Authored;bool HasRigidbody=false;std::vector<std::uint64_t> Shapes;};
 struct Subscription {std::shared_ptr<void> Lease;PhysicsScene::Callback Callback;PhysicsEventType Type;UUID Filter;const void* Owner=nullptr;int Level=-1;};
@@ -174,33 +179,58 @@ struct Service {
 };
 Service& State(){static Service service;if(service.MainThread!=std::this_thread::get_id())throw std::logic_error("Physics APIs must be called on the main thread");return service;}
 std::shared_ptr<World> Get(Scene& scene){Detail::RequireSubsystemService(Detail::SubsystemService::Physics,"Physics");auto& worlds=State().Worlds;auto it=worlds.find(&scene);if(it!=worlds.end())return it->second;auto world=std::make_shared<World>(scene);worlds.emplace(&scene,world);return world;}
-std::string Stamp(const auto& value){std::ostringstream out;out.imbue(std::locale::classic());out.precision(9);if constexpr(std::is_enum_v<std::decay_t<decltype(value)>>)out<<int(value);else if constexpr(std::is_arithmetic_v<std::decay_t<decltype(value)>>)out<<value;else if constexpr(std::is_same_v<std::decay_t<decltype(value)>,std::optional<Vec3>>){if(value)out<<value->X<<','<<value->Y<<','<<value->Z;else out<<"null";}else if constexpr(std::is_same_v<std::decay_t<decltype(value)>,UUID>)out<<value.ToString();else {out<<value.X<<','<<value.Y<<','<<value.Z;if constexpr(std::is_same_v<std::decay_t<decltype(value)>,Quaternion>)out<<','<<value.W;}return out.str();}
+std::string Stamp(const auto& value){return PhysicsKey(value);}
 Vec3 PoseKey(Vec3 v){return {std::round(v.X*100000.f)/100000.f,std::round(v.Y*100000.f)/100000.f,std::round(v.Z*100000.f)/100000.f};}
 Quaternion PoseKey(Quaternion q){q=q.Normalized();if(q.W<0)q={-q.X,-q.Y,-q.Z,-q.W};return {std::round(q.X*1000000.f)/1000000.f,std::round(q.Y*1000000.f)/1000000.f,std::round(q.Z*1000000.f)/1000000.f,std::round(q.W*1000000.f)/1000000.f};}
-struct ColliderBuild {Entity EntityValue;UUID Root;bool Mesh=false;Transform Local;std::string Signature;};
+struct ColliderBuild {Entity EntityValue;UUID Root;bool Mesh=false;Transform Local;std::string Signature,MeshKey;};
+
+std::string MeshCookKey(const ColliderBuild& part,const MeshCollider& c){auto key=std::string("mesh")+part.MeshKey;AppendPhysicsKey(key,part.Local.Scale);AppendPhysicsKey(key,c.Convex);AppendPhysicsKey(key,c.ConvexRadius);AppendPhysicsKey(key,c.DoubleSided);AppendPhysicsKey(key,c.Sanitize);return key;}
+JPH::RefConst<JPH::Shape> CookMesh(const ColliderBuild& part,const MeshCollider& c,BodyMotionType motion){
+    if(!c.Convex&&motion==BodyMotionType::Dynamic)throw std::invalid_argument("Dynamic MeshCollider must be convex");
+    struct Cached {std::string Data;JPH::PhysicsMaterialList Materials;std::size_t Bytes;};static std::map<std::string,Cached> cache;static std::size_t bytes=0;constexpr std::size_t Limit=64u*1024u*1024u;
+    const auto key=MeshCookKey(part,c);
+    if(auto found=cache.find(key);found!=cache.end()){
+        // Restore the cooked tree/hull, never share mutable per-collider user data.
+        std::istringstream stream(found->second.Data,std::ios::binary);JPH::StreamInWrapper input(stream);
+        auto result=JPH::Shape::sRestoreFromBinaryState(input);if(result.HasError())throw std::runtime_error("Could not restore cached collision geometry");
+        auto restored=result.Get();restored->RestoreMaterialState(found->second.Materials.data(),JPH::uint(found->second.Materials.size()));return restored;
+    }
+    std::vector<Vec3> vertices;std::vector<std::uint32_t> indices;
+    if(!ReadPhysicsMesh(part.EntityValue,c.MeshAsset,part.MeshKey,vertices,indices)||vertices.empty())throw std::runtime_error("MeshCollider requires valid attached geometry or a mesh asset");
+    JPH::Array<JPH::Vec3> points;points.reserve(vertices.size());for(auto p:vertices){auto point=p*part.Local.Scale;RequireVector(point);points.push_back(V(point));}
+    JPH::RefConst<JPH::Shape> shape;
+    if(c.Convex){
+        struct PointHash {std::size_t operator()(const std::array<std::uint32_t,3>& value)const{std::size_t result=2166136261u;for(auto coordinate:value)result=(result^coordinate)*16777619u;return result;}};
+        std::unordered_set<std::array<std::uint32_t,3>,PointHash> seen;seen.reserve(points.size());std::size_t count=0;
+        for(auto point:points){const auto bits=[](float v){return std::bit_cast<std::uint32_t>(v==0?0.f:v);};if(seen.insert({bits(point.GetX()),bits(point.GetY()),bits(point.GetZ())}).second)points[count++]=point;}
+        points.resize(count);
+        shape=ShapeResult(JPH::ConvexHullShapeSettings(points,c.ConvexRadius).Create());
+    }else{
+        JPH::TriangleList triangles;triangles.reserve(indices.size()/3*(c.DoubleSided?2:1));
+        for(std::size_t i=0;i+2<indices.size();i+=3){if(indices[i]>=points.size()||indices[i+1]>=points.size()||indices[i+2]>=points.size())throw std::invalid_argument("Invalid mesh collider indices");triangles.emplace_back(points[indices[i]],points[indices[i+1]],points[indices[i+2]]);if(c.DoubleSided)triangles.emplace_back(points[indices[i]],points[indices[i+2]],points[indices[i+1]]);}
+        JPH::MeshShapeSettings settings(triangles);if(c.Sanitize)settings.Sanitize();shape=ShapeResult(settings.Create());
+    }
+    std::ostringstream stream(std::ios::binary);JPH::StreamOutWrapper output(stream);shape->SaveBinaryState(output);
+    auto data=stream.str();const auto used=data.size()+key.size();
+    if(used<=Limit&&!output.IsFailed()){while(!cache.empty()&&(bytes+used>Limit||cache.size()>=128)){bytes-=cache.begin()->second.Bytes;cache.erase(cache.begin());}JPH::PhysicsMaterialList materials;shape->SaveMaterialState(materials);cache.emplace(key,Cached{std::move(data),std::move(materials),used});bytes+=used;}
+    return shape;
+}
 
 void World::Synchronize(){
     if(Dead)return;if(Stepping)throw std::logic_error("Cannot synchronize physics during simulation");Configure();
-    std::map<UUID,std::vector<ColliderBuild>> groups;
+    std::map<UUID,std::vector<ColliderBuild>> groups;PhysicsMeshRevisions revisions;
     const auto collect=[&](Entity entity,bool mesh){
         Entity owner=entity;for(auto parent=entity;parent;parent=parent.GetParent())if(parent.HasComponent<Rigidbody>()){if(!parent.GetComponent<Rigidbody>().Enabled)return;owner=parent;break;}
         if(!entity.GetComponent<Transform>().Enabled||owner.GetUUID().IsRoot())return;
-        auto rootPose=owner.GetWorldTransform();RequireVector(rootPose.Position);(void)Q(rootPose.Rotation);Mat4 rigid=Mat4::Transform(rootPose.Position,rootPose.Rotation,Vec3{1});Mat4 matrix;
+        auto rootPose=owner.GetWorldTransform();RequireVector(rootPose.Position);(void)Q(rootPose.Rotation);Mat4 relative;for(auto current=entity;current&&current!=owner;current=current.GetParent())relative=current.GetComponent<Transform>().GetMatrix()*relative;relative=Mat4::Scaling(rootPose.Scale)*relative;Mat4 matrix;
         std::string signature;
-        if(mesh){const auto& c=entity.GetComponent<MeshCollider>();if(!c.Enabled)return;if(!c.IsValid())throw std::invalid_argument("Invalid MeshCollider on "+entity.GetUUID().ToString());matrix=entity.GetWorldMatrix()*Mat4::Transform(c.Offset,c.Rotation,c.Scale);VisitMeshCollider(c,[&](const char*,const char*,const auto& field){signature+=Stamp(field)+";";});}
-        else{const auto& c=entity.GetComponent<ShapeCollider>();if(!c.Enabled)return;if(!c.IsValid())throw std::invalid_argument("Invalid ShapeCollider on "+entity.GetUUID().ToString());matrix=entity.GetWorldMatrix()*Mat4::Transform(c.Offset,c.Rotation,c.Scale);VisitShapeCollider(c,[&](const char*,const char*,const auto& field){signature+=Stamp(field)+";";});}
-        Transform local;if(!(rigid.Inversed()*matrix).Decompose(local.Position,local.Rotation,local.Scale)||local.Scale.X<=0||local.Scale.Y<=0||local.Scale.Z<=0)throw std::invalid_argument("Physics colliders require non-singular positive world scale");
+        if(mesh){const auto& c=entity.GetComponent<MeshCollider>();if(!c.Enabled)return;if(!c.IsValid())throw std::invalid_argument("Invalid MeshCollider on "+entity.GetUUID().ToString());matrix=relative*Mat4::Transform(c.Offset,c.Rotation,c.Scale);VisitMeshCollider(c,[&](const char*,const char*,const auto& field){signature+=Stamp(field)+";";});}
+        else{const auto& c=entity.GetComponent<ShapeCollider>();if(!c.Enabled)return;if(!c.IsValid())throw std::invalid_argument("Invalid ShapeCollider on "+entity.GetUUID().ToString());matrix=relative*Mat4::Transform(c.Offset,c.Rotation,c.Scale);VisitShapeCollider(c,[&](const char*,const char*,const auto& field){signature+=Stamp(field)+";";});}
+        Transform local;if(!matrix.Decompose(local.Position,local.Rotation,local.Scale)||local.Scale.X<=0||local.Scale.Y<=0||local.Scale.Z<=0)throw std::invalid_argument("Physics colliders require non-singular positive world scale");
         RequireVector(local.Position);RequireVector(local.Scale);(void)Q(local.Rotation);
-        if(mesh){const auto& collider=entity.GetComponent<MeshCollider>();if(!collider.MeshAsset)if(auto* primitive=entity.TryGetComponent<PrimitiveObject>()){signature+=Stamp(primitive->Shape)+Stamp(primitive->Size)+Stamp(primitive->Radius)+Stamp(primitive->Height)+Stamp(primitive->Width)+Stamp(primitive->Depth)+Stamp(primitive->MajorRadius)+Stamp(primitive->MinorRadius)+Stamp(primitive->Segments)+Stamp(primitive->Rings);}
-            UUID asset=collider.MeshAsset;if(!asset)if(auto* component=entity.TryGetComponent<Mesh>()){asset=component->MeshAsset;signature+=std::to_string(component->ModelNodeIndex);}if(asset)if(auto info=AssetManager::GetAsset(asset)){const auto pathBytes=info->CachePath.generic_u8string();signature.append(reinterpret_cast<const char*>(pathBytes.data()),pathBytes.size());std::error_code error;auto stamp=std::filesystem::last_write_time(info->CachePath,error);if(!error){
-                // libc++ file_clock can use a 128-bit count, unsupported by to_string.
-                const auto elapsed=stamp.time_since_epoch();
-                const auto seconds=std::chrono::duration_cast<std::chrono::seconds>(elapsed);
-                const auto fraction=std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed-seconds);
-                signature+=";mtime="+std::to_string(seconds.count())+":"+std::to_string(fraction.count());
-            }}}
+        std::string meshKey;if(mesh){const auto& collider=entity.GetComponent<MeshCollider>();meshKey=PhysicsMeshSignature(entity,collider.MeshAsset,revisions);if(meshKey.empty()&&!collider.MeshAsset)return;signature+=meshKey;}
         signature+=Stamp(PoseKey(local.Position))+";"+Stamp(PoseKey(local.Rotation))+";"+Stamp(PoseKey(local.Scale));
-        groups[owner.GetUUID()].push_back({entity,owner.GetUUID(),mesh,local,signature});
+        groups[owner.GetUUID()].push_back({entity,owner.GetUUID(),mesh,local,signature,meshKey});
     };
     for(auto handle:ScenePtr->GetRegistry().view<ShapeCollider,Transform>())collect(ScenePtr->GetEntity(static_cast<Entity::Id>(handle)),false);
     for(auto handle:ScenePtr->GetRegistry().view<MeshCollider,Transform>())collect(ScenePtr->GetEntity(static_cast<Entity::Id>(handle)),true);
@@ -209,7 +239,7 @@ void World::Synchronize(){
     for(auto it=Bodies.begin();it!=Bodies.end();)if(!groups.contains(it->first)){interface.RemoveBody(it->second.Id);interface.DestroyBody(it->second.Id);BodyOwners.erase(it->second.Id.GetIndexAndSequenceNumber());for(auto key:it->second.Shapes)Colliders.erase(key);it=Bodies.erase(it);}else ++it;
     for(auto& [uuid,parts]:groups){
         auto entity=ScenePtr->GetEntity(uuid);Rigidbody body;const auto* authored=entity.TryGetComponent<Rigidbody>();if(authored){body=*authored;if(!body.IsValid())throw std::invalid_argument("Invalid Rigidbody on "+uuid.ToString());}else body.MotionType=BodyMotionType::Static;
-        std::string signature;VisitBody(body,[&](const char*,const char*,const auto& field){signature+=Stamp(field)+";";});for(const auto& c:parts)signature+=c.EntityValue.GetUUID().ToString()+c.Signature;
+        std::string signature;VisitBody(body,[&](const char*,const char*,const auto& field){signature+=Stamp(field)+";";});for(const auto& c:parts)signature+=Stamp(c.EntityValue.GetUUID())+c.Signature;
         auto pose=entity.GetWorldTransform();auto old=Bodies.find(uuid);retained.insert(uuid);
         if(old!=Bodies.end()&&old->second.Signature==signature){
             if(!Same(pose,old->second.LastScene)){interface.SetPositionAndRotation(old->second.Id,V(pose.Position),Q(pose.Rotation),body.StartAwake?JPH::EActivation::Activate:JPH::EActivation::DontActivate);old->second.LastScene=pose;old->second.PreviousScene=pose;}
@@ -219,12 +249,11 @@ void World::Synchronize(){
         struct ShapeGuard {std::map<std::uint64_t,ColliderData>& Data;std::vector<std::uint64_t>& Keys;bool Committed=false;~ShapeGuard(){if(!Committed)for(auto key:Keys)Data.erase(key);}} shapeGuard{Colliders,shapes};
         for(const auto& part:parts){
             ColliderData data;data.Body=uuid;data.Collider=part.EntityValue.GetUUID();JPH::RefConst<JPH::Shape> shape;
-            if(part.Mesh){const auto& c=part.EntityValue.GetComponent<MeshCollider>();std::vector<Vec3> vertices;std::vector<std::uint32_t> indices;if(!ReadPhysicsMesh(part.EntityValue,c.MeshAsset,vertices,indices)||vertices.empty())throw std::runtime_error("MeshCollider requires valid imported mesh or Primitive Object geometry");
-                JPH::Array<JPH::Vec3> points;points.reserve(vertices.size());for(auto p:vertices){auto point=p*part.Local.Scale;RequireVector(point);points.push_back(V(point));}
-                if(c.Convex)shape=ShapeResult(JPH::ConvexHullShapeSettings(points,c.ConvexRadius).Create());
-                else{if(body.MotionType==BodyMotionType::Dynamic)throw std::invalid_argument("Dynamic MeshCollider must be convex");JPH::TriangleList triangles;for(std::size_t i=0;i+2<indices.size();i+=3){if(indices[i]>=points.size()||indices[i+1]>=points.size()||indices[i+2]>=points.size())throw std::invalid_argument("Invalid mesh collider indices");triangles.emplace_back(points[indices[i]],points[indices[i+1]],points[indices[i+2]]);if(c.DoubleSided)triangles.emplace_back(points[indices[i]],points[indices[i+2]],points[indices[i+1]]);}JPH::MeshShapeSettings settings(triangles);if(c.Sanitize)settings.Sanitize();shape=ShapeResult(settings.Create());hasConcave=true;}
+            if(part.Mesh){const auto& c=part.EntityValue.GetComponent<MeshCollider>();shape=CookMesh(part,c,body.MotionType);data.GeometryKey=MeshCookKey(part,c);
+                hasConcave|=!c.Convex;
                 data.Layer=c.Layer;data.Group=c.CollisionGroup;data.Trigger=c.IsTrigger;data.Friction=c.Friction;data.Restitution=c.Restitution;data.DoubleSided=c.DoubleSided;
             }else{const auto& c=part.EntityValue.GetComponent<ShapeCollider>();PhysicsShape s;s.Shape=c.Shape;s.Size=c.Size;s.Radius=c.Radius;s.Height=c.Height;if(c.Shape==ColliderShape::Plane&&body.MotionType!=BodyMotionType::Static)throw std::invalid_argument("Plane Collider requires a static body");shape=Shape(s,part.Local.Scale,c.ConvexRadius);if(c.Shape==ColliderShape::Plane)hasConcave=true;data.Layer=c.Layer;data.Group=c.CollisionGroup;data.Trigger=c.IsTrigger;data.Friction=c.Friction;data.Restitution=c.Restitution;}
+            if(data.GeometryKey.empty())data.GeometryKey="shape"+part.Signature+Stamp(part.Local.Scale);
             auto key=NextShape++;const_cast<JPH::Shape*>(shape.GetPtr())->SetUserData(key);Colliders.emplace(key,data);Colliders.at(key).NativeShape=shape;Colliders.at(key).Local=part.Local;shapes.push_back(key);anyTrigger|=data.Trigger;anySolid|=!data.Trigger;
             compound.AddShape(V(part.Local.Position),Q(part.Local.Rotation),shape);
         }
@@ -336,13 +365,32 @@ static Mat4 RenderMatrix(Scene& scene,Entity entity){
     auto interpolated=entry->LastScene;interpolated.Position=entry->PreviousScene.Position*(1-w.Alpha)+entry->LastScene.Position*w.Alpha;interpolated.Rotation=Quaternion::Slerp(entry->PreviousScene.Rotation,entry->LastScene.Rotation,w.Alpha);
     Mat4 inverse;if(!root.GetWorldMatrix().TryInverse(inverse))return entity.GetWorldMatrix();return interpolated.GetMatrix()*inverse*entity.GetWorldMatrix();
 }
+static std::shared_ptr<const GuideLines> GuideGeometry(const JPH::Shape& shape,const std::string& key){
+    static std::map<std::string,std::shared_ptr<const GuideLines>> cache;static std::size_t bytes=0;constexpr std::size_t Limit=32u*1024u*1024u;
+    if(auto found=cache.find(key);found!=cache.end())return found->second;
+    auto lines=std::make_shared<GuideLines>();JPH::Shape::GetTrianglesContext context;const auto com=shape.GetCenterOfMass();
+    const auto box=shape.GetSubType()==JPH::EShapeSubType::Plane?JPH::AABox(com-JPH::Vec3::sReplicate(10),com+JPH::Vec3::sReplicate(10)):JPH::AABox::sBiggest();
+    shape.GetTrianglesStart(context,box,com,JPH::Quat::sIdentity(),JPH::Vec3::sReplicate(1));
+    const auto stride=std::max(1u,(shape.GetStats().mNumTriangles+4095u)/4096u);std::uint64_t index=0;
+    JPH::Float3 points[96];for(;;){const int triangles=shape.GetTrianglesNext(context,32,points);if(!triangles)break;for(int i=0;i<triangles;++i,++index){if(index%stride||lines->size()>=12288)continue;for(int edge=0;edge<3;++edge){const auto& a=points[i*3+edge];const auto& b=points[i*3+(edge+1)%3];lines->push_back({{a.x,a.y,a.z},{b.x,b.y,b.z}});}}}
+    const auto used=lines->size()*sizeof(GuideLines::value_type)+key.size();if(used<=Limit){while(!cache.empty()&&(bytes+used>Limit||cache.size()>=256)){bytes-=cache.begin()->second->size()*sizeof(GuideLines::value_type)+cache.begin()->first.size();cache.erase(cache.begin());}cache.emplace(key,lines);bytes+=used;}return lines;
+}
 static std::vector<std::array<float,10>> Guides(Scene& scene,UUID selected){
     if(scene.GetRegistry().view<ShapeCollider>().size()==0&&scene.GetRegistry().view<MeshCollider>().size()==0)return {};
-    auto w=Get(scene);if(!w->Running||w->TopologyDirty)w->Synchronize();std::vector<std::array<float,10>> lines;
+    auto w=Get(scene);if(w->TopologyDirty)w->Synchronize();std::vector<std::array<float,10>> lines;
+    const auto count=std::count_if(w->Colliders.begin(),w->Colliders.end(),[&](const auto& item){return item.second.Body==selected||item.second.Collider==selected;});
+    const auto budget=std::max<std::size_t>(3,12288/std::max<std::size_t>(1,count));
     for(auto& [key,data]:w->Colliders){if(data.Body!=selected&&data.Collider!=selected)continue;auto found=w->Bodies.find(data.Body);if(found==w->Bodies.end())continue;
-        auto& body=w->System.GetBodyInterface();const auto rotation=body.GetRotation(found->second.Id)*Q(data.Local.Rotation);const auto position=body.GetPosition(found->second.Id)+body.GetRotation(found->second.Id)*V(data.Local.Position);const auto com=position+rotation*data.NativeShape->GetCenterOfMass();
-        JPH::Shape::GetTrianglesContext context;const auto box=data.NativeShape->GetSubType()==JPH::EShapeSubType::Plane?JPH::AABox(com-JPH::Vec3::sReplicate(10),com+JPH::Vec3::sReplicate(10)):JPH::AABox::sBiggest();data.NativeShape->GetTrianglesStart(context,box,com,rotation,JPH::Vec3::sReplicate(1));
-        JPH::Float3 points[96];while(lines.size()<12288){const int triangles=data.NativeShape->GetTrianglesNext(context,32,points);if(!triangles)break;for(int i=0;i<triangles;++i)for(int edge=0;edge<3;++edge){const auto& a=points[i*3+edge];const auto& b=points[i*3+(edge+1)%3];lines.push_back({a.x,a.y,a.z,b.x,b.y,b.z,data.Trigger?.2f:.3f,data.Trigger?.8f:1.f,data.Trigger?1.f:.35f,.85f});}}
+        auto& body=w->System.GetBodyInterface();const auto rotation=Q(body.GetRotation(found->second.Id)*Q(data.Local.Rotation));const auto position=V(body.GetPosition(found->second.Id)+body.GetRotation(found->second.Id)*V(data.Local.Position));
+        if(!data.GuideReady||data.GuidePosition!=position||(data.GuideRotation.X!=rotation.X||data.GuideRotation.Y!=rotation.Y||data.GuideRotation.Z!=rotation.Z||data.GuideRotation.W!=rotation.W)){
+            if(!data.GuideLocal)data.GuideLocal=GuideGeometry(*data.NativeShape,data.GeometryKey);
+            data.GuideWorld.clear();data.GuideWorld.reserve(data.GuideLocal->size());
+            for(auto& [a,b]:*data.GuideLocal){auto first=position+rotation.Rotate(a),second=position+rotation.Rotate(b);data.GuideWorld.push_back({first.X,first.Y,first.Z,second.X,second.Y,second.Z,data.Trigger?.2f:.3f,data.Trigger?.8f:1.f,data.Trigger?1.f:.35f,.85f});}
+            data.GuidePosition=position;data.GuideRotation=rotation;data.GuideReady=true;
+        }
+        const auto wanted=std::min({budget,data.GuideWorld.size(),std::size_t(12288)-lines.size()});
+        for(std::size_t i=0;i<wanted;++i)lines.push_back(data.GuideWorld[i*data.GuideWorld.size()/wanted]);
+        if(lines.size()==12288)break;
     }return lines;
 }
 static const PhysicsModuleApi Api{

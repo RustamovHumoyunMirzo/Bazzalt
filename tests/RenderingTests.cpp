@@ -1,4 +1,6 @@
 #include <cassert>
+#include <filament/Renderer.h>
+#include "Runtime/TimeAccess.h"
 
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Components/Light.h"
@@ -138,6 +140,11 @@ int main(int argc,char** argv) {
 
     Bazzalt::Runtime::Engine engine;
     assert(engine.Init(true));
+    Bazzalt::Runtime::TimeAccess::Reset();Bazzalt::Runtime::TimeAccess::Advance(.2);engine.RenderEditorFrame();
+    const auto firstMaterialTime=engine.GetEditorStatistics().at("material_time");assert(std::abs(firstMaterialTime-.2)<1e-6);
+    Bazzalt::Time::SetTimeScale(.5f);Bazzalt::Runtime::TimeAccess::Advance(.2);engine.RenderEditorFrame();assert(std::abs(engine.GetEditorStatistics().at("material_time")-.3)<1e-6);
+    Bazzalt::Time::SetTimeScale(0);Bazzalt::Runtime::TimeAccess::Advance(.2);engine.RenderEditorFrame();assert(std::abs(engine.GetEditorStatistics().at("material_time")-.3)<1e-6);
+    Bazzalt::Runtime::TimeAccess::Reset();
 #ifdef _WIN32
     // Synthetic offscreen IDs must be rejected before reaching Vulkan/OpenGL.
     assert(!engine.CreateEditorViewport(1, 0, true, 64, 64));
@@ -274,6 +281,9 @@ int main(int argc,char** argv) {
         assert(!material->isDepthWriteEnabled());assert(material->isDepthCullingEnabled()!=outline);++checked;
     });assert(checked==1);};
     checkGuides(false);
+    const auto uploads=backend.GetStatistics().at("guide_uploads");
+    for(int i=0;i<20;++i)backend.SetEditorGuides({{0,0,0,1,0,0,1,1,1,1,false}});
+    assert(backend.GetStatistics().at("guide_uploads")==uploads);
     // Long frustum edges and segments crossing the editor camera must use the
     // same batched guide resource, including growth, shrink and invalid input.
     backend.SetEditorGuides({{0,0,0,1000,500,-1000,1,1,1,1,false},{0,0,1,0,0,-1000,1,1,1,1,false}});checkGuides(false);
