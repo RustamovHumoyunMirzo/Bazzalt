@@ -23,6 +23,12 @@ template<class T> bool SetPhysicsValue(T& field,py::handle input){
     else field=py::cast<T>(input);
     return true;
 }
+inline bool PhysicsAdditionAllowed(Entity e,const std::string& name){
+    const bool soft=e.HasComponent<Cloth>()||e.HasComponent<Rope>();
+    if(name=="Cloth")return !e.HasComponent<Rope>()&&!e.HasComponent<Rigidbody>()&&!e.HasComponent<ShapeCollider>()&&!e.HasComponent<MeshCollider>();
+    if(name=="Rope")return !e.HasComponent<Cloth>()&&!e.HasComponent<Rigidbody>()&&!e.HasComponent<ShapeCollider>()&&!e.HasComponent<MeshCollider>();
+    return !soft||(name!="Rigidbody"&&name!="Shape Collider"&&name!="Mesh Collider");
+}
 template<class F> bool PhysicsDispatch(Entity e,const std::string& name,F function){
     if(name=="Rigidbody")function.template operator()<Rigidbody>(e);
     else if(name=="Shape Collider")function.template operator()<ShapeCollider>(e);

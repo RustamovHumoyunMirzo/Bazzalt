@@ -53,6 +53,16 @@ class PhysicsInspectorTests(unittest.TestCase):
             self.assertFalse(r.SetComponentProperty(entity,kind,'Mass',-1))
             self.assertTrue(r.RemoveComponent(entity,kind))
 
+    def test_cloth_addition_keeps_initialized_editor_responsive(self):
+        r=self.Window.Runtime;self.assertTrue(r.Play());r.Stop()
+        existing=r.CreateEntity('Keep in hierarchy');body=r.CreateEntity('Rigid body');self.assertTrue(r.AddComponent(body,'Rigidbody'))
+        self.assertFalse(r.AddComponent(body,'Cloth'));self.assertNotIn('Cloth',r.EntityDetails(body)['components'])
+        self.assertEqual({item['uuid'] for item in r.Entities()},{existing,body});self.assertTrue(r.Tick())
+        fabric=r.CreateEntity('Cloth');self.assertTrue(r.AddComponent(fabric,'Cloth'));self.assertTrue(r.Tick())
+        for component in ('Rigidbody','Shape Collider','Mesh Collider','Rope'):self.assertFalse(r.AddComponent(fabric,component))
+        self.assertTrue(r.Tick());self.assertEqual({item['uuid'] for item in r.Entities()},{existing,body,fabric})
+        self.assertTrue(r.RemoveComponent(fabric,'Cloth'));self.assertTrue(r.AddComponent(fabric,'Rope'));self.assertTrue(r.Tick())
+
     def test_material_clock_freezes_in_paused_play(self):
         r=self.Window.Runtime;self.assertTrue(r.Play());r.Tick();before=r.Statistics()['material_time'];self.assertGreaterEqual(before,0)
         r.Pause(True)

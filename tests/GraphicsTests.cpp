@@ -37,6 +37,10 @@ int main(int argc,char** argv){
     auto fabric=scene.CreateEntity("Fabric");auto& cloth=fabric.AddComponent<Cloth>();cloth.SegmentsX=cloth.SegmentsY=2;
     GraphicsAccess::BeginFrame();assert(GraphicsAccess::Commands().size()==1);assert(GraphicsAccess::Commands().front().Owner==fabric.GetUUID());auto softRevision=GraphicsAccess::Commands().front().Geometry->Revision;GraphicsAccess::EndFrame();
     GraphicsAccess::BeginFrame();assert(GraphicsAccess::Commands().front().Geometry->Revision==softRevision);GraphicsAccess::EndFrame();
+    auto invalidSoft=scene.CreateEntity("Conflicting cloth");invalidSoft.AddComponent<Rigidbody>();invalidSoft.AddComponent<Cloth>();
+    GraphicsAccess::BeginFrame();assert(GraphicsAccess::Commands().size()==1);assert(GraphicsAccess::Commands().front().Owner==fabric.GetUUID());GraphicsAccess::EndFrame();
+    assert(Throws([&]{scene.GetPhysics().Synchronize();})); // Explicit simulation validation stays strict.
+    invalidSoft.RemoveComponent<Rigidbody>();GraphicsAccess::BeginFrame();assert(GraphicsAccess::Commands().size()==2);GraphicsAccess::EndFrame();scene.DestroyEntity(invalidSoft);
     fabric.SetComponentEnabled<Cloth>(false);GraphicsAccess::BeginFrame();assert(GraphicsAccess::Commands().empty());GraphicsAccess::EndFrame();scene.DestroyEntity(fabric);
     auto owner=scene.CreateEntity("Owner");int dead=0;Graphics::OnBeginFrame([&](const auto&){++dead;},owner);scene.DestroyEntity(owner);
     int scoped=0;auto scope=GraphicsAccess::SetScope(&scoped);Graphics::OnBeginFrame([&](const auto&){++scoped;});GraphicsAccess::SetScope(scope);GraphicsAccess::DisconnectScope(&scoped);
@@ -90,4 +94,12 @@ int main(int argc,char** argv){
         Graphics::Unsubscribe(token);capture.RemoveSystem<CameraSystem>();backend.SetGuiScene(nullptr);output.Destroy();
     }
     backend.Shutdown();GraphicsAccess::BindScene(nullptr);
+    {
+        Engine preview;assert(preview.Init(true,false));auto& authoring=preview.GetScene();
+        auto broken=authoring.CreateEntity("Legacy invalid cloth");broken.AddComponent<Rigidbody>();broken.AddComponent<Cloth>();
+        auto valid=authoring.CreateEntity("Valid cloth");valid.AddComponent<Cloth>();
+        auto before=preview.GetEditorMeshBounds(); // Bounds reads must not throw or erase hierarchy data.
+        preview.RenderEditorFrame();auto after=preview.GetEditorMeshBounds();assert(after.contains(valid.GetUUID()));assert(authoring.GetEntity(broken.GetUUID()));
+        broken.RemoveComponent<Rigidbody>();preview.RenderEditorFrame();assert(preview.GetEditorMeshBounds().contains(broken.GetUUID()));
+    }
 }

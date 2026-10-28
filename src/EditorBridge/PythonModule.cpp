@@ -450,6 +450,7 @@ public:
 
     bool AddComponent(const std::string& id, const std::string& type) {
         Entity entity = RequireEntity(id);
+        if(!PhysicsAdditionAllowed(entity,type)){Console::Error("Cannot add "+type+": Cloth and Rope require their own entity without another physics body or collider.","Physics");return false;}
         if(PhysicsDispatch(entity,type,[]<class T>(Entity e){if(!e.HasComponent<T>())e.AddComponent<T>();}))return true;
         if(AudioDispatch(entity,type,[]<class T>(Entity e){if(!e.HasComponent<T>())e.AddComponent<T>();}))return true;
         if (type == "Camera") { if (!entity.HasComponent<Camera>()) entity.AddComponent<Camera>(); }

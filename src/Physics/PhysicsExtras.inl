@@ -82,7 +82,8 @@ template<class T> static SoftEntry CreateSoft(World& w,Entity entity,const T& c,
 }
 template<class T> static void SyncSoftPool(World& w,std::set<UUID>& retained){
     for(auto handle:w.ScenePtr->GetRegistry().view<T>()){
-        auto e=w.ScenePtr->GetEntity(static_cast<Entity::Id>(handle));const auto& c=e.template GetComponent<T>();if(!c.Enabled)continue;
+        auto e=w.ScenePtr->GetEntity(static_cast<Entity::Id>(handle));const auto& c=e.template GetComponent<T>();if(!c.Enabled){w.SoftDiagnostics.erase(e.GetUUID());continue;}
+        try{
         if(!c.IsValid())throw std::invalid_argument("Invalid soft body properties");
         if(e.template HasComponent<Rigidbody>()||e.template HasComponent<ShapeCollider>()||e.template HasComponent<MeshCollider>()||(e.template HasComponent<Cloth>()&&e.template HasComponent<Rope>()))throw std::invalid_argument("A soft body cannot share its entity with another physics body or collider");
         const auto id=e.GetUUID();retained.insert(id);std::string signature,configuration;
@@ -94,9 +95,15 @@ template<class T> static void SyncSoftPool(World& w,std::set<UUID>& retained){
         if(it==w.SoftBodies.end()||it->second.Signature!=signature){if(it!=w.SoftBodies.end()){w.System.GetBodyInterface().RemoveBody(it->second.Id);w.System.GetBodyInterface().DestroyBody(it->second.Id);w.SoftColliders.erase(it->second.Id.GetIndexAndSequenceNumber());it->second.Mesh.Destroy();w.SoftBodies.erase(it);}w.SoftBodies.emplace(id,CreateSoft(w,e,c,signature));}
         else{auto pose=e.GetWorldTransform();if(pose.Position!=it->second.Pose.Position||PhysicsKey(pose.Rotation)!=PhysicsKey(it->second.Pose.Rotation)){w.System.GetBodyInterface().SetPositionAndRotation(it->second.Id,V(pose.Position),Q(pose.Rotation),JPH::EActivation::Activate);it->second.Pose=pose;}}
         auto& entry=w.SoftBodies.at(id);if(entry.Configuration!=configuration){auto* body=w.System.GetBodyLockInterfaceNoLock().TryGetBody(entry.Id);auto* motion=static_cast<JPH::SoftBodyMotionProperties*>(body->GetMotionProperties());motion->SetNumIterations(c.Iterations);motion->SetGravityFactor(c.GravityFactor);motion->SetLinearDamping(c.Damping);motion->SetMaxLinearVelocity(c.MaxVelocity);body->SetFriction(c.Friction);body->SetRestitution(c.Restitution);body->SetAllowSleeping(c.AllowSleeping&&w.Settings.AllowSleeping);entry.Wind=c.Wind;entry.Material=c.MaterialAsset;entry.CastShadows=c.CastShadows;entry.Configuration=std::move(configuration);w.System.GetBodyInterface().ActivateBody(entry.Id);}
+        w.SoftDiagnostics.erase(id);
+        }catch(const std::exception& error){
+            if(!w.Preview)throw;
+            retained.erase(e.GetUUID());auto& diagnostic=w.SoftDiagnostics[e.GetUUID()];if(diagnostic!=error.what()){diagnostic=error.what();Console::Error("Soft body "+e.GetUUID().ToString()+": "+diagnostic,"Physics");}
+        }
     }
 }
 void World::SyncExtras(){
+    std::erase_if(SoftDiagnostics,[&](const auto& item){return !ScenePtr->GetEntity(item.first);});
     std::set<JointKey> retained;Suppressed.clear();
     SyncJointPool<Joint>(*this,0,retained);SyncJointPool<DistanceJoint>(*this,1,retained);SyncJointPool<HingeJoint>(*this,2,retained);SyncJointPool<SliderJoint>(*this,3,retained);SyncJointPool<BallAndSocketJoint>(*this,4,retained);SyncJointPool<FixedJoint>(*this,5,retained);
     for(auto it=Joints.begin();it!=Joints.end();)if(!retained.contains(it->first)){if(it->second.Native)System.RemoveConstraint(it->second.Native);it=Joints.erase(it);}else ++it;

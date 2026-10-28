@@ -30,6 +30,7 @@
 #include "Physics/PhysicsKeys.h"
 #include "Bazzalt/Scene.h"
 #include "Bazzalt/AssetManager.h"
+#include "Bazzalt/Console.h"
 #include "Bazzalt/Components/Mesh.h"
 #include "Bazzalt/Components/PrimitiveObject.h"
 #include "Bazzalt/Detail/ModuleLifetime.h"
@@ -89,6 +90,8 @@ ContactPair ContactKey(const CollisionEvent& e){auto a=std::pair{e.BodyAUUID,e.C
 bool IsExit(PhysicsEventType type){return type==PhysicsEventType::CollisionExit||type==PhysicsEventType::TriggerExit;}
 
 struct World final:JPH::ContactListener {
+    bool Preview=false;
+    std::map<UUID,std::string> SoftDiagnostics;
     Scene* ScenePtr;bool Running=false,Dead=false,Stepping=false,Dispatching=false,Updating=false;float Alpha=1,LastDelta=0;
     PhysicsSettings Settings;
     bool TopologyDirty=true;std::vector<entt::scoped_connection> Connections;std::vector<PendingForce> Forces;
@@ -430,7 +433,7 @@ static const PhysicsModuleApi Api{
     [](Scene& scene,Entity e,JointType t,int operation){auto w=Get(scene);if(!e||e.GetScene()!=&scene||int(t)>4)return false;w->Synchronize();bool result=false;for(auto& [key,j]:w->Joints)if(key.first==e.GetUUID()&&j.Settings.Type==t){if(operation==0){j.Broken=true;if(j.Native){j.Native->SetEnabled(false);for(auto* body:{j.Native->GetBody1(),j.Native->GetBody2()})if(body->IsDynamic())w->System.GetBodyInterface().ActivateBody(body->GetID());}result=true;}else if(operation==1){j.Broken=false;if(j.Native)j.Native->SetEnabled(true);if(j.Native)for(auto* body:{j.Native->GetBody1(),j.Native->GetBody2()})if(body->IsDynamic())w->System.GetBodyInterface().ActivateBody(body->GetID());result=true;}else result|=j.Broken;}return result;},
     [](Scene& scene,Entity e){return SoftVertices(*Get(scene),e);},
     [](Scene& scene,Entity e,Vec3 value,int index,int operation){return SoftControl(*Get(scene),e,value,index,operation);},
-    [](Scene& scene){auto w=Get(scene);if(!w->Running||w->TopologyDirty)w->Synchronize();w->DrawSoftBodies();},Guides
+    [](Scene& scene){auto w=Get(scene);const bool old=w->Preview;w->Preview=!w->Running;struct Restore{World& W;bool Old;~Restore(){W.Preview=Old;}} restore{*w,old};if(!w->Running||w->TopologyDirty)w->Synchronize();w->DrawSoftBodies();},Guides
 };
 }
 #ifdef _WIN32

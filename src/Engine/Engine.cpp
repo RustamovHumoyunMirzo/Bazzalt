@@ -307,7 +307,7 @@ std::unordered_map<UUID,std::pair<Vec3,Vec3>> Engine::GetEditorMeshBounds() cons
             auto [it,added]=result.emplace(entity.GetUUID(),std::pair{minimum,maximum});if(!added){auto& [a,b]=it->second;a={std::min(a.X,minimum.X),std::min(a.Y,minimum.Y),std::min(a.Z,minimum.Z)};b={std::max(b.X,maximum.X),std::max(b.Y,maximum.Y),std::max(b.Z,maximum.Z)};}
         }
     }
-    const auto softBounds=[&](auto view){for(auto handle:view){auto entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));if(m_editorHidden.contains(entity.GetUUID()))continue;auto points=m_scene->GetPhysics().GetSoftBodyVertices(entity);if(points.empty())continue;Vec3 lo=points.front(),hi=lo;for(auto p:points){lo={std::min(lo.X,p.X),std::min(lo.Y,p.Y),std::min(lo.Z,p.Z)};hi={std::max(hi.X,p.X),std::max(hi.Y,p.Y),std::max(hi.Z,p.Z)};}result[entity.GetUUID()]={lo,hi};}};
+    const auto softBounds=[&](auto view){for(auto handle:view){auto entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));if(m_editorHidden.contains(entity.GetUUID()))continue;std::vector<Vec3> points;try{points=m_scene->GetPhysics().GetSoftBodyVertices(entity);}catch(const std::exception&){continue;}if(points.empty())continue;Vec3 lo=points.front(),hi=lo;for(auto p:points){lo={std::min(lo.X,p.X),std::min(lo.Y,p.Y),std::min(lo.Z,p.Z)};hi={std::max(hi.X,p.X),std::max(hi.Y,p.Y),std::max(hi.Z,p.Z)};}result[entity.GetUUID()]={lo,hi};}};
     softBounds(m_scene->GetRegistry().view<Cloth>());softBounds(m_scene->GetRegistry().view<Rope>());
     return result;
 }

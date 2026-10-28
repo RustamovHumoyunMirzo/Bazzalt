@@ -213,3 +213,8 @@ Cloth and Rope create optimized Jolt SoftBodySharedSettings, including faces, st
 GraphicsAccess.BeginFrame calls RenderPhysicsScene after the graphics frame begins. The physics module submits current world-space deformed geometry via GraphicsMesh; unchanged geometry retains its revision. Each frame recomputes area-weighted normals. Gameplay and editor use the same surface/material pipeline. Selected guides show the deforming triangles. Soft-body collision resolution uses Jolt; rigid contact subscriptions do not currently include soft-body contact manifolds. No self-collision, tearing, runtime rigid attachment/skinning or cross-platform deterministic simulation is promised.
 
 Add field definitions once in PhysicsFields.h, then extend the serialization registry, bridge dispatch, Lua registration, inspector types and API inventory. Never expose native constraint/body handles. Tests must cover stepping, pins, body recreation, broken constraints, component disable/removal, serialization and teardown.
+
+
+### Editor soft-body failure isolation
+
+The bridge validates incompatible component additions before mutating the registry. Preview synchronization catches soft-body authoring errors per entity, reports each distinct error once, removes stale native soft bodies, and keeps valid render submissions alive. Explicit Synchronize and game simulation remain strict. Hierarchy bounds reads catch failed physics readback rather than propagating it through SceneEntities and clearing the hierarchy. Regression tests initialize the editor renderer, exercise rejection in both component orders, preview legacy invalid data alongside valid cloth, and repair it without restarting.
