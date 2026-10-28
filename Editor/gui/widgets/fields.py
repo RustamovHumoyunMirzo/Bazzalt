@@ -7,7 +7,7 @@ from enum import Enum
 from pathlib import Path
 from .options_button import OptionsButton
 
-from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal, QSignalBlocker
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPaintEvent
 from PySide6.QtWidgets import (
     QAbstractSpinBox, QCheckBox,
@@ -276,14 +276,22 @@ class MultiSelectInput(FieldStateSupport, QToolButton):
     def __init__(self, placeholder: str = "—", parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._placeholder = placeholder
+        self._clear_action = None
         self._menu = QMenu(self)
         self.setMenu(self._menu)
         self.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self._UpdateText()
 
-    def SetOptions(self, options: Iterable[tuple[str, object]]) -> None:
+    def SetOptions(self, options: Iterable[tuple[str, object]], *, clear_label: str | None = None) -> None:
         selected = set(self.GetValues())
         self._menu.clear()
+        self._clear_action = None
+        if clear_label is not None:
+            self._clear_action = QAction(clear_label, self._menu)
+            self._clear_action.setCheckable(True)
+            self._clear_action.triggered.connect(lambda _checked=False: self.SetValues(()))
+            self._menu.addAction(self._clear_action)
+            self._menu.addSeparator()
         for label, value in options:
             action = QAction(label, self._menu)
             action.setData(value)
@@ -291,10 +299,12 @@ class MultiSelectInput(FieldStateSupport, QToolButton):
             action.setChecked(value in selected)
             action.toggled.connect(lambda _checked: self._SelectionUpdated())
             self._menu.addAction(action)
+        if self._clear_action is not None:
+            self._clear_action.setChecked(not self.GetValues())
         self._UpdateText()
 
     def GetValues(self) -> tuple[object, ...]:
-        return tuple(action.data() for action in self._menu.actions() if action.isChecked())
+        return tuple(action.data() for action in self._menu.actions() if action is not self._clear_action and action.isChecked())
 
     def SetValues(self, values: Iterable[object]) -> None:
         selected = set(values)
@@ -305,11 +315,15 @@ class MultiSelectInput(FieldStateSupport, QToolButton):
         self._SelectionUpdated()
 
     def _SelectionUpdated(self) -> None:
+        if self._clear_action is not None:
+            blocker = QSignalBlocker(self._clear_action)
+            self._clear_action.setChecked(not self.GetValues())
+            del blocker
         self._UpdateText()
         self.SelectionChanged.emit(self.GetValues())
 
     def _UpdateText(self) -> None:
-        labels = [action.text() for action in self._menu.actions() if action.isChecked()]
+        labels = [action.text() for action in self._menu.actions() if action is not self._clear_action and action.isChecked()]
         self.setText(", ".join(labels) if labels else self._placeholder)
 
 

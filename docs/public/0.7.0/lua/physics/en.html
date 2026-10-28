@@ -101,11 +101,11 @@ cloth.PinEdges = 4
 entity:SetComponent("Cloth", cloth)
 local physics = entity:GetScene():GetPhysics()
 physics:ApplySoftBodyImpulse(entity, Bazzalt.Vec3.new(0, 0, 2))
-local positions = physics:GetSoftBodyVertices(entity) -- Lua array, vertices use zero-based indices in control calls</code></pre></article>
+local positions = physics:GetSoftBodyVertices(entity) -- Lua array, vertices use zero-based indices in control calls</code></pre><h2 id="cloth-gravity">Cloth gravity and pins</h2><p>Cloth starts with its top edge pinned. Pinned particles stay anchored even when gravity is enabled, so the complete object does not fall. Choose <strong>Pin Edges → None</strong> to release every edge and let the cloth fall freely. Selecting an edge again turns that constraint back on. Gravity Factor 1 uses scene gravity; 0 removes gravity acceleration without clearing existing velocity. In scripts, set <code>Cloth.PinEdges = 0</code> and <code>Cloth.GravityFactor = 1</code>. Cloth simulation moves its mesh particles; the entity’s authoring Transform is not its simulated center.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../audio/en.html"><small>Previous</small>Lua audio</a>
 <a class="next" href="../gui/en.html"><small>Next</small>GUI in Lua</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#first-behavior">A physical behavior</a><a class="toc-link" href="#raycasts">Raycasts and casts</a><a class="toc-link" href="#events">Events and lifetime</a><a class="toc-link" href="#settings">Scene settings and manual simulation</a><a class="toc-link" href="#reference">Complete API</a><a class="toc-link" href="#joints-soft-bodies">Joints, cloth and rope</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#first-behavior">A physical behavior</a><a class="toc-link" href="#raycasts">Raycasts and casts</a><a class="toc-link" href="#events">Events and lifetime</a><a class="toc-link" href="#settings">Scene settings and manual simulation</a><a class="toc-link" href="#reference">Complete API</a><a class="toc-link" href="#joints-soft-bodies">Joints, cloth and rope</a><a class="toc-link" href="#cloth-gravity">Cloth gravity and pins</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

@@ -84,6 +84,20 @@ void CheckClothSourceShape(){
     assert(physics.ApplySoftBodyImpulse(cube,{0,0,1},0));physics.Simulate(1.f/60);auto deformed=physics.GetSoftBodyVertices(cube);assert((deformed[0]-points[0]).Length()>.001f);
     Runtime::PhysicsModule().Stop(scene);
 }
+void CheckClothGravityAndPins(){
+    Scene scene;auto settings=scene.GetPhysicsSettings();settings.AutoSimulation=false;settings.WorkerThreads=0;assert(scene.SetPhysicsSettings(settings));
+    auto make=[&](const char* name,float x){auto e=scene.CreateEntity(name);e.GetComponent<Transform>().Position={x,5,0};e.AddComponent<PrimitiveObject>();e.AddComponent<Cloth>();return e;};
+    auto pinned=make("Pinned",0),floating=make("Zero gravity",10);floating.GetComponent<Cloth>().PinEdges=0;floating.GetComponent<Cloth>().GravityFactor=0;
+    Runtime::PhysicsModule().Start(scene);auto physics=scene.GetPhysics();auto anchor=physics.GetSoftBodyVertices(pinned),zero=physics.GetSoftBodyVertices(floating);
+    for(int i=0;i<30;++i)physics.Simulate(1.f/60);
+    auto held=physics.GetSoftBodyVertices(pinned);for(std::size_t i=0;i<anchor.size();++i)if(anchor[i].Y>5.49f)assert((held[i]-anchor[i]).Length()<.001f);
+    for(auto point:physics.GetSoftBodyVertices(floating))assert(std::abs(point.Y-4.5f)<.001f||std::abs(point.Y-5.5f)<.001f);
+    pinned.GetComponent<Cloth>().PinEdges=0;physics.Synchronize();auto released=physics.GetSoftBodyVertices(pinned);
+    for(int i=0;i<30;++i)physics.Simulate(1.f/60);
+    auto falling=physics.GetSoftBodyVertices(pinned);float before=0,after=0;for(auto point:released)before+=point.Y;for(auto point:falling)after+=point.Y;assert((before-after)/falling.size()>.8f);
+    floating.GetComponent<Cloth>().GravityFactor=1;for(int i=0;i<30;++i)physics.Simulate(1.f/60);float moved=0;auto affected=physics.GetSoftBodyVertices(floating);for(std::size_t i=0;i<zero.size();++i)moved+=zero[i].Y-affected[i].Y;assert(moved/zero.size()>.8f);
+    Runtime::PhysicsModule().Stop(scene);
+}
 int main(){
     Rigidbody damping;damping.LinearDamping=10;damping.AngularDamping=10;assert(damping.IsValid());
     Scene scene;auto settings=scene.GetPhysicsSettings();settings.AutoSimulation=false;settings.WorkerThreads=0;assert(scene.SetPhysicsSettings(settings));
@@ -119,5 +133,5 @@ int main(){
     {auto temporary=std::make_unique<Scene>();auto stale=temporary->GetPhysics();temporary.reset();bool rejected=false;try{stale.GetBodyCount();}catch(const std::logic_error&){rejected=true;}assert(rejected);}
     bool cleaned=false;{Scene temporary;temporary.AddSystem<CleanupPhysics>(cleaned);}assert(cleaned);
     Runtime::PhysicsModule().Stop(scene);assert(!world.IsRunning());scene.Clear();assert(scene.GetPhysicsSettings().AutoSimulation);
-    CheckAttachedMeshSources();CheckJointsAndSoftBodies();CheckClothSourceShape();
+    CheckAttachedMeshSources();CheckJointsAndSoftBodies();CheckClothSourceShape();CheckClothGravityAndPins();
 }

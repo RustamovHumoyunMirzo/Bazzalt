@@ -66,6 +66,14 @@ class PhysicsInspectorTests(unittest.TestCase):
         self.assertTrue(r.Tick());self.assertEqual({item['uuid'] for item in r.Entities()},{existing,body,fabric})
         self.assertTrue(r.RemoveComponent(fabric,'Cloth'));self.assertTrue(r.AddComponent(fabric,'Rope'));self.assertTrue(r.Tick())
 
+    def test_cloth_pins_none_clears_and_restores_constraints(self):
+        w=self.Window;r=w.Runtime;entity=r.CreateEntity('Cloth pins');r.AddComponent(entity,'Primitive Object');r.AddComponent(entity,'Cloth');w.Controller.SelectEntity(entity,force=True)
+        field=w.Properties._sections['runtime.Cloth']._fields['Pin Edges'];none=field.menu().actions()[0]
+        self.assertEqual(none.text(),w.Localization.Translate('physics.none'));self.assertEqual(field.GetValues(),(4,));self.assertFalse(none.isChecked())
+        none.trigger();self.assertEqual(r.EntityDetails(entity)['component_data']['Cloth']['Pin Edges'],0);self.assertEqual(field.GetValues(),());self.assertTrue(none.isChecked())
+        next(action for action in field.menu().actions() if action.data()==4).trigger()
+        self.assertEqual(r.EntityDetails(entity)['component_data']['Cloth']['Pin Edges'],4);self.assertEqual(field.GetValues(),(4,));self.assertFalse(none.isChecked())
+
     def test_material_clock_freezes_in_paused_play(self):
         r=self.Window.Runtime;self.assertTrue(r.Play());r.Tick();before=r.Statistics()['material_time'];self.assertGreaterEqual(before,0)
         r.Pause(True)
