@@ -35,6 +35,8 @@ struct SoftEntry {
     Vec3 Wind{};
     UUID Material{};
     Transform Pose;
+    Vec3 ReferenceCenter{};
+    Vec3 RestScale{1};
     bool CastShadows=true;
     bool Closed=false;
 };

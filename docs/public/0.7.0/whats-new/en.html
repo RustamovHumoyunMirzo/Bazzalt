@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="This release adds Linux support, custom drawing through the C++ and Lua Graphics APIs, and ordered camera material effects. It also improves editor startup and documentation loading. Existing Windows projects remain compatible.">
+  <meta name="description" content="Cloth and rope transforms and selection gizmos now follow their simulated position during Play. Paused transform edits move the deformed body immediately, and Stop restores the original authoring pose.">
   <title>What&#x27;s new in 0.7.0 | BAZZALT Docs</title>
   <link rel="stylesheet" href="../../assets/docs.css">
   <script src="../../assets/theme.js"></script>
@@ -26,7 +26,7 @@
     <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
     <main id="content" tabindex="-1">
       <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../index.html">Docs</a> / What&#x27;s new in 0.7.0</nav>
-      <article class="doc"><h1>What's new in 0.7.0</h1>
+      <article class="doc"><h1>What's new in 0.7.0</h1><p>Cloth and rope transforms and selection gizmos now follow their simulated position during Play. Paused transform edits move the deformed body immediately, and Stop restores the original authoring pose.</p>
 <p>This release adds Linux support, custom drawing through the C++ and Lua Graphics APIs, and ordered camera material effects. It also improves editor startup and documentation loading. Existing Windows projects remain compatible.</p>
 <h2 id="graphics">Custom drawing in C++ and Lua</h2>
 <p>Use <code>#include &lt;Bazzalt/Graphics.h&gt;</code> in C++ or <code>Bazzalt.Graphics</code> in Lua to submit your own geometry without accessing renderer internals. A <code>GraphicsVertex</code> contains position, normal, UV coordinates and color. <code>GraphicsTopology</code> supports points, lines, line strips, triangles and triangle strips.</p>

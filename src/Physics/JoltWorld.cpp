@@ -314,10 +314,13 @@ void World::Step(float dt,bool manual){
     for(auto& [uuid,entry]:Bodies){auto entity=ScenePtr->GetEntity(uuid);auto* body=entity.TryGetComponent<Rigidbody>();if(body&&body->MotionType==BodyMotionType::Dynamic&&body->Gravity&&interface.IsActive(entry.Id)){const auto acceleration=*body->Gravity*body->GravityFactor;if(acceleration.LengthSquared()>1e-12f)interface.AddForce(entry.Id,V(acceleration*body->Mass),JPH::EActivation::DontActivate);}}
     for(auto& [id,entry]:Bodies)entry.PreviousScene=entry.LastScene;
     const auto error=System.Update(dt,int(Settings.CollisionSteps),&Allocator,Jobs.get());if(error!=JPH::EPhysicsUpdateError::None)throw std::runtime_error("Jolt update exhausted physics capacity; increase scene physics limits");
-    std::vector<UUID> order;for(auto& [id,entry]:Bodies)order.push_back(id);
+    std::vector<UUID> order;for(auto& [id,entry]:Bodies)order.push_back(id);for(auto& [id,entry]:SoftBodies)order.push_back(id);
     const auto depth=[&](UUID id){int count=0;for(auto e=ScenePtr->GetEntity(id);e&&count<1024;e=e.GetParent())++count;return count;};
     std::stable_sort(order.begin(),order.end(),[&](UUID a,UUID b){return depth(a)<depth(b);});
-    for(auto id:order){auto& entry=Bodies.at(id);auto entity=ScenePtr->GetEntity(id);if(!entity||entry.Authored.MotionType==BodyMotionType::Static)continue;auto transform=entity.GetWorldTransform();transform.Position=V(interface.GetPosition(entry.Id));transform.Rotation=Q(interface.GetRotation(entry.Id));if(!ScenePtr->SetWorldTransform(entity,transform))throw std::runtime_error("Cannot synchronize physics under a singular parent transform");entry.LastScene=transform;}
+    for(auto id:order){auto entity=ScenePtr->GetEntity(id);if(!entity)continue;auto transform=entity.GetWorldTransform();
+        if(auto soft=SoftBodies.find(id);soft!=SoftBodies.end()){auto& entry=soft->second;transform.Scale=entry.RestScale;transform.Rotation=Q(interface.GetRotation(entry.Id));transform.Position=V(interface.GetPosition(entry.Id))-transform.Rotation.Rotate(entry.ReferenceCenter);if(!ScenePtr->SetWorldTransform(entity,transform))throw std::runtime_error("Cannot synchronize soft body under a singular parent transform");entry.Pose=entity.GetWorldTransform();}
+        else{auto& entry=Bodies.at(id);if(entry.Authored.MotionType==BodyMotionType::Static)continue;transform.Position=V(interface.GetPosition(entry.Id));transform.Rotation=Q(interface.GetRotation(entry.Id));if(!ScenePtr->SetWorldTransform(entity,transform))throw std::runtime_error("Cannot synchronize physics under a singular parent transform");entry.LastScene=transform;}
+    }
     UpdateExtras(dt);Stepping=false;Dispatch();ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterPhysicsStep,dt});ApplicationEventsAccess::ThrowIfFailed();
 }
 struct QueryFilter final:JPH::ShapeFilter {
@@ -361,7 +364,7 @@ std::vector<PhysicsHit> Query(Scene& scene,int mode,const PhysicsShape& shape,co
     }
     std::stable_sort(result.begin(),result.end(),[](const auto& a,const auto& b){return a.Distance!=b.Distance?a.Distance<b.Distance:a.Object.GetUUID()!=b.Object.GetUUID()?a.Object.GetUUID()<b.Object.GetUUID():a.Collider.GetUUID()<b.Collider.GetUUID();});return result;
 }
-BodyEntry* BodyFor(World& w,Entity e){if(e.GetScene()!=w.ScenePtr||!e)return nullptr;for(auto current=e;current;current=current.GetParent()){if(auto* body=current.TryGetComponent<Rigidbody>();body&&!body->Enabled)return nullptr;auto found=w.Bodies.find(current.GetUUID());if(found!=w.Bodies.end())return &found->second;if(current.HasComponent<Rigidbody>())return nullptr;}return nullptr;}
+BodyEntry* BodyFor(World& w,Entity e){if(e.GetScene()!=w.ScenePtr||!e)return nullptr;for(auto current=e;current;current=current.GetParent()){if(auto* cloth=current.TryGetComponent<Cloth>();cloth&&cloth->Enabled)return nullptr;if(auto* rope=current.TryGetComponent<Rope>();rope&&rope->Enabled)return nullptr;if(auto* body=current.TryGetComponent<Rigidbody>();body&&!body->Enabled)return nullptr;auto found=w.Bodies.find(current.GetUUID());if(found!=w.Bodies.end())return &found->second;if(current.HasComponent<Rigidbody>())return nullptr;}return nullptr;}
 bool Command(Scene& scene,Entity e,PhysicsCommand command,Vec3 value,Vec3 point,Quaternion rotation,float dt,bool activate){
     RequireVector(value);RequireVector(point);auto w=Get(scene);if(!w->Running)throw std::logic_error("Physics body control requires a running simulation");if(w->TopologyDirty)w->Synchronize();auto* entry=BodyFor(*w,e);if(!entry)return false;auto& body=w->System.GetBodyInterface();const auto id=entry->Id;const auto motion=body.GetMotionType(id);
     const bool dynamic=motion==JPH::EMotionType::Dynamic;

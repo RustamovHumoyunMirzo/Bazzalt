@@ -428,11 +428,11 @@ public:
         value.Position = {position[0], position[1], position[2]};
         value.Rotation = Quaternion{rotation[0], rotation[1], rotation[2], rotation[3]}.Normalized();
         value.Scale = {scale[0], scale[1], scale[2]};
-        return RequireEntity(id).SetWorldTransform(value);
+        Entity entity=RequireEntity(id);if(!entity.SetWorldTransform(value))return false;if(m_playing&&entity.GetScene()->GetPhysics().IsRunning())entity.GetScene()->GetPhysics().Synchronize();return true;
     }
     bool Translate(const std::string& id, const std::array<float, 3>& delta) {
         Entity entity=RequireEntity(id);Transform value=entity.GetWorldTransform();
-        value.Translate({delta[0], delta[1], delta[2]});return entity.SetWorldTransform(value);
+        value.Translate({delta[0], delta[1], delta[2]});if(!entity.SetWorldTransform(value))return false;if(m_playing&&entity.GetScene()->GetPhysics().IsRunning())entity.GetScene()->GetPhysics().Synchronize();return true;
     }
     std::string InstantiateModel(const std::string& asset, const std::string& parent) {
         Entity entity = m_engine->GetScene().InstantiateModel(

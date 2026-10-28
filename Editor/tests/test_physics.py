@@ -81,6 +81,28 @@ class PhysicsInspectorTests(unittest.TestCase):
         fields['Compliance'].setValue(.00001);self.assertAlmostEqual(r.EntityDetails(entity)['component_data']['Cloth']['Compliance'],.00001,places=8)
         self.assertIn('Pressure',fields);self.assertIn('Collision Radius',fields);self.assertIn('Subdivision Level',fields)
 
+    def test_soft_body_gizmo_tracks_play_and_restores_on_stop(self):
+        from PySide6.QtTest import QTest
+        w=self.Window;r=w.Runtime;entity=r.CreateEntity('Moving cloth')
+        r.AddComponent(entity,'Primitive Object');r.AddComponent(entity,'Cloth')
+        r.SetComponentProperty(entity,'Cloth','Pin Edges',0)
+        w.Controller.SelectEntity(entity,force=True)
+        original=tuple(r.EntityPose(entity)['world_position'])
+        self.assertTrue(r.Play());r.Pause(True)
+        for _ in range(30):QTest.qWait(20);r.Step()
+        w.Controller._UpdateGizmo()
+        position=tuple(r.EntityPose(entity)['world_position'])
+        self.assertLess(position[1],original[1]-.5)
+        self.assertAlmostEqual(w.Scene.Surface._selection.Y,position[1],places=4)
+        self.assertTrue(r.Translate(entity,(2,1,0)))
+        w.Controller._UpdateGizmo()
+        moved=tuple(r.EntityPose(entity)['world_position'])
+        self.assertAlmostEqual(moved[0],position[0]+2,places=4)
+        self.assertAlmostEqual(w.Scene.Surface._selection.Y,position[1]+1,places=4)
+        r.Stop();w.Controller._UpdateGizmo()
+        self.assertEqual(tuple(r.EntityPose(entity)['world_position']),original)
+        self.assertAlmostEqual(w.Scene.Surface._selection.Y,original[1],places=4)
+
     def test_material_clock_freezes_in_paused_play(self):
         r=self.Window.Runtime;self.assertTrue(r.Play());r.Tick();before=r.Statistics()['material_time'];self.assertGreaterEqual(before,0)
         r.Pause(True)

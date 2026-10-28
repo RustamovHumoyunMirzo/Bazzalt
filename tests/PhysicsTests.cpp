@@ -129,6 +129,18 @@ void CheckClothMigration(){
     values["Compliance"]="0.002";auto custom=scene.CreateEntity("Custom legacy material");assert(descriptor->Deserialize(custom,values,1));assert(custom.GetComponent<Cloth>().Compliance==.002f&&custom.GetComponent<Cloth>().BendMode==ClothBendMode::Dihedral);
     auto malformed=scene.CreateEntity("Missing v2 fields");assert(!descriptor->Deserialize(malformed,values,2));
 }
+void CheckSoftRuntimeTransforms(){
+    Scene scene;auto settings=scene.GetPhysicsSettings();settings.AutoSimulation=false;settings.WorkerThreads=0;scene.SetPhysicsSettings(settings);
+    auto parent=scene.CreateEntity("Rotating physics parent");parent.AddComponent<ShapeCollider>();auto& parentBody=parent.AddComponent<Rigidbody>();parentBody.Gravity=Vec3{};parentBody.AngularVelocity={0,1,0};
+    auto soft=scene.CreateEntity("Following soft pivot");soft.SetParent(parent);soft.GetComponent<Transform>().Position={0,5,0};soft.AddComponent<PrimitiveObject>();soft.AddComponent<Cloth>().PinEdges=0;
+    auto rope=scene.CreateEntity("Off-center rope");rope.GetComponent<Transform>().Position={10,5,0};auto& rc=rope.AddComponent<Rope>();rc.PinStart=false;rc.PinEnd=false;rc.Segments=8;rc.Sides=4;
+    Runtime::PhysicsModule().Start(scene);auto physics=scene.GetPhysics();auto start=soft.GetWorldTransform().Position;auto ropeStart=rope.GetWorldTransform().Position;auto initial=physics.GetSoftBodyVertices(rope);
+    for(int i=0;i<30;++i)physics.Simulate(1.f/60);
+    auto position=soft.GetWorldTransform().Position;assert(position.Y<start.Y-.8f&&std::abs(position.X-start.X)<.02f);auto points=physics.GetSoftBodyVertices(soft);Vec3 lo{100},hi{-100};for(auto p:points){lo={std::min(lo.X,p.X),std::min(lo.Y,p.Y),std::min(lo.Z,p.Z)};hi={std::max(hi.X,p.X),std::max(hi.Y,p.Y),std::max(hi.Z,p.Z)};}assert((position-(lo+hi)*.5f).Length()<.01f);
+    auto moved=physics.GetSoftBodyVertices(rope);auto ropePose=rope.GetWorldTransform().Position;assert(ropePose.Y<ropeStart.Y-.8f);assert(std::abs((moved[0].Y-initial[0].Y)-(ropePose.Y-ropeStart.Y))<.01f);
+    const Vec3 delta{2,1,-3};auto transform=soft.GetWorldTransform();auto before=physics.GetSoftBodyVertices(soft);transform.Position+=delta;assert(soft.SetWorldTransform(transform));physics.Synchronize();auto after=physics.GetSoftBodyVertices(soft);for(std::size_t i=0;i<before.size();++i)assert((after[i]-before[i]-delta).Length()<.001f);
+    Runtime::PhysicsModule().Stop(scene);
+}
 int main(){
     Rigidbody damping;damping.LinearDamping=10;damping.AngularDamping=10;assert(damping.IsValid());
     Scene scene;auto settings=scene.GetPhysicsSettings();settings.AutoSimulation=false;settings.WorkerThreads=0;assert(scene.SetPhysicsSettings(settings));
@@ -164,5 +176,5 @@ int main(){
     {auto temporary=std::make_unique<Scene>();auto stale=temporary->GetPhysics();temporary.reset();bool rejected=false;try{stale.GetBodyCount();}catch(const std::logic_error&){rejected=true;}assert(rejected);}
     bool cleaned=false;{Scene temporary;temporary.AddSystem<CleanupPhysics>(cleaned);}assert(cleaned);
     Runtime::PhysicsModule().Stop(scene);assert(!world.IsRunning());scene.Clear();assert(scene.GetPhysicsSettings().AutoSimulation);
-    CheckAttachedMeshSources();CheckJointsAndSoftBodies();CheckClothSourceShape();CheckClothGravityAndPins();CheckClothDrapeAndPressure();CheckClothMigration();
+    CheckAttachedMeshSources();CheckJointsAndSoftBodies();CheckClothSourceShape();CheckClothGravityAndPins();CheckClothDrapeAndPressure();CheckClothMigration();CheckSoftRuntimeTransforms();
 }

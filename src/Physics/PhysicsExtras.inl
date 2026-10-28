@@ -71,7 +71,7 @@ static bool ClosedSoftSurface(const JPH::SoftBodySharedSettings& shared){
 }
 template<class T> static SoftEntry CreateSoft(World& w,Entity entity,const T& c,const std::string& signature){
     auto pose=entity.GetWorldTransform();RequireVector(pose.Position);RequireVector(pose.Scale);(void)Q(pose.Rotation);if(pose.Scale.X<=0||pose.Scale.Y<=0||pose.Scale.Z<=0)throw std::invalid_argument("Soft bodies require positive world scale");
-    SoftEntry entry;entry.Signature=signature;entry.Pose=pose;entry.Wind=c.Wind;entry.Material=c.MaterialAsset;entry.CastShadows=c.CastShadows;
+    SoftEntry entry;entry.Signature=signature;entry.Pose=pose;entry.RestScale=pose.Scale;entry.Wind=c.Wind;entry.Material=c.MaterialAsset;entry.CastShadows=c.CastShadows;
     JPH::Ref<JPH::SoftBodySharedSettings> shared=new JPH::SoftBodySharedSettings;
     SoftSurface surface;
     const auto add=[&](Vec3 p,Vec2 uv,bool pin){p=p*pose.Scale;RequireVector(p);if(!std::isfinite(entry.InverseMass)||entry.InverseMass<=0)throw std::invalid_argument("Soft body mass is out of range");shared->mVertices.emplace_back(JPH::Float3(p.X,p.Y,p.Z),JPH::Float3(0,0,0),pin?0:entry.InverseMass);surface.Particles.push_back(unsigned(surface.Vertices.size()));surface.Vertices.push_back({p,{0,0,1},uv,{1,1,1,1}});};
@@ -101,9 +101,14 @@ template<class T> static SoftEntry CreateSoft(World& w,Entity entity,const T& c,
         JPH::SoftBodySharedSettings::VertexAttributes attrs(c.Compliance,c.Compliance,c.BendCompliance);shared->CreateConstraints(&attrs,1,JPH::SoftBodySharedSettings::EBendType::Dihedral);
     }
     if constexpr(std::is_same_v<T,Rope>)entry.Surfaces.push_back(std::move(surface));
-    shared->Optimize();JPH::SoftBodyCreationSettings settings(shared,V(pose.Position),Q(pose.Rotation),JPH::ObjectLayer(c.Layer));
+    // Center the simulation frame without changing the source entity's pivot.
+    Vec3 minimum{std::numeric_limits<float>::max()},maximum{-std::numeric_limits<float>::max()};
+    for(auto& vertex:shared->mVertices){const auto& p=vertex.mPosition;minimum={std::min(minimum.X,p.x),std::min(minimum.Y,p.y),std::min(minimum.Z,p.z)};maximum={std::max(maximum.X,p.x),std::max(maximum.Y,p.y),std::max(maximum.Z,p.z)};}
+    entry.ReferenceCenter=(minimum+maximum)*.5f;
+    for(auto& vertex:shared->mVertices){vertex.mPosition.x-=entry.ReferenceCenter.X;vertex.mPosition.y-=entry.ReferenceCenter.Y;vertex.mPosition.z-=entry.ReferenceCenter.Z;}
+    shared->Optimize();JPH::SoftBodyCreationSettings settings(shared,V(pose.Position+pose.Rotation.Rotate(entry.ReferenceCenter)),Q(pose.Rotation),JPH::ObjectLayer(c.Layer));
     if constexpr(std::is_same_v<T,Cloth>)settings.mPressure=c.Pressure;
-    settings.mMakeRotationIdentity=false;settings.mUpdatePosition=false;settings.mAllowSleeping=c.AllowSleeping&&w.Settings.AllowSleeping;settings.mNumIterations=c.Iterations;settings.mLinearDamping=c.Damping;settings.mMaxLinearVelocity=c.MaxVelocity;settings.mGravityFactor=c.GravityFactor;settings.mFriction=c.Friction;settings.mRestitution=c.Restitution;
+    settings.mMakeRotationIdentity=false;settings.mUpdatePosition=true;settings.mAllowSleeping=c.AllowSleeping&&w.Settings.AllowSleeping;settings.mNumIterations=c.Iterations;settings.mLinearDamping=c.Damping;settings.mMaxLinearVelocity=c.MaxVelocity;settings.mGravityFactor=c.GravityFactor;settings.mFriction=c.Friction;settings.mRestitution=c.Restitution;
     auto* body=w.System.GetBodyInterface().CreateSoftBody(settings);if(!body)throw std::runtime_error("Physics body capacity exhausted while creating soft body");entry.Id=body->GetID();w.System.GetBodyInterface().AddBody(entry.Id,JPH::EActivation::Activate);ColliderData data;data.Body=data.Collider=entity.GetUUID();data.Layer=c.Layer;data.Friction=c.Friction;data.Restitution=c.Restitution;w.SoftColliders.emplace(entry.Id.GetIndexAndSequenceNumber(),data);return entry;
 }
 template<class T> static void SyncSoftPool(World& w,std::set<UUID>& retained){
@@ -116,10 +121,11 @@ template<class T> static void SyncSoftPool(World& w,std::set<UUID>& retained){
         AppendPhysicsKey(signature,c.Mass);AppendPhysicsKey(signature,c.Compliance);AppendPhysicsKey(signature,c.BendCompliance);AppendPhysicsKey(signature,c.Layer);
         if constexpr(std::is_same_v<T,Cloth>){PhysicsMeshRevisions revisions;signature+=PhysicsMeshSignature(e,{},revisions);AppendPhysicsKey(signature,c.BendMode);AppendPhysicsKey(signature,c.SubdivisionLevel);AppendPhysicsKey(signature,c.CollisionRadius);AppendPhysicsKey(signature,c.PinEdges);AppendPhysicsKey(signature,c.ShearCompliance);VisitCloth(c,[&](const char*,const char*,const auto& f){AppendPhysicsKey(configuration,f);});}
         else{AppendPhysicsKey(signature,c.Length);AppendPhysicsKey(signature,c.Radius);AppendPhysicsKey(signature,c.Segments);AppendPhysicsKey(signature,c.Sides);AppendPhysicsKey(signature,c.PinStart);AppendPhysicsKey(signature,c.PinEnd);VisitRope(c,[&](const char*,const char*,const auto& f){AppendPhysicsKey(configuration,f);});}
-        AppendPhysicsKey(signature,e.GetWorldTransform().Scale);
-        auto it=w.SoftBodies.find(id);
+        auto it=w.SoftBodies.find(id);auto scale=e.GetWorldTransform().Scale;
+        if(it!=w.SoftBodies.end()){const auto rest=it->second.RestScale;const auto close=[](float a,float b){return std::abs(a-b)<=1e-6f*std::max({1.f,std::abs(a),std::abs(b)});};if(close(scale.X,rest.X)&&close(scale.Y,rest.Y)&&close(scale.Z,rest.Z))scale=rest;}
+        AppendPhysicsKey(signature,scale);
         if(it==w.SoftBodies.end()||it->second.Signature!=signature){if(it!=w.SoftBodies.end()){w.System.GetBodyInterface().RemoveBody(it->second.Id);w.System.GetBodyInterface().DestroyBody(it->second.Id);w.SoftColliders.erase(it->second.Id.GetIndexAndSequenceNumber());it->second.DestroyMeshes();w.SoftBodies.erase(it);}w.SoftBodies.emplace(id,CreateSoft(w,e,c,signature));}
-        else{auto pose=e.GetWorldTransform();if(pose.Position!=it->second.Pose.Position||PhysicsKey(pose.Rotation)!=PhysicsKey(it->second.Pose.Rotation)){w.System.GetBodyInterface().SetPositionAndRotation(it->second.Id,V(pose.Position),Q(pose.Rotation),JPH::EActivation::Activate);it->second.Pose=pose;}}
+        else{auto pose=e.GetWorldTransform();if(pose.Position!=it->second.Pose.Position||PhysicsKey(pose.Rotation)!=PhysicsKey(it->second.Pose.Rotation)){w.System.GetBodyInterface().SetPositionAndRotation(it->second.Id,V(pose.Position+pose.Rotation.Rotate(it->second.ReferenceCenter)),Q(pose.Rotation),JPH::EActivation::Activate);it->second.Pose=pose;}}
         auto& entry=w.SoftBodies.at(id);if constexpr(std::is_same_v<T,Cloth>)if(c.Pressure>0&&!entry.Closed)throw std::invalid_argument("Cloth pressure requires a closed mesh with consistent outward triangle winding");if(entry.Configuration!=configuration){auto* body=w.System.GetBodyLockInterfaceNoLock().TryGetBody(entry.Id);auto* motion=static_cast<JPH::SoftBodyMotionProperties*>(body->GetMotionProperties());if constexpr(std::is_same_v<T,Cloth>)motion->SetPressure(c.Pressure);motion->SetNumIterations(c.Iterations);motion->SetGravityFactor(c.GravityFactor);motion->SetLinearDamping(c.Damping);motion->SetMaxLinearVelocity(c.MaxVelocity);body->SetFriction(c.Friction);body->SetRestitution(c.Restitution);body->SetAllowSleeping(c.AllowSleeping&&w.Settings.AllowSleeping);entry.Wind=c.Wind;entry.Material=c.MaterialAsset;entry.CastShadows=c.CastShadows;entry.Configuration=std::move(configuration);w.System.GetBodyInterface().ActivateBody(entry.Id);}
         w.SoftDiagnostics.erase(id);
         }catch(const std::exception& error){
