@@ -13,7 +13,7 @@ Version 0.7.0 supports Windows and Linux x64 Hub, Editor, game compiler and runt
 Linux presentation uses X11/XWayland; see the [Linux guide](docs/public/0.7.0/manual/linux/en.html).
 Windows and Linux also support x86 game output; Hub, Editor and game compiler always require x64.
 Build games on their target OS with a matching prebuilt runtime SDK.
-Physics runs in a separate Jolt-based native library, with rigid bodies, colliders, scene queries and C++/Lua contact callbacks. See the [physics guide](docs/public/0.7.0/manual/physics/en.html).
+Physics runs in a separate Jolt-based native library, with rigid bodies, colliders, scene queries, cloth/rope, composable wheeled vehicles and C++/Lua contact callbacks. Vehicle composition includes suspension, tires, brakes, steering and drivetrain parts; see the [vehicle guide](docs/public/0.7.0/manual/vehicles/en.html). See the [physics guide](docs/public/0.7.0/manual/physics/en.html).
 
 See [what is new in 0.7.0](docs/public/0.7.0/whats-new/en.html).
 

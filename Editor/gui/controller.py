@@ -939,7 +939,7 @@ class EditorController(QObject):
             self.SetDirty(True)
             if component=="Light" and name!="Type":self._RefreshInspectorValues()
             if component=="GuiElement" and name=="Stylesheet":self.SelectEntity(entity_id,force=True)
-            if component in {"Rigidbody","Shape Collider","Mesh Collider","Joint","Distance Joint","Hinge Joint","Slider Joint","Ball And Socket Joint","Fixed Joint","Cloth"} and name in {"Use Scene Gravity","Shape","Convex","Type","Motor","Bend Mode"}:self.SelectEntity(entity_id,force=True)
+            if component in {"Rigidbody","Shape Collider","Mesh Collider","Joint","Distance Joint","Hinge Joint","Slider Joint","Ball And Socket Joint","Fixed Joint","Cloth","Vehicle","Vehicle Transmission","Wheel Suspension"} and name in {"Use Scene Gravity","Shape","Convex","Type","Motor","Bend Mode","Collision Test","Gear Count","Automatic","Use Force Point"}:self.SelectEntity(entity_id,force=True)
 
     def _CommitLightType(self,entity_id:str,value:int)->None:
         self._CommitComponent(entity_id,"Light","Type",value)
@@ -1212,6 +1212,8 @@ class EditorController(QObject):
         roots=[value for value in selected if str(self.Runtime.EntityDetails(value).get("parent","")) not in selected]
         def snapshot(entity_id):
             details=dict(self.Runtime.EntityDetails(entity_id))
+            raw=getattr(self.Runtime,"PhysicsAuthoringData",lambda _:{})(entity_id)
+            details.setdefault("component_data",{}).update(raw)
             return {"details":details,"children":[snapshot(child) for child in by_parent.get(entity_id,())]}
         self._hierarchy_clipboard=[snapshot(value) for value in roots]
         self.Window.RefreshEditActions()
@@ -1220,41 +1222,53 @@ class EditorController(QObject):
         if not entity_ids:return
         previous=self._hierarchy_clipboard
         self.CopyHierarchyEntities(entity_ids);nodes=self._hierarchy_clipboard;self._hierarchy_clipboard=previous
-        self.History.Begin("Duplicate entities");created=[];scenes=set()
+        self.History.Begin("Duplicate entities");created=[];scenes=set();remap={}
         try:
             for node in nodes:
                 details=node["details"];parent=str(details.get("parent") or "")
                 if not parent or parent=="00000000-0000-0000-0000-000000000000":parent=str(details.get("scene_uuid") or "")
-                value=self._CloneHierarchyNode(node,parent,True)
+                value=self._CloneHierarchyNode(node,parent,True,remap)
                 if value:created.append(value);scenes.add(str(details.get("scene_uuid","")))
+            self._RemapClonedVehicleReferences(remap)
         except Exception:self.History.Cancel();raise
         if not created:self.History.Cancel();return
         self.History.Commit();self.SetDirty(True,scenes);self.RefreshHierarchy();self.SelectEntities(created)
 
     def PasteHierarchyEntities(self,parent_id)->None:
         if not self._hierarchy_clipboard:return
-        self.History.Begin("Paste entities");created=[]
+        self.History.Begin("Paste entities");created=[];remap={}
         try:
             for node in self._hierarchy_clipboard:
-                value=self._CloneHierarchyNode(node,str(parent_id or ""),True)
+                value=self._CloneHierarchyNode(node,str(parent_id or ""),True,remap)
                 if value:created.append(value)
+            self._RemapClonedVehicleReferences(remap)
         except Exception:
             self.History.Cancel();raise
         if not created:self.History.Cancel();return
         self.History.Commit();self.SetDirty(True,[self._SceneForParent(parent_id)]);self.RefreshHierarchy();self.SelectEntities(created)
 
-    def _CloneHierarchyNode(self,node:dict,parent_id:str,top_level:bool=False)->str:
+    def _CloneHierarchyNode(self,node:dict,parent_id:str,top_level:bool=False,remap=None)->str:
         details=node.get("details",{});name=str(details.get("name","Entity"))+(" Copy" if top_level else "")
         entity=self.Runtime.CreateEntity(name,parent_id)
         if not entity:return ""
+        if remap is not None:remap[str(details.get("uuid",""))]=entity
         self.Runtime.SetTransform(entity,details.get("position",(0,0,0)),details.get("rotation",(0,0,0,1)),details.get("scale",(1,1,1)))
         supported=set(self.Runtime.ComponentTypes())
         for component,fields in details.get("component_data",{}).items():
             if component not in supported or not self.Runtime.AddComponent(entity,component):continue
             for field,value in dict(fields).items():self.Runtime.SetComponentProperty(entity,component,field,value)
             self.Runtime.SetComponentEnabled(entity,component,bool(details.get("component_enabled",{}).get(component,True)))
-        for child in node.get("children",()):self._CloneHierarchyNode(child,entity)
+        for child in node.get("children",()):self._CloneHierarchyNode(child,entity,remap=remap)
         return entity
+
+    def _RemapClonedVehicleReferences(self,remap):
+        # Resolve wheel references after all siblings have been created.
+        for entity in remap.values():
+            data=self.Runtime.EntityDetails(entity).get("component_data",{})
+            for component in ("Vehicle Differential","Vehicle Anti Roll Bar"):
+                for field in ("Left Wheel","Right Wheel"):
+                    original=str(data.get(component,{}).get(field,""))
+                    if original in remap:self.Runtime.SetComponentProperty(entity,component,field,remap[original])
 
     def ReparentEntity(self, entity_id: str, parent_id: str) -> None:
         scene_id=str(self.Runtime.EntityDetails(entity_id).get("scene_uuid",""))

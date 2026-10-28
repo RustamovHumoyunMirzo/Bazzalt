@@ -6,10 +6,22 @@
 #include <Jolt/Physics/Constraints/FixedConstraint.h>
 #include <Jolt/Physics/SoftBody/SoftBodyCreationSettings.h>
 #include <Jolt/Physics/SoftBody/SoftBodyMotionProperties.h>
+#include <Jolt/Physics/Vehicle/WheeledVehicleController.h>
 #include "Bazzalt/Graphics.h"
 #include "Runtime/GraphicsAccess.h"
 namespace Bazzalt::Runtime {
 using JointKey=std::pair<UUID,unsigned>;
+struct VehicleDriverInput {
+    float Throttle=0,Steering=0,Brake=0,Handbrake=0;
+    int Gear=1;
+    float Clutch=1;
+};
+struct VehicleEntry : VehicleDriverInput {
+    JPH::Ref<JPH::VehicleConstraint> Native;
+    JPH::BodyID Body;
+    std::string Signature;
+    std::vector<UUID> Wheels;
+};
 struct JointEntry {
     Joint Settings;
     std::string Signature,Configuration;

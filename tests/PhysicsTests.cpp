@@ -141,6 +141,7 @@ void CheckSoftRuntimeTransforms(){
     const Vec3 delta{2,1,-3};auto transform=soft.GetWorldTransform();auto before=physics.GetSoftBodyVertices(soft);transform.Position+=delta;assert(soft.SetWorldTransform(transform));physics.Synchronize();auto after=physics.GetSoftBodyVertices(soft);for(std::size_t i=0;i<before.size();++i)assert((after[i]-before[i]-delta).Length()<.001f);
     Runtime::PhysicsModule().Stop(scene);
 }
+#include "VehicleTests.inl"
 int main(){
     Rigidbody damping;damping.LinearDamping=10;damping.AngularDamping=10;assert(damping.IsValid());
     Scene scene;auto settings=scene.GetPhysicsSettings();settings.AutoSimulation=false;settings.WorkerThreads=0;assert(scene.SetPhysicsSettings(settings));
@@ -176,5 +177,5 @@ int main(){
     {auto temporary=std::make_unique<Scene>();auto stale=temporary->GetPhysics();temporary.reset();bool rejected=false;try{stale.GetBodyCount();}catch(const std::logic_error&){rejected=true;}assert(rejected);}
     bool cleaned=false;{Scene temporary;temporary.AddSystem<CleanupPhysics>(cleaned);}assert(cleaned);
     Runtime::PhysicsModule().Stop(scene);assert(!world.IsRunning());scene.Clear();assert(scene.GetPhysicsSettings().AutoSimulation);
-    CheckAttachedMeshSources();CheckJointsAndSoftBodies();CheckClothSourceShape();CheckClothGravityAndPins();CheckClothDrapeAndPressure();CheckClothMigration();CheckSoftRuntimeTransforms();
+    CheckAttachedMeshSources();CheckJointsAndSoftBodies();CheckClothSourceShape();CheckClothGravityAndPins();CheckClothDrapeAndPressure();CheckClothMigration();CheckSoftRuntimeTransforms();CheckVehicles();
 }

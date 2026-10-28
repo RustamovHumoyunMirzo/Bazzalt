@@ -73,6 +73,11 @@ using Subscription=std::uint64_t;
 using Callback=std::function&lt;void(const CollisionEvent&amp;)&gt;;
 Subscription Subscribe(PhysicsEventType type,Callback callback,Entity filter={});
 bool Unsubscribe(Subscription subscription);
+// Driver inputs are normalized; they never read a platform input device.
+    bool SetVehicleInput(Entity vehicle,float throttle,float steering,float brake=0,float handbrake=0);
+bool SetVehicleGear(Entity vehicle,int gear,float clutch=1);
+[[nodiscard]] std::optional&lt;VehicleState&gt; GetVehicleState(Entity vehicle) const;
+[[nodiscard]] std::optional&lt;VehicleWheelState&gt; GetVehicleWheelState(Entity wheel) const;
 // Joint type identifies a component pool; Joint is the configurable base pool.
     bool BreakJoint(Entity entity,JointType type);
 bool RepairJoint(Entity entity,JointType type);

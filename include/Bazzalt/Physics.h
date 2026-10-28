@@ -2,6 +2,17 @@
 #include "Bazzalt/Components/Joint.h"
 #include "Bazzalt/Components/Cloth.h"
 #include "Bazzalt/Components/Rope.h"
+#include "Bazzalt/Components/Vehicle.h"
+#include "Bazzalt/Components/VehicleWheel.h"
+#include "Bazzalt/Components/WheelSuspension.h"
+#include "Bazzalt/Components/WheelTire.h"
+#include "Bazzalt/Components/WheelBrake.h"
+#include "Bazzalt/Components/WheelSteering.h"
+#include "Bazzalt/Components/VehicleEngine.h"
+#include "Bazzalt/Components/VehicleTransmission.h"
+#include "Bazzalt/Components/VehicleDifferential.h"
+#include "Bazzalt/Components/VehicleAntiRollBar.h"
+#include "Bazzalt/Components/VehicleAerodynamics.h"
 #include "Bazzalt/Export.h"
 #include "Bazzalt/Entity.h"
 #include "Bazzalt/Components/Transform.h"
@@ -56,6 +67,17 @@ struct CollisionEvent {
     Vec3 Normal{},RelativeVelocity{};
     std::vector<ContactPoint> Contacts;
 };
+struct VehicleState {
+    float Speed=0,EngineRPM=0,Clutch=0;
+    int Gear=0;
+    unsigned GroundedWheels=0,WheelCount=0;
+};
+struct VehicleWheelState {
+    bool Grounded=false;
+    Vec3 Position{},ContactPoint{},ContactNormal{};
+    float AngularVelocity=0,SteerAngle=0,SuspensionLength=0,SuspensionForce=0;
+    float LongitudinalSlip=0,LateralSlip=0;
+};
 // Scene-scoped facade; all solver state and third-party types are private.
 class BAZZALT_API PhysicsScene final {
 public:
@@ -102,6 +124,11 @@ public:
     using Callback=std::function<void(const CollisionEvent&)>;
     Subscription Subscribe(PhysicsEventType type,Callback callback,Entity filter={});
     bool Unsubscribe(Subscription subscription);
+    // Driver inputs are normalized; they never read a platform input device.
+    bool SetVehicleInput(Entity vehicle,float throttle,float steering,float brake=0,float handbrake=0);
+    bool SetVehicleGear(Entity vehicle,int gear,float clutch=1);
+    [[nodiscard]] std::optional<VehicleState> GetVehicleState(Entity vehicle) const;
+    [[nodiscard]] std::optional<VehicleWheelState> GetVehicleWheelState(Entity wheel) const;
     // Joint type identifies a component pool; Joint is the configurable base pool.
     bool BreakJoint(Entity entity,JointType type);
     bool RepairJoint(Entity entity,JointType type);

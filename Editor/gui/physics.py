@@ -6,22 +6,33 @@ from .widgets import BoolInput,EnumInput,FloatInput,IntInput,MultiSelectInput,Ve
 def Key(label):return label.lower().replace(' ','_')
 
 def ComponentField(controller,entity,component,name,value):
-    if component not in {'Rigidbody','Shape Collider','Mesh Collider','Joint','Distance Joint','Hinge Joint','Slider Joint','Ball And Socket Joint','Fixed Joint','Cloth','Rope'}:return None
+    if component not in {'Rigidbody','Shape Collider','Mesh Collider','Joint','Distance Joint','Hinge Joint','Slider Joint','Ball And Socket Joint','Fixed Joint','Cloth','Rope','Vehicle','Vehicle Wheel','Wheel Suspension','Wheel Tire','Wheel Brake','Wheel Steering','Vehicle Engine','Vehicle Transmission','Vehicle Differential','Vehicle Anti Roll Bar','Vehicle Aerodynamics'}:return None
     tr=controller.Window.Localization.Translate
     commit=lambda v:controller._CommitComponent(entity,component,name,v)
-    enums={'Motion Type':('static','kinematic','dynamic'),'Collision Detection':('discrete','continuous'),'Interpolation':('none','interpolate'),'Shape':('box','sphere','capsule','cylinder','plane'),'Type':('distance','hinge','slider','ball_and_socket','fixed'),'Motor':('off','velocity','position'),'Bend Mode':('none','distance','dihedral')}
+    enums={'Motion Type':('static','kinematic','dynamic'),'Collision Detection':('discrete','continuous'),'Interpolation':('none','interpolate'),'Shape':('box','sphere','capsule','cylinder','plane'),'Type':('distance','hinge','slider','ball_and_socket','fixed'),'Motor':('off','velocity','position'),'Bend Mode':('none','distance','dihedral'),'Collision Test':('ray','sphere_cast','cylinder_cast')}
     if name in enums:
         field=EnumInput();field.SetOptions([(tr('physics.'+key),i) for i,key in enumerate(enums[name])]);field.SetValue(value)
         field.currentIndexChanged.connect(lambda _:commit(field.GetValue()));return field
-    if name=='Connected Body':
-        entities={str(item['uuid']):item for item in controller.Runtime.Entities() if str(item['uuid'])!=str(entity) and 'Rigidbody' in controller.Runtime.EntityDetails(str(item['uuid'])).get('components',[])}
+    if name in {'Connected Body','Left Wheel','Right Wheel'}:
+        entities={str(item['uuid']):item for item in controller.Runtime.Entities() if str(item['uuid'])!=str(entity) and ('Rigidbody' if name=='Connected Body' else 'Vehicle Wheel') in controller.Runtime.EntityDetails(str(item['uuid'])).get('components',[])}
+        if name!='Connected Body':
+            def owner(identity):
+                seen=set()
+                while identity and identity not in seen:
+                    seen.add(identity);details=controller.Runtime.EntityDetails(identity)
+                    if 'Vehicle' in details.get('components',[]):return identity
+                    if 'Rigidbody' in details.get('components',[]):return None
+                    identity=str(details.get('parent') or '')
+                return None
+            root=owner(entity)
+            if root:entities={key:item for key,item in entities.items() if owner(key)==root}
         field=ObjectPickerInput(validator=lambda v:v in entities)
         field.SetValue(value if value in entities else None,entities.get(value,{}).get('name',''))
         def assign(v):
             field.Display.setText(entities.get(str(v),{}).get('name',''));commit(v or '00000000-0000-0000-0000-000000000000')
         field.ValueChanged.connect(assign)
         def pick():
-            dialog=QDialog(field);dialog.setWindowTitle(tr('physics.field.connected_body'));layout=QVBoxLayout(dialog);items=QListWidget(dialog);layout.addWidget(items)
+            dialog=QDialog(field);dialog.setWindowTitle(tr('physics.field.'+Key(name)));layout=QVBoxLayout(dialog);items=QListWidget(dialog);layout.addWidget(items)
             for identity,item in entities.items():
                 row=QListWidgetItem(item.get('name',''));row.setData(Qt.ItemDataRole.UserRole,identity);items.addItem(row)
             def accept(item):field.SetValue(item.data(Qt.ItemDataRole.UserRole));dialog.accept()
@@ -39,6 +50,8 @@ def ComponentField(controller,entity,component,name,value):
         field=EnumInput();field.SetOptions([(str(i),i) for i in range(32)]);field.SetValue(value);field.currentIndexChanged.connect(lambda _:commit(field.GetValue()));return field
     if name in {'Compliance','Shear Compliance','Bend Compliance'}:
         field=FloatInput(minimum=0,maximum=1e6,value=value,decimals=8);field.setSingleStep(.00001);field.valueChanged.connect(commit);return field
+    if name=='Gear Count':
+        field=IntInput(minimum=1,maximum=10,value=value);field.valueChanged.connect(commit);return field
     if name=='Subdivision Level':
         field=IntInput(minimum=0,maximum=4,value=value);field.valueChanged.connect(commit);return field
     if isinstance(value,float):

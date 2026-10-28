@@ -259,6 +259,19 @@ function W:OnCreate()
  local p=self.Entity:GetWorldTransform().Position
  local hit=self.Entity:GetScene():Raycast(p+B.Vec3.new(0,4,0),B.Vec3.new(0,-1,0),10)
  assert(hit:IsValid() and hit.Object==self.Entity)
+ local scene=self.Entity:GetScene();local car=scene:CreateEntity('Lua Car')
+ local hull=car:AddComponent('ShapeCollider');hull.Size=B.Vec3.new(1.6,.4,3);car:SetComponent('ShapeCollider',hull)
+ local chassis=car:AddComponent('Rigidbody');chassis.Mass=1200;car:SetComponent('Rigidbody',chassis)
+ local vehicle=car:AddComponent('Vehicle');vehicle.CollisionTest=B.VehicleCollisionMode.CylinderCast;car:SetComponent('Vehicle',vehicle);car:AddComponent('VehicleEngine');car:AddComponent('VehicleTransmission');car:AddComponent('VehicleAerodynamics')
+ local wheels={}
+ for i=1,4 do
+  local e=scene:CreateEntity('Lua Wheel '..i);e:SetParent(car);local wheel=e:AddComponent('VehicleWheel');wheel.Position=B.Vec3.new(i%2==0 and .9 or -.9,0,i<=2 and 1.2 or -1.2);e:SetComponent('VehicleWheel',wheel)
+  e:AddComponent('WheelSuspension');e:AddComponent('WheelTire');e:AddComponent('WheelBrake');if i<=2 then e:AddComponent('WheelSteering') end;wheels[i]=e
+ end
+ local diff=car:AddComponent('VehicleDifferential');diff.LeftWheel=wheels[3]:GetUUID();diff.RightWheel=wheels[4]:GetUUID();car:SetComponent('VehicleDifferential',diff)
+ local bar=car:AddComponent('VehicleAntiRollBar');bar.LeftWheel=wheels[1]:GetUUID();bar.RightWheel=wheels[2]:GetUUID();car:SetComponent('VehicleAntiRollBar',bar)
+ world:Synchronize();assert(world:SetVehicleInput(car,.5,0));assert(world:GetVehicleState(car).WheelCount==4);assert(world:GetVehicleWheelState(wheels[1])~=nil)
+ assert(not world:SetVehicleGear(car,2))
  local options=B.PhysicsQueryOptions.new();options.ExcludedEntities={self.Entity:GetUUID()}
  assert(not world:Raycast(p+B.Vec3.new(0,4,0),B.Vec3.new(0,-1,0),10,options):IsValid())
 end

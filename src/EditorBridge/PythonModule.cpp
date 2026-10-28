@@ -364,6 +364,10 @@ public:
         py::list result;
         for(std::size_t index=0;index<m_loadedScenes.size();++index){Scene& scene=SceneAt(index);py::dict item;item["uuid"]=scene.GetUUID().ToString();item["name"]=m_loadedScenes[index].Path.empty()?py::str("Untitled"):PathText(m_loadedScenes[index].Path.stem());item["path"]=m_loadedScenes[index].Path.empty()?py::str():PathText(m_loadedScenes[index].Path);item["active"]=index==m_activeScene;item["entities"]=SceneEntities(scene);result.append(item);}return result;
     }
+    py::dict PhysicsAuthoringData(const std::string& id) {
+        auto entity=RequireEntity(id);py::list components;py::dict enabled,data;
+        InspectPhysics(entity,components,enabled,data,true);return data;
+    }
     py::dict EntityDetails(const std::string& id) {
         auto [scene,entity]=FindEntity(id);if(!entity)return {};auto result=SnapshotEntity(*scene,entity);result["scene_active"]=(scene==&m_engine->GetScene());result["scene_uuid"]=scene->GetUUID().ToString();return result;
     }
@@ -450,7 +454,7 @@ public:
 
     bool AddComponent(const std::string& id, const std::string& type) {
         Entity entity = RequireEntity(id);
-        if(!PhysicsAdditionAllowed(entity,type)){Console::Error("Cannot add "+type+": Cloth and Rope require their own entity without another physics body or collider.","Physics");return false;}
+        if(!PhysicsAdditionAllowed(entity,type)){Console::Error("Cannot add "+type+": incompatible physics components on this entity.","Physics");return false;}
         if(PhysicsDispatch(entity,type,[]<class T>(Entity e){if(!e.HasComponent<T>())e.AddComponent<T>();}))return true;
         if(AudioDispatch(entity,type,[]<class T>(Entity e){if(!e.HasComponent<T>())e.AddComponent<T>();}))return true;
         if (type == "Camera") { if (!entity.HasComponent<Camera>()) entity.AddComponent<Camera>(); }
@@ -495,7 +499,7 @@ public:
     }
     py::list ComponentTypes() const {
         py::list result;
-        result.append("Rigidbody");result.append("Shape Collider");result.append("Mesh Collider");result.append("Joint");result.append("Distance Joint");result.append("Hinge Joint");result.append("Slider Joint");result.append("Ball And Socket Joint");result.append("Fixed Joint");result.append("Cloth");result.append("Rope");result.append("Audio Source");result.append("Audio Listener");
+        result.append("Rigidbody");result.append("Shape Collider");result.append("Mesh Collider");result.append("Joint");result.append("Distance Joint");result.append("Hinge Joint");result.append("Slider Joint");result.append("Ball And Socket Joint");result.append("Fixed Joint");result.append("Cloth");result.append("Rope");result.append("Vehicle");result.append("Vehicle Wheel");result.append("Wheel Suspension");result.append("Wheel Tire");result.append("Wheel Brake");result.append("Wheel Steering");result.append("Vehicle Engine");result.append("Vehicle Transmission");result.append("Vehicle Differential");result.append("Vehicle Anti Roll Bar");result.append("Vehicle Aerodynamics");result.append("Audio Source");result.append("Audio Listener");
         for (const char* name : {"Camera", "Light", "Mesh", "Primitive Object", "Scene Query Bounds", "Gaussian Blur", "Vignette"})
             result.append(name);
         for(auto name:GuiNames)result.append(name);
@@ -556,7 +560,7 @@ public:
             const auto mode=value.cast<int>();if(mode<0||mode>7)return false;
         }
         Entity entity=RequireEntity(id);
-        if(type=="Rigidbody"||type=="Shape Collider"||type=="Mesh Collider"||type=="Joint"||type=="Distance Joint"||type=="Hinge Joint"||type=="Slider Joint"||type=="Ball And Socket Joint"||type=="Fixed Joint"||type=="Cloth"||type=="Rope")return SetPhysicsProperty(entity,type,property,value);
+        if(type=="Rigidbody"||type=="Shape Collider"||type=="Mesh Collider"||type=="Joint"||type=="Distance Joint"||type=="Hinge Joint"||type=="Slider Joint"||type=="Ball And Socket Joint"||type=="Fixed Joint"||type=="Cloth"||type=="Rope"||type=="Vehicle"||type=="Vehicle Wheel"||type=="Wheel Suspension"||type=="Wheel Tire"||type=="Wheel Brake"||type=="Wheel Steering"||type=="Vehicle Engine"||type=="Vehicle Transmission"||type=="Vehicle Differential"||type=="Vehicle Anti Roll Bar"||type=="Vehicle Aerodynamics")return SetPhysicsProperty(entity,type,property,value);
         if(type=="Audio Source"||type=="Audio Listener")return SetAudioProperty(entity,type,property,value);
         if(GuiRegistry().Find("Bazzalt."+type))return SetGUIProperty(entity,type,property,value);
         if(type=="Camera"&&entity.HasComponent<Camera>()){auto&v=entity.GetComponent<Camera>();if(property=="Render Target"){UUID id;if(!UUID::TryParse(value.cast<std::string>(),id))return false;if(id&&!Texture::Load(id).IsRenderTarget())return false;v.RenderTarget=id;}else if(property=="Projection")v.Projection=static_cast<CameraProjection>(value.cast<int>());else if(property=="Post Process Materials"){std::vector<CameraMaterialPass> passes;for(auto item:value.cast<py::list>()){auto row=py::cast<py::dict>(item);UUID id;if(!UUID::TryParse(py::cast<std::string>(row["asset"]),id))return false;passes.push_back({id,py::cast<bool>(row["enabled"])});}try{v.PostProcessing.SetMaterials(std::move(passes));}catch(const std::exception&){return false;}}else if(property=="Post Process Material"){UUID id;if(!UUID::TryParse(value.cast<std::string>(),id))return false;v.PostProcessing.SetMaterial(Bazzalt::Material::Load(id));}else if(property=="Field of View")v.VerticalFieldOfView=ToRadians(value.cast<float>());else if(property=="Orthographic Size")v.OrthographicSize=value.cast<float>();else if(property=="Near")v.NearPlane=value.cast<float>();else if(property=="Far")v.FarPlane=value.cast<float>();else if(property=="Aspect Ratio")v.AspectRatio=value.cast<float>();else if(property=="Aspect Mode")v.AspectMode=static_cast<CameraAspectMode>(value.cast<int>());else if(property=="Viewport"){auto a=value.cast<std::array<float,4>>();v.Viewport={a[0],a[1],a[2],a[3]};}else if(property=="Priority")v.Priority=value.cast<int>();else if(property=="Active")v.Active=value.cast<bool>();else if(property=="Clear Color"){auto a=value.cast<std::array<float,4>>();v.ClearColor={a[0],a[1],a[2],a[3]};}else if(property=="Post Processing")v.PostProcessing.Enabled=value.cast<bool>();else if(property=="Bloom")v.PostProcessing.Bloom=value.cast<bool>();else if(property=="Ambient Occlusion")v.PostProcessing.AmbientOcclusion=value.cast<bool>();else if(property=="Anti Aliasing")v.PostProcessing.AntiAliasingMode=static_cast<AntiAliasing>(value.cast<int>());else if(property=="Tone Mapping")v.PostProcessing.ToneMappingMode=static_cast<ToneMapping>(value.cast<int>());else if(property=="Exposure")v.PostProcessing.Exposure=value.cast<float>();else if(property=="Depth of Field")v.PostProcessing.DepthOfField.Enabled=value.cast<bool>();else if(property=="Focus Distance")v.PostProcessing.DepthOfField.FocusDistance=value.cast<float>();else if(property=="Aperture")v.PostProcessing.DepthOfField.Aperture=value.cast<float>();else if(property=="Shutter Speed")v.PostProcessing.DepthOfField.ShutterSpeed=value.cast<float>();else if(property=="Sensitivity")v.PostProcessing.DepthOfField.Sensitivity=value.cast<float>();else return false;return true;}
@@ -843,6 +847,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("entities", &Bazzalt::EditorBridge::EditorHost::Entities)
         .def("loaded_scenes", &Bazzalt::EditorBridge::EditorHost::LoadedScenes)
         .def("entity_details", &Bazzalt::EditorBridge::EditorHost::EntityDetails)
+        .def("physics_authoring_data", &Bazzalt::EditorBridge::EditorHost::PhysicsAuthoringData)
         .def("entity_pose", &Bazzalt::EditorBridge::EditorHost::EntityPose)
         .def("restore_transforms", &Bazzalt::EditorBridge::EditorHost::RestoreTransforms)
         .def("entity_count", &Bazzalt::EditorBridge::EditorHost::EntityCount)

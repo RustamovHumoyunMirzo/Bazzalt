@@ -100,6 +100,8 @@ struct World final:JPH::ContactListener {
     JPH::PhysicsSystem System;
     JPH::TempAllocatorImplWithMallocFallback Allocator{16*1024*1024};
     std::unique_ptr<JPH::JobSystemThreadPool> Jobs;
+    std::map<UUID,VehicleEntry> Vehicles;
+    std::map<UUID,VehicleDriverInput> PendingVehicleInput;
     std::map<JointKey,JointEntry> Joints;
     std::map<UUID,SoftEntry> SoftBodies;
     std::map<std::pair<unsigned,unsigned>,unsigned> Suppressed;
@@ -120,7 +122,7 @@ struct World final:JPH::ContactListener {
         System.Init(Settings.MaxBodies,0,Settings.MaxBodyPairs,Settings.MaxContactConstraints,Broad,BroadPairs,Pairs);
         System.SetContactListener(this);Configure();
 #define TRACK(Type) Connections.emplace_back(scene.GetRegistry().on_construct<Type>().connect<&World::Changed>(*this));Connections.emplace_back(scene.GetRegistry().on_destroy<Type>().connect<&World::Changed>(*this));Connections.emplace_back(scene.GetRegistry().on_update<Type>().connect<&World::Changed>(*this));
-        TRACK(Rigidbody) TRACK(ShapeCollider) TRACK(MeshCollider) TRACK(Joint) TRACK(DistanceJoint) TRACK(HingeJoint) TRACK(SliderJoint) TRACK(BallAndSocketJoint) TRACK(FixedJoint) TRACK(Cloth) TRACK(Rope)
+        TRACK(Rigidbody) TRACK(ShapeCollider) TRACK(MeshCollider) TRACK(Joint) TRACK(DistanceJoint) TRACK(HingeJoint) TRACK(SliderJoint) TRACK(BallAndSocketJoint) TRACK(FixedJoint) TRACK(Cloth) TRACK(Rope) TRACK(Vehicle) TRACK(VehicleWheel) TRACK(WheelSuspension) TRACK(WheelTire) TRACK(WheelBrake) TRACK(WheelSteering) TRACK(VehicleEngine) TRACK(VehicleTransmission) TRACK(VehicleDifferential) TRACK(VehicleAntiRollBar) TRACK(VehicleAerodynamics)
 #undef TRACK
     }
     void Changed(entt::registry&,entt::entity){TopologyDirty=true;}
@@ -182,6 +184,11 @@ struct World final:JPH::ContactListener {
     void DetachJoints(JPH::BodyID);
     void SyncExtras();
     void UpdateExtras(float);
+    void SyncVehicles();
+    void DetachVehicle(JPH::BodyID);
+    void UpdateVehicles(float);
+    void UpdateWheelTransforms();
+    void DrawVehicleGuides(UUID,std::vector<std::array<float,10>>&);
     void DrawSoftBodies();
     void Synchronize();
     void Step(float dt,bool manual);
@@ -236,9 +243,9 @@ void World::Synchronize(){
     if(Dead)return;if(Stepping)throw std::logic_error("Cannot synchronize physics during simulation");Configure();
     std::map<UUID,std::vector<ColliderBuild>> groups;PhysicsMeshRevisions revisions;
     const auto collect=[&](Entity entity,bool mesh){
-        // A cloth subtree owns its deforming surface. Rest-pose child colliders
-        // must not collide with that same surface; nested rigidbodies are separate.
-        for(auto current=entity;current;current=current.GetParent()){if(current.HasComponent<Rigidbody>())break;if(auto* cloth=current.TryGetComponent<Cloth>();cloth&&cloth->Enabled)return;}
+        // Cloth and vehicle wheels own their surfaces. Animated wheel/model colliders
+        // must not be recooked into the chassis; nested rigidbodies remain separate.
+        for(auto current=entity;current;current=current.GetParent()){if(current.HasComponent<Rigidbody>())break;if(current.HasComponent<VehicleWheel>())return;if(auto* cloth=current.TryGetComponent<Cloth>();cloth&&cloth->Enabled)return;}
 
         Entity owner=entity;for(auto parent=entity;parent;parent=parent.GetParent())if(parent.HasComponent<Rigidbody>()){if(!parent.GetComponent<Rigidbody>().Enabled)return;owner=parent;break;}
         if(!entity.GetComponent<Transform>().Enabled||owner.GetUUID().IsRoot())return;
@@ -256,7 +263,7 @@ void World::Synchronize(){
     for(auto handle:ScenePtr->GetRegistry().view<MeshCollider,Transform>())collect(ScenePtr->GetEntity(static_cast<Entity::Id>(handle)),true);
     for(auto handle:ScenePtr->GetRegistry().view<Rigidbody,Transform>()){auto entity=ScenePtr->GetEntity(static_cast<Entity::Id>(handle));if(!entity.GetUUID().IsRoot()&&entity.GetComponent<Rigidbody>().Enabled&&entity.GetComponent<Transform>().Enabled)groups.try_emplace(entity.GetUUID());}
     auto& interface=System.GetBodyInterface();std::set<UUID> retained;
-    for(auto it=Bodies.begin();it!=Bodies.end();)if(!groups.contains(it->first)){DetachJoints(it->second.Id);interface.RemoveBody(it->second.Id);interface.DestroyBody(it->second.Id);BodyOwners.erase(it->second.Id.GetIndexAndSequenceNumber());for(auto key:it->second.Shapes)Colliders.erase(key);it=Bodies.erase(it);}else ++it;
+    for(auto it=Bodies.begin();it!=Bodies.end();)if(!groups.contains(it->first)){DetachVehicle(it->second.Id);DetachJoints(it->second.Id);interface.RemoveBody(it->second.Id);interface.DestroyBody(it->second.Id);BodyOwners.erase(it->second.Id.GetIndexAndSequenceNumber());for(auto key:it->second.Shapes)Colliders.erase(key);it=Bodies.erase(it);}else ++it;
     for(auto& [uuid,parts]:groups){
         auto entity=ScenePtr->GetEntity(uuid);Rigidbody body;const auto* authored=entity.TryGetComponent<Rigidbody>();if(authored){body=*authored;if(!body.IsValid())throw std::invalid_argument("Invalid Rigidbody on "+uuid.ToString());}else body.MotionType=BodyMotionType::Static;
         std::string signature;VisitBody(body,[&](const char*,const char*,const auto& field){signature+=Stamp(field)+";";});for(const auto& c:parts)signature+=Stamp(c.EntityValue.GetUUID())+c.Signature;
@@ -293,13 +300,13 @@ void World::Synchronize(){
         if(old!=Bodies.end()){
             if(old->second.Authored.LinearVelocity==body.LinearVelocity)settings.mLinearVelocity=interface.GetLinearVelocity(old->second.Id);
             if(old->second.Authored.AngularVelocity==body.AngularVelocity)settings.mAngularVelocity=interface.GetAngularVelocity(old->second.Id);
-            wasAwake=interface.IsActive(old->second.Id)||old->second.Authored.Gravity!=body.Gravity||old->second.Authored.GravityFactor!=body.GravityFactor||old->second.Authored.MotionType!=body.MotionType;DetachJoints(old->second.Id);interface.RemoveBody(old->second.Id);interface.DestroyBody(old->second.Id);BodyOwners.erase(old->second.Id.GetIndexAndSequenceNumber());for(auto key:old->second.Shapes)Colliders.erase(key);Bodies.erase(old);
+            wasAwake=interface.IsActive(old->second.Id)||old->second.Authored.Gravity!=body.Gravity||old->second.Authored.GravityFactor!=body.GravityFactor||old->second.Authored.MotionType!=body.MotionType;DetachVehicle(old->second.Id);DetachJoints(old->second.Id);interface.RemoveBody(old->second.Id);interface.DestroyBody(old->second.Id);BodyOwners.erase(old->second.Id.GetIndexAndSequenceNumber());for(auto key:old->second.Shapes)Colliders.erase(key);Bodies.erase(old);
         }
         auto* native=interface.CreateBody(settings);if(!native)throw std::runtime_error("Scene exceeded Max Bodies physics capacity");auto id=native->GetID();interface.AddBody(id,wasAwake&&body.MotionType!=BodyMotionType::Static?JPH::EActivation::Activate:JPH::EActivation::DontActivate);
         Bodies.emplace(uuid,BodyEntry{id,uuid,std::move(signature),pose,pose,body,bool(authored),shapes});shapeGuard.Committed=true;BodyOwners[id.GetIndexAndSequenceNumber()]=uuid;
     }
-    for(auto it=Bodies.begin();it!=Bodies.end();)if(!retained.contains(it->first)){DetachJoints(it->second.Id);interface.RemoveBody(it->second.Id);interface.DestroyBody(it->second.Id);BodyOwners.erase(it->second.Id.GetIndexAndSequenceNumber());for(auto key:it->second.Shapes)Colliders.erase(key);it=Bodies.erase(it);}else ++it;
-    SyncExtras();TopologyDirty=false;
+    for(auto it=Bodies.begin();it!=Bodies.end();)if(!retained.contains(it->first)){DetachVehicle(it->second.Id);DetachJoints(it->second.Id);interface.RemoveBody(it->second.Id);interface.DestroyBody(it->second.Id);BodyOwners.erase(it->second.Id.GetIndexAndSequenceNumber());for(auto key:it->second.Shapes)Colliders.erase(key);it=Bodies.erase(it);}else ++it;
+    SyncExtras();SyncVehicles();TopologyDirty=false;
 }
 void World::Step(float dt,bool manual){
     if(!std::isfinite(dt)||dt<=0||dt>1)throw std::invalid_argument("Physics step must be finite, greater than zero and at most one second");
@@ -313,6 +320,7 @@ void World::Step(float dt,bool manual){
     auto forces=std::move(Forces);Forces.clear();for(const auto& force:forces){auto found=Bodies.find(force.Owner);auto entity=ScenePtr->GetEntity(force.Owner);if(found==Bodies.end()||!entity||entity.GetId()!=force.Generation||interface.GetMotionType(found->second.Id)!=JPH::EMotionType::Dynamic)continue;switch(force.Command){case PhysicsCommand::Force:interface.AddForce(found->second.Id,V(force.Value));break;case PhysicsCommand::ForceAtPosition:interface.AddForce(found->second.Id,V(force.Value),V(force.Point));break;case PhysicsCommand::Torque:interface.AddTorque(found->second.Id,V(force.Value));break;default:break;}}
     for(auto& [uuid,entry]:Bodies){auto entity=ScenePtr->GetEntity(uuid);auto* body=entity.TryGetComponent<Rigidbody>();if(body&&body->MotionType==BodyMotionType::Dynamic&&body->Gravity&&interface.IsActive(entry.Id)){const auto acceleration=*body->Gravity*body->GravityFactor;if(acceleration.LengthSquared()>1e-12f)interface.AddForce(entry.Id,V(acceleration*body->Mass),JPH::EActivation::DontActivate);}}
     for(auto& [id,entry]:Bodies)entry.PreviousScene=entry.LastScene;
+    UpdateVehicles(dt);
     const auto error=System.Update(dt,int(Settings.CollisionSteps),&Allocator,Jobs.get());if(error!=JPH::EPhysicsUpdateError::None)throw std::runtime_error("Jolt update exhausted physics capacity; increase scene physics limits");
     std::vector<UUID> order;for(auto& [id,entry]:Bodies)order.push_back(id);for(auto& [id,entry]:SoftBodies)order.push_back(id);
     const auto depth=[&](UUID id){int count=0;for(auto e=ScenePtr->GetEntity(id);e&&count<1024;e=e.GetParent())++count;return count;};
@@ -321,6 +329,7 @@ void World::Step(float dt,bool manual){
         if(auto soft=SoftBodies.find(id);soft!=SoftBodies.end()){auto& entry=soft->second;transform.Scale=entry.RestScale;transform.Rotation=Q(interface.GetRotation(entry.Id));transform.Position=V(interface.GetPosition(entry.Id))-transform.Rotation.Rotate(entry.ReferenceCenter);if(!ScenePtr->SetWorldTransform(entity,transform))throw std::runtime_error("Cannot synchronize soft body under a singular parent transform");entry.Pose=entity.GetWorldTransform();}
         else{auto& entry=Bodies.at(id);if(entry.Authored.MotionType==BodyMotionType::Static)continue;transform.Position=V(interface.GetPosition(entry.Id));transform.Rotation=Q(interface.GetRotation(entry.Id));if(!ScenePtr->SetWorldTransform(entity,transform))throw std::runtime_error("Cannot synchronize physics under a singular parent transform");entry.LastScene=transform;}
     }
+    UpdateWheelTransforms();
     UpdateExtras(dt);Stepping=false;Dispatch();ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterPhysicsStep,dt});ApplicationEventsAccess::ThrowIfFailed();
 }
 struct QueryFilter final:JPH::ShapeFilter {
@@ -400,6 +409,7 @@ static std::shared_ptr<const GuideLines> GuideGeometry(const JPH::Shape& shape,c
     const auto used=lines->size()*sizeof(GuideLines::value_type)+key.size();if(used<=Limit){while(!cache.empty()&&(bytes+used>Limit||cache.size()>=256)){bytes-=cache.begin()->second->size()*sizeof(GuideLines::value_type)+cache.begin()->first.size();cache.erase(cache.begin());}cache.emplace(key,lines);bytes+=used;}return lines;
 }
 #include "Physics/PhysicsExtras.inl"
+#include "Physics/Vehicles.inl"
 static std::vector<std::array<float,10>> Guides(Scene& scene,UUID selected){
 
     auto w=Get(scene);if(w->TopologyDirty)w->Synchronize();std::vector<std::array<float,10>> lines;
@@ -419,12 +429,14 @@ static std::vector<std::array<float,10>> Guides(Scene& scene,UUID selected){
     }
     for(auto& [key,j]:w->Joints)if(key.first==selected&&j.Native&&!j.Broken){auto a=V(j.Native->GetBody1()->GetCenterOfMassTransform()*j.Native->GetConstraintToBody1Matrix().GetTranslation()),b=V(j.Native->GetBody2()->GetCenterOfMassTransform()*j.Native->GetConstraintToBody2Matrix().GetTranslation());lines.push_back({a.X,a.Y,a.Z,b.X,b.Y,b.Z,1,.7f,.2f,1});for(auto axis:{Vec3{.1f,0,0},Vec3{0,.1f,0},Vec3{0,0,.1f}}){auto x=a-axis,y=a+axis;lines.push_back({x.X,x.Y,x.Z,y.X,y.Y,y.Z,1,.7f,.2f,1});}}
     if(auto it=w->SoftBodies.find(selected);it!=w->SoftBodies.end()){auto points=SoftVertices(*w,scene.GetEntity(selected));for(std::size_t i=0;i+2<it->second.Indices.size()&&lines.size()<12288;i+=3)for(int e=0;e<3;++e){auto a=points[it->second.Indices[i+e]],b=points[it->second.Indices[i+(e+1)%3]];lines.push_back({a.X,a.Y,a.Z,b.X,b.Y,b.Z,.3f,1,.35f,.8f});}}
+    w->DrawVehicleGuides(selected,lines);
     return lines;
 }
 static const PhysicsModuleApi Api{
     PhysicsModuleVersion,sizeof(PhysicsModuleApi),
+    SetVehicleInput,SetVehicleGear,ReadVehicleState,ReadVehicleWheelState,
     [](Scene& scene){auto& worlds=State().Worlds;auto it=worlds.find(&scene);if(it!=worlds.end()){it->second->Dead=true;worlds.erase(it);}},
-    [](Scene& scene){auto w=Get(scene);w->Synchronize();w->Running=true;},
+    [](Scene& scene){auto w=Get(scene);w->Synchronize();w->Running=true;w->SyncVehicles();},
     [](Scene& scene){auto& worlds=State().Worlds;auto it=worlds.find(&scene);if(it!=worlds.end()){it->second->Dead=true;worlds.erase(it);}},
     [](Scene& scene,float dt,bool manual){auto w=Get(scene);if(!w->Running)throw std::logic_error("Physics simulation has not started");w->Step(dt,manual);},
     [](Scene& scene){Get(scene)->Synchronize();},

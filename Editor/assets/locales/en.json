@@ -1028,5 +1028,10 @@
   "physics.field.bend_mode": "Bend Mode",
   "physics.field.subdivision_level": "Subdivision Level",
   "physics.field.pressure": "Pressure",
-  "physics.field.collision_radius": "Collision Radius"
+  "physics.field.collision_radius": "Collision Radius",
+  "physics.ray": "Ray",
+  "physics.sphere_cast": "Sphere cast",
+  "physics.cylinder_cast": "Cylinder cast",
+  "physics.field.left_wheel": "Left wheel",
+  "physics.field.right_wheel": "Right wheel"
 }

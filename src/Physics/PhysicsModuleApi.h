@@ -2,10 +2,14 @@
 #include "Bazzalt/Physics.h"
 namespace Bazzalt { class ComponentSerializationRegistry; }
 namespace Bazzalt::Runtime {
-inline constexpr std::uint32_t PhysicsModuleVersion=2;
+inline constexpr std::uint32_t PhysicsModuleVersion=3;
 enum class PhysicsCommand { Force,ForceAtPosition,Impulse,ImpulseAtPosition,Torque,AngularImpulse,LinearVelocity,AngularVelocity,MoveKinematic,Teleport,Wake,Sleep };
 struct PhysicsModuleApi {
     std::uint32_t Version,Size;
+    bool (*VehicleInput)(Scene&,Entity,float,float,float,float);
+    bool (*VehicleGear)(Scene&,Entity,int,float);
+    std::optional<VehicleState> (*ReadVehicle)(Scene&,Entity);
+    std::optional<VehicleWheelState> (*ReadWheel)(Scene&,Entity);
     void (*Release)(Scene&);
     void (*Start)(Scene&);
     void (*Stop)(Scene&);

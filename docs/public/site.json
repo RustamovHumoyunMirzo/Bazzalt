@@ -22,6 +22,7 @@
         "camera-materials",
         "audio",
         "physics",
+        "vehicles",
         "settings",
         "extensions",
         "glossary"
@@ -48,6 +49,7 @@
         "graphics",
         "audio",
         "physics",
+        "vehicles",
         "gui",
         "extensions",
         "reference"
@@ -61,6 +63,7 @@
         "graphics",
         "audio",
         "physics",
+        "vehicles",
         "gui",
         "extensions",
         "reference"

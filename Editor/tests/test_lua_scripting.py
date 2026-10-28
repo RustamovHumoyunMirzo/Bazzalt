@@ -57,8 +57,7 @@ return Walk
         # must still fail the per-header contract below.
         schema=(root/"src/Physics/PhysicsFields.h").read_text(encoding="utf-8").replace("\\\n"," ")
         macros={m[1]:m[2] for m in re.finditer(r"#define (BAZZALT_\w+_FIELDS)\(X\) ([^\n]+)",schema)}
-        physics=(root/"src/Script/LuaPhysics.cpp").read_text(encoding="utf-8")
-        for invocation in re.finditer(r"#define FIELD\(Name,Label\) \w+\[#Name\]=&(\w+)::Name;\s*(BAZZALT_\w+_FIELDS)\(FIELD\)",physics):
+        for invocation in re.finditer(r"#define FIELD\(Name,Label\) \w+\[#Name\]=&(\w+)::Name;\s*(BAZZALT_\w+_FIELDS)\(FIELD\)",bindings):
             expanded=macros[invocation[2]]
             for child in re.findall(r"(BAZZALT_\w+_FIELDS)\(X\)",expanded):expanded=expanded.replace(child+"(X)",macros[child])
             bindings+="\n"+"\n".join("&"+invocation[1]+"::"+field for field in re.findall(r"X\((\w+),",expanded))
@@ -74,7 +73,7 @@ return Walk
                 # mistaken for CameraPostProcessing's direct data members.
                 body=re.sub(r"struct\s+\w+\s*\{[\s\S]*?\}","",body)
                 qualifier={"DepthOfFieldSettings":"DoF"}.get(declaration[1],declaration[1])
-                for name in re.findall(r"^\s*(?:float|bool|int|std::uint\d+_t|Vec[234]|Quaternion|UUID|std::string|CameraProjection|CameraAspectMode|LightType|PrimitiveShape|SceneQueryShape)\s+(\w+)\s*(?:=|\{|;)",body,re.M):
+                for name in re.findall(r"^\s*(?:float|bool|int|std::uint\d+_t|Vec[234]|Quaternion|UUID|std::string|CameraProjection|CameraAspectMode|LightType|PrimitiveShape|SceneQueryShape|VehicleCollisionMode)\s+(\w+)\s*(?:=|\{|;)",body,re.M):
                     with self.subTest(header=header.name,type=qualifier,field=name):self.assertIn(f"&{qualifier}::{name}",bindings)
         cmake=(root/"cmake/Lua.cmake").read_text();self.assertIn("add_library(BazzaltLua SHARED",cmake)
         self.assertNotIn("add_library(BazzaltLua STATIC",cmake)

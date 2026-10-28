@@ -4,6 +4,8 @@ void World::DetachJoints(JPH::BodyID body){
     Suppressed.clear();
 }
 void World::ClearExtras(){
+    for(auto& [id,v]:Vehicles){System.RemoveStepListener(v.Native);System.RemoveConstraint(v.Native);}
+    Vehicles.clear();PendingVehicleInput.clear();
     for(auto& [key,j]:Joints)if(j.Native)System.RemoveConstraint(j.Native);
     Joints.clear();Suppressed.clear();
     for(auto& [id,s]:SoftBodies){System.GetBodyInterface().RemoveBody(s.Id);System.GetBodyInterface().DestroyBody(s.Id);SoftColliders.erase(s.Id.GetIndexAndSequenceNumber());s.DestroyMeshes();}

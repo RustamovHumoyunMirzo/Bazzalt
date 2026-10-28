@@ -81,6 +81,40 @@ class PhysicsInspectorTests(unittest.TestCase):
         fields['Compliance'].setValue(.00001);self.assertAlmostEqual(r.EntityDetails(entity)['component_data']['Cloth']['Compliance'],.00001,places=8)
         self.assertIn('Pressure',fields);self.assertIn('Collision Radius',fields);self.assertIn('Subdivision Level',fields)
 
+    def test_vehicle_composition_fields_and_wheel_pickers(self):
+        w=self.Window;r=w.Runtime;car=r.CreateEntity('Car')
+        for kind in ('Shape Collider','Rigidbody','Vehicle','Vehicle Engine','Vehicle Transmission','Vehicle Differential','Vehicle Aerodynamics'):
+            self.assertTrue(r.AddComponent(car,kind),kind)
+        self.assertTrue(r.SetComponentProperty(car,'Rigidbody','Mass',1200.))
+        wheels=[]
+        for i in range(4):
+            e=r.CreateEntity('Wheel '+str(i));self.assertTrue(r.SetParent(e,car))
+            for kind in ('Vehicle Wheel','Wheel Suspension','Wheel Tire','Wheel Brake'):self.assertTrue(r.AddComponent(e,kind))
+            self.assertTrue(r.SetComponentProperty(e,'Vehicle Wheel','Position',(-.9 if i%2==0 else .9,0,1.2 if i<2 else -1.2)))
+            if i<2:self.assertTrue(r.AddComponent(e,'Wheel Steering'))
+            wheels.append(e)
+        self.assertTrue(r.SetComponentProperty(car,'Vehicle Differential','Left Wheel',wheels[2]))
+        self.assertTrue(r.SetComponentProperty(car,'Vehicle Differential','Right Wheel',wheels[3]))
+        w.Controller.SelectEntity(car,force=True)
+        fields=w.Properties._sections['runtime.Vehicle Differential']._fields
+        self.assertEqual(fields['Left Wheel'].GetValue(),wheels[2])
+        self.assertEqual(fields['Right Wheel'].GetValue(),wheels[3])
+        self.assertEqual(w.Properties._sections['runtime.Vehicle Transmission']._fields['Gear Count'].GetValue(),6)
+        w.Controller.SelectEntity(wheels[0],force=True)
+        self.assertIn('Frequency',w.Properties._sections['runtime.Wheel Suspension']._fields)
+        self.assertIn('Max Angle',w.Properties._sections['runtime.Wheel Steering']._fields)
+        self.assertFalse(r.SetComponentProperty(wheels[0],'Vehicle Wheel','Radius',-1.))
+        self.assertTrue(r.RemoveComponent(wheels[0],'Wheel Brake'))
+        self.assertTrue(r.SetComponentProperty(car,"Vehicle Transmission","Gear 10",.29))
+        w.Controller.DuplicateHierarchyEntities([car])
+        duplicate=w.Controller.SelectedEntity
+        self.assertNotEqual(duplicate,car)
+        data=r.EntityDetails(duplicate)['component_data']['Vehicle Differential']
+        self.assertAlmostEqual(r.PhysicsAuthoringData(duplicate)['Vehicle Transmission']['Gear 10'],.29,places=5)
+        self.assertNotEqual(data['Left Wheel'],wheels[2])
+        self.assertEqual(r.EntityDetails(data['Left Wheel'])['parent'],duplicate)
+
+
     def test_soft_body_gizmo_tracks_play_and_restores_on_stop(self):
         from PySide6.QtTest import QTest
         w=self.Window;r=w.Runtime;entity=r.CreateEntity('Moving cloth')

@@ -293,6 +293,9 @@ class RuntimeService(QObject):
         if result:self.SceneChanged.emit()
         return result
 
+    def PhysicsAuthoringData(self,entity_id: str) -> dict:
+        return dict(self._host.physics_authoring_data(entity_id)) if self._host is not None and hasattr(self._host,'physics_authoring_data') else {}
+
     def ComponentTypes(self) -> list[str]:
         return list(self._host.component_types()) if self._host is not None and hasattr(self._host, "component_types") else []
 
