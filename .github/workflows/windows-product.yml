@@ -36,6 +36,7 @@ jobs:
           & scripts/get_rapidyaml.ps1
           & scripts/get_sdl3.ps1
           & scripts/get_miniaudio.ps1
+          & scripts/get_jolt.ps1
           & scripts/get_freetype.ps1
             & scripts/get_text_shaping.ps1
           & scripts/get_lua.ps1
@@ -178,6 +179,7 @@ jobs:
           & scripts/get_rapidyaml.ps1
           & scripts/get_sdl3.ps1
           & scripts/get_miniaudio.ps1
+          & scripts/get_jolt.ps1
           & scripts/get_freetype.ps1
             & scripts/get_text_shaping.ps1
           & scripts/get_lua.ps1

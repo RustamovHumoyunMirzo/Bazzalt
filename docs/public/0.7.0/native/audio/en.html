@@ -76,7 +76,7 @@ dialogue.SetSettings(settings);</code></pre>
 <p>The engine starts/stops the audio system with gameplay. Authoring never plays PlayOnAwake sounds. Device initialization is lazy and failure does not crash the editor or invent a listener. Test IsValid on returned voices and use Audio::GetLastError for details. Calls that manipulate voices, buses or ECS belong on the gameplay/main thread, not an audio callback or arbitrary worker thread. Never initialize miniaudio yourself through the public API.</p>
 <p>See the <a href="../reference/Audio/en.html">complete audio API reference</a> and the <a href="../../manual/audio/en.html">editor audio guide</a>.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../graphics/en.html"><small>Previous</small>Drawing geometry with Graphics</a>
-<a class="next" href="../gui/en.html"><small>Next</small>GUI in C++</a></nav>
+<a class="next" href="../physics/en.html"><small>Next</small>Physics in C++</a></nav>
     </main>
     <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#playback">Play an entity&#x27;s source</a><a class="toc-link" href="#voices">Keep a voice handle</a><a class="toc-link" href="#buses">Route and control buses</a><a class="toc-link" href="#errors">Lifecycle and failures</a></nav></aside>
   </div>

@@ -14,7 +14,7 @@ void BindLuaApplicationEvents(sol::table api){
     app["SetRunInBackground"]=sol::overload(&Application::SetRunInBackground,[](sol::table,bool value){Application::SetRunInBackground(value);});
     app["Quit"]=sol::overload([](sol::optional<int> code){Application::Quit(code.value_or(0));},[](sol::table,sol::optional<int> code){Application::Quit(code.value_or(0));});
     auto denied=[](sol::variadic_args){throw std::logic_error("Application event listeners require a registered C++ Subsystem Script");};
-    for(int i=0;i<=int(ApplicationEventType::OnShutdown);++i)app[ApplicationEvents::GetName(ApplicationEventType(i))]=denied;
+    for(int i=0;i<=int(ApplicationEventType::OnAfterPhysicsShutdown);++i)app[ApplicationEvents::GetName(ApplicationEventType(i))]=denied;
     auto legacy=api.create_named("ApplicationEvents");legacy["Subscribe"]=denied;legacy["Unsubscribe"]=denied;
 }
 }

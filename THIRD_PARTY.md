@@ -36,20 +36,13 @@ mutex operations and unrelated diagnostics unchanged.
 | [Lua](https://www.lua.org), Lua.org / PUC-Rio | Separate scripting library | [MIT](https://www.lua.org/license.html) |
 | [sol2](https://github.com/ThePhD/sol2), Rapptz, ThePhD and contributors | Lua bindings | [MIT](https://github.com/ThePhD/sol2/blob/develop/LICENSE.txt) |
 | [SDL3](https://github.com/libsdl-org/SDL), Sam Lantinga and contributors | Windowing/input | [zlib](https://github.com/libsdl-org/SDL/blob/main/LICENSE.txt) |
+| [Jolt Physics](https://github.com/jrouwe/JoltPhysics/tree/v5.3.0), Jorrit Rouwe and contributors | Separate native physics runtime | [MIT](https://github.com/jrouwe/JoltPhysics/blob/v5.3.0/LICENSE); snapshot in licenses/third_party/Jolt/LICENSE |
 | [miniaudio](https://github.com/mackron/miniaudio), David Reid | Audio decoding/mixing/output | [Public-domain or MIT-0 alternatives](https://github.com/mackron/miniaudio/blob/master/LICENSE); MIT-0 is the distribution option used here |
 | [stb](https://github.com/nothings/stb), Sean Barrett and contributors | Image decoding through Filament, Vorbis decoding with miniaudio | [MIT or public-domain alternatives](https://github.com/nothings/stb/blob/master/LICENSE); preserve file notices |
 | [FreeType](https://freetype.org), FreeType Project contributors | Private GUI rasterization | [FreeType License](https://gitlab.freedesktop.org/freetype/freetype/-/blob/master/docs/FTL.TXT) (chosen alternative to GPL); Portions of this software are copyright © 2026 The FreeType Project (www.freetype.org). All rights reserved. |
 | zlib contributors | FreeType's bundled gzip/zlib implementation | [zlib notice in source](https://gitlab.freedesktop.org/freetype/freetype/-/blob/master/src/gzip/zlib.h) |
 | [HarfBuzz](https://github.com/harfbuzz/harfbuzz), Google and other named authors | Private GUI OpenType shaping | [Old MIT and per-file notices](https://github.com/harfbuzz/harfbuzz/blob/main/COPYING) |
 | [SheenBidi](https://github.com/Tehreer/SheenBidi), Muhammad Tayyab Akram | Unicode bidirectional layout | [Apache-2.0](https://github.com/Tehreer/SheenBidi/blob/master/LICENSE) |
-
-## Prepared optional dependencies
-
-Jolt Physics 5.3.0, Jorrit Rouwe and contributors, is pinned for future physics
-integration under the [MIT license](https://github.com/jrouwe/JoltPhysics/blob/v5.3.0/LICENSE).
-It is not linked into or required by current engine/editor/game distributions.
-Its notice is preserved in `licenses/third_party/Jolt/LICENSE`; the dependency
-collector also copies `deps/jolt/LICENSE` when source is present.
 
 ## Filament SDK dependencies
 

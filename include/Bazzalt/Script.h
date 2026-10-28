@@ -23,6 +23,12 @@ public:
     virtual void OnFixedUpdate(float fixedDeltaTime) { (void)fixedDeltaTime; }
     virtual void OnLateUpdate(float deltaTime) { (void)deltaTime; }
     virtual void OnDestroy() {}
+    virtual void OnCollisionEnter(const CollisionEvent&) {}
+    virtual void OnCollisionStay(const CollisionEvent&) {}
+    virtual void OnCollisionExit(const CollisionEvent&) {}
+    virtual void OnTriggerEnter(const CollisionEvent&) {}
+    virtual void OnTriggerStay(const CollisionEvent&) {}
+    virtual void OnTriggerExit(const CollisionEvent&) {}
     [[nodiscard]] const std::string& GetEntityUUID() const { return m_entityUUID; }
     [[nodiscard]] Entity GetEntity() const {
         UUID id;
@@ -55,7 +61,7 @@ public:
 
 enum class PropertyType : std::uint8_t { Boolean, Integer, Float, String, Vec2, Vec3, Vec4, Entity, Asset };
 
-inline constexpr std::uint32_t ScriptAbiVersion = 1;
+inline constexpr std::uint32_t ScriptAbiVersion = 2;
 struct ScriptModuleApi {
     std::uint32_t AbiVersion;
     const char* TypeName;

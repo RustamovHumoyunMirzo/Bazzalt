@@ -21,6 +21,7 @@
         "scenes",
         "camera-materials",
         "audio",
+        "physics",
         "settings",
         "extensions",
         "glossary"
@@ -46,6 +47,7 @@
         "materials",
         "graphics",
         "audio",
+        "physics",
         "gui",
         "extensions",
         "reference"
@@ -58,6 +60,7 @@
         "api",
         "graphics",
         "audio",
+        "physics",
         "gui",
         "extensions",
         "reference"

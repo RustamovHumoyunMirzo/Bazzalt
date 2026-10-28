@@ -1,0 +1,159 @@
+# Physics runtime and Jolt ownership
+
+Physics implementation lives in `src/Physics/JoltWorld.cpp` and
+`PhysicsGeometry.cpp`, built as `bazzalt_physics.dll` / `libbazzalt_physics.so`.
+Jolt links statically only into that module. Core contains engine-owned data,
+serialization, a public facade and a sibling-module loader, never Jolt headers
+or solver code. The module imports core one way; core dispatches through
+`PhysicsModuleApi` rather than importing the module's link library.
+
+## Build and distribution
+
+`scripts/dependencies/jolt.json` is the single source pin (5.3.0 at
+0373ec0dd762e4bc2f6acdb08371ee84fa23c6db). get_jolt.py and its shell wrappers
+fetch source and reject incorrect revisions/dirty trees. Dependency builds
+belong on GitHub Actions. The Jolt dependency workflow checks Windows/Linux,
+x64/x86 and publishes static library artifacts. Local engine work can use the
+matching CI Release artifact through BAZZALT_JOLT_LIBRARY; do not build large
+third-party dependencies on the developer PC.
+
+cmake/Jolt.cmake scopes broad upstream options, uses static PIC, single
+precision, 16-bit object layers and the existing SSE2 CPU baseline. It disables
+AVX/SSE4/FMA options, LTO, upstream applications, object streams, profiler and
+debug renderer. MSVC uses the DLL CRT. Linux x64 uses Clang/libc++; x86 uses
+Clang/libstdc++. An imported library must match all these choices, architecture
+and build configuration. Jolt types/includes/libs must never be exposed through
+ScriptSDK or native game compilation. Only the sibling physics runtime ships.
+
+Core loads the module relative to its own binary, with a version and table-size
+check, not from the project/current directory. Module code remains loaded for
+process lifetime, as callbacks/serializers may still refer to it. One process
+service owns Jolt allocator/factory/type registration. Each scene world owns
+its physics system, bounded job pool, temp allocator, body/shape maps and event
+queues. The 16 MiB scratch arena uses Jolt's malloc fallback rather than aborting
+when a step needs more temporary memory. Scene destruction and Clear release the world before registry storage.
+
+Release packaging, standalone RuntimeTemplates, compiler validation and Hub
+manifests include physics_abi=1. Old Hub payloads without that declaration remain
+installable; new payloads must provide the matching physics library. Physics is
+native game code and introduces no Python dependency in built games. Jolt's MIT
+notice is included by the common third-party collector.
+
+## Public data and serialization
+
+Public Rigidbody/ShapeCollider/MeshCollider data has no runtime handles.
+PhysicsFields.h is the field schema shared by serializers, editor bridge and
+Lua bindings; update it when adding a field. Component serializers are version
+1, and the scene Physics mapping has its own Version=1. Old scenes without the
+mapping use defaults. Nullable Rigidbody.Gravity encodes as null; it is not a
+fake zero vector. Validate physics settings before clearing a scene on load.
+Unknown component descriptors keep the existing unresolved-component policy.
+
+Body IDs are private generational Jolt handles. UUIDs identify body owners and
+actual collider entities. A collider attaches to its nearest enabled rigidbody;
+otherwise it is static. Nested rigidbodies are independent. Disabled parent
+rigidbodies suppress attached colliders, without suppressing child bodies.
+Collider-less bodies use EmptyShape and still simulate. Compound subshape user
+data maps to collider UUIDs/material/layer/group/trigger properties.
+
+## Synchronization, transforms and rendering
+
+The main thread synchronizes authored edits at fixed-step/explicit boundaries, with structural changes observed through EnTT signals. Forces queue until the next step, so controls do not rescan/rebuild the entire scene per script. Queries read current physics poses while running and synchronize editing previews/topology. Signatures track component values, relative collider
+poses, primitive dimensions, asset/node identity and geometry cache timestamps.
+Quantize derived relative pose signatures to avoid rebuilding a body from
+floating-point noise after parent movement. Shape data caches are bounded.
+Rebuilds preserve runtime velocities unless the authored velocity was changed.
+
+Offsets/rotations/scales compose with the entity world transform and are then
+converted to a rigid body's local space. Use positive, non-singular scale.
+Sphere scale uses the maximum axis; capsules/cylinders use the maximum X/Z
+radial scale and Y height. Concave dynamic meshes and moving infinite planes
+are rejected. Triangle meshes can be double-sided and sanitized. World-space
+poses write back parent-before-child through SetWorldTransform; never overwrite
+local transforms with world values. Center-of-mass offsets follow body scale.
+
+The existing Time accumulator is the only scheduler. After native/Lua/scene
+fixed callbacks, automatic physics advances once. AutoSimulation=false skips
+solver work; public Simulate permits a manual fixed step only in a running
+world. Invalid delta and recursive stepping are rejected. Global before/after
+step notifications wrap actual automatic and manual steps, not idle frames.
+
+Dynamic pose writeback is authoritative. RenderSystems uses the private
+PhysicsRenderMatrix hook to interpolate previous/current poses by accumulator
+alpha, including children of physical parents. It must not change Scene query
+matrices or saved transforms. Teleport clears interpolation history. Selected
+collider guides come from cooked shape triangles, not guessed render bounds;
+they go through existing Scene-only guide rendering and respect Gizmos visibility.
+
+## Queries and collision events
+
+Vec3-origin Scene.Raycast/RaycastAll are physical; SceneRay overloads remain
+visual geometry queries. ShapeCast/All and OverlapShape are on Scene too. The
+PhysicsScene facade adds shape conveniences and body controls. Public facades
+hold a weak scene lifetime token, so use after unload throws instead of touching
+freed scene memory. Query results retain ordinary scene-scoped Entity values;
+store UUIDs across scene lifetime boundaries.
+
+Queries read the current world during Play (explicit Synchronize flushes raw transform edits) and automatically synchronize topology/edit-mode previews. They normalize direction, honor layer/trigger/backface/exclusion
+filters, bound output, keep nearest hits per collider and sort cast results.
+ShapeFilter inspects leaf user data only: compound subshape IDs are incomplete
+while traversing, so never call GetSubShapeUserData on an intermediate compound
+inside the filter. Returned body/subshape IDs are resolved only after a valid
+result. The physics query path never calls scene/render picking fallbacks.
+
+Broadphase distinguishes static/moving objects and uses ordinary single-layer
+pair masks; mixed-layer compounds get exact per-leaf narrowphase filtering.
+Same nonzero collision groups suppress contacts. Layer matrix edits invalidate
+cached contacts. Per-collider friction/restitution/trigger state is applied in
+the contact listener; mixed trigger/solid compounds keep their individual roles.
+
+Worker listeners copy bounded contact data under a mutex. They never touch
+EnTT, Lua or user callbacks. Active manifold counts aggregate Enter/Stay/Exit by
+collider pair; up to 64 contact points are retained. Main-thread dispatch runs
+after pose writeback and validates entity presence. UUIDs survive Exit when an
+entity has gone. Subscription IDs are process-unique, preventing stale IDs from
+removing a new scene world's listener. Dispatch snapshots subscription IDs;
+removed listeners are skipped and additions wait for later events.
+
+Subscriptions retain native module leases and script/subsystem owner scopes.
+Disconnect owners before destroying a behavior/subsystem/VM; Lua protected
+callbacks have instruction budgets. Native and Lua behavior callbacks are routed
+to matching body/collider entities and respect script enablement. Do not hold a
+Jolt body lock while invoking user code. Scene replacement may invalidate the
+world during a callback; retained shared world state and its Dead flag prevent
+subsequent dispatch into the old registry.
+
+## Application/subsystem lifecycle
+
+Persisted legacy levels 0..4 remain Boot, Window, Initialization, Content, Ready.
+IDs 5..13 add Before/Input/AfterInput, Before/Audio/AfterAudio and
+Before/Physics/AfterPhysics. GetLevelOrder supplies real ordering; do not compare
+numeric IDs for permission or scheduling. UI groups use the same explicit order.
+Input/Audio/Physics readiness guards are independent. Loading a higher stage may
+listen to equal/later events, but subscriptions to earlier stages fail.
+
+A player can create its native window and preload scene data before Play.
+Content/post-window notifications are deferred while runtime services are not
+ready; CompleteInitialization drains them after audio/physics initialization,
+then reaches Ready. This avoids loading Physics-level subsystems prematurely.
+Scene geometry loading alone does not start simulation. Input initialization
+signals surround the real SDL setup; editor Play notifies availability of its
+already initialized input service. Audio/physics initialization surrounds
+service/world startup. Stop destroys script callbacks before releasing worlds
+and audio; application shutdown disconnects subsystem callbacks.
+
+## Tests and scope
+
+BazzaltPhysicsTests exercises real CPU simulation/contact points, impulses,
+gravity overrides, layers, triggers, physical queries/casts/overlaps, mesh
+colliders, disabled bodies, serialization, destruction and facade lifetime.
+Editor tests cover native field roundtrips, nullable gravity and collision-layer
+editing. Keep standalone cooked-game, native C++/Lua and Windows/Linux x86/x64
+checks when changing the module. Preserve dependency-only registration/teardown
+checks as the fast build/ABI gate.
+
+This is a rigid-body foundation. Do not claim soft bodies, vehicles, character
+controllers, joints or cross-platform deterministic networking. Native callbacks
+remain trusted C++ code. Jolt objects/streams/BodyID never become scene formats
+or gameplay ABI. Add public API changes to C++, Lua, generated references and
+What's New together.

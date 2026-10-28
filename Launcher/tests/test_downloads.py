@@ -138,11 +138,31 @@ class DownloadTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError,"Unsupported GUI runtime ABI"):
                         Install(self.MakeEntry(archive.read_bytes()),archive,self.Root/"versions-unknown-gui")
 
+    def test_physics_module_abi_and_both_library_locations(self):
+        archive=self.EditorZip()
+        with zipfile.ZipFile(archive) as source:files={name:source.read(name) for name in source.namelist()}
+        metadata={"version":"0.5.0","architecture":"x64","executable":"Bazzalt.exe","physics_abi":1}
+        files["editor.json"]=json.dumps(metadata)
+        with self.assertRaisesRegex(ValueError,"Missing physics runtime library"):
+            archive=self.Zip(files);Install(self.MakeEntry(archive.read_bytes()),archive,self.Root/"missing-physics")
+        files["Editor/bazzalt_physics.dll"]=PE()
+        with self.assertRaisesRegex(ValueError,"Missing physics runtime library"):
+            archive=self.Zip(files);Install(self.MakeEntry(archive.read_bytes()),archive,self.Root/"missing-sdk-physics")
+        files["ScriptSDK/lib/bazzalt_physics.dll"]=PE()
+        archive=self.Zip(files);target=Install(self.MakeEntry(archive.read_bytes()),archive,self.Root/"physics")
+        self.assertTrue((target/"Editor/bazzalt_physics.dll").is_file())
+        for abi in (2,"1",True):
+            metadata["physics_abi"]=abi;files["editor.json"]=json.dumps(metadata);archive=self.Zip(files)
+            with self.assertRaisesRegex(ValueError,"Unsupported physics runtime ABI"):
+                Install(self.MakeEntry(archive.read_bytes()),archive,self.Root/"unknown-physics")
+
     def test_core_audit_requires_gui_runtime(self):
         (self.Root/"include/Bazzalt").mkdir(parents=True);(self.Root/"include/Bazzalt/Scene.h").write_text("// header")
         (self.Root/"lib").mkdir();(self.Root/"lib/Bazzalt.dll").write_bytes(PE());(self.Root/"lib/bazzalt_lua.dll").write_bytes(PE())
         with self.assertRaisesRegex(ValueError,"bazzalt_gui.dll"):Audit(self.Root,"x64","core")
-        (self.Root/"lib/bazzalt_gui.dll").write_bytes(PE());Audit(self.Root,"x64","core")
+        (self.Root/"lib/bazzalt_gui.dll").write_bytes(PE())
+        with self.assertRaisesRegex(ValueError,"bazzalt_physics.dll"):Audit(self.Root,"x64","core")
+        (self.Root/"lib/bazzalt_physics.dll").write_bytes(PE());Audit(self.Root,"x64","core")
 
     def test_release_architecture_and_hub_separation(self):
         executable=self.Root/"BazzaltHub.exe";executable.write_bytes(PE());self.assertEqual(Architecture(executable),"x64");Audit(self.Root,"x64","hub")

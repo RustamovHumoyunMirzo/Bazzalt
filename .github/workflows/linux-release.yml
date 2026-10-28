@@ -27,7 +27,7 @@ jobs:
           sudo apt-get install -y clang libc++-dev libc++abi-dev ninja-build pkg-config libssl-dev libx11-dev libx11-xcb-dev libxcb1-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev libxkbcommon-x11-0 libxcb-cursor0 fonts-dejavu-core libgl1-mesa-dev libvulkan-dev patchelf
           python -m pip install -r requirements-build.txt PySide6==6.10.2 pybind11==3.0.2
           python -c "from pathlib import Path; from Launcher.downloads import Extract; Extract(next(Path('dist/linux-x86').glob('*.zip')),Path('build/LinuxX86Package'))"
-          for dependency in entt rapidyaml filament sdl3 lua sol2 miniaudio freetype text_shaping pybind11; do sh "scripts/get_${dependency}.sh"; done
+          for dependency in entt rapidyaml filament sdl3 lua sol2 miniaudio jolt freetype text_shaping pybind11; do sh "scripts/get_${dependency}.sh"; done
           CC=clang CXX=clang++ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build --parallel 2
           python scripts/build_linux_release.py --base-url "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"

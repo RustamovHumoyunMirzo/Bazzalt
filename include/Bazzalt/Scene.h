@@ -23,6 +23,7 @@
 #include "Bazzalt/SceneQuery.h"
 #include "Bazzalt/System.h"
 #include "Bazzalt/SceneEnvironment.h"
+#include "Bazzalt/Physics.h"
 
 namespace Bazzalt {
 
@@ -38,6 +39,14 @@ public:
     Scene(Scene&&) = delete;
     Scene& operator=(Scene&&) = delete;
 
+    [[nodiscard]] PhysicsScene GetPhysics() { return PhysicsScene(*this); }
+    [[nodiscard]] const PhysicsSettings& GetPhysicsSettings() const { return m_physicsSettings; }
+    bool SetPhysicsSettings(const PhysicsSettings& settings);
+    [[nodiscard]] PhysicsHit Raycast(Vec3 origin,Vec3 direction,float distance=10000,const PhysicsQueryOptions& options={}) { return GetPhysics().Raycast(origin,direction,distance,options); }
+    [[nodiscard]] std::vector<PhysicsHit> RaycastAll(Vec3 origin,Vec3 direction,float distance=10000,const PhysicsQueryOptions& options={}) { return GetPhysics().RaycastAll(origin,direction,distance,options); }
+    [[nodiscard]] PhysicsHit ShapeCast(const PhysicsShape& shape,const Transform& transform,Vec3 direction,float distance,const PhysicsQueryOptions& options={}) { return GetPhysics().ShapeCast(shape,transform,direction,distance,options); }
+    [[nodiscard]] std::vector<PhysicsHit> ShapeCastAll(const PhysicsShape& shape,const Transform& transform,Vec3 direction,float distance,const PhysicsQueryOptions& options={}) { return GetPhysics().ShapeCastAll(shape,transform,direction,distance,options); }
+    [[nodiscard]] std::vector<PhysicsHit> OverlapShape(const PhysicsShape& shape,const Transform& transform,const PhysicsQueryOptions& options={}) { return GetPhysics().OverlapShape(shape,transform,options); }
     Entity CreateEntity(std::string name = {});
     Entity CreateEntity(UUID uuid, std::string name = {});
     void DestroyEntity(Entity entity);
@@ -172,7 +181,10 @@ public:
 private:
     friend void Detail::RetainGameplayModule(Scene*);
     void RetainGameplayModule();
+    friend class PhysicsScene;
+    std::shared_ptr<void> m_lifetime=std::make_shared<int>(0);
     SceneEnvironment m_environment{};
+    PhysicsSettings m_physicsSettings{};
     std::map<std::string,std::string> m_extensionProperties;
     friend class SceneSerializer;
     friend class Runtime::Engine;

@@ -30,7 +30,9 @@
 <h2 id="source-contract">Public declarations</h2>
 <p>Header: <code>Bazzalt/Subsystem.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
 <pre><code class="language-cpp">enum class SubsystemLevel {
-Boot, Window, Initialization, Content, Ready
+Boot=0, Window=1, Initialization=2, Content=3, Ready=4,
+    BeforeInput=5,Input=6,AfterInput=7,BeforeAudio=8,Audio=9,AfterAudio=10,
+    BeforePhysics=11,Physics=12,AfterPhysics=13
 };</code></pre>
 <!-- API-SOURCE-END --></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../Subsystem/en.html"><small>Previous</small>Subsystem</a>

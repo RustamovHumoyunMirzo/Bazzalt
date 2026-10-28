@@ -4,7 +4,8 @@ from pathlib import Path
 import yaml
 
 KEY='application.subsystems'
-LEVELS=('boot','window','initialization','content','ready')
+LEVELS=('boot','window','initialization','content','ready','before_input','input','after_input','before_audio','audio','after_audio','before_physics','physics','after_physics')
+LEVEL_ORDER=(0,1,2,5,6,7,8,9,10,11,12,13,3,4)
 
 def Registrations(properties):
     raw=properties.get(KEY,'[]') or '[]'
@@ -18,7 +19,7 @@ def Registrations(properties):
         identity=str(uuid.UUID(str(value['asset'])))
         if identity=='00000000-0000-0000-0000-000000000000' or identity in seen:raise ValueError('Duplicate or empty subsystem UUID')
         level=value['level']
-        if isinstance(level,bool) or not isinstance(level,int) or not 0<=level<5:raise ValueError('Invalid subsystem load level')
+        if isinstance(level,bool) or not isinstance(level,int) or not 0<=level<len(LEVELS):raise ValueError('Invalid subsystem load level')
         seen.add(identity);result.append(dict(asset=identity,level=level))
     return result
 

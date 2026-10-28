@@ -1,6 +1,7 @@
 #include "Runtime/LuaRuntime.h"
 #include "Runtime/ApplicationEventsAccess.h"
 #include "Bazzalt/Audio.h"
+#include "Bazzalt/Console.h"
 #include "Bazzalt/Font.h"
 #include "Script/LuaBindings.h"
 #include "Runtime/GraphicsAccess.h"
@@ -152,6 +153,19 @@ bool LuaRuntime::Start(std::string& error){
         lua["COMPONENT"]=sol::nil;lua["PROPERTY"]=sol::nil;
         for(const auto& [key,value]:binding.Properties)SetProperty(active.Object,key,value);
         active.Call("OnCreate");
+        if(m_impl->Instances.size()==1){
+            auto previous=ApplicationEventsAccess::SetOwner(m_impl.get());
+            try{for(int i=0;i<6;++i)scene->GetPhysics().Subscribe(PhysicsEventType(i),[this](const CollisionEvent& event){
+                static constexpr const char* names[]={"OnCollisionEnter","OnCollisionStay","OnCollisionExit","OnTriggerEnter","OnTriggerStay","OnTriggerExit"};
+                for(auto& instance:m_impl->Instances){if(instance->Failed||instance->Destroyed||!instance->Owner)continue;const auto uuid=instance->Owner.GetUUID();if(uuid!=event.BodyAUUID&&uuid!=event.BodyBUUID&&uuid!=event.ColliderAUUID&&uuid!=event.ColliderBUUID)continue;
+                    if(auto* scripts=instance->Owner.TryGetComponent<ScriptComponents>()){if(!scripts->Enabled)continue;bool enabled=true;for(const auto& script:scripts->Values)if(script.TypeName==instance->Name)enabled=script.Enabled;if(!enabled)continue;}
+                    sol::object member=instance->Object[names[int(event.Type)]];if(!member.valid()||member==sol::nil)continue;
+                    auto* state=instance->Vm->State;auto owner=ApplicationEventsAccess::SetOwner(state);auto oldCaller=ExtensionAccess::SetCaller(ExtensionAccess::ComponentOwner(instance->Name));
+                    lua_sethook(state,Budget,LUA_MASKCOUNT,1000000);sol::protected_function function=member;auto result=function(instance->Object,event);lua_sethook(state,nullptr,0,0);ApplicationEventsAccess::SetOwner(owner);ExtensionAccess::SetCaller(std::move(oldCaller));
+                    if(!result.valid()){instance->Failed=true;sol::error error=result;Console::Error(instance->Name+": "+error.what(),"Lua");}
+                }
+            });}catch(...){ApplicationEventsAccess::SetOwner(previous);throw;}ApplicationEventsAccess::SetOwner(previous);
+        }
     }}catch(const std::exception& failure){error=failure.what();Stop();return false;}
     return true;
 }
@@ -159,6 +173,7 @@ void LuaRuntime::Update(float dt){for(auto& instance:m_impl->Instances)try{insta
 void LuaRuntime::FixedUpdate(float dt){for(auto& instance:m_impl->Instances)try{instance->Call("OnFixedUpdate",dt,true);}catch(const std::exception& error){instance->Failed=true;std::cerr<<"[Lua] "<<error.what()<<'\n';}}
 void LuaRuntime::LateUpdate(float dt){for(auto& instance:m_impl->Instances)try{instance->Call("OnLateUpdate",dt,true);}catch(const std::exception& error){instance->Failed=true;std::cerr<<"[Lua] "<<error.what()<<'\n';}}
 void LuaRuntime::Stop() noexcept {
+    ApplicationEventsAccess::DisconnectOwner(m_impl.get());
     if(!m_impl->Instances.empty())if(auto* scene=SceneManager::GetActiveScene())try{scene->RemoveSystem<LuaSystems>();}catch(const std::exception& error){std::cerr<<"[Lua] "<<error.what()<<'\n';}
     for(auto it=m_impl->Instances.rbegin();it!=m_impl->Instances.rend();++it)try{(*it)->Call("OnDestroy");}catch(const std::exception& error){std::cerr<<"[Lua] "<<error.what()<<'\n';}
     if(!m_impl->Instances.empty())if(auto* scene=SceneManager::GetActiveScene())try{scene->RemoveSystem<LuaSystems>();}catch(const std::exception& error){std::cerr<<"[Lua] "<<error.what()<<'\n';}

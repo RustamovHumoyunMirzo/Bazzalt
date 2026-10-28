@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utils/Entity.h>
+#include <utils/BitmaskEnum.h>
 
 #include "Bazzalt/PostProcessing.h"
 #include "Bazzalt/SceneEnvironment.h"
@@ -25,6 +26,14 @@ class RenderTarget;
 namespace Bazzalt { class Scene; }
 
 namespace Bazzalt::Runtime {
+
+// Keep Filament flag operators visible alongside engine-owned enum operators.
+using ::operator|;
+using ::operator&;
+using ::operator^;
+using ::operator~;
+using ::operator|=;
+using ::operator&=;
 
 class RenderAssets;
 class GuiRenderer;

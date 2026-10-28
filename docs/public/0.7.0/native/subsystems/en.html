@@ -33,12 +33,13 @@
 <p>A registered source cannot also be an entity script. Registration checks saved scenes and the attachment manifest; Play validates active scene attachments again. Even disabled attachments conflict. A manually edited scene cannot silently run the same source as both a component and a subsystem. A C++ source must implement the subsystem contract: SUBSYSTEM(Name) with OnRegister(). Existing unattached COMPONENT sources may be compiled in subsystem mode, but entity-only methods and GetEntity() will fail compilation rather than be emulated.</p>
 <h2 id="levels">Startup levels</h2>
 <table><thead><tr><th>Level</th><th>Load boundary</th></tr></thead><tbody>
-<tr><td>0 — Boot</td><td>Before OnBoot. Packages are authenticated and project metadata is available; no scene or drivers are ready.</td></tr>
-<tr><td>1 — Window</td><td>Before OnBeforeWindowCreate.</td></tr>
-<tr><td>2 — Initialization</td><td>Before OnInit. This begins driver initialization, not its completion.</td></tr>
-<tr><td>3 — Content</td><td>Before OnLoad. Core rendering/input drivers are initialized; initial scene content is not ready yet.</td></tr>
-<tr><td>4 — Ready</td><td>Before OnPostWindowCreate. The startup scene and rendering surface are available.</td></tr>
+<tr><td>0 â€” Boot</td><td>Before OnBoot. Packages are authenticated and project metadata is available; no scene or drivers are ready.</td></tr>
+<tr><td>1 â€” Window</td><td>Before OnBeforeWindowCreate.</td></tr>
+<tr><td>2 â€” Initialization</td><td>Before OnInit. This begins driver initialization, not its completion.</td></tr>
+<tr><td>3 â€” Content</td><td>Before OnLoad. Rendering, input, audio and physics services are initialized; initial scene content is not ready yet.</td></tr>
+<tr><td>4 â€” Ready</td><td>Before OnPostWindowCreate. The startup scene and rendering surface are available.</td></tr>
 </tbody></table>
+<p>Numeric IDs are stable for saved projects; startup order follows the table rather than numeric sorting. Physics stepping emits OnBeforePhysicsStep and OnAfterPhysicsStep with DeltaTime; teardown emits OnBeforePhysicsShutdown and OnAfterPhysicsShutdown.</p>
 <p>A subsystem may subscribe to its own level or higher levels. A Ready subsystem subscribing to OnBoot or OnInit is an error. A Boot subsystem may subscribe to OnLateUpdate and access the scene inside that later callback. Loading early does not give permission to use uninitialized services early. Registration order within a level follows the dialog order; shutdown unregisters in reverse loading order.</p>
 <p>Editor Play simulates these application startup phases against the existing editor host; it does not create a second editor window. Boot still follows package/project and native module setup. OnBoot is not literally the first CPU instruction or a bypass of package verification.</p>
 <h2 id="api">Subsystem API</h2>

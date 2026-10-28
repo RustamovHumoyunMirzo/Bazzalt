@@ -10,7 +10,7 @@ namespace Bazzalt {
 namespace {
 struct State {
     int Target=60,Background=30,ExitCode=0;
-    bool RunInBackground=true,Focused=true,Playing=false,Editor=false,Quitting=false,ServicesReady=false,SceneReady=false,AudioReady=false;
+    bool RunInBackground=true,Focused=true,Playing=false,Editor=false,Quitting=false,ServicesReady=false,SceneReady=false,AudioReady=false,InputReady=false,PhysicsReady=false;
     double SmoothedDelta=0;
     std::uint64_t Frames=0;
     std::uint32_t Width=0,Height=0;
@@ -52,11 +52,14 @@ std::string Application::GetPlatform(){
 #endif
 }
 Scene& Subsystem::GetScene(){auto* scene=SceneManager::GetActiveScene();if(!scene)throw std::logic_error("No active scene");return *scene;}
+bool Runtime::ApplicationAccess::AreRuntimeServicesReady(){return Data().InputReady&&Data().AudioReady&&Data().PhysicsReady;}
 void Runtime::ApplicationAccess::Reset(bool editor,const ProjectMetadata& project){
     Data()={};Data().Editor=editor;Data().Name=project.Name;
     if(auto found=project.Properties.find("project.company");found!=project.Properties.end())Data().Company=found->second;
     if(auto found=project.Properties.find("project.version");found!=project.Properties.end())Data().Version=found->second;
 }
+void Runtime::ApplicationAccess::SetInputReady(bool ready){Data().InputReady=ready;}
+void Runtime::ApplicationAccess::SetPhysicsReady(bool ready){Data().PhysicsReady=ready;}
 void Runtime::ApplicationAccess::SetServicesReady(bool ready){Data().ServicesReady=ready;}
 void Runtime::ApplicationAccess::SetSceneReady(bool ready){Data().SceneReady=ready;}
 void Runtime::ApplicationAccess::SetAudioReady(bool ready){Data().AudioReady=ready;}
@@ -73,7 +76,7 @@ void Runtime::ApplicationAccess::Advance(double delta){if(!std::isfinite(delta)|
 int Runtime::ApplicationAccess::GetEffectiveFrameRate(){const auto& state=Data();if(state.Focused)return state.Target;if(!state.Target)return state.Background;if(!state.Background)return state.Target;return std::min(state.Target,state.Background);}
 void Detail::RequireSubsystemService(SubsystemService service,const char* operation){
     if(Runtime::ApplicationEventsAccess::GetSubsystemLevel()<0)return;
-    const bool ready=service==SubsystemService::Scene?Data().SceneReady:service==SubsystemService::Audio?Data().AudioReady:Data().ServicesReady;
+    const bool ready=service==SubsystemService::Scene?Data().SceneReady:service==SubsystemService::Audio?Data().AudioReady:service==SubsystemService::Input?Data().InputReady:service==SubsystemService::Physics?Data().PhysicsReady:Data().ServicesReady;
     if(!ready)throw std::logic_error(std::string(operation)+": service is not initialized; subscribe to a later application event");
 }
 }

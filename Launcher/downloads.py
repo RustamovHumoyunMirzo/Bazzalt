@@ -115,7 +115,7 @@ def Install(entry: dict, archive: Path, versions: Path) -> Path:
         digest=hashlib.file_digest(stream,"sha256").hexdigest()
     if archive.stat().st_size != entry["size"] or digest.lower() != entry["sha256"].lower():
         raise ValueError("Package changed or failed its integrity check before installation")
-    product = entry["product"];linux=entry["platform"]=="linux";executable="Bazzalt" if linux else "Bazzalt.exe";core="libBazzalt.so" if linux else "Bazzalt.dll";lua="libbazzalt_lua.so" if linux else "bazzalt_lua.dll";gui="libbazzalt_gui.so" if linux else "bazzalt_gui.dll"
+    product = entry["product"];linux=entry["platform"]=="linux";executable="Bazzalt" if linux else "Bazzalt.exe";core="libBazzalt.so" if linux else "Bazzalt.dll";lua="libbazzalt_lua.so" if linux else "bazzalt_lua.dll";gui="libbazzalt_gui.so" if linux else "bazzalt_gui.dll";physics="libbazzalt_physics.so" if linux else "bazzalt_physics.dll"
     if product not in {"editor", "llvm", "core"}: raise ValueError("This download is not an installable ZIP package")
     parent = versions if product == "editor" else DataPaths.Tools() if product == "llvm" else DataPaths.Root() / "SDKs"
     name = "bazzalt_" + entry["version"].replace(".", "_") if product == "editor" else "llvm" if product == "llvm" else entry["id"]
@@ -130,6 +130,10 @@ def Install(entry: dict, archive: Path, versions: Path) -> Path:
             if manifest.get("lua_version"):
                 for name in ("Editor/"+lua,"ScriptSDK/lib/"+lua):
                     if not (payload/name).is_file():raise ValueError("Missing Lua runtime library: "+name)
+            if manifest.get("physics_abi"):
+                if type(manifest["physics_abi"]) is not int or manifest["physics_abi"]!=1:raise ValueError("Unsupported physics runtime ABI")
+                for name in ("Editor/"+physics,"ScriptSDK/lib/"+physics):
+                    if not (payload/name).is_file():raise ValueError("Missing physics runtime library: "+name)
             if manifest.get("gui_abi"):
                 if type(manifest["gui_abi"]) is not int or manifest["gui_abi"] not in (1,2,3,4,5,6):raise ValueError("Unsupported GUI runtime ABI")
                 for name in ("Editor/"+gui,"ScriptSDK/lib/"+gui):
@@ -142,6 +146,7 @@ def Install(entry: dict, archive: Path, versions: Path) -> Path:
         else:
             if not (payload / "include/Bazzalt/Scene.h").is_file() or not (payload / ("lib/"+core)).is_file(): raise ValueError("Incomplete Core SDK package")
             metadata=payload/"core.json"
+            if metadata.is_file() and json.loads(metadata.read_text(encoding="utf-8-sig")).get("physics_abi") and not (payload/("lib/"+physics)).is_file():raise ValueError("Missing physics runtime library: "+physics)
             if metadata.is_file() and json.loads(metadata.read_text(encoding="utf-8-sig")).get("gui_abi") and not (payload/("lib/"+gui)).is_file():raise ValueError("Missing GUI runtime library: lib/bazzalt_gui.dll")
         for path in payload.rglob("*"):
             if linux and path.is_file():

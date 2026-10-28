@@ -89,7 +89,7 @@ def ValidateRuntime(runtime,architecture,platform="windows"):
     core_version=json.loads(versions.read_text(encoding='utf-8-sig'))['core']
     if manifest.get('core_version')!=core_version:raise ValueError('Runtime template does not match this compiler/core version')
     if manifest.get('platform','windows')!=platform:raise ValueError('Runtime platform mismatch')
-    required=['BazzaltPlayer.exe','Bazzalt.dll','bazzalt_lua.dll','bazzalt_gui.dll'] if platform=='windows' else ['BazzaltPlayer','libbazzalt_player.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so']
+    required=['BazzaltPlayer.exe','Bazzalt.dll','bazzalt_lua.dll','bazzalt_gui.dll','bazzalt_physics.dll'] if platform=='windows' else ['BazzaltPlayer','libbazzalt_player.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so','libbazzalt_physics.so']
     files=manifest.get('files',required)
     if not set(required)<=set(files):raise ValueError('Incomplete runtime template')
     for name in files:

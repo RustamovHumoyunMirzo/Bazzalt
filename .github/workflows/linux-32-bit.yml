@@ -47,7 +47,7 @@ jobs:
           key: linux-filament-x86-v1.77.0-clang18-libstdcxx-${{ hashFiles('scripts/build_linux_x86_dependencies.sh', 'scripts/patch_filament_win32.py', 'scripts/patch_filament_linux_x86.py', 'scripts/test_bluegl_linux_x86.py', 'tests/FilamentThreadAnnotationsProbe.cpp') }}
       - name: Fetch engine dependencies and check callbacks and number parsing
         run: |
-          for dependency in entt rapidyaml sdl3 lua sol2 miniaudio freetype text_shaping; do sh "scripts/get_${dependency}.sh"; done
+          for dependency in entt rapidyaml sdl3 lua sol2 miniaudio jolt freetype text_shaping; do sh "scripts/get_${dependency}.sh"; done
           clang++ -m32 -std=c++20 -stdlib=libstdc++ -fsyntax-only -Ideps/sol2/include -Ideps/lua/src tests/Sol2CompatibilityProbe.cpp
           clang++ -m32 -std=c++20 -stdlib=libstdc++ -Isrc tests/NumberParsingTests.cpp -o number-parsing-probe
           ./number-parsing-probe

@@ -1,4 +1,4 @@
-![BAZZALT](./bazzalt/assets/branding/BazzaltText.svg)
+![BAZZALT](./bazzalt/assets/branding/BazzaltLogo.svg)
 
 [![Windows 32-bit Game Runtime](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/windows-32-bit.yml/badge.svg?event=push)](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/windows-32-bit.yml)
 [![Windows 64-bit](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/windows-64-bit.yml/badge.svg?event=push)](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/windows-64-bit.yml)
@@ -13,6 +13,8 @@ Version 0.7.0 supports Windows and Linux x64 Hub, Editor, game compiler and runt
 Linux presentation uses X11/XWayland; see the [Linux guide](docs/public/0.7.0/manual/linux/en.html).
 Windows and Linux also support x86 game output; Hub, Editor and game compiler always require x64.
 Build games on their target OS with a matching prebuilt runtime SDK.
+Physics runs in a separate Jolt-based native library, with rigid bodies, colliders, scene queries and C++/Lua contact callbacks. See the [physics guide](docs/public/0.7.0/manual/physics/en.html).
+
 See [what is new in 0.7.0](docs/public/0.7.0/whats-new/en.html).
 
 > **Alpha status:** core workflows are functional, but APIs and file formats may

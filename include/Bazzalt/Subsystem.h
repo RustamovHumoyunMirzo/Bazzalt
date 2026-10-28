@@ -4,7 +4,10 @@
 #include "Bazzalt/Scene.h"
 #include <stdexcept>
 namespace Bazzalt {
-enum class SubsystemLevel { Boot, Window, Initialization, Content, Ready };
+// Original persisted IDs remain stable; scheduling uses lifecycle order.
+enum class SubsystemLevel { Boot=0, Window=1, Initialization=2, Content=3, Ready=4,
+    BeforeInput=5,Input=6,AfterInput=7,BeforeAudio=8,Audio=9,AfterAudio=10,
+    BeforePhysics=11,Physics=12,AfterPhysics=13 };
 // Not a Component or Behavior. Deliberately has no GetEntity().
 class Subsystem {
 public:

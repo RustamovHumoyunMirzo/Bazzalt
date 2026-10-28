@@ -152,6 +152,31 @@ def lua_types():
         for m in re.finditer(r'type\["(\w+)"\]\s*=([^;]+);',template):
             result[name][1][m[1]]=m[2].replace('T::',name+'::').replace('T value',name+' value')
     result['MathFunctions']=('src/Script/LuaMath.cpp', {m[1]:m[2] for m in re.finditer(r'api\["(\w+)"\]\s*=([^;]+);',math)})
+    # Physics uses one field schema for serialization, editor authoring and Lua.
+    physics=(ROOT/'src/Script/LuaPhysics.cpp').read_text(encoding='utf-8')
+    schema=(ROOT/'src/Physics/PhysicsFields.h').read_text(encoding='utf-8').replace('\\\n',' ')
+    macros={m[1]:m[2] for m in re.finditer(r'#define (BAZZALT_\w+_FIELDS)\(X\) ([^\n]+)',schema)}
+    def fields(macro):
+        text=macros[macro]
+        for child in re.findall(r'(BAZZALT_\w+_FIELDS)\(X\)',text):text=text.replace(child+'(X)',macros[child])
+        return re.findall(r'X\((\w+),',text)
+    for name,macro in (('Rigidbody','BAZZALT_BODY_FIELDS'),('ShapeCollider','BAZZALT_SHAPE_FIELDS'),('MeshCollider','BAZZALT_MESH_COLLIDER_FIELDS'),('PhysicsSettings','BAZZALT_PHYSICS_SETTINGS_FIELDS')):
+        for field in fields(macro):result[name][1].setdefault(field,'&'+name+'::'+field)
+    for variable,name in (('hit','PhysicsHit'),('event','CollisionEvent')):
+        start=physics.index('#define FIELD(Name) '+variable);end=physics.index('#undef FIELD',start)
+        for field in re.findall(r'FIELD\((\w+)\)',physics[start:end]):
+            if field!='Name':result[name][1].setdefault(field,'&'+name+'::'+field)
+    for method in re.findall(r'METHOD\((\w+)\)',physics):
+        if method!='Name':result['PhysicsScene'][1].setdefault(method,'&PhysicsScene::'+method)
+    # Scene physics overloads are bound after the base Scene type at runtime.
+    start=physics.index('sol::usertype<Scene> scene=api["Scene"]')
+    for match in re.finditer(r'scene\["(\w+)"\]\s*=',physics[start:]):
+        begin=start+match.end();scan=masked(physics);depth=0;end=begin
+        for end in range(begin,len(scan)):
+            depth+=(scan[end] in '({[')-(scan[end] in ')}]')
+            if scan[end]==';' and depth==0:break
+        result['Scene'][1][match[1]]=physics[begin:end].strip()
+
     return result
 
 

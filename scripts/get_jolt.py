@@ -18,6 +18,6 @@ def Fetch():
     if Run("git","-C",str(destination),"rev-parse","HEAD")!=lock["commit"]:raise RuntimeError("Jolt revision integrity check failed")
     if Run("git","-C",str(destination),"status","--porcelain","--untracked-files=normal"):raise RuntimeError("Jolt source has local changes; refusing to use modified dependency source")
     if not (destination/"Build/CMakeLists.txt").is_file():raise RuntimeError("Invalid Jolt source layout")
-    print(f"Jolt {lock['version']} source is ready; physics simulation is not integrated yet.")
+    print(f"Jolt {lock['version']} source is ready for the private physics module.")
 
 if __name__=="__main__":Fetch()

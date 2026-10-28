@@ -9,7 +9,7 @@ from scripts.stage_game_runtime import Stage
 def Run(*args):subprocess.run([str(x) for x in args],cwd=ROOT,check=True)
 def Libraries(build,destination):
     destination.mkdir(parents=True,exist_ok=True)
-    for pattern in ('libBazzalt.so*','libbazzalt_lua.so*','libbazzalt_gui.so*','libbshad.so*'):
+    for pattern in ('libBazzalt.so*','libbazzalt_lua.so*','libbazzalt_gui.so*','libbazzalt_physics.so*','libbshad.so*'):
         for path in (build/'Editor').glob(pattern):shutil.copy2(path,destination/path.name)
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--product',choices=('core','editor','hub','compiler','all'),default='all');parser.add_argument('--build',type=Path,default=ROOT/'build');parser.add_argument('--output',type=Path,default=ROOT/'dist/releases');parser.add_argument('--base-url',default='');args=parser.parse_args()
@@ -22,7 +22,7 @@ def main():
         if stage.exists():raise SystemExit('Choose a clean staging directory: '+str(stage))
         if product=='core':
             stage.mkdir(parents=True);shutil.copytree(build/'ScriptSDK/include',stage/'include');Libraries(build,stage/'lib');Stage(build,stage/'RuntimeTemplates/linux-x64','x64',platform='linux')
-            (stage/'core.json').write_text(json.dumps(dict(version=versions['core'],architecture='x64',platform='linux',abi=1,lua_version='5.4.9',gui_abi=6)))
+            (stage/'core.json').write_text(json.dumps(dict(version=versions['core'],architecture='x64',platform='linux',abi=1,lua_version='5.4.9',gui_abi=6,physics_abi=1)))
         else:
             executable={'editor':'Bazzalt','hub':'BazzaltHub','compiler':'BazzaltCompiler'}[product];source={'editor':'bazzalt_editor.py','hub':'bazzalt_hub.py','compiler':'bazzalt_compiler.py'}[product]
             command=[sys.executable,'-m','nuitka','--mode=standalone','--assume-yes-for-downloads','--output-dir='+str(build/'LinuxNuitka'/product),'--output-filename='+executable]
@@ -41,7 +41,7 @@ def main():
                 shutil.copy2(modules[0],stage/'Editor'/modules[0].name);shutil.copytree(build/'ScriptSDK',stage/'ScriptSDK',symlinks=False);Stage(build,stage/'RuntimeTemplates/linux-x64','x64',platform='linux')
                 compiler=build/'LinuxRelease/compiler'
                 if not compiler.is_dir():raise ValueError('Package the Linux compiler before the editor')
-                shutil.copytree(compiler,stage/'tools/compiler');(stage/'editor.json').write_text(json.dumps(dict(version=versions['editor'],architecture='x64',platform='linux',executable='Bazzalt',project_format_max=1,lua_version='5.4.9',gui_abi=6)))
+                shutil.copytree(compiler,stage/'tools/compiler');(stage/'editor.json').write_text(json.dumps(dict(version=versions['editor'],architecture='x64',platform='linux',executable='Bazzalt',project_format_max=1,lua_version='5.4.9',gui_abi=6,physics_abi=1)))
         Collect(stage/'licenses',ROOT,python=product!='core')
         x86=ROOT/'build/LinuxX86Package/RuntimeTemplates/linux-x86'
         if product in ('core','editor') and x86.is_dir():shutil.copytree(x86,stage/'RuntimeTemplates/linux-x86')

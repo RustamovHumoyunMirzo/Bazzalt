@@ -12,6 +12,7 @@ public:
     void OnCreate() override { if(!Bazzalt::Detail::BoundMaterialServices)throw std::runtime_error("Material host service was not bound");if(Surface.IsValid())Surface.SetFloat("roughness",0.1f);Bazzalt::Time::SetSlowMotion(0.25f);Write("create"); }
     void OnUpdate(float delta) override { if(Bazzalt::Time::GetDeltaTime()!=delta)throw std::runtime_error("Module clock was not shared");Write("update");if(Bazzalt::Input::GetKeyDown(Bazzalt::KeyCode::W))Write("input_w"); }
     void OnFixedUpdate(float delta) override { if(!Bazzalt::Time::IsInFixedTimeStep()||Bazzalt::Time::GetDeltaTime()!=delta)throw std::runtime_error("Module fixed clock was not shared");Write("fixed"); }
+    void OnTriggerEnter(const Bazzalt::CollisionEvent& event) override { if(event.Contacts.empty())throw std::runtime_error("Missing trigger contact manifold");Write("trigger"); }
     void OnDestroy() override { Write("destroy"); }
     void OnLateUpdate(float) override { Write("late"); }
 };

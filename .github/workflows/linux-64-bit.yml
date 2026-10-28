@@ -39,7 +39,7 @@ jobs:
           restore-keys: linux-x64-objects-
       - name: Download pinned source dependencies and prebuilt Filament SDK
         run: |
-          for dependency in entt rapidyaml filament sdl3 stb_image lua sol2 miniaudio freetype text_shaping pybind11; do
+          for dependency in entt rapidyaml filament sdl3 stb_image lua sol2 miniaudio jolt freetype text_shaping pybind11; do
             if [ -f "scripts/get_${dependency}.sh" ]; then sh "scripts/get_${dependency}.sh"; fi
           done
       - name: Check Sol2 callbacks and portable number parsing before the full build

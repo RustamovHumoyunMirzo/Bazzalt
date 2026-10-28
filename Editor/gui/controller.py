@@ -519,6 +519,8 @@ class EditorController(QObject):
             except OSError:pass
         section.AddViewport(preview)
 
+        from .physics import InspectScene
+        InspectScene(self,scene_id)
         if getattr(self.Window,'Extensions',None):self.Window.Extensions.InspectScene(scene_id)
 
     def SetEntityEditorState(self,entity_id,key,value):
@@ -743,6 +745,9 @@ class EditorController(QObject):
         return self.Window.Resources.Icon(f"icons/{filename}") if filename else None
 
     def _ComponentEditor(self, entity_id: str, component: str, name: str, value):  # type: ignore[no-untyped-def]
+        from .physics import ComponentField
+        physics_field=ComponentField(self,entity_id,component,name,value)
+        if physics_field is not None:return physics_field
         if component=="Audio Source" and name=="Clip":return self._AssetPicker(value,AUDIO_EXTENSIONS,lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
         if component=="Audio Listener" and name=="Mixer Asset":return self._AssetPicker(value,{".bmixer"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
         if component=="Audio Source" and name=="Output Bus":
@@ -934,6 +939,7 @@ class EditorController(QObject):
             self.SetDirty(True)
             if component=="Light" and name!="Type":self._RefreshInspectorValues()
             if component=="GuiElement" and name=="Stylesheet":self.SelectEntity(entity_id,force=True)
+            if component in {"Rigidbody","Shape Collider","Mesh Collider"} and name in {"Use Scene Gravity","Shape","Convex"}:self.SelectEntity(entity_id,force=True)
 
     def _CommitLightType(self,entity_id:str,value:int)->None:
         self._CommitComponent(entity_id,"Light","Type",value)

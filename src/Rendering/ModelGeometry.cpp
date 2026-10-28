@@ -4,6 +4,7 @@
 #include <charconv>
 #include <cmath>
 #include <cstring>
+#include <fstream>
 #include <limits>
 #include <numeric>
 #include <string>
@@ -67,7 +68,7 @@ bool Box(Vec3 o,Vec3 d,Vec3 minimum,Vec3 maximum,float limit){
 }
 }
 
-std::shared_ptr<ModelGeometryAsset> ReadModelGeometry(const std::vector<std::uint8_t>& bytes){
+std::shared_ptr<ModelGeometryAsset> ReadModelGeometry(const std::vector<std::uint8_t>& bytes,const std::filesystem::path& source){
     auto result=std::make_shared<ModelGeometryAsset>();
     if(bytes.empty())return result;
     std::size_t start=0,length=bytes.size();std::vector<std::uint8_t> binary;
@@ -82,7 +83,17 @@ std::shared_ptr<ModelGeometryAsset> ReadModelGeometry(const std::vector<std::uin
     auto tree=ryml::parse_in_arena(ryml::csubstr(reinterpret_cast<const char*>(bytes.data()+start),length));auto root=tree.crootref();
     if(!root.has_child("nodes")||!root.has_child("buffers")||!root.has_child("meshes"))return result;
     std::vector<std::vector<std::uint8_t>> buffers;
-    for(auto buffer:root["buffers"].children())buffers.push_back(buffer.has_child("uri")?Decode(buffer["uri"].val()):binary);
+    for(auto buffer:root["buffers"].children()){
+        if(!buffer.has_child("uri")){buffers.push_back(binary);continue;}
+        auto uri=buffer["uri"].val();std::string text(uri.str,uri.len);
+        if(text.starts_with("data:")){buffers.push_back(Decode(uri));continue;}
+        std::vector<std::uint8_t> data;
+        if(!source.empty()&&text.find(':')==std::string::npos){
+            auto relative=std::filesystem::u8path(text);auto base=std::filesystem::weakly_canonical(source.parent_path());auto file=std::filesystem::weakly_canonical(base/relative);auto inside=file.lexically_relative(base);
+            if(!relative.is_absolute()&&!inside.empty()&&!inside.is_absolute()&&*inside.begin()!=".."){std::ifstream stream(file,std::ios::binary|std::ios::ate);auto size=stream.tellg();if(size>0&&size<=128*1024*1024){data.resize(std::size_t(size));stream.seekg(0);if(!stream.read(reinterpret_cast<char*>(data.data()),size))data.clear();}}
+        }
+        buffers.push_back(std::move(data));
+    }
     std::vector<std::shared_ptr<ModelGeometry>> meshes;
     for(auto mesh:root["meshes"].children()){
         auto geometry=std::make_shared<ModelGeometry>();

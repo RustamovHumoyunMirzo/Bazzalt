@@ -52,4 +52,7 @@ not persist EnTT entity identifiers, pointers, cache paths, or renderer handles.
 
 - [Extension packages, SDK lifetime and deployment](extensions.md)
 
-- [Jolt physics integration preparation](physics-integration.md) — private dependency, ownership, fixed-step and release contracts; no simulation yet.
+- [Jolt physics runtime](physics.md) — separate module, scene ownership, fixed steps, queries, events, scripting and release contracts.
+
+
+> NOTICE! Content in the `docs/private` directory may be outdated or inaccurate. If you find any issues, feel free to report them or open a pull request. Only public documentation is actively maintained.

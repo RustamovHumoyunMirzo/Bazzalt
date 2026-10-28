@@ -4,7 +4,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt,QTimer
 from PySide6.QtWidgets import QDialog,QVBoxLayout,QHBoxLayout,QTreeWidget,QTreeWidgetItem,QPushButton,QLabel,QDialogButtonBox
 from .widgets.fields import AssetPickerInput,EnumInput
-from ..subsystems import Registrations,Sources,KEY,LEVELS
+from ..subsystems import Registrations,Sources,KEY,LEVELS,LEVEL_ORDER
 
 class GlobalSubsystemsDialog(QDialog):
     def __init__(self,editor):
@@ -14,7 +14,7 @@ class GlobalSubsystemsDialog(QDialog):
         self.Error=QLabel();self.Error.setWordWrap(True);root.addWidget(self.Error)
         row=QHBoxLayout();self.Picker=AssetPickerInput(self.Tr('subsystems.select'),accepted_extensions=('.cpp',),picker_title=self.Tr('subsystems.select'),search_placeholder=self.Tr('properties.search_project_assets'),missing_label=self.Tr('properties.missing_asset'))
         self.Picker.ConfigureAssets(editor.Controller._ProjectAssets());self.Picker.AssetResolver=editor.Runtime.ResolveAssetRecord;self.Picker.PickRequested.connect(self.Picker.OpenProjectPicker)
-        self.Level=EnumInput();self.Level.SetOptions([(self.Tr('subsystems.level.'+name),index) for index,name in enumerate(LEVELS)]);self.Level.SetValue(4)
+        self.Level=EnumInput();self.Level.SetOptions([(self.Tr('subsystems.level.'+name),index) for index,name in ((i,LEVELS[i]) for i in LEVEL_ORDER)]);self.Level.SetValue(4)
         add=QPushButton(self.Tr('subsystems.add'));add.clicked.connect(self._Add);remove=QPushButton(self.Tr('subsystems.remove'));remove.clicked.connect(self._Remove)
         row.addWidget(self.Picker,1);row.addWidget(self.Level);row.addWidget(add);row.addWidget(remove);root.addLayout(row)
         buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Apply|QDialogButtonBox.StandardButton.Close);buttons.button(QDialogButtonBox.StandardButton.Apply).clicked.connect(self._Apply);buttons.rejected.connect(self.reject);root.addWidget(buttons)
@@ -26,14 +26,15 @@ class GlobalSubsystemsDialog(QDialog):
         for widget in (self.Tree,self.Picker,self.Level,add,remove,buttons.button(QDialogButtonBox.StandardButton.Apply)):widget.setEnabled(enabled)
         if not enabled:self.Error.setText(self.Tr('subsystems.stop_playing' if self.Info else 'subsystems.no_project'))
     def _Refresh(self):
-        self.Tree.clear();groups=[]
-        for name in LEVELS:
-            group=QTreeWidgetItem([self.Tr('subsystems.level.'+name),'']);group.setFlags(Qt.ItemFlag.ItemIsEnabled);self.Tree.addTopLevelItem(group);group.setExpanded(True);groups.append(group)
+        self.Tree.clear();groups={}
+        for level_id in LEVEL_ORDER:
+            name=LEVELS[level_id]
+            group=QTreeWidgetItem([self.Tr('subsystems.level.'+name),'']);group.setFlags(Qt.ItemFlag.ItemIsEnabled);self.Tree.addTopLevelItem(group);group.setExpanded(True);groups[level_id]=group
         for index,value in enumerate(self.Values):
             record=self.Editor.Runtime.ResolveAssetRecord(value['asset']);item=QTreeWidgetItem([record['name'] if record else self.Tr('properties.missing_asset'),self.Tr('subsystems.level.'+LEVELS[value['level']])]);item.setData(0,Qt.ItemDataRole.UserRole,index)
             if record:item.setToolTip(0,record['path'])
             groups[value['level']].addChild(item)
-            level=EnumInput();level.SetOptions([(self.Tr('subsystems.level.'+name),i) for i,name in enumerate(LEVELS)]);level.SetValue(value['level']);self.Tree.setItemWidget(item,1,level)
+            level=EnumInput();level.SetOptions([(self.Tr('subsystems.level.'+name),i) for i,name in ((i,LEVELS[i]) for i in LEVEL_ORDER)]);level.SetValue(value['level']);self.Tree.setItemWidget(item,1,level)
             level.currentIndexChanged.connect(lambda _,i=index,field=level:self._ChangeLevel(i,field.GetValue()))
         self.Tree.setColumnWidth(0,420)
     def _Validate(self,values):

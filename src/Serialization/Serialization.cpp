@@ -1,6 +1,7 @@
 #include "Bazzalt/Serialization.h"
 #include "Utils/NumberParsing.h"
 #include "Audio/AudioRuntime.h"
+#include "Physics/PhysicsSerialization.h"
 #include "GUI/GuiSerialization.h"
 #include <charconv>
 #include <cmath>
@@ -26,59 +27,219 @@
 #include "Bazzalt/Components/ScriptComponent.h"
 #include "Bazzalt/Scene.h"
 
-namespace Bazzalt { namespace {
-struct EntityRecord { UUID Id; UUID Parent; std::string Name; std::vector<SerializedComponent> Components; };
-std::string Text(ryml::ConstNodeRef n) { auto v=n.val(); return {v.str,v.len}; }
-std::string PathUtf8(const std::filesystem::path&p){const auto v=p.generic_u8string();return{reinterpret_cast<const char*>(v.data()),v.size()};}
-std::string Key(ryml::ConstNodeRef n) { auto v=n.key(); return {v.str,v.len}; }
-std::string Quote(const std::string& s) { std::ostringstream o; o<<'"'; for(unsigned char c:s){ switch(c){case '\\':o<<"\\\\";break;case '"':o<<"\\\"";break;case '\n':o<<"\\n";break;case '\r':o<<"\\r";break;case '\t':o<<"\\t";break;default:o<<static_cast<char>(c);} } o<<'"'; return o.str(); }
-bool UInt(ryml::ConstNodeRef n, std::uint32_t& v) { auto s=Text(n); auto r=std::from_chars(s.data(),s.data()+s.size(),v); return r.ec==std::errc{}&&r.ptr==s.data()+s.size(); }
-std::string Float(float v){std::ostringstream s;s.imbue(std::locale::classic());s<<std::setprecision(std::numeric_limits<float>::max_digits10)<<v;return s.str();}
-std::string EnvironmentYaml(const SceneEnvironment& v){
-    std::ostringstream out;out<<"Environment:\n  Version: 2\n  Mode: "<<static_cast<int>(v.Mode)<<"\n  Source: "<<Quote(v.SourceAsset.ToString())<<"\n  Material: "<<Quote(v.MaterialAsset.ToString())<<"\n  Intensity: "<<Float(v.Intensity)<<"\n  IBL: "<<(v.ImageBasedLighting?"true":"false")<<"\n  Skybox: "<<(v.SkyboxVisible?"true":"false")<<"\n  ShowSun: "<<(v.ShowSun?"true":"false")<<"\n";
-    out<<"  RotationX: "<<Float(v.Rotation.X)<<"\n  RotationY: "<<Float(v.Rotation.Y)<<"\n  RotationZ: "<<Float(v.Rotation.Z)<<"\n  ClearR: "<<Float(v.ClearColor.X)<<"\n  ClearG: "<<Float(v.ClearColor.Y)<<"\n  ClearB: "<<Float(v.ClearColor.Z)<<"\n  ClearA: "<<Float(v.ClearColor.W)<<"\n";return out.str();
-}
-bool Float(const PropertyMap& p,const char* k,float& v){auto i=p.find(k);return i!=p.end()&&Detail::ParseNumber(i->second,v);}
-bool Bool(const PropertyMap&p,const char*k,bool&v){auto i=p.find(k);if(i==p.end())return false;if(i->second=="true"){v=true;return true;}if(i->second=="false"){v=false;return true;}return false;}
-bool Unsigned(const PropertyMap&p,const char*k,std::uint32_t&v){auto i=p.find(k);if(i==p.end())return false;auto b=i->second.data(),e=b+i->second.size();auto r=std::from_chars(b,e,v);return r.ec==std::errc{}&&r.ptr==e;}
-template<typename T> bool Enum(const PropertyMap&p,const char*k,T&v){auto i=p.find(k);if(i==p.end())return false;int n=0;auto b=i->second.data(),e=b+i->second.size();auto r=std::from_chars(b,e,n);if(r.ec!=std::errc{}||r.ptr!=e)return false;v=static_cast<T>(n);return true;}
-template<typename T> bool EnumRange(const PropertyMap&p,const char*k,T&v,int minimum,int maximum){int n=0;auto i=p.find(k);if(i==p.end())return false;auto b=i->second.data(),e=b+i->second.size();auto r=std::from_chars(b,e,n);if(r.ec!=std::errc{}||r.ptr!=e||n<minimum||n>maximum)return false;v=static_cast<T>(n);return true;}
-const std::string* Property(const PropertyMap& properties,const char* key){const auto found=properties.find(key);return found==properties.end()?nullptr:&found->second;}
-bool ReadEnvironment(ryml::ConstNodeRef root,SceneEnvironment& v){
-    if(!root.has_child("Environment"))return true;
-    const auto node=root["Environment"];if(!node.is_map())return false;
-    PropertyMap p;for(auto field:node.children()){if(!field.has_val())return false;p[Key(field)]=Text(field);}
-    int version=0;const auto* source=Property(p,"Source");const auto* material=Property(p,"Material");
-    if(!Enum(p,"Version",version)||(version!=1&&version!=2))return false;
-    if(version==2){if(!EnumRange(p,"Mode",v.Mode,0,1))return false;}
-    else {UUID legacyMaterial;if(material&&UUID::TryParse(*material,legacyMaterial)&&legacyMaterial)v.Mode=SceneEnvironmentMode::Material;}
-    return source&&material&&UUID::TryParse(*source,v.SourceAsset)&&UUID::TryParse(*material,v.MaterialAsset)&&Float(p,"Intensity",v.Intensity)&&Bool(p,"IBL",v.ImageBasedLighting)&&Bool(p,"Skybox",v.SkyboxVisible)&&Bool(p,"ShowSun",v.ShowSun)&&Float(p,"RotationX",v.Rotation.X)&&Float(p,"RotationY",v.Rotation.Y)&&Float(p,"RotationZ",v.Rotation.Z)&&Float(p,"ClearR",v.ClearColor.X)&&Float(p,"ClearG",v.ClearColor.Y)&&Float(p,"ClearB",v.ClearColor.Z)&&Float(p,"ClearA",v.ClearColor.W)&&v.IsValid();
-}
-} // namespace
+namespace Bazzalt
+{
+    namespace
+    {
+        struct EntityRecord
+        {
+            UUID Id;
+            UUID Parent;
+            std::string Name;
+            std::vector<SerializedComponent> Components;
+        };
+        std::string Text(ryml::ConstNodeRef n)
+        {
+            auto v = n.val();
+            return {v.str, v.len};
+        }
+        std::string PathUtf8(const std::filesystem::path &p)
+        {
+            const auto v = p.generic_u8string();
+            return {reinterpret_cast<const char *>(v.data()), v.size()};
+        }
+        std::string Key(ryml::ConstNodeRef n)
+        {
+            auto v = n.key();
+            return {v.str, v.len};
+        }
+        std::string Quote(const std::string &s)
+        {
+            std::ostringstream o;
+            o << '"';
+            for (unsigned char c : s)
+            {
+                switch (c)
+                {
+                case '\\':
+                    o << "\\\\";
+                    break;
+                case '"':
+                    o << "\\\"";
+                    break;
+                case '\n':
+                    o << "\\n";
+                    break;
+                case '\r':
+                    o << "\\r";
+                    break;
+                case '\t':
+                    o << "\\t";
+                    break;
+                default:
+                    o << static_cast<char>(c);
+                }
+            }
+            o << '"';
+            return o.str();
+        }
+        bool UInt(ryml::ConstNodeRef n, std::uint32_t &v)
+        {
+            auto s = Text(n);
+            auto r = std::from_chars(s.data(), s.data() + s.size(), v);
+            return r.ec == std::errc{} && r.ptr == s.data() + s.size();
+        }
+        std::string Float(float v)
+        {
+            std::ostringstream s;
+            s.imbue(std::locale::classic());
+            s << std::setprecision(std::numeric_limits<float>::max_digits10) << v;
+            return s.str();
+        }
+        std::string EnvironmentYaml(const SceneEnvironment &v)
+        {
+            std::ostringstream out;
+            out << "Environment:\n  Version: 2\n  Mode: " << static_cast<int>(v.Mode) << "\n  Source: " << Quote(v.SourceAsset.ToString()) << "\n  Material: " << Quote(v.MaterialAsset.ToString()) << "\n  Intensity: " << Float(v.Intensity) << "\n  IBL: " << (v.ImageBasedLighting ? "true" : "false") << "\n  Skybox: " << (v.SkyboxVisible ? "true" : "false") << "\n  ShowSun: " << (v.ShowSun ? "true" : "false") << "\n";
+            out << "  RotationX: " << Float(v.Rotation.X) << "\n  RotationY: " << Float(v.Rotation.Y) << "\n  RotationZ: " << Float(v.Rotation.Z) << "\n  ClearR: " << Float(v.ClearColor.X) << "\n  ClearG: " << Float(v.ClearColor.Y) << "\n  ClearB: " << Float(v.ClearColor.Z) << "\n  ClearA: " << Float(v.ClearColor.W) << "\n";
+            return out.str();
+        }
+        bool Float(const PropertyMap &p, const char *k, float &v)
+        {
+            auto i = p.find(k);
+            return i != p.end() && Detail::ParseNumber(i->second, v);
+        }
+        bool Bool(const PropertyMap &p, const char *k, bool &v)
+        {
+            auto i = p.find(k);
+            if (i == p.end())
+                return false;
+            if (i->second == "true")
+            {
+                v = true;
+                return true;
+            }
+            if (i->second == "false")
+            {
+                v = false;
+                return true;
+            }
+            return false;
+        }
+        bool Unsigned(const PropertyMap &p, const char *k, std::uint32_t &v)
+        {
+            auto i = p.find(k);
+            if (i == p.end())
+                return false;
+            auto b = i->second.data(), e = b + i->second.size();
+            auto r = std::from_chars(b, e, v);
+            return r.ec == std::errc{} && r.ptr == e;
+        }
+        template <typename T>
+        bool Enum(const PropertyMap &p, const char *k, T &v)
+        {
+            auto i = p.find(k);
+            if (i == p.end())
+                return false;
+            int n = 0;
+            auto b = i->second.data(), e = b + i->second.size();
+            auto r = std::from_chars(b, e, n);
+            if (r.ec != std::errc{} || r.ptr != e)
+                return false;
+            v = static_cast<T>(n);
+            return true;
+        }
+        template <typename T>
+        bool EnumRange(const PropertyMap &p, const char *k, T &v, int minimum, int maximum)
+        {
+            int n = 0;
+            auto i = p.find(k);
+            if (i == p.end())
+                return false;
+            auto b = i->second.data(), e = b + i->second.size();
+            auto r = std::from_chars(b, e, n);
+            if (r.ec != std::errc{} || r.ptr != e || n < minimum || n > maximum)
+                return false;
+            v = static_cast<T>(n);
+            return true;
+        }
+        const std::string *Property(const PropertyMap &properties, const char *key)
+        {
+            const auto found = properties.find(key);
+            return found == properties.end() ? nullptr : &found->second;
+        }
+        bool ReadEnvironment(ryml::ConstNodeRef root, SceneEnvironment &v)
+        {
+            if (!root.has_child("Environment"))
+                return true;
+            const auto node = root["Environment"];
+            if (!node.is_map())
+                return false;
+            PropertyMap p;
+            for (auto field : node.children())
+            {
+                if (!field.has_val())
+                    return false;
+                p[Key(field)] = Text(field);
+            }
+            int version = 0;
+            const auto *source = Property(p, "Source");
+            const auto *material = Property(p, "Material");
+            if (!Enum(p, "Version", version) || (version != 1 && version != 2))
+                return false;
+            if (version == 2)
+            {
+                if (!EnumRange(p, "Mode", v.Mode, 0, 1))
+                    return false;
+            }
+            else
+            {
+                UUID legacyMaterial;
+                if (material && UUID::TryParse(*material, legacyMaterial) && legacyMaterial)
+                    v.Mode = SceneEnvironmentMode::Material;
+            }
+            return source && material && UUID::TryParse(*source, v.SourceAsset) && UUID::TryParse(*material, v.MaterialAsset) && Float(p, "Intensity", v.Intensity) && Bool(p, "IBL", v.ImageBasedLighting) && Bool(p, "Skybox", v.SkyboxVisible) && Bool(p, "ShowSun", v.ShowSun) && Float(p, "RotationX", v.Rotation.X) && Float(p, "RotationY", v.Rotation.Y) && Float(p, "RotationZ", v.Rotation.Z) && Float(p, "ClearR", v.ClearColor.X) && Float(p, "ClearG", v.ClearColor.Y) && Float(p, "ClearB", v.ClearColor.Z) && Float(p, "ClearA", v.ClearColor.W) && v.IsValid();
+        }
+    } // namespace
 
-void ComponentSerializationRegistry::RegisterDescriptor(Descriptor d){
-    if(d.Type.empty()||d.Version==0||!d.Serialize||!d.Deserialize)throw std::invalid_argument("Component serializer descriptor is incomplete");
-    if(auto module=Detail::GetCurrentGameplayModule()) {
-        if(std::find(m_gameplayModules.begin(),m_gameplayModules.end(),module)==m_gameplayModules.end())
-            m_gameplayModules.push_back(std::move(module));
+    void ComponentSerializationRegistry::RegisterDescriptor(Descriptor d)
+    {
+        if (d.Type.empty() || d.Version == 0 || !d.Serialize || !d.Deserialize)
+            throw std::invalid_argument("Component serializer descriptor is incomplete");
+        if (auto module = Detail::GetCurrentGameplayModule())
+        {
+            if (std::find(m_gameplayModules.begin(), m_gameplayModules.end(), module) == m_gameplayModules.end())
+                m_gameplayModules.push_back(std::move(module));
+        }
+        for (auto &e : m_descriptors)
+            if (e.Type == d.Type)
+            {
+                e = std::move(d);
+                return;
+            }
+        m_descriptors.emplace_back(std::move(d));
     }
-    for(auto& e:m_descriptors)if(e.Type==d.Type){e=std::move(d);return;}
-    m_descriptors.emplace_back(std::move(d));
-}
-const ComponentSerializationRegistry::Descriptor* ComponentSerializationRegistry::Find(const std::string& t)const{for(const auto& d:m_descriptors)if(d.Type==t)return &d;return nullptr;}
+    const ComponentSerializationRegistry::Descriptor *ComponentSerializationRegistry::Find(const std::string &t) const
+    {
+        for (const auto &d : m_descriptors)
+            if (d.Type == t)
+                return &d;
+        return nullptr;
+    }
 
-SceneSerializer::SceneSerializer(){
-Runtime::RegisterAudioComponents(m_components);
-Runtime::RegisterGuiComponents(m_components);
-m_components.Register<ScriptComponents>("Bazzalt.ScriptComponents",1,
-    [](const ScriptComponents& value,PropertyMap& output){
+    SceneSerializer::SceneSerializer()
+    {
+        Runtime::RegisterAudioComponents(m_components);
+        Runtime::RegisterPhysicsComponents(m_components);
+        Runtime::RegisterGuiComponents(m_components);
+        m_components.Register<ScriptComponents>("Bazzalt.ScriptComponents", 1, [](const ScriptComponents &value, PropertyMap &output)
+                                                {
         output["Count"]=std::to_string(value.Values.size());output["Enabled"]=value.Enabled?"true":"false";
         for(std::size_t i=0;i<value.Values.size();++i){const auto& script=value.Values[i];const auto prefix="Script."+std::to_string(i)+".";
             output[prefix+"Source"]=script.Source;output[prefix+"TypeName"]=script.TypeName;output[prefix+"Enabled"]=script.Enabled?"true":"false";output[prefix+"Count"]=std::to_string(script.Properties.size());
             output[prefix+"Lua"]=script.Lua?"true":"false";
             for(std::size_t j=0;j<script.Properties.size();++j){const auto key=prefix+"Property."+std::to_string(j)+".";output[key+"Name"]=script.Properties[j].Name;output[key+"Type"]=script.Properties[j].Type;output[key+"Value"]=script.Properties[j].Value;}
-        }
-    },[](ScriptComponents& value,const PropertyMap& properties,std::uint32_t version){
+        } }, [](ScriptComponents &value, const PropertyMap &properties, std::uint32_t version)
+                                                {
         if(version!=1)return false;
         try{
             const auto count=std::stoul(properties.at("Count"));if(count>1024)return false;
@@ -91,47 +252,261 @@ m_components.Register<ScriptComponents>("Bazzalt.ScriptComponents",1,
                 for(std::size_t j=0;j<fields;++j){const auto key=prefix+"Property."+std::to_string(j)+".";ScriptPropertyValue field{properties.at(key+"Name"),properties.at(key+"Type"),properties.at(key+"Value")};if(!names.insert(field.Name).second)return false;script.Properties.push_back(std::move(field));}
                 value.Values.push_back(std::move(script));
             }return true;
-        }catch(const std::exception&){return false;}
-    });
-m_components.Register<Transform>("Bazzalt.Transform",1,
-[](const Transform& v,PropertyMap& o){o["Position.X"]=Float(v.Position.X);o["Position.Y"]=Float(v.Position.Y);o["Position.Z"]=Float(v.Position.Z);o["Rotation.X"]=Float(v.Rotation.X);o["Rotation.Y"]=Float(v.Rotation.Y);o["Rotation.Z"]=Float(v.Rotation.Z);o["Rotation.W"]=Float(v.Rotation.W);o["Scale.X"]=Float(v.Scale.X);o["Scale.Y"]=Float(v.Scale.Y);o["Scale.Z"]=Float(v.Scale.Z);},
-[](Transform& v,const PropertyMap& i,std::uint32_t n){return n==1&&Float(i,"Position.X",v.Position.X)&&Float(i,"Position.Y",v.Position.Y)&&Float(i,"Position.Z",v.Position.Z)&&Float(i,"Rotation.X",v.Rotation.X)&&Float(i,"Rotation.Y",v.Rotation.Y)&&Float(i,"Rotation.Z",v.Rotation.Z)&&Float(i,"Rotation.W",v.Rotation.W)&&Float(i,"Scale.X",v.Scale.X)&&Float(i,"Scale.Y",v.Scale.Y)&&Float(i,"Scale.Z",v.Scale.Z);});
+        }catch(const std::exception&){return false;} });
+        m_components.Register<Transform>("Bazzalt.Transform", 1, [](const Transform &v, PropertyMap &o)
+                                         {o["Position.X"]=Float(v.Position.X);o["Position.Y"]=Float(v.Position.Y);o["Position.Z"]=Float(v.Position.Z);o["Rotation.X"]=Float(v.Rotation.X);o["Rotation.Y"]=Float(v.Rotation.Y);o["Rotation.Z"]=Float(v.Rotation.Z);o["Rotation.W"]=Float(v.Rotation.W);o["Scale.X"]=Float(v.Scale.X);o["Scale.Y"]=Float(v.Scale.Y);o["Scale.Z"]=Float(v.Scale.Z); }, [](Transform &v, const PropertyMap &i, std::uint32_t n)
+                                         { return n == 1 && Float(i, "Position.X", v.Position.X) && Float(i, "Position.Y", v.Position.Y) && Float(i, "Position.Z", v.Position.Z) && Float(i, "Rotation.X", v.Rotation.X) && Float(i, "Rotation.Y", v.Rotation.Y) && Float(i, "Rotation.Z", v.Rotation.Z) && Float(i, "Rotation.W", v.Rotation.W) && Float(i, "Scale.X", v.Scale.X) && Float(i, "Scale.Y", v.Scale.Y) && Float(i, "Scale.Z", v.Scale.Z); });
 
-m_components.Register<Camera>("Bazzalt.Camera",4,[](const Camera&v,PropertyMap&o){
-o["Post.Material"]=v.PostProcessing.MaterialAsset.ToString();o["Post.Materials.Count"]=std::to_string(v.PostProcessing.Materials.size());for(std::size_t x=0;x<v.PostProcessing.Materials.size();++x){const auto p="Post.Materials."+std::to_string(x)+".";o[p+"Asset"]=v.PostProcessing.Materials[x].MaterialAsset.ToString();o[p+"Enabled"]=v.PostProcessing.Materials[x].Enabled?"true":"false";}o["RenderTarget"]=v.RenderTarget.ToString();o["Projection"]=std::to_string(static_cast<int>(v.Projection));o["FieldOfView"]=Float(v.VerticalFieldOfView);o["OrthographicSize"]=Float(v.OrthographicSize);o["Near"]=Float(v.NearPlane);o["Far"]=Float(v.FarPlane);o["Aspect"]=Float(v.AspectRatio);o["AspectMode"]=std::to_string(static_cast<int>(v.AspectMode));o["Viewport.X"]=Float(v.Viewport.X);o["Viewport.Y"]=Float(v.Viewport.Y);o["Viewport.Width"]=Float(v.Viewport.Width);o["Viewport.Height"]=Float(v.Viewport.Height);o["Priority"]=std::to_string(v.Priority);o["Active"]=v.Active?"true":"false";o["Clear.R"]=Float(v.ClearColor.X);o["Clear.G"]=Float(v.ClearColor.Y);o["Clear.B"]=Float(v.ClearColor.Z);o["Clear.A"]=Float(v.ClearColor.W);o["Post.Enabled"]=v.PostProcessing.Enabled?"true":"false";o["Post.Bloom"]=v.PostProcessing.Bloom?"true":"false";o["Post.AO"]=v.PostProcessing.AmbientOcclusion?"true":"false";o["Post.AA"]=std::to_string(static_cast<int>(v.PostProcessing.AntiAliasingMode));o["Post.ToneMapping"]=std::to_string(static_cast<int>(v.PostProcessing.ToneMappingMode));o["Post.Exposure"]=Float(v.PostProcessing.Exposure);const auto&d=v.PostProcessing.DepthOfField;o["Post.DoF.Enabled"]=d.Enabled?"true":"false";o["Post.DoF.FocusDistance"]=Float(d.FocusDistance);o["Post.DoF.Aperture"]=Float(d.Aperture);o["Post.DoF.ShutterSpeed"]=Float(d.ShutterSpeed);o["Post.DoF.Sensitivity"]=Float(d.Sensitivity);o["Post.DoF.CocScale"]=Float(d.CocScale);o["Post.DoF.CocAspect"]=Float(d.CocAspectRatio);o["Post.DoF.MaxAperture"]=Float(d.MaxApertureDiameter);o["Post.DoF.Quality"]=std::to_string(static_cast<int>(d.Quality));o["Post.DoF.NativeResolution"]=d.NativeResolution?"true":"false";const auto&e=v.PostProcessing.CustomEffects.GetEffects();o["Post.Custom.Count"]=std::to_string(e.size());for(std::size_t x=0;x<e.size();++x){const auto p="Post.Custom."+std::to_string(x)+".";o[p+"Shader"]=e[x].ShaderAsset.ToString();o[p+"Name"]=e[x].Name;o[p+"Enabled"]=e[x].Enabled?"true":"false";o[p+"Order"]=std::to_string(e[x].Order);o[p+"ParameterCount"]=std::to_string(e[x].Parameters.size());for(std::size_t y=0;y<e[x].Parameters.size();++y){const auto q=p+"Parameter."+std::to_string(y)+".";const auto&a=e[x].Parameters[y];o[q+"Name"]=a.Name;o[q+"Type"]=std::to_string(static_cast<int>(a.Type));o[q+"X"]=Float(a.Value.X);o[q+"Y"]=Float(a.Value.Y);o[q+"Z"]=Float(a.Value.Z);o[q+"W"]=Float(a.Value.W);o[q+"Integer"]=std::to_string(a.IntegerValue);o[q+"Boolean"]=a.BooleanValue?"true":"false";o[q+"Texture"]=a.TextureAsset.ToString();}}},
-[](Camera&v,const PropertyMap&i,std::uint32_t n){if(n>=4){int count=0;if(!Enum(i,"Post.Materials.Count",count)||count<0||count>int(CameraPostProcessing::MaxMaterials))return false;for(int x=0;x<count;++x){auto p="Post.Materials."+std::to_string(x)+".";const auto* id=Property(i,(p+"Asset").c_str());CameraMaterialPass pass;if(!id||!UUID::TryParse(*id,pass.MaterialAsset)||!Bool(i,(p+"Enabled").c_str(),pass.Enabled))return false;v.PostProcessing.Materials.push_back(pass);}}if(n>=3){const auto* material=Property(i,"Post.Material");if(!material||!UUID::TryParse(*material,v.PostProcessing.MaterialAsset))return false;}if(const auto* target=Property(i,"RenderTarget");target&&!UUID::TryParse(*target,v.RenderTarget))return false;if(n<1||n>4||!EnumRange(i,"Projection",v.Projection,0,1)||!Float(i,"FieldOfView",v.VerticalFieldOfView)||!Float(i,"OrthographicSize",v.OrthographicSize)||!Float(i,"Near",v.NearPlane)||!Float(i,"Far",v.FarPlane)||!Float(i,"Aspect",v.AspectRatio)||!Enum(i,"Priority",v.Priority)||!Bool(i,"Active",v.Active)||!Float(i,"Clear.R",v.ClearColor.X)||!Float(i,"Clear.G",v.ClearColor.Y)||!Float(i,"Clear.B",v.ClearColor.Z)||!Float(i,"Clear.A",v.ClearColor.W)||!Bool(i,"Post.Enabled",v.PostProcessing.Enabled)||!Bool(i,"Post.Bloom",v.PostProcessing.Bloom)||!Bool(i,"Post.AO",v.PostProcessing.AmbientOcclusion)||!EnumRange(i,"Post.AA",v.PostProcessing.AntiAliasingMode,0,7)||!EnumRange(i,"Post.ToneMapping",v.PostProcessing.ToneMappingMode,0,2)||!Float(i,"Post.Exposure",v.PostProcessing.Exposure))return false;if(n>=2){auto&d=v.PostProcessing.DepthOfField;if(!EnumRange(i,"AspectMode",v.AspectMode,0,1)||!Float(i,"Viewport.X",v.Viewport.X)||!Float(i,"Viewport.Y",v.Viewport.Y)||!Float(i,"Viewport.Width",v.Viewport.Width)||!Float(i,"Viewport.Height",v.Viewport.Height)||!Bool(i,"Post.DoF.Enabled",d.Enabled)||!Float(i,"Post.DoF.FocusDistance",d.FocusDistance)||!Float(i,"Post.DoF.Aperture",d.Aperture)||!Float(i,"Post.DoF.ShutterSpeed",d.ShutterSpeed)||!Float(i,"Post.DoF.Sensitivity",d.Sensitivity)||!Float(i,"Post.DoF.CocScale",d.CocScale)||!Float(i,"Post.DoF.CocAspect",d.CocAspectRatio)||!Float(i,"Post.DoF.MaxAperture",d.MaxApertureDiameter)||!EnumRange(i,"Post.DoF.Quality",d.Quality,0,2)||!Bool(i,"Post.DoF.NativeResolution",d.NativeResolution))return false;int count=0;if(!Enum(i,"Post.Custom.Count",count)||count<0||count>64)return false;for(int x=0;x<count;++x){const auto p="Post.Custom."+std::to_string(x)+".";const auto*shader=Property(i,(p+"Shader").c_str());const auto*name=Property(i,(p+"Name").c_str());UUID id;bool enabled=false;int order=0,parameterCount=0;if(!shader||!name||!UUID::TryParse(*shader,id)||id.IsRoot()||!Bool(i,(p+"Enabled").c_str(),enabled)||!Enum(i,(p+"Order").c_str(),order)||!Enum(i,(p+"ParameterCount").c_str(),parameterCount)||parameterCount<0||parameterCount>128)return false;auto&e=v.PostProcessing.CustomEffects.AddEffect(id,*name);e.Enabled=enabled;e.Order=order;for(int y=0;y<parameterCount;++y){const auto q=p+"Parameter."+std::to_string(y)+".";const auto*parameterName=Property(i,(q+"Name").c_str());PostProcessParameter a;if(!parameterName||parameterName->empty()||!EnumRange(i,(q+"Type").c_str(),a.Type,0,6)||!Float(i,(q+"X").c_str(),a.Value.X)||!Float(i,(q+"Y").c_str(),a.Value.Y)||!Float(i,(q+"Z").c_str(),a.Value.Z)||!Float(i,(q+"W").c_str(),a.Value.W)||!Enum(i,(q+"Integer").c_str(),a.IntegerValue)||!Bool(i,(q+"Boolean").c_str(),a.BooleanValue))return false;const auto*texture=Property(i,(q+"Texture").c_str());if(!texture||!UUID::TryParse(*texture,a.TextureAsset))return false;a.Name=*parameterName;e.Parameters.push_back(std::move(a));}}}const auto&d=v.PostProcessing.DepthOfField;return v.NearPlane>0.0f&&v.FarPlane>v.NearPlane&&v.AspectRatio>0.0f&&v.Viewport.X>=0.0f&&v.Viewport.Y>=0.0f&&v.Viewport.Width>=0.0f&&v.Viewport.Height>=0.0f&&v.Viewport.X+v.Viewport.Width<=1.0f&&v.Viewport.Y+v.Viewport.Height<=1.0f&&d.FocusDistance>0.0f&&d.Aperture>=0.5f&&d.ShutterSpeed>0.0f&&d.Sensitivity>0.0f&&d.CocScale>=0.0f&&d.CocAspectRatio>0.0f&&d.MaxApertureDiameter>=0.0f;});
+        m_components.Register<Camera>("Bazzalt.Camera", 4, [](const Camera &v, PropertyMap &o)
+                                      {
+o["Post.Material"]=v.PostProcessing.MaterialAsset.ToString();o["Post.Materials.Count"]=std::to_string(v.PostProcessing.Materials.size());for(std::size_t x=0;x<v.PostProcessing.Materials.size();++x){const auto p="Post.Materials."+std::to_string(x)+".";o[p+"Asset"]=v.PostProcessing.Materials[x].MaterialAsset.ToString();o[p+"Enabled"]=v.PostProcessing.Materials[x].Enabled?"true":"false";}o["RenderTarget"]=v.RenderTarget.ToString();o["Projection"]=std::to_string(static_cast<int>(v.Projection));o["FieldOfView"]=Float(v.VerticalFieldOfView);o["OrthographicSize"]=Float(v.OrthographicSize);o["Near"]=Float(v.NearPlane);o["Far"]=Float(v.FarPlane);o["Aspect"]=Float(v.AspectRatio);o["AspectMode"]=std::to_string(static_cast<int>(v.AspectMode));o["Viewport.X"]=Float(v.Viewport.X);o["Viewport.Y"]=Float(v.Viewport.Y);o["Viewport.Width"]=Float(v.Viewport.Width);o["Viewport.Height"]=Float(v.Viewport.Height);o["Priority"]=std::to_string(v.Priority);o["Active"]=v.Active?"true":"false";o["Clear.R"]=Float(v.ClearColor.X);o["Clear.G"]=Float(v.ClearColor.Y);o["Clear.B"]=Float(v.ClearColor.Z);o["Clear.A"]=Float(v.ClearColor.W);o["Post.Enabled"]=v.PostProcessing.Enabled?"true":"false";o["Post.Bloom"]=v.PostProcessing.Bloom?"true":"false";o["Post.AO"]=v.PostProcessing.AmbientOcclusion?"true":"false";o["Post.AA"]=std::to_string(static_cast<int>(v.PostProcessing.AntiAliasingMode));o["Post.ToneMapping"]=std::to_string(static_cast<int>(v.PostProcessing.ToneMappingMode));o["Post.Exposure"]=Float(v.PostProcessing.Exposure);const auto&d=v.PostProcessing.DepthOfField;o["Post.DoF.Enabled"]=d.Enabled?"true":"false";o["Post.DoF.FocusDistance"]=Float(d.FocusDistance);o["Post.DoF.Aperture"]=Float(d.Aperture);o["Post.DoF.ShutterSpeed"]=Float(d.ShutterSpeed);o["Post.DoF.Sensitivity"]=Float(d.Sensitivity);o["Post.DoF.CocScale"]=Float(d.CocScale);o["Post.DoF.CocAspect"]=Float(d.CocAspectRatio);o["Post.DoF.MaxAperture"]=Float(d.MaxApertureDiameter);o["Post.DoF.Quality"]=std::to_string(static_cast<int>(d.Quality));o["Post.DoF.NativeResolution"]=d.NativeResolution?"true":"false";const auto&e=v.PostProcessing.CustomEffects.GetEffects();o["Post.Custom.Count"]=std::to_string(e.size());for(std::size_t x=0;x<e.size();++x){const auto p="Post.Custom."+std::to_string(x)+".";o[p+"Shader"]=e[x].ShaderAsset.ToString();o[p+"Name"]=e[x].Name;o[p+"Enabled"]=e[x].Enabled?"true":"false";o[p+"Order"]=std::to_string(e[x].Order);o[p+"ParameterCount"]=std::to_string(e[x].Parameters.size());for(std::size_t y=0;y<e[x].Parameters.size();++y){const auto q=p+"Parameter."+std::to_string(y)+".";const auto&a=e[x].Parameters[y];o[q+"Name"]=a.Name;o[q+"Type"]=std::to_string(static_cast<int>(a.Type));o[q+"X"]=Float(a.Value.X);o[q+"Y"]=Float(a.Value.Y);o[q+"Z"]=Float(a.Value.Z);o[q+"W"]=Float(a.Value.W);o[q+"Integer"]=std::to_string(a.IntegerValue);o[q+"Boolean"]=a.BooleanValue?"true":"false";o[q+"Texture"]=a.TextureAsset.ToString();}} }, [](Camera &v, const PropertyMap &i, std::uint32_t n)
+                                      {if(n>=4){int count=0;if(!Enum(i,"Post.Materials.Count",count)||count<0||count>int(CameraPostProcessing::MaxMaterials))return false;for(int x=0;x<count;++x){auto p="Post.Materials."+std::to_string(x)+".";const auto* id=Property(i,(p+"Asset").c_str());CameraMaterialPass pass;if(!id||!UUID::TryParse(*id,pass.MaterialAsset)||!Bool(i,(p+"Enabled").c_str(),pass.Enabled))return false;v.PostProcessing.Materials.push_back(pass);}}if(n>=3){const auto* material=Property(i,"Post.Material");if(!material||!UUID::TryParse(*material,v.PostProcessing.MaterialAsset))return false;}if(const auto* target=Property(i,"RenderTarget");target&&!UUID::TryParse(*target,v.RenderTarget))return false;if(n<1||n>4||!EnumRange(i,"Projection",v.Projection,0,1)||!Float(i,"FieldOfView",v.VerticalFieldOfView)||!Float(i,"OrthographicSize",v.OrthographicSize)||!Float(i,"Near",v.NearPlane)||!Float(i,"Far",v.FarPlane)||!Float(i,"Aspect",v.AspectRatio)||!Enum(i,"Priority",v.Priority)||!Bool(i,"Active",v.Active)||!Float(i,"Clear.R",v.ClearColor.X)||!Float(i,"Clear.G",v.ClearColor.Y)||!Float(i,"Clear.B",v.ClearColor.Z)||!Float(i,"Clear.A",v.ClearColor.W)||!Bool(i,"Post.Enabled",v.PostProcessing.Enabled)||!Bool(i,"Post.Bloom",v.PostProcessing.Bloom)||!Bool(i,"Post.AO",v.PostProcessing.AmbientOcclusion)||!EnumRange(i,"Post.AA",v.PostProcessing.AntiAliasingMode,0,7)||!EnumRange(i,"Post.ToneMapping",v.PostProcessing.ToneMappingMode,0,2)||!Float(i,"Post.Exposure",v.PostProcessing.Exposure))return false;if(n>=2){auto&d=v.PostProcessing.DepthOfField;if(!EnumRange(i,"AspectMode",v.AspectMode,0,1)||!Float(i,"Viewport.X",v.Viewport.X)||!Float(i,"Viewport.Y",v.Viewport.Y)||!Float(i,"Viewport.Width",v.Viewport.Width)||!Float(i,"Viewport.Height",v.Viewport.Height)||!Bool(i,"Post.DoF.Enabled",d.Enabled)||!Float(i,"Post.DoF.FocusDistance",d.FocusDistance)||!Float(i,"Post.DoF.Aperture",d.Aperture)||!Float(i,"Post.DoF.ShutterSpeed",d.ShutterSpeed)||!Float(i,"Post.DoF.Sensitivity",d.Sensitivity)||!Float(i,"Post.DoF.CocScale",d.CocScale)||!Float(i,"Post.DoF.CocAspect",d.CocAspectRatio)||!Float(i,"Post.DoF.MaxAperture",d.MaxApertureDiameter)||!EnumRange(i,"Post.DoF.Quality",d.Quality,0,2)||!Bool(i,"Post.DoF.NativeResolution",d.NativeResolution))return false;int count=0;if(!Enum(i,"Post.Custom.Count",count)||count<0||count>64)return false;for(int x=0;x<count;++x){const auto p="Post.Custom."+std::to_string(x)+".";const auto*shader=Property(i,(p+"Shader").c_str());const auto*name=Property(i,(p+"Name").c_str());UUID id;bool enabled=false;int order=0,parameterCount=0;if(!shader||!name||!UUID::TryParse(*shader,id)||id.IsRoot()||!Bool(i,(p+"Enabled").c_str(),enabled)||!Enum(i,(p+"Order").c_str(),order)||!Enum(i,(p+"ParameterCount").c_str(),parameterCount)||parameterCount<0||parameterCount>128)return false;auto&e=v.PostProcessing.CustomEffects.AddEffect(id,*name);e.Enabled=enabled;e.Order=order;for(int y=0;y<parameterCount;++y){const auto q=p+"Parameter."+std::to_string(y)+".";const auto*parameterName=Property(i,(q+"Name").c_str());PostProcessParameter a;if(!parameterName||parameterName->empty()||!EnumRange(i,(q+"Type").c_str(),a.Type,0,6)||!Float(i,(q+"X").c_str(),a.Value.X)||!Float(i,(q+"Y").c_str(),a.Value.Y)||!Float(i,(q+"Z").c_str(),a.Value.Z)||!Float(i,(q+"W").c_str(),a.Value.W)||!Enum(i,(q+"Integer").c_str(),a.IntegerValue)||!Bool(i,(q+"Boolean").c_str(),a.BooleanValue))return false;const auto*texture=Property(i,(q+"Texture").c_str());if(!texture||!UUID::TryParse(*texture,a.TextureAsset))return false;a.Name=*parameterName;e.Parameters.push_back(std::move(a));}}}const auto&d=v.PostProcessing.DepthOfField;return v.NearPlane>0.0f&&v.FarPlane>v.NearPlane&&v.AspectRatio>0.0f&&v.Viewport.X>=0.0f&&v.Viewport.Y>=0.0f&&v.Viewport.Width>=0.0f&&v.Viewport.Height>=0.0f&&v.Viewport.X+v.Viewport.Width<=1.0f&&v.Viewport.Y+v.Viewport.Height<=1.0f&&d.FocusDistance>0.0f&&d.Aperture>=0.5f&&d.ShutterSpeed>0.0f&&d.Sensitivity>0.0f&&d.CocScale>=0.0f&&d.CocAspectRatio>0.0f&&d.MaxApertureDiameter>=0.0f; });
 
-m_components.Register<Light>("Bazzalt.Light",1,[](const Light&v,PropertyMap&o){o["Type"]=std::to_string(static_cast<int>(v.Type));o["Color.R"]=Float(v.Color.X);o["Color.G"]=Float(v.Color.Y);o["Color.B"]=Float(v.Color.Z);o["Intensity"]=Float(v.Intensity);o["Range"]=Float(v.Range);o["InnerCone"]=Float(v.InnerConeAngle);o["OuterCone"]=Float(v.OuterConeAngle);o["SunAngularRadius"]=Float(v.SunAngularRadius);o["SunHaloSize"]=Float(v.SunHaloSize);o["SunHaloFalloff"]=Float(v.SunHaloFalloff);o["CastShadows"]=v.CastShadows?"true":"false";o["Enabled"]=v.Enabled?"true":"false";},
-[](Light&v,const PropertyMap&i,std::uint32_t n){return n==1&&EnumRange(i,"Type",v.Type,0,3)&&Float(i,"Color.R",v.Color.X)&&Float(i,"Color.G",v.Color.Y)&&Float(i,"Color.B",v.Color.Z)&&Float(i,"Intensity",v.Intensity)&&Float(i,"Range",v.Range)&&Float(i,"InnerCone",v.InnerConeAngle)&&Float(i,"OuterCone",v.OuterConeAngle)&&Float(i,"SunAngularRadius",v.SunAngularRadius)&&Float(i,"SunHaloSize",v.SunHaloSize)&&Float(i,"SunHaloFalloff",v.SunHaloFalloff)&&Bool(i,"CastShadows",v.CastShadows)&&Bool(i,"Enabled",v.Enabled)&&v.Intensity>=0.0f&&v.Range>=0.0f&&v.InnerConeAngle>=0.0f&&v.OuterConeAngle>=v.InnerConeAngle;});
+        m_components.Register<Light>("Bazzalt.Light", 1, [](const Light &v, PropertyMap &o)
+                                     {o["Type"]=std::to_string(static_cast<int>(v.Type));o["Color.R"]=Float(v.Color.X);o["Color.G"]=Float(v.Color.Y);o["Color.B"]=Float(v.Color.Z);o["Intensity"]=Float(v.Intensity);o["Range"]=Float(v.Range);o["InnerCone"]=Float(v.InnerConeAngle);o["OuterCone"]=Float(v.OuterConeAngle);o["SunAngularRadius"]=Float(v.SunAngularRadius);o["SunHaloSize"]=Float(v.SunHaloSize);o["SunHaloFalloff"]=Float(v.SunHaloFalloff);o["CastShadows"]=v.CastShadows?"true":"false";o["Enabled"]=v.Enabled?"true":"false"; }, [](Light &v, const PropertyMap &i, std::uint32_t n)
+                                     { return n == 1 && EnumRange(i, "Type", v.Type, 0, 3) && Float(i, "Color.R", v.Color.X) && Float(i, "Color.G", v.Color.Y) && Float(i, "Color.B", v.Color.Z) && Float(i, "Intensity", v.Intensity) && Float(i, "Range", v.Range) && Float(i, "InnerCone", v.InnerConeAngle) && Float(i, "OuterCone", v.OuterConeAngle) && Float(i, "SunAngularRadius", v.SunAngularRadius) && Float(i, "SunHaloSize", v.SunHaloSize) && Float(i, "SunHaloFalloff", v.SunHaloFalloff) && Bool(i, "CastShadows", v.CastShadows) && Bool(i, "Enabled", v.Enabled) && v.Intensity >= 0.0f && v.Range >= 0.0f && v.InnerConeAngle >= 0.0f && v.OuterConeAngle >= v.InnerConeAngle; });
 
-m_components.Register<Mesh>("Bazzalt.Mesh",3,[](const Mesh&v,PropertyMap&o){o["MeshAsset"]=v.MeshAsset.ToString();o["MaterialAsset"]=v.MaterialAsset.ToString();o["ModelNodeIndex"]=std::to_string(v.ModelNodeIndex);o["LayerMask"]=std::to_string(v.LayerMask);o["Visible"]=v.Visible?"true":"false";o["CastShadows"]=v.CastShadows?"true":"false";o["ReceiveShadows"]=v.ReceiveShadows?"true":"false";std::string materials;for(const UUID id:v.Materials){if(!materials.empty())materials+=',';materials+=id.ToString();}o["Materials"]=materials;},
-[](Mesh&v,const PropertyMap&i,std::uint32_t n){const auto*mesh=Property(i,"MeshAsset");const auto*materials=Property(i,"Materials");if((n<1||n>3)||!mesh||!materials||!UUID::TryParse(*mesh,v.MeshAsset)||(n>=2&&!Unsigned(i,"ModelNodeIndex",v.ModelNodeIndex))||!EnumRange(i,"LayerMask",v.LayerMask,0,255)||!Bool(i,"Visible",v.Visible)||!Bool(i,"CastShadows",v.CastShadows)||!Bool(i,"ReceiveShadows",v.ReceiveShadows))return false;if(n>=3){const auto*material=Property(i,"MaterialAsset");if(!material||!UUID::TryParse(*material,v.MaterialAsset))return false;}if(!materials->empty())for(std::size_t b=0;b<materials->size();){const auto e=materials->find(',',b);UUID id;if(!UUID::TryParse(std::string_view(*materials).substr(b,e==std::string::npos?materials->size()-b:e-b),id))return false;v.Materials.push_back(id);if(e==std::string::npos)break;b=e+1;}return true;});
+        m_components.Register<Mesh>("Bazzalt.Mesh", 3, [](const Mesh &v, PropertyMap &o)
+                                    {o["MeshAsset"]=v.MeshAsset.ToString();o["MaterialAsset"]=v.MaterialAsset.ToString();o["ModelNodeIndex"]=std::to_string(v.ModelNodeIndex);o["LayerMask"]=std::to_string(v.LayerMask);o["Visible"]=v.Visible?"true":"false";o["CastShadows"]=v.CastShadows?"true":"false";o["ReceiveShadows"]=v.ReceiveShadows?"true":"false";std::string materials;for(const UUID id:v.Materials){if(!materials.empty())materials+=',';materials+=id.ToString();}o["Materials"]=materials; }, [](Mesh &v, const PropertyMap &i, std::uint32_t n)
+                                    {const auto*mesh=Property(i,"MeshAsset");const auto*materials=Property(i,"Materials");if((n<1||n>3)||!mesh||!materials||!UUID::TryParse(*mesh,v.MeshAsset)||(n>=2&&!Unsigned(i,"ModelNodeIndex",v.ModelNodeIndex))||!EnumRange(i,"LayerMask",v.LayerMask,0,255)||!Bool(i,"Visible",v.Visible)||!Bool(i,"CastShadows",v.CastShadows)||!Bool(i,"ReceiveShadows",v.ReceiveShadows))return false;if(n>=3){const auto*material=Property(i,"MaterialAsset");if(!material||!UUID::TryParse(*material,v.MaterialAsset))return false;}if(!materials->empty())for(std::size_t b=0;b<materials->size();){const auto e=materials->find(',',b);UUID id;if(!UUID::TryParse(std::string_view(*materials).substr(b,e==std::string::npos?materials->size()-b:e-b),id))return false;v.Materials.push_back(id);if(e==std::string::npos)break;b=e+1;}return true; });
 
-m_components.Register<PrimitiveObject>("Bazzalt.PrimitiveObject",2,[](const PrimitiveObject&v,PropertyMap&o){o["MaterialAsset"]=v.MaterialAsset.ToString();o["Shape"]=std::to_string(static_cast<int>(v.Shape));o["Size.X"]=Float(v.Size.X);o["Size.Y"]=Float(v.Size.Y);o["Size.Z"]=Float(v.Size.Z);o["Radius"]=Float(v.Radius);o["Height"]=Float(v.Height);o["Width"]=Float(v.Width);o["Depth"]=Float(v.Depth);o["MajorRadius"]=Float(v.MajorRadius);o["MinorRadius"]=Float(v.MinorRadius);o["Segments"]=std::to_string(v.Segments);o["Rings"]=std::to_string(v.Rings);o["Color.R"]=Float(v.Color.X);o["Color.G"]=Float(v.Color.Y);o["Color.B"]=Float(v.Color.Z);o["Color.A"]=Float(v.Color.W);o["LayerMask"]=std::to_string(v.LayerMask);o["Visible"]=v.Visible?"true":"false";o["CastShadows"]=v.CastShadows?"true":"false";o["ReceiveShadows"]=v.ReceiveShadows?"true":"false";},
-[](PrimitiveObject&v,const PropertyMap&i,std::uint32_t n){if(n<1||n>2)return false;v.MaterialAsset={};if(n==2){const auto* material=Property(i,"MaterialAsset");if(!material||!UUID::TryParse(*material,v.MaterialAsset))return false;}return EnumRange(i,"Shape",v.Shape,0,6)&&Float(i,"Size.X",v.Size.X)&&Float(i,"Size.Y",v.Size.Y)&&Float(i,"Size.Z",v.Size.Z)&&Float(i,"Radius",v.Radius)&&Float(i,"Height",v.Height)&&Float(i,"Width",v.Width)&&Float(i,"Depth",v.Depth)&&Float(i,"MajorRadius",v.MajorRadius)&&Float(i,"MinorRadius",v.MinorRadius)&&Unsigned(i,"Segments",v.Segments)&&Unsigned(i,"Rings",v.Rings)&&Float(i,"Color.R",v.Color.X)&&Float(i,"Color.G",v.Color.Y)&&Float(i,"Color.B",v.Color.Z)&&Float(i,"Color.A",v.Color.W)&&EnumRange(i,"LayerMask",v.LayerMask,0,255)&&Bool(i,"Visible",v.Visible)&&Bool(i,"CastShadows",v.CastShadows)&&Bool(i,"ReceiveShadows",v.ReceiveShadows)&&v.Size.X>0&&v.Size.Y>0&&v.Size.Z>0&&v.Radius>0&&v.Height>0&&v.Width>0&&v.Depth>0&&v.MajorRadius>0&&v.MinorRadius>0&&v.MinorRadius<=v.MajorRadius&&v.Segments>=3&&v.Segments<=128&&v.Rings>=2&&v.Rings<=128;});
+        m_components.Register<PrimitiveObject>("Bazzalt.PrimitiveObject", 2, [](const PrimitiveObject &v, PropertyMap &o)
+                                               {o["MaterialAsset"]=v.MaterialAsset.ToString();o["Shape"]=std::to_string(static_cast<int>(v.Shape));o["Size.X"]=Float(v.Size.X);o["Size.Y"]=Float(v.Size.Y);o["Size.Z"]=Float(v.Size.Z);o["Radius"]=Float(v.Radius);o["Height"]=Float(v.Height);o["Width"]=Float(v.Width);o["Depth"]=Float(v.Depth);o["MajorRadius"]=Float(v.MajorRadius);o["MinorRadius"]=Float(v.MinorRadius);o["Segments"]=std::to_string(v.Segments);o["Rings"]=std::to_string(v.Rings);o["Color.R"]=Float(v.Color.X);o["Color.G"]=Float(v.Color.Y);o["Color.B"]=Float(v.Color.Z);o["Color.A"]=Float(v.Color.W);o["LayerMask"]=std::to_string(v.LayerMask);o["Visible"]=v.Visible?"true":"false";o["CastShadows"]=v.CastShadows?"true":"false";o["ReceiveShadows"]=v.ReceiveShadows?"true":"false"; }, [](PrimitiveObject &v, const PropertyMap &i, std::uint32_t n)
+                                               {if(n<1||n>2)return false;v.MaterialAsset={};if(n==2){const auto* material=Property(i,"MaterialAsset");if(!material||!UUID::TryParse(*material,v.MaterialAsset))return false;}return EnumRange(i,"Shape",v.Shape,0,6)&&Float(i,"Size.X",v.Size.X)&&Float(i,"Size.Y",v.Size.Y)&&Float(i,"Size.Z",v.Size.Z)&&Float(i,"Radius",v.Radius)&&Float(i,"Height",v.Height)&&Float(i,"Width",v.Width)&&Float(i,"Depth",v.Depth)&&Float(i,"MajorRadius",v.MajorRadius)&&Float(i,"MinorRadius",v.MinorRadius)&&Unsigned(i,"Segments",v.Segments)&&Unsigned(i,"Rings",v.Rings)&&Float(i,"Color.R",v.Color.X)&&Float(i,"Color.G",v.Color.Y)&&Float(i,"Color.B",v.Color.Z)&&Float(i,"Color.A",v.Color.W)&&EnumRange(i,"LayerMask",v.LayerMask,0,255)&&Bool(i,"Visible",v.Visible)&&Bool(i,"CastShadows",v.CastShadows)&&Bool(i,"ReceiveShadows",v.ReceiveShadows)&&v.Size.X>0&&v.Size.Y>0&&v.Size.Z>0&&v.Radius>0&&v.Height>0&&v.Width>0&&v.Depth>0&&v.MajorRadius>0&&v.MinorRadius>0&&v.MinorRadius<=v.MajorRadius&&v.Segments>=3&&v.Segments<=128&&v.Rings>=2&&v.Rings<=128; });
 
-m_components.Register<ModelInstance>("Bazzalt.ModelInstance",1,
-[](const ModelInstance&v,PropertyMap&o){o["ModelAsset"]=v.ModelAsset.ToString();},
-[](ModelInstance&v,const PropertyMap&i,std::uint32_t n){const auto*asset=Property(i,"ModelAsset");return n==1&&asset&&UUID::TryParse(*asset,v.ModelAsset)&&!v.ModelAsset.IsRoot();});
+        m_components.Register<ModelInstance>("Bazzalt.ModelInstance", 1, [](const ModelInstance &v, PropertyMap &o)
+                                             { o["ModelAsset"] = v.ModelAsset.ToString(); }, [](ModelInstance &v, const PropertyMap &i, std::uint32_t n)
+                                             {const auto*asset=Property(i,"ModelAsset");return n==1&&asset&&UUID::TryParse(*asset,v.ModelAsset)&&!v.ModelAsset.IsRoot(); });
 
-m_components.Register<ModelNode>("Bazzalt.ModelNode",1,
-[](const ModelNode&v,PropertyMap&o){o["ModelAsset"]=v.ModelAsset.ToString();o["SourceIndex"]=std::to_string(v.SourceIndex);o["MeshIndex"]=std::to_string(v.MeshIndex);o["StablePath"]=v.StablePath;o["HasMesh"]=v.HasMesh?"true":"false";},
-[](ModelNode&v,const PropertyMap&i,std::uint32_t n){const auto*asset=Property(i,"ModelAsset");const auto*path=Property(i,"StablePath");return n==1&&asset&&path&&UUID::TryParse(*asset,v.ModelAsset)&&!v.ModelAsset.IsRoot()&&Unsigned(i,"SourceIndex",v.SourceIndex)&&Unsigned(i,"MeshIndex",v.MeshIndex)&&Bool(i,"HasMesh",v.HasMesh)&&(v.StablePath=*path,true);});
+        m_components.Register<ModelNode>("Bazzalt.ModelNode", 1, [](const ModelNode &v, PropertyMap &o)
+                                         {o["ModelAsset"]=v.ModelAsset.ToString();o["SourceIndex"]=std::to_string(v.SourceIndex);o["MeshIndex"]=std::to_string(v.MeshIndex);o["StablePath"]=v.StablePath;o["HasMesh"]=v.HasMesh?"true":"false"; }, [](ModelNode &v, const PropertyMap &i, std::uint32_t n)
+                                         {const auto*asset=Property(i,"ModelAsset");const auto*path=Property(i,"StablePath");return n==1&&asset&&path&&UUID::TryParse(*asset,v.ModelAsset)&&!v.ModelAsset.IsRoot()&&Unsigned(i,"SourceIndex",v.SourceIndex)&&Unsigned(i,"MeshIndex",v.MeshIndex)&&Bool(i,"HasMesh",v.HasMesh)&&(v.StablePath=*path,true); });
 
-m_components.Register<SceneQueryBounds>("Bazzalt.SceneQueryBounds",1,
-[](const SceneQueryBounds&v,PropertyMap&o){o["Shape"]=std::to_string(static_cast<int>(v.Shape));o["Center.X"]=Float(v.Center.X);o["Center.Y"]=Float(v.Center.Y);o["Center.Z"]=Float(v.Center.Z);o["Extents.X"]=Float(v.Extents.X);o["Extents.Y"]=Float(v.Extents.Y);o["Extents.Z"]=Float(v.Extents.Z);o["Radius"]=Float(v.Radius);o["LayerMask"]=std::to_string(v.LayerMask);o["Enabled"]=v.Enabled?"true":"false";},
-[](SceneQueryBounds&v,const PropertyMap&i,std::uint32_t n){return n==1&&EnumRange(i,"Shape",v.Shape,0,1)&&Float(i,"Center.X",v.Center.X)&&Float(i,"Center.Y",v.Center.Y)&&Float(i,"Center.Z",v.Center.Z)&&Float(i,"Extents.X",v.Extents.X)&&Float(i,"Extents.Y",v.Extents.Y)&&Float(i,"Extents.Z",v.Extents.Z)&&Float(i,"Radius",v.Radius)&&Enum(i,"LayerMask",v.LayerMask)&&Bool(i,"Enabled",v.Enabled)&&v.Radius>=0.0f;});
+        m_components.Register<SceneQueryBounds>("Bazzalt.SceneQueryBounds", 1, [](const SceneQueryBounds &v, PropertyMap &o)
+                                                {o["Shape"]=std::to_string(static_cast<int>(v.Shape));o["Center.X"]=Float(v.Center.X);o["Center.Y"]=Float(v.Center.Y);o["Center.Z"]=Float(v.Center.Z);o["Extents.X"]=Float(v.Extents.X);o["Extents.Y"]=Float(v.Extents.Y);o["Extents.Z"]=Float(v.Extents.Z);o["Radius"]=Float(v.Radius);o["LayerMask"]=std::to_string(v.LayerMask);o["Enabled"]=v.Enabled?"true":"false"; }, [](SceneQueryBounds &v, const PropertyMap &i, std::uint32_t n)
+                                                { return n == 1 && EnumRange(i, "Shape", v.Shape, 0, 1) && Float(i, "Center.X", v.Center.X) && Float(i, "Center.Y", v.Center.Y) && Float(i, "Center.Z", v.Center.Z) && Float(i, "Extents.X", v.Extents.X) && Float(i, "Extents.Y", v.Extents.Y) && Float(i, "Extents.Z", v.Extents.Z) && Float(i, "Radius", v.Radius) && Enum(i, "LayerMask", v.LayerMask) && Bool(i, "Enabled", v.Enabled) && v.Radius >= 0.0f; });
 
-m_components.Register<GaussianBlur>("Bazzalt.GaussianBlur",1,
-[](const GaussianBlur&v,PropertyMap&o){o["Enabled"]=v.Enabled?"true":"false";o["Size"]=Float(v.Size);},
-[](GaussianBlur&v,const PropertyMap&i,std::uint32_t n){return n==1&&Bool(i,"Enabled",v.Enabled)&&Float(i,"Size",v.Size)&&v.Size>=0.0f;});
+        m_components.Register<GaussianBlur>("Bazzalt.GaussianBlur", 1, [](const GaussianBlur &v, PropertyMap &o)
+                                            {o["Enabled"]=v.Enabled?"true":"false";o["Size"]=Float(v.Size); }, [](GaussianBlur &v, const PropertyMap &i, std::uint32_t n)
+                                            { return n == 1 && Bool(i, "Enabled", v.Enabled) && Float(i, "Size", v.Size) && v.Size >= 0.0f; });
 
-m_components.Register<Vignette>("Bazzalt.Vignette",1,
-[](const Vignette&v,PropertyMap&o){o["Enabled"]=v.Enabled?"true":"false";o["Color.R"]=Float(v.Color.X);o["Color.G"]=Float(v.Color.Y);o["Color.B"]=Float(v.Color.Z);o["Color.A"]=Float(v.Color.W);o["Intensity"]=Float(v.Intensity);o["Smoothness"]=Float(v.Smoothness);o["Roundness"]=Float(v.Roundness);},
-[](Vignette&v,const PropertyMap&i,std::uint32_t n){return n==1&&Bool(i,"Enabled",v.Enabled)&&Float(i,"Color.R",v.Color.X)&&Float(i,"Color.G",v.Color.Y)&&Float(i,"Color.B",v.Color.Z)&&Float(i,"Color.A",v.Color.W)&&Float(i,"Intensity",v.Intensity)&&Float(i,"Smoothness",v.Smoothness)&&Float(i,"Roundness",v.Roundness)&&v.Intensity>=0.0f&&v.Intensity<=1.0f&&v.Smoothness>0.0f&&v.Smoothness<=1.0f&&v.Roundness>=0.0f&&v.Roundness<=1.0f;});
-}
+        m_components.Register<Vignette>("Bazzalt.Vignette", 1, [](const Vignette &v, PropertyMap &o)
+                                        {o["Enabled"]=v.Enabled?"true":"false";o["Color.R"]=Float(v.Color.X);o["Color.G"]=Float(v.Color.Y);o["Color.B"]=Float(v.Color.Z);o["Color.A"]=Float(v.Color.W);o["Intensity"]=Float(v.Intensity);o["Smoothness"]=Float(v.Smoothness);o["Roundness"]=Float(v.Roundness); }, [](Vignette &v, const PropertyMap &i, std::uint32_t n)
+                                        { return n == 1 && Bool(i, "Enabled", v.Enabled) && Float(i, "Color.R", v.Color.X) && Float(i, "Color.G", v.Color.Y) && Float(i, "Color.B", v.Color.Z) && Float(i, "Color.A", v.Color.W) && Float(i, "Intensity", v.Intensity) && Float(i, "Smoothness", v.Smoothness) && Float(i, "Roundness", v.Roundness) && v.Intensity >= 0.0f && v.Intensity <= 1.0f && v.Smoothness > 0.0f && v.Smoothness <= 1.0f && v.Roundness >= 0.0f && v.Roundness <= 1.0f; });
+    }
 
-bool SceneSerializer::Save(const Scene& scene,const std::filesystem::path& path){m_lastError.clear();std::ofstream s(path,std::ios::binary|std::ios::trunc);if(!s){m_lastError="Could not open scene for writing: "+PathUtf8(path);return false;}try{s<<"FormatVersion: "<<CurrentFormatVersion<<"\nSceneUUID: "<<Quote(scene.GetUUID().ToString())<<"\n"<<EnvironmentYaml(scene.GetEnvironment());if(!scene.GetExtensionProperties().empty()){s<<"ExtensionProperties:\n";for(const auto& [key,value]:scene.GetExtensionProperties())s<<"  "<<Quote(key)<<": "<<Quote(value)<<"\n";}s<<"Entities:\n";auto view=scene.GetRegistry().view<Identity,Name,Hierarchy>();for(auto h:view){Entity e=const_cast<Scene&>(scene).GetEntity(static_cast<Entity::Id>(h));if(e.GetUUID().IsRoot())continue;std::vector<SerializedComponent> cs;for(const auto& d:m_components.GetDescriptors()){SerializedComponent c{d.Type,d.Version,{}};if(d.Serialize(e,c.Properties))cs.push_back(std::move(c));}if(auto* u=e.TryGetComponent<UnresolvedComponents>())for(const auto& c:u->Values)if(!m_components.Find(c.Type))cs.push_back(c);s<<"  - UUID: "<<Quote(e.GetUUID().ToString())<<"\n    Parent: "<<Quote(e.GetComponent<Hierarchy>().Parent.ToString())<<"\n    Name: "<<Quote(e.GetComponent<Name>().Value)<<"\n    Components:\n";for(const auto& c:cs){s<<"      - Type: "<<Quote(c.Type)<<"\n        Version: "<<c.Version<<"\n        Properties:\n";for(const auto& [k,v]:c.Properties)s<<"          "<<Quote(k)<<": "<<Quote(v)<<'\n';}}}catch(const std::exception&e){m_lastError="Component serialization failed: "+std::string(e.what());return false;}if(!s){m_lastError="Failed writing scene: "+PathUtf8(path);return false;}return true;}
+    bool SceneSerializer::Save(const Scene &scene, const std::filesystem::path &path)
+    {
+        m_lastError.clear();
+        std::ofstream s(path, std::ios::binary | std::ios::trunc);
+        if (!s)
+        {
+            m_lastError = "Could not open scene for writing: " + PathUtf8(path);
+            return false;
+        }
+        try
+        {
+            s << "FormatVersion: " << CurrentFormatVersion << "\nSceneUUID: " << Quote(scene.GetUUID().ToString()) << "\n"
+              << EnvironmentYaml(scene.GetEnvironment());
+            s << "Physics:\n";
+            for (const auto &[key, value] : Runtime::WritePhysicsSettings(scene.GetPhysicsSettings()))
+                s << "  " << Quote(key) << ": " << Quote(value) << '\n';
+            if (!scene.GetExtensionProperties().empty())
+            {
+                s << "ExtensionProperties:\n";
+                for (const auto &[key, value] : scene.GetExtensionProperties())
+                    s << "  " << Quote(key) << ": " << Quote(value) << "\n";
+            }
+            s << "Entities:\n";
+            auto view = scene.GetRegistry().view<Identity, Name, Hierarchy>();
+            for (auto h : view)
+            {
+                Entity e = const_cast<Scene &>(scene).GetEntity(static_cast<Entity::Id>(h));
+                if (e.GetUUID().IsRoot())
+                    continue;
+                std::vector<SerializedComponent> cs;
+                for (const auto &d : m_components.GetDescriptors())
+                {
+                    SerializedComponent c{d.Type, d.Version, {}};
+                    if (d.Serialize(e, c.Properties))
+                        cs.push_back(std::move(c));
+                }
+                if (auto *u = e.TryGetComponent<UnresolvedComponents>())
+                    for (const auto &c : u->Values)
+                        if (!m_components.Find(c.Type))
+                            cs.push_back(c);
+                s << "  - UUID: " << Quote(e.GetUUID().ToString()) << "\n    Parent: " << Quote(e.GetComponent<Hierarchy>().Parent.ToString()) << "\n    Name: " << Quote(e.GetComponent<Name>().Value) << "\n    Components:\n";
+                for (const auto &c : cs)
+                {
+                    s << "      - Type: " << Quote(c.Type) << "\n        Version: " << c.Version << "\n        Properties:\n";
+                    for (const auto &[k, v] : c.Properties)
+                        s << "          " << Quote(k) << ": " << Quote(v) << '\n';
+                }
+            }
+        }
+        catch (const std::exception &e)
+        {
+            m_lastError = "Component serialization failed: " + std::string(e.what());
+            return false;
+        }
+        if (!s)
+        {
+            m_lastError = "Failed writing scene: " + PathUtf8(path);
+            return false;
+        }
+        return true;
+    }
 
-bool SceneSerializer::Load(Scene& scene,const std::filesystem::path& path){m_lastError.clear();std::error_code sizeError;constexpr std::uintmax_t MaxSceneBytes=64u*1024u*1024u;if(std::filesystem::file_size(path,sizeError)>MaxSceneBytes||sizeError){m_lastError=sizeError?"Could not inspect scene: "+PathUtf8(path):"Scene exceeds the 64 MiB limit: "+PathUtf8(path);return false;}std::ifstream f(path,std::ios::binary);std::string y((std::istreambuf_iterator<char>(f)),{});if(y.empty()){m_lastError="Could not read scene: "+PathUtf8(path);return false;}SceneEnvironment environment;std::vector<EntityRecord> rs;UUID sid;std::unordered_set<UUID> ids;try{auto tree=ryml::parse_in_arena(ryml::csubstr(y.data(),y.size()));auto root=tree.rootref();if(!ReadEnvironment(root,environment)){m_lastError="Invalid scene Environment settings";return false;}std::uint32_t ver=0;if(!root.has_child("FormatVersion")||!UInt(root["FormatVersion"],ver)||ver==0||ver>CurrentFormatVersion||!root.has_child("SceneUUID")||!UUID::TryParse(Text(root["SceneUUID"]),sid)||sid.IsRoot()||!root.has_child("Entities")){m_lastError="Invalid or unsupported scene YAML";return false;}for(auto en:root["Entities"].children()){EntityRecord r;if(!en.has_child("UUID")||!UUID::TryParse(Text(en["UUID"]),r.Id)||r.Id.IsRoot()||!ids.insert(r.Id).second||!en.has_child("Parent")||!UUID::TryParse(Text(en["Parent"]),r.Parent)||!en.has_child("Name")){m_lastError="Invalid entity in scene YAML";return false;}r.Name=Text(en["Name"]);if(en.has_child("Components"))for(auto cn:en["Components"].children()){SerializedComponent c;if(!cn.has_child("Type")||!cn.has_child("Version")||!UInt(cn["Version"],c.Version)){m_lastError="Invalid component in scene YAML";return false;}c.Type=Text(cn["Type"]);if(c.Type.empty()||c.Version==0){m_lastError="Invalid component descriptor";return false;}if(cn.has_child("Properties"))for(auto p:cn["Properties"].children())c.Properties[Key(p)]=Text(p);r.Components.push_back(std::move(c));}rs.push_back(std::move(r));}}catch(const std::exception& e){m_lastError="Could not parse scene YAML: "+std::string(e.what());return false;}for(const auto&r:rs)if(!r.Parent.IsRoot()&&!ids.count(r.Parent)){m_lastError="Entity references missing parent";return false;}scene.Clear();scene.m_uuid=sid;try{for(const auto&r:rs)scene.CreateEntity(r.Id,r.Name);for(const auto&r:rs){Entity e=scene.GetEntity(r.Id);if(!r.Parent.IsRoot()&&!scene.SetParent(e,scene.GetEntity(r.Parent))){m_lastError="Invalid hierarchy cycle";return false;}for(const auto&c:r.Components){if(auto*d=m_components.Find(c.Type)){if(!d->Deserialize(e,c.Properties,c.Version)){m_lastError="Could not deserialize component: "+c.Type;return false;}}else{auto*u=e.TryGetComponent<UnresolvedComponents>();if(!u)u=&e.AddComponent<UnresolvedComponents>();u->Values.push_back(c);}}}}catch(const std::exception&e){m_lastError="Component deserialization failed: "+std::string(e.what());return false;}scene.SetEnvironment(environment);scene.m_extensionProperties.clear();try{auto tree=ryml::parse_in_arena(ryml::csubstr(y.data(),y.size()));auto root=tree.rootref();if(root.has_child("ExtensionProperties")){auto values=root["ExtensionProperties"];if(!values.is_map()||values.num_children()>1024)throw std::runtime_error("Invalid extension scene properties");for(auto p:values.children()){auto key=Key(p);auto split=key.find(':');if(split==std::string::npos||!scene.SetExtensionProperty(key.substr(0,split),key.substr(split+1),Text(p)))throw std::runtime_error("Invalid extension scene property");}}}catch(const std::exception& e){m_lastError=e.what();return false;}return true;}
+    bool SceneSerializer::Load(Scene &scene, const std::filesystem::path &path)
+    {
+        m_lastError.clear();
+        std::error_code sizeError;
+        constexpr std::uintmax_t MaxSceneBytes = 64u * 1024u * 1024u;
+        if (std::filesystem::file_size(path, sizeError) > MaxSceneBytes || sizeError)
+        {
+            m_lastError = sizeError ? "Could not inspect scene: " + PathUtf8(path) : "Scene exceeds the 64 MiB limit: " + PathUtf8(path);
+            return false;
+        }
+        std::ifstream f(path, std::ios::binary);
+        std::string y((std::istreambuf_iterator<char>(f)), {});
+        if (y.empty())
+        {
+            m_lastError = "Could not read scene: " + PathUtf8(path);
+            return false;
+        }
+        SceneEnvironment environment;
+        PhysicsSettings physicsSettings;
+        std::vector<EntityRecord> rs;
+        UUID sid;
+        std::unordered_set<UUID> ids;
+        try
+        {
+            auto tree = ryml::parse_in_arena(ryml::csubstr(y.data(), y.size()));
+            auto root = tree.rootref();
+            if (!ReadEnvironment(root, environment))
+            {
+                m_lastError = "Invalid scene Environment settings";
+                return false;
+            }
+            if(root.has_child("Physics")){
+                auto physics=root["Physics"];if(!physics.is_map())throw std::runtime_error("Invalid scene Physics settings");PropertyMap properties;
+                for(auto field:physics.children()){if(!field.has_val()||properties.contains(Key(field)))throw std::runtime_error("Invalid scene Physics settings");properties.emplace(Key(field),Text(field));}
+                if(!Runtime::ReadPhysicsSettings(physicsSettings,properties))throw std::runtime_error("Invalid scene Physics settings");
+            }
+            std::uint32_t ver = 0;
+            if (!root.has_child("FormatVersion") || !UInt(root["FormatVersion"], ver) || ver == 0 || ver > CurrentFormatVersion || !root.has_child("SceneUUID") || !UUID::TryParse(Text(root["SceneUUID"]), sid) || sid.IsRoot() || !root.has_child("Entities"))
+            {
+                m_lastError = "Invalid or unsupported scene YAML";
+                return false;
+            }
+            for (auto en : root["Entities"].children())
+            {
+                EntityRecord r;
+                if (!en.has_child("UUID") || !UUID::TryParse(Text(en["UUID"]), r.Id) || r.Id.IsRoot() || !ids.insert(r.Id).second || !en.has_child("Parent") || !UUID::TryParse(Text(en["Parent"]), r.Parent) || !en.has_child("Name"))
+                {
+                    m_lastError = "Invalid entity in scene YAML";
+                    return false;
+                }
+                r.Name = Text(en["Name"]);
+                if (en.has_child("Components"))
+                    for (auto cn : en["Components"].children())
+                    {
+                        SerializedComponent c;
+                        if (!cn.has_child("Type") || !cn.has_child("Version") || !UInt(cn["Version"], c.Version))
+                        {
+                            m_lastError = "Invalid component in scene YAML";
+                            return false;
+                        }
+                        c.Type = Text(cn["Type"]);
+                        if (c.Type.empty() || c.Version == 0)
+                        {
+                            m_lastError = "Invalid component descriptor";
+                            return false;
+                        }
+                        if (cn.has_child("Properties"))
+                            for (auto p : cn["Properties"].children())
+                                c.Properties[Key(p)] = Text(p);
+                        r.Components.push_back(std::move(c));
+                    }
+                rs.push_back(std::move(r));
+            }
+        }
+        catch (const std::exception &e)
+        {
+            m_lastError = "Could not parse scene YAML: " + std::string(e.what());
+            return false;
+        }
+        for (const auto &r : rs)
+            if (!r.Parent.IsRoot() && !ids.count(r.Parent))
+            {
+                m_lastError = "Entity references missing parent";
+                return false;
+            }
+        scene.Clear();
+        scene.m_uuid = sid;
+        try
+        {
+            for (const auto &r : rs)
+                scene.CreateEntity(r.Id, r.Name);
+            for (const auto &r : rs)
+            {
+                Entity e = scene.GetEntity(r.Id);
+                if (!r.Parent.IsRoot() && !scene.SetParent(e, scene.GetEntity(r.Parent)))
+                {
+                    m_lastError = "Invalid hierarchy cycle";
+                    return false;
+                }
+                for (const auto &c : r.Components)
+                {
+                    if (auto *d = m_components.Find(c.Type))
+                    {
+                        if (!d->Deserialize(e, c.Properties, c.Version))
+                        {
+                            m_lastError = "Could not deserialize component: " + c.Type;
+                            return false;
+                        }
+                    }
+                    else
+                    {
+                        auto *u = e.TryGetComponent<UnresolvedComponents>();
+                        if (!u)
+                            u = &e.AddComponent<UnresolvedComponents>();
+                        u->Values.push_back(c);
+                    }
+                }
+            }
+        }
+        catch (const std::exception &e)
+        {
+            m_lastError = "Component deserialization failed: " + std::string(e.what());
+            return false;
+        }
+        scene.SetEnvironment(environment);
+        scene.SetPhysicsSettings(physicsSettings);
+        scene.m_extensionProperties.clear();
+        try
+        {
+            auto tree = ryml::parse_in_arena(ryml::csubstr(y.data(), y.size()));
+            auto root = tree.rootref();
+            if (root.has_child("ExtensionProperties"))
+            {
+                auto values = root["ExtensionProperties"];
+                if (!values.is_map() || values.num_children() > 1024)
+                    throw std::runtime_error("Invalid extension scene properties");
+                for (auto p : values.children())
+                {
+                    auto key = Key(p);
+                    auto split = key.find(':');
+                    if (split == std::string::npos || !scene.SetExtensionProperty(key.substr(0, split), key.substr(split + 1), Text(p)))
+                        throw std::runtime_error("Invalid extension scene property");
+                }
+            }
+        }
+        catch (const std::exception &e)
+        {
+            m_lastError = e.what();
+            return false;
+        }
+        return true;
+    }
 } // namespace Bazzalt

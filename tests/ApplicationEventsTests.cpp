@@ -53,10 +53,13 @@ int main(int argc,char** argv){
     Mode("early");subsystems.Configure({binding});
     denied=false;try{subsystems.ReachLevel(0);}catch(const std::logic_error&){denied=true;}assert(denied);subsystems.Stop();Mode("");
     std::vector<ApplicationEventType> order;std::vector<ApplicationEvents::Subscription> subscriptions;
-    for(int i=0;i<=int(ApplicationEventType::OnShutdown);++i)subscriptions.push_back(Listen(ApplicationEventType(i),[&](const auto& event){order.push_back(event.Type);}));
+    for(int i=0;i<=int(ApplicationEventType::OnAfterPhysicsShutdown);++i)subscriptions.push_back(Listen(ApplicationEventType(i),[&](const auto& event){order.push_back(event.Type);}));
     {Runtime::Engine engine;assert(engine.Init(true));engine.Update();engine.BeginShutdown();engine.Shutdown(true);engine.EndApplication();}
     assert(order.front()==ApplicationEventType::OnBoot);
     const auto before=[&](auto a,auto b){assert(std::find(order.begin(),order.end(),a)<std::find(order.begin(),order.end(),b));};
+    before(ApplicationEventType::OnBeforeInputInit,ApplicationEventType::OnInputInit);before(ApplicationEventType::OnAfterInputInit,ApplicationEventType::OnBeforeAudioInit);
+    before(ApplicationEventType::OnAudioInit,ApplicationEventType::OnBeforePhysicsInit);before(ApplicationEventType::OnPhysicsInit,ApplicationEventType::OnLoad);
+    before(ApplicationEventType::OnBeforePhysicsShutdown,ApplicationEventType::OnAfterPhysicsShutdown);
     before(ApplicationEventType::OnUpdate,ApplicationEventType::OnLateUpdate);before(ApplicationEventType::OnLateUpdate,ApplicationEventType::OnPreRender);
     assert(std::count(order.begin(),order.end(),ApplicationEventType::OnShutdown)==1);
     for(auto id:subscriptions)ApplicationEvents::Unsubscribe(id);

@@ -1,4 +1,4 @@
-name: Jolt dependency preparation
+name: Jolt dependency
 on:
   push:
     paths: ['cmake/Jolt.cmake', 'scripts/get_jolt.*', 'scripts/dependencies/jolt.json', 'tests/jolt/**', '.github/workflows/jolt-preparation.yml']
@@ -29,7 +29,7 @@ jobs:
         shell: pwsh
         run: |
           $target = if ('${{ matrix.architecture }}' -eq 'x86') { 'Win32' } else { 'x64' }
-          cmake -S tests/jolt -B build/jolt-probe -G "Visual Studio 17 2022" -A $target -DBAZZALT_PREPARE_JOLT=ON
+          cmake -S tests/jolt -B build/jolt-probe -G "Visual Studio 17 2022" -A $target -DBAZZALT_BUILD_JOLT=ON
           if ($LASTEXITCODE -ne 0) { throw 'Jolt configure failed' }
       - name: Configure Linux dependency probe
         if: runner.os == 'Linux'
@@ -39,7 +39,7 @@ jobs:
           sudo apt-get install -y clang ninja-build libc++-dev libc++abi-dev g++-multilib
           flags=()
           if [ '${{ matrix.architecture }}' = x86 ]; then flags+=(-DCMAKE_CXX_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32); fi
-          cmake -S tests/jolt -B build/jolt-probe -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++ -DBAZZALT_PREPARE_JOLT=ON "${flags[@]}"
+          cmake -S tests/jolt -B build/jolt-probe -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++ -DBAZZALT_BUILD_JOLT=ON "${flags[@]}"
       - name: Build dependency and link probe on CI
         run: cmake --build build/jolt-probe --config Release --parallel 2
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -54,5 +54,5 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: jolt-preparation-${{ matrix.os }}-${{ matrix.architecture }}
+          name: jolt-tests-${{ matrix.os }}-${{ matrix.architecture }}
           path: build/jolt-probe/Testing/Temporary/*.log

@@ -274,6 +274,11 @@ class RuntimeService(QObject):
     def RestoreTransforms(self,snapshot:bytes)->bool:
         return bool(self._host and hasattr(self._host,"restore_transforms") and self._host.restore_transforms(json.loads(snapshot)))
 
+    def ScenePhysics(self,scene_id:str)->dict:
+        return dict(self._host.scene_physics(scene_id)) if self._host is not None and hasattr(self._host,"scene_physics") else {}
+    def SetScenePhysics(self,scene_id:str,data:dict)->bool:
+        return bool(self._host is not None and hasattr(self._host,"set_scene_physics") and self._host.set_scene_physics(scene_id,data))
+
     def SceneEnvironment(self,scene_id:str)->dict:
         return dict(self._host.scene_environment(scene_id)) if self._host is not None and hasattr(self._host,"scene_environment") else {}
 

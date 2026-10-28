@@ -32,7 +32,7 @@ class PlatformTargetsTests(unittest.TestCase):
     def test_x86_template_is_permitted_only_in_its_designated_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);header=bytearray(64);header[:6]=b'\x7fELF\x02\x01';struct.pack_into('<H',header,18,62)
-            for name in ('lib/libBazzalt.so','lib/libbazzalt_lua.so','lib/libbazzalt_gui.so','include/Bazzalt/Scene.h'):
+            for name in ('lib/libBazzalt.so','lib/libbazzalt_lua.so','lib/libbazzalt_gui.so','lib/libbazzalt_physics.so','include/Bazzalt/Scene.h'):
                 path=root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(header)
             header[4]=1;struct.pack_into('<H',header,18,3);path=root/'RuntimeTemplates/linux-x86/BazzaltPlayer';path.parent.mkdir(parents=True);path.write_bytes(header)
             Audit(root,'x64','core','linux')

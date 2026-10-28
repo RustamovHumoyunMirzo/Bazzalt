@@ -19,7 +19,7 @@ class SubsystemTests(unittest.TestCase):
             parent.Runtime.ResolveAssetRecord.side_effect=lambda value:record if value==identity else None
             parent.Runtime.ProjectInfo.return_value=dict(name='Game',project_path=str(project),properties={'custom':'keep'})
             parent.Runtime.UpdateProjectInfo.return_value=True;parent.Controller=SimpleNamespace(_ProjectAssets=lambda:[record])
-            dialog=GlobalSubsystemsDialog(parent);self.assertTrue(dialog.isModal());self.assertEqual(dialog.Tree.topLevelItemCount(),5)
+            dialog=GlobalSubsystemsDialog(parent);self.assertTrue(dialog.isModal());self.assertEqual(dialog.Tree.topLevelItemCount(),14)
             dialog.Picker.SetValue(identity);dialog.Level.SetValue(2);dialog._Add();self.assertEqual(dialog.Values,[dict(asset=identity,level=2)])
             dialog._Apply();properties=parent.Runtime.UpdateProjectInfo.call_args.args[1];self.assertEqual(properties['custom'],'keep');self.assertEqual(json.loads(properties[KEY]),dialog.Values)
             self.assertEqual(dialog.result(),dialog.DialogCode.Accepted);self.assertFalse(dialog.isVisible());self.assertFalse(dialog.Error.text())
@@ -28,7 +28,8 @@ class SubsystemTests(unittest.TestCase):
     def test_registration_validation(self):
         identity='12345678-1234-4234-8234-123456789abc';entry=dict(asset=identity,level=4)
         self.assertEqual(Registrations({KEY:json.dumps([entry])}),[entry])
-        for values in ([entry,entry],[dict(entry,level=-1)],[dict(entry,level=True)],[dict(entry,asset='')]):
+        for level in range(5,14):self.assertEqual(Registrations({KEY:json.dumps([dict(entry,level=level)])})[0]['level'],level)
+        for values in ([entry,entry],[dict(entry,level=14)],[dict(entry,level=-1)],[dict(entry,level=True)],[dict(entry,asset='')]):
             with self.assertRaises(ValueError):Registrations({KEY:json.dumps(values)})
     def test_subsystem_wrapper_is_not_an_entity_wrapper(self):
         with tempfile.TemporaryDirectory() as folder:

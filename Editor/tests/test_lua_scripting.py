@@ -53,6 +53,15 @@ return Walk
         import re
         root=Path(__file__).resolve().parents[2]
         bindings="\n".join(path.read_text(encoding="utf-8") for path in (root/"src/Script").glob("Lua*.cpp"))
+        # Expand actual shared-schema invocations; missing macros or invocations
+        # must still fail the per-header contract below.
+        schema=(root/"src/Physics/PhysicsFields.h").read_text(encoding="utf-8").replace("\\\n"," ")
+        macros={m[1]:m[2] for m in re.finditer(r"#define (BAZZALT_\w+_FIELDS)\(X\) ([^\n]+)",schema)}
+        physics=(root/"src/Script/LuaPhysics.cpp").read_text(encoding="utf-8")
+        for invocation in re.finditer(r"#define FIELD\(Name,Label\) \w+\[#Name\]=&(\w+)::Name;\s*(BAZZALT_\w+_FIELDS)\(FIELD\)",physics):
+            expanded=macros[invocation[2]]
+            for child in re.findall(r"(BAZZALT_\w+_FIELDS)\(X\)",expanded):expanded=expanded.replace(child+"(X)",macros[child])
+            bindings+="\n"+"\n".join("&"+invocation[1]+"::"+field for field in re.findall(r"X\((\w+),",expanded))
         for header in (root/"include/Bazzalt/Components").glob("*.h"):
             text=header.read_text(encoding="utf-8")
             # Data fields are a binding contract; native templates/traits are not.

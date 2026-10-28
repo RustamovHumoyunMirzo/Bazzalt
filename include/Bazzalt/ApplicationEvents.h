@@ -10,7 +10,8 @@ enum class ApplicationEventType {
     OnPreUpdate, OnUpdate, OnFixedUpdate, OnLateUpdate, OnPreRender, OnRender, OnPostRender,
     OnWindowResize, OnWindowFocusChanged, OnWindowCloseRequested,
     OnSceneLoad, OnSceneLoaded, OnSceneUnload, OnSceneUnloaded,
-    OnPlay, OnStop, OnPreShutdown, OnShutdown
+    OnPlay, OnStop, OnPreShutdown, OnShutdown,
+    OnBeforeInputInit, OnInputInit, OnAfterInputInit, OnBeforeAudioInit, OnAudioInit, OnAfterAudioInit, OnBeforePhysicsInit, OnPhysicsInit, OnAfterPhysicsInit, OnBeforePhysicsStep, OnAfterPhysicsStep, OnBeforePhysicsShutdown, OnAfterPhysicsShutdown
 };
 struct ApplicationEvent {
     ApplicationEventType Type{};

@@ -2,6 +2,7 @@
 #include "Runtime/Engine.h"
 #include "Bazzalt/Script.h"
 #include "Runtime/TimeAccess.h"
+#include "Physics/PhysicsModuleApi.h"
 #include <cassert>
 #include <filesystem>
 #include <fstream>
@@ -20,7 +21,11 @@ int main(int argc,char** argv){
     assert(Bazzalt::Time::GetTimeScale()==0.25f);
     Bazzalt::Runtime::TimeAccess::Advance(0.064);
     {Bazzalt::Runtime::TimeAccess::FixedScope fixed;runtime.FixedUpdate(Bazzalt::Time::GetDeltaTime());}
-    runtime.Update(Bazzalt::Time::GetDeltaTime());runtime.LateUpdate(Bazzalt::Time::GetDeltaTime());runtime.Stop();
-    std::ifstream stream(log);std::string contents((std::istreambuf_iterator<char>(stream)),{});stream.close();std::string expected;for(const auto* action:{"create","fixed","update","late","destroy"})expected+=std::string(action)+":"+binding.Entity+"\n";assert(contents==expected);assert(!Bazzalt::Scripts::Find(entity,"LifecycleProbe"));
+    runtime.Update(Bazzalt::Time::GetDeltaTime());runtime.LateUpdate(Bazzalt::Time::GetDeltaTime());
+    entity.AddComponent<Bazzalt::ShapeCollider>();entity.AddComponent<Bazzalt::Rigidbody>().Gravity=Bazzalt::Vec3{};
+    auto trigger=engine.GetScene().CreateEntity("Trigger");trigger.AddComponent<Bazzalt::ShapeCollider>().IsTrigger=true;
+    auto settings=engine.GetScene().GetPhysicsSettings();settings.AutoSimulation=false;settings.WorkerThreads=0;assert(engine.GetScene().SetPhysicsSettings(settings));
+    Bazzalt::Runtime::PhysicsModule().Start(engine.GetScene());engine.GetScene().GetPhysics().Simulate(1.f/60);runtime.Stop();Bazzalt::Runtime::PhysicsModule().Stop(engine.GetScene());
+    std::ifstream stream(log);std::string contents((std::istreambuf_iterator<char>(stream)),{});stream.close();std::string expected;for(const auto* action:{"create","fixed","update","late","trigger","destroy"})expected+=std::string(action)+":"+binding.Entity+"\n";assert(contents==expected);assert(!Bazzalt::Scripts::Find(entity,"LifecycleProbe"));
     std::filesystem::remove(log,error);return 0;
 }

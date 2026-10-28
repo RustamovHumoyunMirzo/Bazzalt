@@ -1,0 +1,104 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Physics uses the same Rigidbody, ShapeCollider and MeshCollider data as C++. The engine loads its sibling physics library and owns simulation. No require of Jolt, driver setup or custom game loop is needed.">
+  <title>Physics in Lua | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Lua / Physics in Lua</nav>
+      <article class="doc"><h1>Physics in Lua</h1>
+<p>Physics uses the same Rigidbody, ShapeCollider and MeshCollider data as C++. The engine loads its sibling physics library and owns simulation. No require of Jolt, driver setup or custom game loop is needed.</p>
+<h2 id="first-behavior">A physical behavior</h2>
+<pre><code class="language-lua">local B = Bazzalt
+local Body = COMPONENT(&quot;BouncingBox&quot;)
+
+function Body:OnCreate()
+    if not self.Entity:HasComponent(&quot;Rigidbody&quot;) then
+        self.Entity:AddComponent(&quot;Rigidbody&quot;)
+    end
+    if not self.Entity:HasComponent(&quot;ShapeCollider&quot;) then
+        self.Entity:AddComponent(&quot;ShapeCollider&quot;)
+    end
+    self.Entity:GetScene():GetPhysics():ApplyImpulse(self.Entity, B.Vec3(0, 5, 0))
+end
+
+function Body:OnCollisionEnter(event)
+    B.Console.Info(&quot;Contact points: &quot; .. #event.Contacts)
+end
+return Body</code></pre>
+<p>Use component names without spaces in scripts: Rigidbody, ShapeCollider and MeshCollider. Inspector labels may contain spaces. Component Get returns a copy; after editing it, call Entity:SetComponent(typeName, value). For example:</p>
+<pre><code class="language-lua">local body = self.Entity:GetComponent(&quot;Rigidbody&quot;)
+body.Mass = 2
+body.GravityFactor = 0.5
+self.Entity:SetComponent(&quot;Rigidbody&quot;, body)
+local physics = self.Entity:GetScene():GetPhysics()
+physics:SetGravity(self.Entity, Bazzalt.Vec3(0, -3, 0))
+physics:SetGravity(self.Entity, nil) -- Use scene gravity again.
+physics:ApplyForce(self.Entity, Bazzalt.Vec3(10, 0, 0))
+physics:SetLinearVelocity(self.Entity, Bazzalt.Vec3(2, 0, 0))</code></pre>
+<h2 id="raycasts">Raycasts and casts</h2>
+<pre><code class="language-lua">local B = Bazzalt
+local scene = self.Entity:GetScene()
+local options = B.PhysicsQueryOptions()
+options.IncludeTriggers = false
+options.ExcludedEntities = { self.Entity:GetUUID() }
+local hit = scene:Raycast(B.Vec3(0, 10, 0), B.Vec3(0, -1, 0), 30, options)
+if hit:IsValid() then
+    B.Console.Info(hit.Object:GetUUID():ToString())
+end
+local shape = B.PhysicsShape()
+shape.Shape = B.ColliderShape.Sphere
+shape.Radius = 0.5
+local transform = B.Transform()
+transform.Position = B.Vec3(0, 5, 0)
+local sweep = scene:ShapeCast(shape, transform, B.Vec3(1, 0, 0), 10, options)
+local overlapping = scene:OverlapShape(shape, transform, options)</code></pre>
+<p>The Vec3-origin Raycast overload queries the physics world. Passing a SceneRay instead keeps the existing visual geometry query. A miss returns an invalid PhysicsHit, not nil; use IsValid(). Result arrays are ordinary Lua tables indexed from one. Distances are world metres. PhysicsScene also exposes ShapeCastAll, SphereCast/SphereCastAll, RaycastAll, OverlapSphere, OverlapBox, CheckSphere and CheckBox.</p>
+<h2 id="events">Events and lifetime</h2>
+<p>OnCollisionEnter/Stay/Exit and OnTriggerEnter/Stay/Exit receive CollisionEvent. Its normal points from A toward B; relative velocity is B minus A. Contacts contains world PointA, PointB and Penetration values. Body and Collider UUIDs remain useful in Exit events even if one entity no longer exists.</p>
+<p>Explicit listeners use physics:Subscribe(B.PhysicsEventType.CollisionEnter, function(event) ... end, optionalEntity). Save its ID to unsubscribe manually. Lua-owned listeners are also disconnected before their VM is destroyed. All callbacks run on the main thread with an instruction budget; edits/forces made after a step affect the next step. Do not call Simulate recursively from a contact callback.</p>
+<h2 id="settings">Scene settings and manual simulation</h2>
+<pre><code class="language-lua">local physics = self.Entity:GetScene():GetPhysics()
+local settings = physics:GetSettings()
+settings.Gravity = Bazzalt.Vec3(0, -4, 0)
+assert(physics:SetSettings(settings))
+physics:SetLayerCollision(0, 1, false)</code></pre>
+<p>Automatic stepping follows scaled Time fixed updates. To simulate manually, set AutoSimulation=false and call physics:Simulate(fixedDeltaTime) during Play. Ordinary editing never runs the solver. Keep delta finite and between zero (exclusive) and one second (inclusive); use a small fixed interval. Stop Play before changing capacity limits.</p>
+<p>PhysicsScene is scene-scoped and detects unload. Reacquire it from the new scene rather than retaining references across scene replacement. Global application initialization/step events remain C++ Subsystem Script listeners; Lua behaviors use their fixed/contact callbacks and the full physics facade.</p>
+<h2 id="reference">Complete API</h2>
+<p>See <a href="../reference/PhysicsScene/en.html">PhysicsScene</a>, <a href="../reference/Rigidbody/en.html">Rigidbody</a>, <a href="../reference/PhysicsSettings/en.html">PhysicsSettings</a>, <a href="../reference/ShapeCollider/en.html">ShapeCollider</a>, <a href="../reference/MeshCollider/en.html">MeshCollider</a> and <a href="../reference/CollisionEvent/en.html">CollisionEvent</a>. The <a href="../../manual/physics/en.html">editor guide</a> explains fields, compounds, layers and visual collider guides.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../audio/en.html"><small>Previous</small>Lua audio</a>
+<a class="next" href="../gui/en.html"><small>Next</small>GUI in Lua</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#first-behavior">A physical behavior</a><a class="toc-link" href="#raycasts">Raycasts and casts</a><a class="toc-link" href="#events">Events and lifetime</a><a class="toc-link" href="#settings">Scene settings and manual simulation</a><a class="toc-link" href="#reference">Complete API</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

@@ -31,10 +31,10 @@ struct SubsystemRuntime::Instance {
 SubsystemRuntime::SubsystemRuntime()=default;
 void SubsystemRuntime::Instance::ConsoleError(const char* text){ApplicationEventsAccess::Fail(text);}
 SubsystemRuntime::~SubsystemRuntime(){Stop();}
-void SubsystemRuntime::Configure(std::vector<SubsystemBinding> bindings){Stop();m_bindings=std::move(bindings);std::stable_sort(m_bindings.begin(),m_bindings.end(),[](const auto& a,const auto& b){return a.Level<b.Level;});}
+void SubsystemRuntime::Configure(std::vector<SubsystemBinding> bindings){Stop();m_bindings=std::move(bindings);std::stable_sort(m_bindings.begin(),m_bindings.end(),[](const auto& a,const auto& b){return ApplicationEventsAccess::GetLevelOrder(a.Level)<ApplicationEventsAccess::GetLevelOrder(b.Level);});}
 void SubsystemRuntime::ReachLevel(int level){
-    if(level<=m_level)return;
-    for(const auto& binding:m_bindings)if(binding.Level>m_level&&binding.Level<=level){
+    const int order=ApplicationEventsAccess::GetLevelOrder(level);if(order<=m_level)return;
+    for(const auto& binding:m_bindings)if(ApplicationEventsAccess::GetLevelOrder(binding.Level)>m_level&&ApplicationEventsAccess::GetLevelOrder(binding.Level)<=order){
         auto instance=std::make_unique<Instance>();instance->Level=binding.Level;
 #ifdef _WIN32
         auto library=LoadLibraryExW(binding.Module.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);if(library)instance->Library={library,[](void* value){FreeLibrary(static_cast<HMODULE>(value));}};
@@ -51,7 +51,7 @@ void SubsystemRuntime::ReachLevel(int level){
         instance->Published=true;
         Scope registered(instance->Library,instance->Object,binding.Level);api->Register(instance->Object);m_instances.push_back(std::move(instance));
     }
-    m_level=level;
+    m_level=order;
 }
 void SubsystemRuntime::Stop() noexcept{while(!m_instances.empty())m_instances.pop_back();m_level=-1;}
 }

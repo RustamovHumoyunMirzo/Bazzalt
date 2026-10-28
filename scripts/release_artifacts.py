@@ -38,12 +38,12 @@ def PayloadArchitecture(relative: Path, architecture: str, platform: str) -> str
 
 def Audit(root: Path, architecture: str, product: str, platform: str="windows") -> None:
     if platform=="linux":
-        required={"editor":["Bazzalt","editor.json","Editor/libBazzalt.so","Editor/libbazzalt_gui.so","Editor/libbazzalt_lua.so","ScriptSDK/include/Bazzalt/Scene.h","ScriptSDK/lib/libBazzalt.so"],"core":["include/Bazzalt/Scene.h","lib/libBazzalt.so","lib/libbazzalt_lua.so","lib/libbazzalt_gui.so"],"hub":["BazzaltHub"],"compiler":["BazzaltCompiler","BazzaltCooker"]}.get(product,[])
+        required={"editor":["Bazzalt","editor.json","Editor/libBazzalt.so","Editor/libbazzalt_gui.so","Editor/libbazzalt_physics.so","Editor/libbazzalt_lua.so","ScriptSDK/include/Bazzalt/Scene.h","ScriptSDK/lib/libBazzalt.so"],"core":["include/Bazzalt/Scene.h","lib/libBazzalt.so","lib/libbazzalt_lua.so","lib/libbazzalt_gui.so","lib/libbazzalt_physics.so"],"hub":["BazzaltHub"],"compiler":["BazzaltCompiler","BazzaltCooker"]}.get(product,[])
         for name in required:
             if not (root/name).is_file():raise ValueError("Missing Linux file: "+name)
         if product=="hub":
             for path in root.rglob("*"):
-                if path.name.lower() in {"versions","scriptsdk","libbazzalt.so","libbazzalt_lua.so","libbazzalt_gui.so","toolchain"} or path.name.startswith("_bazzalt_runtime"):raise ValueError("Hub contains editor/core files: "+str(path))
+                if path.name.lower() in {"versions","scriptsdk","libbazzalt.so","libbazzalt_lua.so","libbazzalt_gui.so","libbazzalt_physics.so","toolchain"} or path.name.startswith("_bazzalt_runtime"):raise ValueError("Hub contains editor/core files: "+str(path))
         binaries=[]
         for path in root.rglob("*"):
             if not path.is_file():continue
@@ -63,14 +63,14 @@ def Audit(root: Path, architecture: str, product: str, platform: str="windows") 
         if Architecture(path) != architecture: raise ValueError(f"Wrong architecture: {path}")
     if product == "hub":
         for path in root.rglob("*"):
-            if path.name.lower() in {"versions", "scriptsdk", "bazzalt.dll", "bazzalt_lua.dll", "bazzalt_gui.dll", "bazzalt.exe", "toolchain"} or path.name.startswith("_bazzalt_runtime"):
+            if path.name.lower() in {"versions", "scriptsdk", "bazzalt.dll", "bazzalt_lua.dll", "bazzalt_gui.dll","bazzalt_physics.dll", "bazzalt.exe", "toolchain"} or path.name.startswith("_bazzalt_runtime"):
                 raise ValueError(f"Hub must not ship editors/core/tools: {path}")
     elif product == "editor":
-        for required in ("Bazzalt.exe", "editor.json", "Editor/Bazzalt.dll", "Editor/bazzalt_lua.dll", "Editor/bazzalt_gui.dll", "ScriptSDK/include/Bazzalt/Scene.h", "ScriptSDK/lib/Bazzalt.lib", "ScriptSDK/lib/bazzalt_lua.dll", "ScriptSDK/lib/bazzalt_gui.dll"):
+        for required in ("Bazzalt.exe", "editor.json", "Editor/Bazzalt.dll", "Editor/bazzalt_lua.dll", "Editor/bazzalt_gui.dll", "Editor/bazzalt_physics.dll", "ScriptSDK/include/Bazzalt/Scene.h", "ScriptSDK/lib/Bazzalt.lib", "ScriptSDK/lib/bazzalt_lua.dll", "ScriptSDK/lib/bazzalt_gui.dll", "ScriptSDK/lib/bazzalt_physics.dll"):
             if not (root / required).is_file(): raise ValueError(f"Missing editor file: {required}")
         if (root / "toolchain").exists(): raise ValueError("Editors must use separately installed build tools")
     elif product == "core":
-        for required in ("include/Bazzalt/Scene.h", "lib/Bazzalt.dll", "lib/bazzalt_lua.dll", "lib/bazzalt_gui.dll"):
+        for required in ("include/Bazzalt/Scene.h", "lib/Bazzalt.dll", "lib/bazzalt_lua.dll", "lib/bazzalt_gui.dll", "lib/bazzalt_physics.dll"):
             if not (root / required).is_file():raise ValueError(f"Missing core file: {required}")
 
 

@@ -1,5 +1,7 @@
 #include "Runtime/Engine.h"
+#include "Bazzalt/Console.h"
 #include "Runtime/GraphicsAccess.h"
+#include "Physics/PhysicsModuleApi.h"
 #include "Runtime/ExtensionAccess.h"
 #include "Runtime/ApplicationEventsAccess.h"
 #include "Runtime/ApplicationAccess.h"
@@ -82,9 +84,11 @@ bool Engine::Init(bool headless, bool startScripts)
         std::cerr << "[Engine] " << m_lastError << "\n";
         return false;
     }
+    ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforeInputInit});
     if(!InputAccess::Initialize()){
         m_lastError="Could not initialize the SDL3 input subsystem";m_renderBackend->Shutdown();return false;
     }
+    ApplicationAccess::SetInputReady(true);ApplicationEventsAccess::Emit({ApplicationEventType::OnInputInit});ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterInputInit});
     AttachRenderSystems();
 
     m_isInitialized = true;
@@ -141,8 +145,10 @@ void Engine::Update(bool renderFrame)
         m_scene->FixedUpdate(step);
         m_scriptRuntime->FixedUpdate(step);
         m_luaRuntime->FixedUpdate(step);
+        if(m_scriptsRunning)PhysicsModule().Step(*m_scene,step,false);
     }
     if(fixedSteps > 64)m_fixedAccumulator = std::fmod(m_fixedAccumulator, double(Time::GetFixedDeltaTime()));
+    if(m_scriptsRunning)PhysicsModule().SetInterpolationAlpha(*m_scene,float(m_fixedAccumulator/Time::GetFixedDeltaTime()));
     m_scene->Update(m_deltaTime);
     m_scriptRuntime->Update(m_deltaTime);
     m_luaRuntime->Update(m_deltaTime);
@@ -237,6 +243,7 @@ for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id
     }
     for(auto h:m_scene->GetRegistry().view<AudioListener>()){auto e=m_scene->GetEntity(static_cast<Entity::Id>(h));if(!e.GetComponent<AudioListener>().IsEnabled()||m_editorHidden.contains(e.GetUUID()))continue;auto p=e.GetWorldTransform().Position;icons.push_back({p.X,p.Y,p.Z,false,2});}
     m_renderBackend->SetEditorIcons(m_editorIconsVisible?icons:std::vector<RenderBackend::EditorIcon>{});
+    if(m_editorIconsVisible)for(auto selected:m_selectedObjects){auto entity=m_scene->GetEntity(selected);if(!entity||m_editorHidden.contains(selected)||(!entity.HasComponent<Rigidbody>()&&!entity.HasComponent<ShapeCollider>()&&!entity.HasComponent<MeshCollider>()))continue;try{for(const auto& p:PhysicsModule().Guides(*m_scene,selected))guides.push_back({p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9]});}catch(const std::exception& error){if(m_lastError!=error.what()){m_lastError=error.what();Console::Warning(m_lastError,"Physics");}}}
     if(!m_editorIconsVisible)guides.clear();
     std::unordered_set<UUID> selectedOwners,hoveredOwners;
     auto objects=m_scene->GetRegistry().view<Transform>();
@@ -434,13 +441,16 @@ bool Engine::StartScripts(bool resetTime){
         if(!m_scriptRuntime->Configure(std::move(native),m_lastError))return false;
     }
     if(resetTime)TimeAccess::Reset();m_fixedAccumulator=0.0;m_lastFrameTime=std::chrono::steady_clock::now();
+    ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforeAudioInit});
     m_audioRuntime->Start(*m_scene,m_headlessAudio);
     ApplicationAccess::SetAudioReady(true);
-    if(!m_scriptRuntime->Start(m_lastError)){m_audioRuntime->Stop();return false;}
-    if(!m_luaRuntime->Start(m_lastError)){m_scriptRuntime->Stop();m_audioRuntime->Stop();return false;}
+    ApplicationEventsAccess::Emit({ApplicationEventType::OnAudioInit});ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterAudioInit});
+    try{ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforePhysicsInit});ApplicationEventsAccess::ThrowIfFailed();PhysicsModule().Start(*m_scene);ApplicationAccess::SetPhysicsReady(true);ApplicationEventsAccess::Emit({ApplicationEventType::OnPhysicsInit});ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterPhysicsInit});ApplicationAccess::SetServicesReady(true);ApplicationAccess::SetSceneReady(true);ApplicationEventsAccess::CompleteInitialization(m_scene->GetUUID().ToString(),m_editorHost);}catch(const std::exception& error){m_lastError=error.what();m_audioRuntime->Stop();ReleasePhysicsScene(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationAccess::SetAudioReady(false);ApplicationAccess::SetServicesReady(false);return false;}
+    if(!m_scriptRuntime->Start(m_lastError)){m_audioRuntime->Stop();PhysicsModule().Stop(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationAccess::SetAudioReady(false);ApplicationAccess::SetServicesReady(false);return false;}
+    if(!m_luaRuntime->Start(m_lastError)){m_scriptRuntime->Stop();m_audioRuntime->Stop();PhysicsModule().Stop(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationAccess::SetAudioReady(false);ApplicationAccess::SetServicesReady(false);return false;}
     m_scriptsRunning=true;ApplicationEventsAccess::Emit({ApplicationEventType::OnPlay});return true;
 }
-void Engine::StopScripts(){if(m_scriptsRunning){ApplicationEventsAccess::Emit({ApplicationEventType::OnStop});m_scriptsRunning=false;}m_audioRuntime->Stop();ApplicationAccess::SetAudioReady(false);m_luaRuntime->Stop();m_scriptRuntime->Stop();GraphicsAccess::CancelFrame();ResetRuntimeMaterials();ResetRuntimeTextures();}
+void Engine::StopScripts(){if(m_scriptsRunning){ApplicationEventsAccess::Emit({ApplicationEventType::OnStop});m_scriptsRunning=false;}m_luaRuntime->Stop();m_scriptRuntime->Stop();ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforePhysicsShutdown});ReleasePhysicsScene(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterPhysicsShutdown});m_audioRuntime->Stop();ApplicationAccess::SetAudioReady(false);GraphicsAccess::CancelFrame();ResetRuntimeMaterials();ResetRuntimeTextures();}
 
 bool Engine::PrepareApplication(){
     if(m_applicationPrepared)return true;
@@ -455,7 +465,7 @@ bool Engine::PrepareApplication(){
             for(auto node:root.children()){
                 if(!node.is_map()||node.num_children()!=2||!node.has_child("asset")||!node.has_child("level"))throw std::runtime_error("Invalid subsystem registration");
                 auto idText=node["asset"].val();UUID id;if(!UUID::TryParse({idText.str,idText.len},id)||id.IsRoot()||!m_subsystemAssets.insert(id).second)throw std::runtime_error("Duplicate or invalid subsystem asset UUID");
-                auto levelText=node["level"].val();std::string levelValue(levelText.str,levelText.len);std::size_t used=0;int level=std::stoi(levelValue,&used);if(used!=levelValue.size()||level<0||level>4)throw std::runtime_error("Invalid subsystem load level");
+                auto levelText=node["level"].val();std::string levelValue(levelText.str,levelText.len);std::size_t used=0;int level=std::stoi(levelValue,&used);if(used!=levelValue.size()||level<0||level>13)throw std::runtime_error("Invalid subsystem load level");
                 auto asset=m_assetDatabase->Find(id);if(!asset||asset->State!=AssetState::Ready)throw std::runtime_error("Subsystem asset is not ready: "+id.ToString());
                 auto module=m_subsystemModules.contains(id)?m_subsystemModules.at(id):asset->CachePath;
                 bindings.push_back({id,module,level});
@@ -466,15 +476,14 @@ bool Engine::PrepareApplication(){
         m_applicationPrepared=true;m_preShutdown=false;ApplicationEventsAccess::Emit({ApplicationEventType::OnBoot});ApplicationEventsAccess::ThrowIfFailed();
         if(m_editorHost){
             ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforeWindowCreate});ApplicationEventsAccess::Emit({ApplicationEventType::OnInit});
-            ApplicationAccess::SetServicesReady(true);ApplicationEventsAccess::Emit({ApplicationEventType::OnLoad});ApplicationAccess::SetSceneReady(true);
-            ApplicationEventsAccess::Emit({ApplicationEventType::OnPostWindowCreate});ApplicationEventsAccess::ThrowIfFailed();
+            ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforeInputInit});ApplicationAccess::SetInputReady(true);ApplicationEventsAccess::Emit({ApplicationEventType::OnInputInit});ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterInputInit});ApplicationEventsAccess::ThrowIfFailed();
         }
         return true;
     }catch(const std::exception& error){m_lastError=error.what();if(m_subsystems)m_subsystems->Stop();ApplicationEventsAccess::BindStageLoader({});m_applicationPrepared=false;return false;}
 }
 void Engine::BeginShutdown(){if(m_applicationPrepared&&!m_preShutdown){m_preShutdown=true;Application::Quit(Application::GetExitCode());ApplicationEventsAccess::Emit({ApplicationEventType::OnPreShutdown});}}
 void Engine::EndApplication(){
-    if(!m_applicationPrepared)return;BeginShutdown();ApplicationAccess::SetServicesReady(false);ApplicationAccess::SetSceneReady(false);ApplicationAccess::SetAudioReady(false);ApplicationEventsAccess::Emit({ApplicationEventType::OnShutdown});
+    if(!m_applicationPrepared)return;BeginShutdown();ApplicationAccess::SetServicesReady(false);ApplicationAccess::SetSceneReady(false);ApplicationAccess::SetAudioReady(false);ApplicationAccess::SetPhysicsReady(false);ApplicationAccess::SetInputReady(false);ApplicationEventsAccess::Emit({ApplicationEventType::OnShutdown});
     ApplicationEventsAccess::DisconnectOwner(this);if(m_subsystems)m_subsystems->Stop();ApplicationEventsAccess::BindStageLoader({});m_applicationPrepared=false;ExtensionAccess::Clear();
 }
 bool Engine::RefreshTextureAsset(const std::filesystem::path& source){if(!m_assetDatabase)return false;const bool result=m_assetDatabase->RefreshSource(source);if(!result)m_lastError=m_assetDatabase->GetLastError();return result;}

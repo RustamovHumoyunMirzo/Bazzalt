@@ -44,12 +44,25 @@ public:
     BAZZALT_APP_SIGNAL(OnStop)
     BAZZALT_APP_SIGNAL(OnPreShutdown)
     BAZZALT_APP_SIGNAL(OnShutdown)
+    BAZZALT_APP_SIGNAL(OnBeforeInputInit)
+    BAZZALT_APP_SIGNAL(OnInputInit)
+    BAZZALT_APP_SIGNAL(OnAfterInputInit)
+    BAZZALT_APP_SIGNAL(OnBeforeAudioInit)
+    BAZZALT_APP_SIGNAL(OnAudioInit)
+    BAZZALT_APP_SIGNAL(OnAfterAudioInit)
+    BAZZALT_APP_SIGNAL(OnBeforePhysicsInit)
+    BAZZALT_APP_SIGNAL(OnPhysicsInit)
+    BAZZALT_APP_SIGNAL(OnAfterPhysicsInit)
+    BAZZALT_APP_SIGNAL(OnBeforePhysicsShutdown)
+    BAZZALT_APP_SIGNAL(OnAfterPhysicsShutdown)
 #undef BAZZALT_APP_SIGNAL
 #define BAZZALT_APP_TIMED_SIGNAL(Name) \
     static Subscription Name(std::function<void(float)> callback) { return Subscribe(ApplicationEventType::Name,[callback=std::move(callback)](const ApplicationEvent& e){callback(e.DeltaTime);}); }
     BAZZALT_APP_TIMED_SIGNAL(OnPreUpdate)
     BAZZALT_APP_TIMED_SIGNAL(OnUpdate)
     BAZZALT_APP_TIMED_SIGNAL(OnFixedUpdate)
+    BAZZALT_APP_TIMED_SIGNAL(OnBeforePhysicsStep)
+    BAZZALT_APP_TIMED_SIGNAL(OnAfterPhysicsStep)
     BAZZALT_APP_TIMED_SIGNAL(OnLateUpdate)
 #undef BAZZALT_APP_TIMED_SIGNAL
     static Subscription OnWindowResize(std::function<void(std::uint32_t,std::uint32_t)> callback) {return Subscribe(ApplicationEventType::OnWindowResize,[callback=std::move(callback)](const ApplicationEvent& e){callback(e.Width,e.Height);});}

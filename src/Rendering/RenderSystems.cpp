@@ -1,4 +1,5 @@
 #include "Rendering/RenderSystems.h"
+#include "Physics/PhysicsModuleApi.h"
 #include "Rendering/AntiAliasingSettings.h"
 #include "Runtime/TextureLibrary.h"
 #include <iostream>
@@ -156,7 +157,7 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
         m_backend.RegisterCameraOutput(id,resource.Color,resource.History,resource.Target,resource.HistoryTarget);
         if(camera.RenderTarget){if(camera.Active)m_backend.GetAssets().SetTextureProducer(camera.RenderTarget,id);else if(m_backend.GetAssets().GetTextureProducer(camera.RenderTarget)==id)m_backend.GetAssets().SetTextureProducer(camera.RenderTarget,{});}
         if(!camera.Active)m_backend.GetAssets().SetCameraTexture(id,nullptr);
-        const Mat4 world = entity.GetWorldMatrix();
+        const Mat4 world = PhysicsRenderMatrix(scene,entity);
         const Vec3 position = SafeVector(world.TransformPoint({}));
         const Vec3 forward = SafeDirection(world.TransformDirection({0.0f, 0.0f, -1.0f}), {0,0,-1});
         Vec3 up = SafeDirection(world.TransformDirection({0.0f, 1.0f, 0.0f}), {0,1,0});
@@ -346,7 +347,7 @@ void LightSystem::OnUpdate(Scene& scene, float) {
             builder.color(ToFilament(color))
                    .intensity(intensity)
                    .castShadows(light.CastShadows);
-            const Mat4 initialWorld = entity.GetWorldMatrix();
+            const Mat4 initialWorld = PhysicsRenderMatrix(scene,entity);
             if (type == LightType::Point || type == LightType::Spot)
                 builder.position(ToFilament(SafeVector(initialWorld.TransformPoint({})))).falloff(range);
             if (type != LightType::Point)
@@ -365,7 +366,7 @@ void LightSystem::OnUpdate(Scene& scene, float) {
         m_backend.RegisterEditorLight(id,found->second.Entity);
         manager.setColor(instance, ToFilament(color));
         manager.setIntensity(instance, intensity);
-        const Mat4 world = entity.GetWorldMatrix();
+        const Mat4 world = PhysicsRenderMatrix(scene,entity);
         if (type == LightType::Point || type == LightType::Spot) {
             manager.setFalloff(instance, range);
             manager.setPosition(instance, ToFilament(SafeVector(world.TransformPoint({}))));
@@ -434,7 +435,7 @@ void MeshSystem::OnUpdate(Scene& scene, float) {
             const auto slots=assets.GetMaterialSlotCount(resource);
             if(slots&&mesh.Materials.empty()){mesh.Materials.resize(slots);found->second.Materials=mesh.Materials;}
         }
-        assets.UpdateMesh(found->second.Handle, entity.GetWorldMatrix(), mesh);
+        assets.UpdateMesh(found->second.Handle, PhysicsRenderMatrix(scene,entity), mesh);
         assets.SetEditorOwner(found->second.Handle,id);
     }
     for (auto iterator=m_resources.begin();iterator!=m_resources.end();) {
@@ -450,7 +451,7 @@ void MeshSystem::Destroy(UUID id) {
 
 namespace { std::size_t PrimitiveGeometryKey(const PrimitiveObject&v){std::size_t h=static_cast<std::size_t>(v.Shape);const auto mix=[&](auto value){h^=std::hash<decltype(value)>{}(value)+0x9e3779b9+(h<<6)+(h>>2);};mix(v.MaterialAsset);mix(v.Size.X);mix(v.Size.Y);mix(v.Size.Z);mix(v.Radius);mix(v.Height);mix(v.Width);mix(v.Depth);mix(v.MajorRadius);mix(v.MinorRadius);mix(v.Segments);mix(v.Rings);return h;} }
 void PrimitiveSystem::OnCreate(Scene&){}
-void PrimitiveSystem::OnUpdate(Scene&scene,float){auto& assets=m_backend.GetAssets();std::unordered_set<UUID> alive;auto view=GetView(scene.GetRegistry());for(auto handle:view){Entity entity=scene.GetEntity(static_cast<Entity::Id>(handle));const auto id=entity.GetUUID();const auto& primitive=view.get<PrimitiveObject>(handle);if(!primitive.IsEnabled())continue;alive.insert(id);const auto key=PrimitiveGeometryKey(primitive);auto found=m_resources.find(id);if(found!=m_resources.end()&&found->second.GeometryKey!=key){Destroy(id);found=m_resources.end();}if(found==m_resources.end())found=m_resources.emplace(id,Resource{assets.CreatePrimitive(primitive),key}).first;assets.UpdatePrimitive(found->second.Handle,entity.GetWorldMatrix(),primitive);assets.SetEditorOwner(found->second.Handle,id);}for(auto it=m_resources.begin();it!=m_resources.end();){if(!alive.contains(it->first)){auto id=it->first;++it;Destroy(id);}else ++it;}}
+void PrimitiveSystem::OnUpdate(Scene&scene,float){auto& assets=m_backend.GetAssets();std::unordered_set<UUID> alive;auto view=GetView(scene.GetRegistry());for(auto handle:view){Entity entity=scene.GetEntity(static_cast<Entity::Id>(handle));const auto id=entity.GetUUID();const auto& primitive=view.get<PrimitiveObject>(handle);if(!primitive.IsEnabled())continue;alive.insert(id);const auto key=PrimitiveGeometryKey(primitive);auto found=m_resources.find(id);if(found!=m_resources.end()&&found->second.GeometryKey!=key){Destroy(id);found=m_resources.end();}if(found==m_resources.end())found=m_resources.emplace(id,Resource{assets.CreatePrimitive(primitive),key}).first;assets.UpdatePrimitive(found->second.Handle,PhysicsRenderMatrix(scene,entity),primitive);assets.SetEditorOwner(found->second.Handle,id);}for(auto it=m_resources.begin();it!=m_resources.end();){if(!alive.contains(it->first)){auto id=it->first;++it;Destroy(id);}else ++it;}}
 void PrimitiveSystem::OnDestroy(Scene&){while(!m_resources.empty())Destroy(m_resources.begin()->first);}
 void PrimitiveSystem::Destroy(UUID id){auto found=m_resources.find(id);if(found==m_resources.end())return;m_backend.GetAssets().DestroyPrimitive(found->second.Handle);m_resources.erase(found);}
 

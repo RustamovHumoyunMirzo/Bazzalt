@@ -190,6 +190,7 @@ file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/EditorBridge/")
+list(FILTER LIB_SOURCES EXCLUDE REGEX "/Physics/(JoltWorld|PhysicsGeometry)\\.cpp$")
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/GUI/CSS/")
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/GUI/(FontFace|GuiStyles|GuiPaint)\\.cpp$")
 add_subdirectory(src/GUI/CSS)
@@ -258,6 +259,28 @@ target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE BazzaltMiniaudio Bazzalt
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SIZEOF_VOID_P EQUAL 4)
     target_link_libraries(Bazzalt PRIVATE atomic)
 endif()
+
+# The core uses a private dispatch table; the solver is linked only here.
+if(NOT TARGET Jolt)
+    message(FATAL_ERROR "The physics runtime requires the Jolt dependency")
+endif()
+add_library(BazzaltPhysics SHARED src/Physics/JoltWorld.cpp src/Physics/PhysicsGeometry.cpp)
+target_include_directories(BazzaltPhysics PRIVATE include src)
+target_link_libraries(BazzaltPhysics PRIVATE Bazzalt Bazzalt::JoltDependency)
+target_compile_features(BazzaltPhysics PRIVATE cxx_std_20)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SIZEOF_VOID_P EQUAL 4)
+    target_link_libraries(BazzaltPhysics PRIVATE atomic)
+endif()
+set_target_properties(BazzaltPhysics PROPERTIES OUTPUT_NAME bazzalt_physics
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"
+    BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+if(MSVC)
+    target_compile_options(BazzaltPhysics PRIVATE /utf-8 /bigobj)
+endif()
+add_custom_command(TARGET BazzaltPhysics POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:BazzaltPhysics>"
+        "${CMAKE_BINARY_DIR}/ScriptSDK/lib/$<TARGET_FILE_NAME:BazzaltPhysics>" VERBATIM)
 
 # One-way link: GUI imports core; core loads the sibling module through a private
 # versioned table. This avoids circular DLL dependencies/import libraries.
@@ -356,6 +379,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(BazzaltCooker PRIVATE Bazzalt ryml)
     set_target_properties(BazzaltCooker PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor" BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
 endif()
+if(TARGET BazzaltPlayer)
+    add_dependencies(BazzaltPlayer BazzaltPhysics)
+endif()
+if(TARGET BazzaltCooker)
+    add_dependencies(BazzaltCooker BazzaltPhysics)
+endif()
+
 if(BAZZALT_BUILD_EDITOR_BRIDGE)
     if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
         message(FATAL_ERROR "The Editor requires 64-bit. For 32-bit game/runtime builds set BAZZALT_BUILD_EDITOR_BRIDGE=OFF.")
@@ -385,7 +415,7 @@ if(BAZZALT_BUILD_EDITOR_BRIDGE)
         C_VISIBILITY_PRESET default WINDOWS_EXPORT_ALL_SYMBOLS ON
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor")
-    add_dependencies(_bazzalt_runtime bshader BazzaltGui)
+    add_dependencies(_bazzalt_runtime bshader BazzaltGui BazzaltPhysics)
     target_link_libraries(_bazzalt_runtime PRIVATE Bazzalt)
     target_include_directories(_bazzalt_runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     set_target_properties(_bazzalt_runtime PROPERTIES
@@ -401,10 +431,10 @@ target_link_libraries(BazzaltExample
     PRIVATE
     Bazzalt
 )
-add_dependencies(BazzaltExample BazzaltGui)
+add_dependencies(BazzaltExample BazzaltGui BazzaltPhysics)
 if(WIN32)
     add_custom_command(TARGET BazzaltExample POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE:BazzaltLua>" "$<TARGET_FILE:BazzaltGui>" "$<TARGET_FILE_DIR:BazzaltExample>")
+        "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE:BazzaltLua>" "$<TARGET_FILE:BazzaltGui>" "$<TARGET_FILE:BazzaltPhysics>" "$<TARGET_FILE_DIR:BazzaltExample>")
 endif()
 
 include(CTest)
@@ -429,11 +459,11 @@ if(BUILD_TESTING)
         add_test(NAME BazzaltBshaderTests COMMAND BazzaltBshaderTests)
     endif()
     function(bazzalt_enable_test_assertions target)
-        add_dependencies(${target} BazzaltGui)
+        add_dependencies(${target} BazzaltGui BazzaltPhysics)
         target_sources(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests/TestDiagnostics.cpp")
         if(WIN32)
             add_custom_command(TARGET ${target} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE:BazzaltLua>" "$<TARGET_FILE:BazzaltGui>" "$<TARGET_FILE_DIR:${target}>")
+                "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE:BazzaltLua>" "$<TARGET_FILE:BazzaltGui>" "$<TARGET_FILE:BazzaltPhysics>" "$<TARGET_FILE_DIR:${target}>")
         endif()
         if(MSVC)
             target_compile_options(${target} PRIVATE /UNDEBUG)
@@ -461,6 +491,11 @@ if(BUILD_TESTING)
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/MathTests.cpp"
     )
     add_executable(BazzaltTimeTests tests/TimeTests.cpp)
+    add_executable(BazzaltPhysicsTests tests/PhysicsTests.cpp)
+    target_include_directories(BazzaltPhysicsTests PRIVATE src)
+    target_link_libraries(BazzaltPhysicsTests PRIVATE Bazzalt)
+    bazzalt_enable_test_assertions(BazzaltPhysicsTests)
+    add_test(NAME BazzaltPhysicsTests COMMAND BazzaltPhysicsTests)
     add_executable(BazzaltAudioTests tests/AudioTests.cpp)
     target_include_directories(BazzaltAudioTests PRIVATE src)
     target_compile_definitions(BazzaltAudioTests PRIVATE BAZZALT_TEST_AUDIO_DIR="${BAZZALT_MINIAUDIO_DIR}/data")
@@ -566,6 +601,8 @@ if(BUILD_TESTING)
     add_library(BazzaltScriptLifecycleModule MODULE tests/fixtures/ScriptLifecycleModule.cpp)
     target_link_libraries(BazzaltScriptLifecycleModule PRIVATE Bazzalt)
     set_target_properties(BazzaltScriptLifecycleModule PROPERTIES PREFIX "")
+    add_dependencies(BazzaltInputTests BazzaltScriptLifecycleModule)
+    add_dependencies(BazzaltMaterialTests BazzaltScriptLifecycleModule)
     add_library(BazzaltPublicApiModule MODULE tests/fixtures/PublicApiModule.cpp)
     target_link_libraries(BazzaltPublicApiModule PRIVATE Bazzalt)
     set_target_properties(BazzaltPublicApiModule PROPERTIES PREFIX "")
@@ -574,11 +611,14 @@ if(BUILD_TESTING)
     target_link_libraries(BazzaltPublicScriptApiTests PRIVATE Bazzalt)
     bazzalt_enable_test_assertions(BazzaltPublicScriptApiTests)
     add_test(NAME BazzaltPublicScriptApiTests COMMAND BazzaltPublicScriptApiTests $<TARGET_FILE:BazzaltPublicApiModule>)
+    add_dependencies(BazzaltPublicScriptApiTests BazzaltPublicApiModule)
     add_executable(BazzaltNativeScriptRuntimeTests tests/NativeScriptRuntimeTests.cpp)
+    add_dependencies(BazzaltNativeScriptRuntimeTests BazzaltScriptLifecycleModule)
     add_executable(BazzaltLuaRuntimeTests tests/LuaRuntimeTests.cpp)
     add_executable(BazzaltApplicationEventsTests tests/ApplicationEventsTests.cpp)
     add_library(BazzaltSubsystemProbe MODULE tests/fixtures/SubsystemProbe.cpp)
     target_link_libraries(BazzaltSubsystemProbe PRIVATE Bazzalt)
+    add_dependencies(BazzaltApplicationEventsTests BazzaltSubsystemProbe)
     target_include_directories(BazzaltApplicationEventsTests PRIVATE src)
     target_link_libraries(BazzaltApplicationEventsTests PRIVATE Bazzalt)
     bazzalt_enable_test_assertions(BazzaltApplicationEventsTests)

@@ -1,5 +1,6 @@
 #include "Bazzalt/Scene.h"
 #include "Bazzalt/GUI.h"
+#include "Physics/PhysicsModuleApi.h"
 #include "GUI/GuiSystem.h"
 
 #include <functional>
@@ -26,6 +27,8 @@ void Scene::RetainGameplayModule() {
 
 Scene::~Scene() {
     DestroySystems();
+    m_lifetime.reset();
+    Runtime::ReleasePhysicsScene(*this);
 }
 
 Entity Scene::CreateEntity(std::string name) {
@@ -56,6 +59,8 @@ void Scene::DestroyEntity(Entity entity) {
 }
 
 void Scene::Clear() {
+    Runtime::ReleasePhysicsScene(*this);
+    m_physicsSettings={};
     m_extensionProperties.clear();
     m_environment={};
     m_registry.clear();

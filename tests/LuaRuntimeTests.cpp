@@ -1,4 +1,5 @@
 #include "Runtime/LuaRuntime.h"
+#include "Physics/PhysicsModuleApi.h"
 #include "Runtime/ConsoleStore.h"
 #include "Runtime/Engine.h"
 #include "Runtime/AssetDatabase.h"
@@ -242,6 +243,23 @@ function W:OnCreate()
 end
 return W)");
     assert(Runtime::LuaRuntime::Import(source,output,error));assert(runtime.Configure({binding},error));assert(runtime.Start(error));runtime.Stop();Runtime::ConsoleAccess::Release();
+    write(R"lua(local B=Bazzalt;local W=COMPONENT('Walk')
+function W:OnCreate()
+ local c=self.Entity:AddComponent('ShapeCollider');c.Shape=B.ColliderShape.Sphere;c.Radius=.5;self.Entity:SetComponent('ShapeCollider',c)
+ local r=self.Entity:AddComponent('Rigidbody');r.Gravity=B.Vec3.new(0,0,0);self.Entity:SetComponent('Rigidbody',r)
+ local world=self.Entity:GetScene():GetPhysics();assert(world:IsRunning());world:Synchronize()
+ assert(world:SetLinearVelocity(self.Entity,B.Vec3.new(1,0,0)))
+ assert(world:ApplyImpulse(self.Entity,B.Vec3.new(1,0,0)))
+ assert(world:GetLinearVelocity(self.Entity).X>1)
+ local p=self.Entity:GetWorldTransform().Position
+ local hit=self.Entity:GetScene():Raycast(p+B.Vec3.new(0,4,0),B.Vec3.new(0,-1,0),10)
+ assert(hit:IsValid() and hit.Object==self.Entity)
+ local options=B.PhysicsQueryOptions.new();options.ExcludedEntities={self.Entity:GetUUID()}
+ assert(not world:Raycast(p+B.Vec3.new(0,4,0),B.Vec3.new(0,-1,0),10,options):IsValid())
+end
+return W)lua");
+    assert(Runtime::LuaRuntime::Import(source,output,error));assert(runtime.Configure({binding},error));
+    Runtime::PhysicsModule().Start(engine.GetScene());assert(runtime.Start(error));runtime.Stop();Runtime::PhysicsModule().Stop(engine.GetScene());
     write("this is invalid Lua");assert(!Runtime::LuaRuntime::Import(source,output,error));assert(database.Refresh());
     const auto failedAsset=database.Find(source);assert(failedAsset&&failedAsset->State==AssetState::Failed&&!failedAsset->LastError.empty());
     write("return {} ");assert(runtime.Configure({binding},error));binding.Module=source;assert(runtime.Configure({binding},error));assert(!runtime.Start(error)); // Source must not execute as runtime bytecode.

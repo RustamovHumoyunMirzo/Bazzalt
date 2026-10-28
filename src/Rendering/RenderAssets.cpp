@@ -54,6 +54,12 @@ extern "C" void stbi_image_free(void*);
 #include "graphics_unlit_filamat.h"
 
 namespace Bazzalt::Runtime {
+using ::operator|;
+using ::operator&;
+using ::operator^;
+using ::operator~;
+using ::operator|=;
+using ::operator&=;
 namespace {
 
 std::vector<std::uint8_t> ReadBytes(const std::filesystem::path& path) {
