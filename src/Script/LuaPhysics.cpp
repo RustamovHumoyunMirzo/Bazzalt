@@ -53,6 +53,7 @@ void BindLuaPhysics(sol::table api){
     Operations<BallAndSocketJoint>(api,"BallAndSocketJoint"); // Properties and IsValid are inherited from Joint.
     auto typeFixedJoint=api.new_usertype<FixedJoint>("FixedJoint",sol::constructors<FixedJoint()>(),sol::base_classes,sol::bases<Joint,Component>());
     Operations<FixedJoint>(api,"FixedJoint"); // Properties and IsValid are inherited from Joint.
+    api.new_enum("ClothBendMode","None",ClothBendMode::None,"Distance",ClothBendMode::Distance,"Dihedral",ClothBendMode::Dihedral);
     auto typeCloth=api.new_usertype<Cloth>("Cloth",sol::constructors<Cloth()>(),sol::base_classes,sol::bases<Component>());
 #define FIELD(Name,Label) typeCloth[#Name]=&Cloth::Name;
     BAZZALT_CLOTH_FIELDS(FIELD)

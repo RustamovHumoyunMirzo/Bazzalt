@@ -36,5 +36,6 @@ struct SoftEntry {
     UUID Material{};
     Transform Pose;
     bool CastShadows=true;
+    bool Closed=false;
 };
 }

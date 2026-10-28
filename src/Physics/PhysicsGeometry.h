@@ -13,4 +13,5 @@ bool ReadPhysicsMesh(Entity entity,UUID asset,const std::string& signature,std::
 struct SoftMeshPart {UUID Owner;std::uint32_t Node=0xffffffffu,Slot=0;std::vector<GraphicsVertex> Vertices;std::vector<std::uint32_t> Indices;};
 // Render seams remain separate; the soft solver welds coincident particles.
 bool ReadSoftMesh(Entity entity,std::vector<SoftMeshPart>& parts);
+unsigned RefineSoftMesh(std::vector<SoftMeshPart>& parts,unsigned maximumLevel);
 }

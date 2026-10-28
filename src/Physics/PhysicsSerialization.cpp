@@ -4,6 +4,7 @@
 #include <sstream>
 #include <iomanip>
 #include <limits>
+#include <string_view>
 namespace Bazzalt::Runtime {
 namespace {
 template<class T> std::string Encode(const T& value){
@@ -34,7 +35,15 @@ PropertyMap WritePhysicsSettings(const PhysicsSettings& value){PropertyMap p;p["
 bool ReadPhysicsSettings(PhysicsSettings& output,const PropertyMap& p){if(!p.contains("Version")||p.at("Version")!="1")return false;PhysicsSettings value;bool valid=true;VisitPhysicsSettings(value,[&](const char* name,const char*,auto& field){auto it=p.find(name);if(it==p.end()||!Decode(it->second,field))valid=false;});if(!valid||!value.IsValid())return false;output=value;return true;}
 void RegisterPhysicsComponents(ComponentSerializationRegistry& registry){
 #define REGISTER(Type,Visit) registry.Register<Type>("Bazzalt." #Type,1,[](const Type& value,PropertyMap& p){Visit(value,[&](const char* name,const char*,const auto& field){p[name]=Encode(field);});},[](Type& output,const PropertyMap& p,std::uint32_t version){if(version!=1)return false;Type value;bool valid=true;Visit(value,[&](const char* name,const char*,auto& field){auto it=p.find(name);if(it==p.end()||!Decode(it->second,field))valid=false;});if(!valid||!value.IsValid())return false;output=value;return true;});
-    REGISTER(Rigidbody,VisitBody) REGISTER(ShapeCollider,VisitShapeCollider) REGISTER(MeshCollider,VisitMeshCollider) REGISTER(Joint,VisitJoint) REGISTER(DistanceJoint,VisitJoint) REGISTER(HingeJoint,VisitJoint) REGISTER(SliderJoint,VisitJoint) REGISTER(BallAndSocketJoint,VisitJoint) REGISTER(FixedJoint,VisitJoint) REGISTER(Cloth,VisitCloth) REGISTER(Rope,VisitRope)
+    REGISTER(Rigidbody,VisitBody) REGISTER(ShapeCollider,VisitShapeCollider) REGISTER(MeshCollider,VisitMeshCollider) REGISTER(Joint,VisitJoint) REGISTER(DistanceJoint,VisitJoint) REGISTER(HingeJoint,VisitJoint) REGISTER(SliderJoint,VisitJoint) REGISTER(BallAndSocketJoint,VisitJoint) REGISTER(FixedJoint,VisitJoint) REGISTER(Rope,VisitRope)
+    registry.Register<Cloth>("Bazzalt.Cloth",2,[](const Cloth& value,PropertyMap& p){VisitCloth(value,[&](const char* name,const char*,const auto& field){p[name]=Encode(field);});},[](Cloth& output,const PropertyMap& p,std::uint32_t version){
+        if(version!=1&&version!=2)return false;Cloth value;bool valid=true;VisitCloth(value,[&](const char* name,const char*,auto& field){auto it=p.find(name);if(it==p.end()){const std::string_view key=name;if(version!=1||(key!="BendMode"&&key!="SubdivisionLevel"&&key!="Pressure"&&key!="CollisionRadius"))valid=false;}else if(!Decode(it->second,field))valid=false;});
+        if(version==1&&!p.contains("BendMode")){
+            if(value.Compliance==0&&value.ShearCompliance==0&&value.BendCompliance==.0001f){const Cloth defaults;value.Compliance=defaults.Compliance;value.ShearCompliance=defaults.ShearCompliance;value.BendCompliance=defaults.BendCompliance;}
+            else value.BendMode=ClothBendMode::Dihedral;
+        }
+        if(!valid||!value.IsValid())return false;output=value;return true;
+    });
 #undef REGISTER
 }
 }

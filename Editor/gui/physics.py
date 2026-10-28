@@ -9,7 +9,7 @@ def ComponentField(controller,entity,component,name,value):
     if component not in {'Rigidbody','Shape Collider','Mesh Collider','Joint','Distance Joint','Hinge Joint','Slider Joint','Ball And Socket Joint','Fixed Joint','Cloth','Rope'}:return None
     tr=controller.Window.Localization.Translate
     commit=lambda v:controller._CommitComponent(entity,component,name,v)
-    enums={'Motion Type':('static','kinematic','dynamic'),'Collision Detection':('discrete','continuous'),'Interpolation':('none','interpolate'),'Shape':('box','sphere','capsule','cylinder','plane'),'Type':('distance','hinge','slider','ball_and_socket','fixed'),'Motor':('off','velocity','position')}
+    enums={'Motion Type':('static','kinematic','dynamic'),'Collision Detection':('discrete','continuous'),'Interpolation':('none','interpolate'),'Shape':('box','sphere','capsule','cylinder','plane'),'Type':('distance','hinge','slider','ball_and_socket','fixed'),'Motor':('off','velocity','position'),'Bend Mode':('none','distance','dihedral')}
     if name in enums:
         field=EnumInput();field.SetOptions([(tr('physics.'+key),i) for i,key in enumerate(enums[name])]);field.SetValue(value)
         field.currentIndexChanged.connect(lambda _:commit(field.GetValue()));return field
@@ -37,8 +37,12 @@ def ComponentField(controller,entity,component,name,value):
         field=controller._AssetPicker(value,{'.gltf','.glb'},lambda v:commit(v or '00000000-0000-0000-0000-000000000000'));field.Display.setPlaceholderText(tr('physics.attached_geometry'));return field
     if name=='Layer':
         field=EnumInput();field.SetOptions([(str(i),i) for i in range(32)]);field.SetValue(value);field.currentIndexChanged.connect(lambda _:commit(field.GetValue()));return field
+    if name in {'Compliance','Shear Compliance','Bend Compliance'}:
+        field=FloatInput(minimum=0,maximum=1e6,value=value,decimals=8);field.setSingleStep(.00001);field.valueChanged.connect(commit);return field
+    if name=='Subdivision Level':
+        field=IntInput(minimum=0,maximum=4,value=value);field.valueChanged.connect(commit);return field
     if isinstance(value,float):
-        limits={'Mass':(.0001,1e12),'Inertia Multiplier':(.0001,1e6),'Linear Damping':(0,1e6),'Angular Damping':(0,1e6),'Restitution':(0,1),'Friction':(0,1e6),'Radius':(.001,1e6),'Height':(.001,1e6),'Convex Radius':(0,1e6),'Max Linear Velocity':(.001,1e6),'Max Angular Velocity':(.001,1e6),'Gravity Factor':(-1e6,1e6)}
+        limits={'Mass':(.0001,1e12),'Inertia Multiplier':(.0001,1e6),'Linear Damping':(0,1e6),'Angular Damping':(0,1e6),'Restitution':(0,1),'Friction':(0,1e6),'Radius':(.001,1e6),'Height':(.001,1e6),'Convex Radius':(0,1e6),'Max Linear Velocity':(.001,1e6),'Max Angular Velocity':(.001,1e6),'Gravity Factor':(-1e6,1e6),'Pressure':(0,1e9),'Collision Radius':(0,1e6)}
         lo,hi=limits.get(name,(-1e6,1e6));field=FloatInput(minimum=lo,maximum=hi,value=value);field.valueChanged.connect(commit);return field
     if name in {'Segments','Sides','Segments X','Segments Y','Iterations','Velocity Iterations','Position Iterations'}:
         field=IntInput(minimum=0,maximum=255,value=value);field.valueChanged.connect(commit);return field

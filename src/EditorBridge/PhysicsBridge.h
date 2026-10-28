@@ -52,7 +52,7 @@ inline void InspectPhysics(Entity e,py::list& components,py::dict& enabled,py::d
         if(kind!=0)for(auto key:{"Min Distance","Max Distance"})values.attr("pop")(key,py::none());
         if(kind!=1&&kind!=2)for(auto key:{"Min Limit","Max Limit","Motor","Motor Velocity","Motor Target","Motor Force","Motor Frequency","Motor Damping","Friction"})values.attr("pop")(key,py::none());
     }
-    if(data.contains("Cloth")){auto values=data["Cloth"].cast<py::dict>();for(auto key:{"Width","Height","Segments X","Segments Y"})values.attr("pop")(key,py::none());}
+    if(data.contains("Cloth")){auto values=data["Cloth"].cast<py::dict>();if(auto* cloth=e.TryGetComponent<Cloth>();cloth&&cloth->BendMode==ClothBendMode::None)values.attr("pop")("Bend Compliance",py::none());for(auto key:{"Width","Height","Segments X","Segments Y"})values.attr("pop")(key,py::none());}
     if(auto* c=e.TryGetComponent<ShapeCollider>()){auto v=data["Shape Collider"].cast<py::dict>();if(c->Shape!=ColliderShape::Box)v.attr("pop")("Size",py::none());if(c->Shape==ColliderShape::Box||c->Shape==ColliderShape::Plane){v.attr("pop")("Radius",py::none());v.attr("pop")("Height",py::none());}else if(c->Shape==ColliderShape::Sphere)v.attr("pop")("Height",py::none());}
     if(auto* body=e.TryGetComponent<Rigidbody>()){auto values=data["Rigidbody"].cast<py::dict>();values["Use Scene Gravity"]=!body->Gravity.has_value();if(!body->Gravity)values.attr("pop")("Gravity",py::none());}
 }

@@ -40,7 +40,7 @@ int main(int argc,char** argv){
     assert(GraphicsAccess::Commands().front().Geometry->Revision==revision);
     copy.Destroy();assert(!mesh.IsValid());assert(GraphicsAccess::Commands().front().Geometry->Vertices.size()==3);assert(Throws([&]{Graphics::DrawMesh(mesh);}));Graphics::ClearDraws();
     // Soft surfaces enter the same public Graphics pipeline with stable mesh revisions.
-    auto fabric=scene.CreateEntity("Fabric");fabric.AddComponent<PrimitiveObject>();auto& cloth=fabric.AddComponent<Cloth>();cloth.SegmentsX=cloth.SegmentsY=2;
+    auto fabric=scene.CreateEntity("Fabric");fabric.AddComponent<PrimitiveObject>();auto& cloth=fabric.AddComponent<Cloth>();cloth.SubdivisionLevel=0;cloth.SegmentsX=cloth.SegmentsY=2;
     GraphicsAccess::BeginFrame();assert(GraphicsAccess::Commands().size()==1);assert(GraphicsAccess::Commands().front().Owner==fabric.GetUUID());assert(GraphicsAccess::Commands().front().Source==fabric.GetUUID());assert(GraphicsAccess::Commands().front().Geometry->Vertices.size()==24);assert(GraphicsAccess::Commands().front().Geometry->Indices.size()==36);auto softRevision=GraphicsAccess::Commands().front().Geometry->Revision;GraphicsAccess::EndFrame();
     GraphicsAccess::BeginFrame();assert(GraphicsAccess::Commands().front().Geometry->Revision==softRevision);GraphicsAccess::EndFrame();
     auto invalidSoft=scene.CreateEntity("Conflicting cloth");invalidSoft.AddComponent<PrimitiveObject>();invalidSoft.AddComponent<Rigidbody>();invalidSoft.AddComponent<Cloth>();

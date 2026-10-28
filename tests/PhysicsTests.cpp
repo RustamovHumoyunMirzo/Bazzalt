@@ -5,6 +5,7 @@
 #include "Physics/PhysicsModuleApi.h"
 #include "Runtime/GraphicsAccess.h"
 #include <cassert>
+#include <cstdio>
 #include <cmath>
 #include <filesystem>
 #include <limits>
@@ -41,8 +42,8 @@ void CheckAttachedMeshSources(){
     scene.FindEntityByName("Child B").GetComponent<Transform>().Position.X=8;assert(world.Raycast({108,5,0},{0,-1,0},10).Object==group);assert(!world.Raycast({106,5,0},{0,-1,0},10));
     first.AddComponent<Rigidbody>();assert(!world.Raycast({100,5,0},{0,-1,0},10));assert(world.Raycast({108,5,0},{0,-1,0},10).Object==group);first.RemoveComponent<Rigidbody>();assert(world.Raycast({100,5,0},{0,-1,0},10).Object==group);
     auto empty=scene.CreateEntity("Awaiting geometry");empty.AddComponent<MeshCollider>();world.Synchronize();assert(!world.Raycast({200,5,0},{0,-1,0},10));
-    first.RemoveComponent<MeshCollider>();group.RemoveComponent<MeshCollider>();first.AddComponent<Cloth>();world.Synchronize();assert(world.GetSoftBodyVertices(first).size()==8);for(auto p:world.GetSoftBodyVertices(first))assert(p.X>=99.49f&&p.X<=100.51f);Runtime::GraphicsAccess::BindScene(&scene);Runtime::GraphicsAccess::BeginFrame();assert(Runtime::GraphicsAccess::Commands().size()==1);const auto& draw=Runtime::GraphicsAccess::Commands().front();assert(draw.Source==first.GetUUID());assert(std::any_of(draw.Geometry->Vertices.begin(),draw.Geometry->Vertices.end(),[](auto& v){return v.UV.X>.9f&&v.UV.Y>.9f;}));Runtime::GraphicsAccess::EndFrame();Runtime::GraphicsAccess::BindScene(nullptr);
-    first.RemoveComponent<Cloth>();group.AddComponent<Cloth>();world.Synchronize();assert(world.GetSoftBodyVertices(group).size()==16);for(auto p:world.GetSoftBodyVertices(group))assert(p.X<109);auto second=scene.FindEntityByName("Child B");second.AddComponent<ShapeCollider>();world.Synchronize();assert(world.Raycast({108,5,0},{0,-1,0},10).Object==group);group.SetComponentEnabled<Cloth>(false);world.Synchronize();assert(world.Raycast({108,5,0},{0,-1,0},10).Object==second);
+    first.RemoveComponent<MeshCollider>();group.RemoveComponent<MeshCollider>();first.AddComponent<Cloth>().SubdivisionLevel=0;world.Synchronize();assert(world.GetSoftBodyVertices(first).size()==8);for(auto p:world.GetSoftBodyVertices(first))assert(p.X>=99.49f&&p.X<=100.51f);Runtime::GraphicsAccess::BindScene(&scene);Runtime::GraphicsAccess::BeginFrame();assert(Runtime::GraphicsAccess::Commands().size()==1);const auto& draw=Runtime::GraphicsAccess::Commands().front();assert(draw.Source==first.GetUUID());assert(std::any_of(draw.Geometry->Vertices.begin(),draw.Geometry->Vertices.end(),[](auto& v){return v.UV.X>.9f&&v.UV.Y>.9f;}));Runtime::GraphicsAccess::EndFrame();Runtime::GraphicsAccess::BindScene(nullptr);
+    first.RemoveComponent<Cloth>();group.AddComponent<Cloth>().SubdivisionLevel=0;world.Synchronize();assert(world.GetSoftBodyVertices(group).size()==16);for(auto p:world.GetSoftBodyVertices(group))assert(p.X<109);auto second=scene.FindEntityByName("Child B");second.AddComponent<ShapeCollider>();world.Synchronize();assert(world.Raycast({108,5,0},{0,-1,0},10).Object==group);group.SetComponentEnabled<Cloth>(false);world.Synchronize();assert(world.Raycast({108,5,0},{0,-1,0},10).Object==second);
 
 }
 void CheckJointsAndSoftBodies(){
@@ -53,7 +54,7 @@ void CheckJointsAndSoftBodies(){
     auto hinge=make("Hinge",{6,4,0});auto& h=hinge.AddComponent<HingeJoint>();h.Motor=JointMotorMode::Velocity;h.MotorVelocity=1;
     auto slider=make("Slider",{9,4,0});slider.AddComponent<SliderJoint>();
     auto ball=make("Ball",{12,4,0});ball.AddComponent<BallAndSocketJoint>();
-    auto cloth=scene.CreateEntity("Cloth");cloth.GetComponent<Transform>().Position={20,5,0};auto& plane=cloth.AddComponent<PrimitiveObject>();plane.Shape=PrimitiveShape::Plane;plane.Width=plane.Depth=2;plane.Segments=plane.Rings=4;cloth.GetComponent<Transform>().Rotation=Quaternion::FromAxisAngle({1,0,0},-Pi*.5f);auto& c=cloth.AddComponent<Cloth>();c.SegmentsX=c.SegmentsY=4;c.Wind={0,0,2};
+    auto cloth=scene.CreateEntity("Cloth");cloth.GetComponent<Transform>().Position={20,5,0};auto& plane=cloth.AddComponent<PrimitiveObject>();plane.Shape=PrimitiveShape::Plane;plane.Width=plane.Depth=2;plane.Segments=plane.Rings=4;cloth.GetComponent<Transform>().Rotation=Quaternion::FromAxisAngle({1,0,0},-Pi*.5f);auto& c=cloth.AddComponent<Cloth>();c.SubdivisionLevel=0;c.SegmentsX=c.SegmentsY=4;c.Wind={0,0,2};
     auto rope=scene.CreateEntity("Rope");rope.GetComponent<Transform>().Position={25,5,0};auto& r=rope.AddComponent<Rope>();r.Segments=8;r.Sides=4;r.Wind={1,0,0};
     Runtime::PhysicsModule().Start(scene);assert(world.GetBodyCount()==7);auto before=world.GetSoftBodyVertices(cloth);auto ropeBefore=world.GetSoftBodyVertices(rope);assert(before.size()==25&&ropeBefore.size()==36);PhysicsQueryOptions clothRay;clothRay.IncludeBackFaces=true;assert(world.Raycast({20,5,3},{0,0,-1},6,clothRay).Object==cloth);
     for(int i=0;i<60;++i)world.Simulate(1.f/60);
@@ -79,7 +80,7 @@ void CheckJointsAndSoftBodies(){
 }
 void CheckClothSourceShape(){
     Scene scene;auto settings=scene.GetPhysicsSettings();settings.AutoSimulation=false;settings.WorkerThreads=0;settings.Gravity={};scene.SetPhysicsSettings(settings);
-    auto cube=scene.CreateEntity("Soft cube");cube.AddComponent<PrimitiveObject>();auto& cloth=cube.AddComponent<Cloth>();cloth.PinEdges=0;cloth.Compliance=.01f;cloth.BendCompliance=.01f;
+    auto cube=scene.CreateEntity("Soft cube");cube.AddComponent<PrimitiveObject>();auto& cloth=cube.AddComponent<Cloth>();cloth.PinEdges=0;cloth.SubdivisionLevel=0;cloth.Compliance=.01f;cloth.BendCompliance=.01f;
     Runtime::PhysicsModule().Start(scene);auto physics=scene.GetPhysics();auto points=physics.GetSoftBodyVertices(cube);assert(points.size()==8);float minZ=1,maxZ=-1;for(auto p:points){minZ=std::min(minZ,p.Z);maxZ=std::max(maxZ,p.Z);}assert(minZ<-.49f&&maxZ>.49f);
     assert(physics.ApplySoftBodyImpulse(cube,{0,0,1},0));physics.Simulate(1.f/60);auto deformed=physics.GetSoftBodyVertices(cube);assert((deformed[0]-points[0]).Length()>.001f);
     Runtime::PhysicsModule().Stop(scene);
@@ -91,12 +92,42 @@ void CheckClothGravityAndPins(){
     Runtime::PhysicsModule().Start(scene);auto physics=scene.GetPhysics();auto anchor=physics.GetSoftBodyVertices(pinned),zero=physics.GetSoftBodyVertices(floating);
     for(int i=0;i<30;++i)physics.Simulate(1.f/60);
     auto held=physics.GetSoftBodyVertices(pinned);for(std::size_t i=0;i<anchor.size();++i)if(anchor[i].Y>5.49f)assert((held[i]-anchor[i]).Length()<.001f);
-    for(auto point:physics.GetSoftBodyVertices(floating))assert(std::abs(point.Y-4.5f)<.001f||std::abs(point.Y-5.5f)<.001f);
+    auto still=physics.GetSoftBodyVertices(floating);for(std::size_t i=0;i<zero.size();++i)assert((still[i]-zero[i]).Length()<.001f);
     pinned.GetComponent<Cloth>().PinEdges=0;physics.Synchronize();auto released=physics.GetSoftBodyVertices(pinned);
     for(int i=0;i<30;++i)physics.Simulate(1.f/60);
     auto falling=physics.GetSoftBodyVertices(pinned);float before=0,after=0;for(auto point:released)before+=point.Y;for(auto point:falling)after+=point.Y;assert((before-after)/falling.size()>.8f);
     floating.GetComponent<Cloth>().GravityFactor=1;for(int i=0;i<30;++i)physics.Simulate(1.f/60);float moved=0;auto affected=physics.GetSoftBodyVertices(floating);for(std::size_t i=0;i<zero.size();++i)moved+=zero[i].Y-affected[i].Y;assert(moved/zero.size()>.8f);
     Runtime::PhysicsModule().Stop(scene);
+}
+void CheckClothDrapeAndPressure(){
+    {
+        Scene scene;auto settings=scene.GetPhysicsSettings();settings.AutoSimulation=false;settings.WorkerThreads=0;scene.SetPhysicsSettings(settings);
+        auto obstacle=scene.CreateEntity("Drape sphere");auto& sphere=obstacle.AddComponent<ShapeCollider>();sphere.Shape=ColliderShape::Sphere;sphere.Radius=1;
+        auto floor=scene.CreateEntity("Drape floor");floor.GetComponent<Transform>().Position={0,-2.5f,0};floor.AddComponent<ShapeCollider>().Size={20,1,20};
+        auto sheet=scene.CreateEntity("Fabric");sheet.GetComponent<Transform>().Position={0,3,0};auto& mesh=sheet.AddComponent<PrimitiveObject>();mesh.Shape=PrimitiveShape::Plane;mesh.Width=mesh.Depth=4;mesh.Segments=mesh.Rings=12;auto& cloth=sheet.AddComponent<Cloth>();cloth.PinEdges=0;cloth.SubdivisionLevel=0;
+        Runtime::PhysicsModule().Start(scene);auto physics=scene.GetPhysics();for(int i=0;i<180;++i)physics.Simulate(1.f/60);auto points=physics.GetSoftBodyVertices(sheet);float low=100;for(auto p:points)low=std::min(low,p.Y);assert(points[84].Y>.8f&&points[84].Y-low>.7f);Runtime::PhysicsModule().Stop(scene);
+    }
+    {
+        Scene scene;auto settings=scene.GetPhysicsSettings();settings.AutoSimulation=false;settings.WorkerThreads=0;scene.SetPhysicsSettings(settings);
+        auto floor=scene.CreateEntity("Impact floor");floor.GetComponent<Transform>().Position={0,-.5f,0};floor.AddComponent<ShapeCollider>().Size={30,1,30};
+        auto make=[&](const char* name,float x){auto e=scene.CreateEntity(name);e.GetComponent<Transform>().Position={x,3,0};auto& mesh=e.AddComponent<PrimitiveObject>();mesh.Shape=PrimitiveShape::Sphere;mesh.Radius=1;mesh.Segments=12;mesh.Rings=8;auto& cloth=e.AddComponent<Cloth>();cloth.PinEdges=0;cloth.SubdivisionLevel=1;return e;};
+        auto flat=make("Unpressurized",-3),inflated=make("Pressurized",3);Runtime::PhysicsModule().Start(scene);auto physics=scene.GetPhysics();for(int i=0;i<15;++i)physics.Simulate(1.f/60);
+        auto before=physics.GetSoftBodyVertices(inflated);inflated.GetComponent<Cloth>().Pressure=20;physics.Synchronize();auto after=physics.GetSoftBodyVertices(inflated);assert(before==after);
+        for(int i=0;i<180;++i)physics.Simulate(1.f/60);
+        const auto height=[&](Entity e){float lo=100,hi=-100;for(auto p:physics.GetSoftBodyVertices(e)){lo=std::min(lo,p.Y);hi=std::max(hi,p.Y);}return hi-lo;};
+        const float flatHeight=height(flat),inflatedHeight=height(inflated);std::fprintf(stderr,"soft impact heights: flat=%f pressure=%f\n",flatHeight,inflatedHeight);assert(flatHeight<1.6f);assert(inflatedHeight>flatHeight+.2f);
+        Runtime::PhysicsModule().Stop(scene);
+    }
+    {
+        Scene scene;auto e=scene.CreateEntity("Open pressure mesh");e.AddComponent<PrimitiveObject>().Shape=PrimitiveShape::Plane;e.AddComponent<Cloth>().Pressure=1;bool rejected=false;try{scene.GetPhysics().Synchronize();}catch(const std::invalid_argument&){rejected=true;}assert(rejected);
+    }
+}
+void CheckClothMigration(){
+    Runtime::Engine host;auto& scene=host.GetScene();auto entity=scene.CreateEntity("Legacy fabric");auto& old=entity.AddComponent<Cloth>();old.Compliance=old.ShearCompliance=0;old.BendCompliance=.0001f;
+    auto* descriptor=host.GetSceneSerializer().GetComponents().Find("Bazzalt.Cloth");assert(descriptor&&descriptor->Version==2);PropertyMap values;assert(descriptor->Serialize(entity,values));for(auto name:{"BendMode","SubdivisionLevel","Pressure","CollisionRadius"})values.erase(name);
+    auto loaded=scene.CreateEntity("Migrated");assert(descriptor->Deserialize(loaded,values,1));auto& material=loaded.GetComponent<Cloth>();assert(material.Compliance>0&&material.ShearCompliance>0&&material.BendMode==ClothBendMode::None&&material.SubdivisionLevel==2);
+    values["Compliance"]="0.002";auto custom=scene.CreateEntity("Custom legacy material");assert(descriptor->Deserialize(custom,values,1));assert(custom.GetComponent<Cloth>().Compliance==.002f&&custom.GetComponent<Cloth>().BendMode==ClothBendMode::Dihedral);
+    auto malformed=scene.CreateEntity("Missing v2 fields");assert(!descriptor->Deserialize(malformed,values,2));
 }
 int main(){
     Rigidbody damping;damping.LinearDamping=10;damping.AngularDamping=10;assert(damping.IsValid());
@@ -133,5 +164,5 @@ int main(){
     {auto temporary=std::make_unique<Scene>();auto stale=temporary->GetPhysics();temporary.reset();bool rejected=false;try{stale.GetBodyCount();}catch(const std::logic_error&){rejected=true;}assert(rejected);}
     bool cleaned=false;{Scene temporary;temporary.AddSystem<CleanupPhysics>(cleaned);}assert(cleaned);
     Runtime::PhysicsModule().Stop(scene);assert(!world.IsRunning());scene.Clear();assert(scene.GetPhysicsSettings().AutoSimulation);
-    CheckAttachedMeshSources();CheckJointsAndSoftBodies();CheckClothSourceShape();CheckClothGravityAndPins();
+    CheckAttachedMeshSources();CheckJointsAndSoftBodies();CheckClothSourceShape();CheckClothGravityAndPins();CheckClothDrapeAndPressure();CheckClothMigration();
 }

@@ -939,7 +939,7 @@ class EditorController(QObject):
             self.SetDirty(True)
             if component=="Light" and name!="Type":self._RefreshInspectorValues()
             if component=="GuiElement" and name=="Stylesheet":self.SelectEntity(entity_id,force=True)
-            if component in {"Rigidbody","Shape Collider","Mesh Collider","Joint","Distance Joint","Hinge Joint","Slider Joint","Ball And Socket Joint","Fixed Joint"} and name in {"Use Scene Gravity","Shape","Convex","Type","Motor"}:self.SelectEntity(entity_id,force=True)
+            if component in {"Rigidbody","Shape Collider","Mesh Collider","Joint","Distance Joint","Hinge Joint","Slider Joint","Ball And Socket Joint","Fixed Joint","Cloth"} and name in {"Use Scene Gravity","Shape","Convex","Type","Motor","Bend Mode"}:self.SelectEntity(entity_id,force=True)
 
     def _CommitLightType(self,entity_id:str,value:int)->None:
         self._CommitComponent(entity_id,"Light","Type",value)

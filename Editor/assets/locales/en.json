@@ -1023,5 +1023,10 @@
   "physics.left": "Left",
   "physics.right": "Right",
   "physics.top": "Top",
-  "physics.bottom": "Bottom"
+  "physics.bottom": "Bottom",
+  "physics.dihedral": "Dihedral",
+  "physics.field.bend_mode": "Bend Mode",
+  "physics.field.subdivision_level": "Subdivision Level",
+  "physics.field.pressure": "Pressure",
+  "physics.field.collision_radius": "Collision Radius"
 }

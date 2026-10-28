@@ -37,6 +37,7 @@
 #include "Bazzalt/Detail/SubsystemAccess.h"
 #include "Runtime/ApplicationEventsAccess.h"
 #include <algorithm>
+#include <numeric>
 #include <bit>
 #include <unordered_set>
 #include <chrono>

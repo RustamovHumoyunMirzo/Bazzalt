@@ -115,4 +115,18 @@ bool ReadSoftMesh(Entity entity,std::vector<SoftMeshPart>& output){
     return !output.empty()&&std::any_of(output.begin(),output.end(),[](const auto& mesh){return !mesh.Indices.empty();});
 }
 
+unsigned RefineSoftMesh(std::vector<SoftMeshPart>& parts,unsigned maximumLevel){
+    unsigned level=0;
+    for(;level<maximumLevel;++level){
+        std::size_t vertices=0,indices=0;std::vector<std::map<std::pair<unsigned,unsigned>,unsigned>> edges(parts.size());
+        for(std::size_t p=0;p<parts.size();++p){auto& part=parts[p];vertices+=part.Vertices.size();indices+=part.Indices.size()*4;for(std::size_t i=0;i+2<part.Indices.size();i+=3)for(int j=0;j<3;++j){unsigned a=part.Indices[i+j],b=part.Indices[i+(j+1)%3];edges[p].try_emplace({std::min(a,b),std::max(a,b)},0);}vertices+=edges[p].size();}
+        if(vertices>16384||indices>262144)break;
+        for(std::size_t p=0;p<parts.size();++p){auto& part=parts[p];for(auto& [edge,index]:edges[p]){auto a=part.Vertices[edge.first],b=part.Vertices[edge.second];GraphicsVertex v;v.Position=(a.Position+b.Position)*.5f;v.Normal=(a.Normal+b.Normal).Normalized();v.UV=(a.UV+b.UV)*.5f;v.Color=(a.Color+b.Color)*.5f;index=unsigned(part.Vertices.size());part.Vertices.push_back(v);}
+            std::vector<unsigned> refined;refined.reserve(part.Indices.size()*4);const auto middle=[&](unsigned a,unsigned b){return edges[p].at({std::min(a,b),std::max(a,b)});};
+            for(std::size_t i=0;i+2<part.Indices.size();i+=3){unsigned a=part.Indices[i],b=part.Indices[i+1],c=part.Indices[i+2],ab=middle(a,b),bc=middle(b,c),ca=middle(c,a);refined.insert(refined.end(),{a,ab,ca,ab,b,bc,ca,bc,c,ab,bc,ca});}part.Indices=std::move(refined);
+        }
+    }
+    return level;
+}
+
 }

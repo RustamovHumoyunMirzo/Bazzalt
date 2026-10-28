@@ -74,6 +74,13 @@ class PhysicsInspectorTests(unittest.TestCase):
         next(action for action in field.menu().actions() if action.data()==4).trigger()
         self.assertEqual(r.EntityDetails(entity)['component_data']['Cloth']['Pin Edges'],4);self.assertEqual(field.GetValues(),(4,));self.assertFalse(none.isChecked())
 
+    def test_cloth_material_controls_preserve_small_compliance(self):
+        w=self.Window;r=w.Runtime;entity=r.CreateEntity('Flexible cloth');r.AddComponent(entity,'Primitive Object');r.AddComponent(entity,'Cloth');w.Controller.SelectEntity(entity,force=True)
+        fields=w.Properties._sections['runtime.Cloth']._fields
+        self.assertAlmostEqual(fields['Compliance'].GetValue(),.0001,places=8);self.assertEqual(fields['Bend Mode'].GetValue(),0)
+        fields['Compliance'].setValue(.00001);self.assertAlmostEqual(r.EntityDetails(entity)['component_data']['Cloth']['Compliance'],.00001,places=8)
+        self.assertIn('Pressure',fields);self.assertIn('Collision Radius',fields);self.assertIn('Subdivision Level',fields)
+
     def test_material_clock_freezes_in_paused_play(self):
         r=self.Window.Runtime;self.assertTrue(r.Play());r.Tick();before=r.Statistics()['material_time'];self.assertGreaterEqual(before,0)
         r.Pause(True)
