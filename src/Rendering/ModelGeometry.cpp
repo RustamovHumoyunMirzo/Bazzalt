@@ -35,25 +35,26 @@ std::vector<std::uint8_t> Decode(ryml::csubstr uri) {
 struct Accessor {
     const std::vector<std::uint8_t>* Buffer=nullptr;
     std::size_t Offset=0,Stride=0,Count=0,Element=0;
-    std::uint32_t Type=0;
+    std::uint32_t Type=0;bool Normalized=false;
 };
-Accessor ReadAccessor(Ref root,std::size_t index,const std::vector<std::vector<std::uint8_t>>& buffers,bool positions) {
+Accessor ReadAccessor(Ref root,std::size_t index,const std::vector<std::vector<std::uint8_t>>& buffers,unsigned components) {
     Accessor result;
     if(!root.has_child("accessors")||index>=root["accessors"].num_children()||!root.has_child("bufferViews"))return result;
     auto accessor=root["accessors"][index];if(!accessor.has_child("bufferView")||accessor.has_child("sparse"))return result;
     auto vi=Field(accessor,"bufferView");if(vi>=root["bufferViews"].num_children())return result;
     auto view=root["bufferViews"][vi];auto bi=Field(view,"buffer");if(bi>=buffers.size())return result;
-    auto type=Field(accessor,"componentType");auto elements=positions?3u:1u;
-    if(positions && (type!=5126||!accessor.has_child("type")||accessor["type"].val()!=ryml::csubstr("VEC3")))return result;
-    if(!positions && (type!=5121&&type!=5123&&type!=5125))return result;
+    auto type=Field(accessor,"componentType");auto elements=components?components:1u;
+    if(components && ((!accessor.has_child("type"))||accessor["type"].val()!=ryml::csubstr(components==2?"VEC2":"VEC3")||(type!=5126&&!(components==2&&(type==5121||type==5123)&&accessor.has_child("normalized")&&accessor["normalized"].val()==ryml::csubstr("true")))))return result;
+    if(!components && (type!=5121&&type!=5123&&type!=5125))return result;
     const auto element=(type==5121?1u:type==5123?2u:4u)*elements;
     const auto offset=Field(accessor,"byteOffset"),viewOffset=Field(view,"byteOffset"),viewSize=Field(view,"byteLength");
     const auto stride=Field(view,"byteStride",element),count=Field(accessor,"count");
     if(stride<element||!count||offset>viewSize||element>viewSize-offset||
         count-1>(viewSize-offset-element)/stride||viewOffset>buffers[bi].size()||viewSize>buffers[bi].size()-viewOffset)return result;
-    result={&buffers[bi],viewOffset+offset,stride,count,element,static_cast<std::uint32_t>(type)};return result;
+    result={&buffers[bi],viewOffset+offset,stride,count,element,static_cast<std::uint32_t>(type),components&&type!=5126};return result;
 }
 Vec3 Position(const Accessor& a,std::size_t index){Vec3 value;std::memcpy(&value,a.Buffer->data()+a.Offset+index*a.Stride,12);return value;}
+Vec2 Texcoord(const Accessor& a,std::size_t index){if(!a.Buffer||index>=a.Count)return {};const auto* p=a.Buffer->data()+a.Offset+index*a.Stride;Vec2 result;if(a.Type==5126)std::memcpy(&result,p,8);else if(a.Type==5123){std::uint16_t v[2];std::memcpy(v,p,4);result={v[0]/65535.f,v[1]/65535.f};}else result={p[0]/255.f,p[1]/255.f};return std::isfinite(result.X)&&std::isfinite(result.Y)?result:Vec2{};}
 std::uint32_t Index(const Accessor& a,std::size_t index){std::uint32_t value=0;std::memcpy(&value,a.Buffer->data()+a.Offset+index*a.Stride,a.Element);return value;}
 bool Finite(Vec3 p){return std::isfinite(p.X)&&std::isfinite(p.Y)&&std::isfinite(p.Z);}
 float Axis(Vec3 v,int axis){return axis==0?v.X:axis==1?v.Y:v.Z;}
@@ -97,9 +98,12 @@ std::shared_ptr<ModelGeometryAsset> ReadModelGeometry(const std::vector<std::uin
     std::vector<std::shared_ptr<ModelGeometry>> meshes;
     for(auto mesh:root["meshes"].children()){
         auto geometry=std::make_shared<ModelGeometry>();
+        std::uint32_t slot=0;
         if(mesh.has_child("primitives"))for(auto primitive:mesh["primitives"].children()){
+            const auto primitiveSlot=slot++;
             if(!primitive.has_child("attributes")||!primitive["attributes"].has_child("POSITION"))continue;
-            auto positions=ReadAccessor(root,Number(primitive["attributes"]["POSITION"]),buffers,true);if(!positions.Buffer)continue;
+            auto positions=ReadAccessor(root,Number(primitive["attributes"]["POSITION"]),buffers,3);if(!positions.Buffer)continue;
+            Accessor uv,normals;const auto attributes=primitive["attributes"];if(attributes.has_child("TEXCOORD_0"))uv=ReadAccessor(root,Number(attributes["TEXCOORD_0"]),buffers,2);if(attributes.has_child("NORMAL"))normals=ReadAccessor(root,Number(attributes["NORMAL"]),buffers,3);
             Accessor indices;if(primitive.has_child("indices")){indices=ReadAccessor(root,Number(primitive["indices"]),buffers,false);if(!indices.Buffer)continue;}
             auto count=indices.Buffer?indices.Count:positions.Count;auto mode=Field(primitive,"mode",4);if(mode<4||mode>6)continue;
             const auto vertex=[&](std::size_t i){return indices.Buffer?Index(indices,i):static_cast<std::uint32_t>(i);};
@@ -110,7 +114,7 @@ std::shared_ptr<ModelGeometryAsset> ReadModelGeometry(const std::vector<std::uin
                 else{a=vertex(0);b=vertex(i-1);c=vertex(i);}
                 if(a>=positions.Count||b>=positions.Count||c>=positions.Count)continue;
                 auto va=Position(positions,a),vb=Position(positions,b),vc=Position(positions,c);
-                if(Finite(va)&&Finite(vb)&&Finite(vc)&&Vec3::Cross(vb-va,vc-va).LengthSquared()>1e-18f)geometry->Triangles.push_back({va,vb,vc});
+                if(Finite(va)&&Finite(vb)&&Finite(vc)&&Vec3::Cross(vb-va,vc-va).LengthSquared()>1e-18f){auto n=Vec3::Cross(vb-va,vc-va).Normalized();const auto normal=[&](unsigned index){auto v=normals.Buffer&&index<normals.Count?Position(normals,index):n;return Finite(v)&&v.LengthSquared()>1e-12f?v.Normalized():n;};geometry->Triangles.push_back({va,vb,vc,normal(a),normal(b),normal(c),Texcoord(uv,a),Texcoord(uv,b),Texcoord(uv,c),primitiveSlot});}
             }
         }
         geometry->Build();meshes.push_back(std::move(geometry));

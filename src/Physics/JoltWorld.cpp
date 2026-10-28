@@ -235,6 +235,10 @@ void World::Synchronize(){
     if(Dead)return;if(Stepping)throw std::logic_error("Cannot synchronize physics during simulation");Configure();
     std::map<UUID,std::vector<ColliderBuild>> groups;PhysicsMeshRevisions revisions;
     const auto collect=[&](Entity entity,bool mesh){
+        // A cloth subtree owns its deforming surface. Rest-pose child colliders
+        // must not collide with that same surface; nested rigidbodies are separate.
+        for(auto current=entity;current;current=current.GetParent()){if(current.HasComponent<Rigidbody>())break;if(auto* cloth=current.TryGetComponent<Cloth>();cloth&&cloth->Enabled)return;}
+
         Entity owner=entity;for(auto parent=entity;parent;parent=parent.GetParent())if(parent.HasComponent<Rigidbody>()){if(!parent.GetComponent<Rigidbody>().Enabled)return;owner=parent;break;}
         if(!entity.GetComponent<Transform>().Enabled||owner.GetUUID().IsRoot())return;
         auto rootPose=owner.GetWorldTransform();RequireVector(rootPose.Position);(void)Q(rootPose.Rotation);Mat4 relative;for(auto current=entity;current&&current!=owner;current=current.GetParent())relative=current.GetComponent<Transform>().GetMatrix()*relative;relative=Mat4::Scaling(rootPose.Scale)*relative;Mat4 matrix;

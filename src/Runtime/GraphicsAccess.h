@@ -17,10 +17,13 @@ struct GraphicsCommand {
     bool Scoped=false;
     UUID Camera{};
     UUID Owner{};
+    UUID Source{};
+    std::uint32_t SourceNode=0xffffffffu,SourceSlot=0;
     std::uint64_t Viewport=0;
 };
 struct GraphicsAccess {
-    static void DrawEntity(GraphicsMesh mesh,UUID material,UUID owner,GraphicsDrawOptions options);
+    static void DrawEntity(GraphicsMesh mesh,UUID material,UUID owner,GraphicsDrawOptions options,UUID source={},unsigned node=0xffffffffu,unsigned slot=0);
+    static bool IsDeformed(UUID source);
     static void BindScene(Scene* scene);
     static void BeginFrame();
     static void BeforeCamera(GraphicsEvent event);

@@ -17,12 +17,20 @@ struct JointEntry {
     JPH::BodyID A,B;
     bool Broken=false;
 };
-struct SoftEntry {
-    JPH::BodyID Id;
-    std::string Signature,Configuration;
+struct SoftSurface {
     GraphicsMesh Mesh;
     std::vector<GraphicsVertex> Vertices;
     std::vector<std::uint32_t> Indices;
+    std::vector<unsigned> Particles,SmoothingGroups;
+    UUID Source{};
+    unsigned Node=0xffffffffu,Slot=0;
+};
+struct SoftEntry {
+    JPH::BodyID Id;
+    std::string Signature,Configuration;
+    std::vector<SoftSurface> Surfaces;
+    std::vector<std::uint32_t> Indices;
+    void DestroyMeshes(){for(auto& s:Surfaces)s.Mesh.Destroy();}
     float InverseMass=1;
     Vec3 Wind{};
     UUID Material{};

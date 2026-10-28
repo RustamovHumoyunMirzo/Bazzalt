@@ -207,7 +207,9 @@ struct RenderAssets::Impl {
     std::unordered_map<UUID,CachedGeometry> GeometryCache;
     Handle NextHandle = 1;
     std::unordered_map<Handle, Instance> Instances;
-    std::vector<utils::Entity> EditorSuspended;
+    std::vector<utils::Entity> EditorSuspended,DeformedSuspended;
+    std::function<void(UUID)> DeformationRelease;
+    std::unordered_set<UUID> DeformedSources;
     std::vector<Instance::Original> MaskOriginals;
     std::vector<utils::Entity> MaskEntities;
     std::unordered_map<UUID, filament::Material*> Materials;
@@ -425,8 +427,8 @@ struct RenderAssets::Impl {
                 Restore(value);auto* old=override.Value;override.Value=shader->createInstance();
                 const auto ri=Engine.getRenderableManager().getInstance(override.Entity);
                 Engine.getRenderableManager().setMaterialInstanceAt(ri,override.Primitive,override.Value);
-                if(old)Engine.destroy(old);ApplyDebug(value);
-            }else if(!shader&&override.Value){Restore(value);const auto ri=Engine.getRenderableManager().getInstance(override.Entity);Engine.getRenderableManager().setMaterialInstanceAt(ri,override.Primitive,override.Base);Engine.destroy(override.Value);override.Value=nullptr;ApplyDebug(value);}
+                if(old){if(DeformationRelease)DeformationRelease(value.EditorOwner);Engine.destroy(old);}ApplyDebug(value);
+            }else if(!shader&&override.Value){Restore(value);const auto ri=Engine.getRenderableManager().getInstance(override.Entity);Engine.getRenderableManager().setMaterialInstanceAt(ri,override.Primitive,override.Base);if(DeformationRelease)DeformationRelease(value.EditorOwner);Engine.destroy(override.Value);override.Value=nullptr;ApplyDebug(value);}
             override.CameraFeed=override.Value&&material.IsValid()&&ApplyMaterialValues(override.Value,override.Asset);
             override.StateOverride=stateOverride;
         }
@@ -611,7 +613,7 @@ void RenderAssets::UpdateMesh(Handle handle, const Mat4& transform, const Mesh& 
 void RenderAssets::DestroyMesh(Handle handle) {
     if (!m_impl) return;
     const auto found = m_impl->Instances.find(handle); if (found == m_impl->Instances.end()) return;
-    auto& instance = found->second;
+    auto& instance = found->second;if(m_impl->DeformationRelease)m_impl->DeformationRelease(instance.EditorOwner);
     m_impl->Restore(instance);
     for(auto& override:instance.Overrides)if(override.Value){const auto ri=m_impl->Engine.getRenderableManager().getInstance(override.Entity);if(ri)m_impl->Engine.getRenderableManager().setMaterialInstanceAt(ri,override.Primitive,override.Base);m_impl->Engine.destroy(override.Value);}
     if (instance.Type == Impl::Kind::Gltf) {
@@ -660,7 +662,7 @@ bool RenderAssets::BeginSelectionMask(filament::Scene& scene,const std::unordere
                                      filament::MaterialInstance* selectedMaterial,filament::MaterialInstance* hoverMaterial){
     if(!m_impl)return false;EndSelectionMask(scene);auto& manager=m_impl->Engine.getRenderableManager();
     for(const auto& [_,value]:m_impl->Instances){
-        if(!value.AddedToScene)continue;
+        if(!value.AddedToScene||m_impl->DeformedSources.contains(value.EditorOwner))continue;
         auto* material=selected.contains(value.EditorOwner)?selectedMaterial:hovered.contains(value.EditorOwner)?hoverMaterial:nullptr;
         if(!material)continue;
         const auto add=[&](utils::Entity entity){if(scene.hasEntity(entity))return;auto ri=manager.getInstance(entity);if(!ri)return;
@@ -713,6 +715,16 @@ void RenderAssets::BeginEditorView(const std::unordered_set<UUID>& hidden){
     for(auto entity:m_impl->EditorSuspended)m_impl->Scene.remove(entity);
 }
 void RenderAssets::EndEditorView(){if(!m_impl)return;for(auto entity:m_impl->EditorSuspended)m_impl->Scene.addEntity(entity);m_impl->EditorSuspended.clear();}
+
+void RenderAssets::SetDeformationRelease(std::function<void(UUID)> release){if(m_impl)m_impl->DeformationRelease=std::move(release);}
+void RenderAssets::BeginDeformedView(const std::unordered_set<UUID>& sources){
+    if(!m_impl)return;EndDeformedView();m_impl->DeformedSources=sources;const auto suspend=[&](utils::Entity entity){if(m_impl->Scene.hasEntity(entity)){m_impl->DeformedSuspended.push_back(entity);m_impl->Scene.remove(entity);}};
+    for(auto& [_,value]:m_impl->Instances)if(sources.contains(value.EditorOwner)&&value.AddedToScene){if(value.Type==Impl::Kind::Gltf){if(value.SelectedGltfEntity)suspend(value.SelectedGltfEntity);else for(std::size_t i=0;i<value.Gltf->getEntityCount();++i)suspend(value.Gltf->getEntities()[i]);}else suspend(value.Type==Impl::Kind::Primitive?value.PrimitiveEntity:value.Filamesh.renderable);}
+}
+void RenderAssets::EndDeformedView(){if(!m_impl)return;for(auto entity:m_impl->DeformedSuspended)m_impl->Scene.addEntity(entity);m_impl->DeformedSuspended.clear();m_impl->DeformedSources.clear();}
+filament::MaterialInstance* RenderAssets::GetDeformedMaterial(UUID source,unsigned node,unsigned slot){
+    if(!m_impl)return nullptr;auto& manager=m_impl->Engine.getRenderableManager();for(auto& [_,value]:m_impl->Instances)if(value.EditorOwner==source){utils::Entity entity;if(value.Type==Impl::Kind::Primitive)entity=value.PrimitiveEntity;else if(value.Type==Impl::Kind::Filamesh)entity=value.Filamesh.renderable;else entity=value.SelectedGltfEntity?value.SelectedGltfEntity:SourceNode(*value.Gltf,node);auto ri=manager.getInstance(entity);if(ri&&slot<manager.getPrimitiveCount(ri))return manager.getMaterialInstanceAt(ri,slot);}return nullptr;
+}
 
 bool RenderAssets::SetDebugMode(const std::string& mode){if(!m_impl||mode!="lit"&&mode!="unlit"&&mode!="wireframe"&&mode!="lighting_only"&&mode!="overdraw")return false;m_impl->DebugMode=mode;for(auto& [_,instance]:m_impl->Instances)m_impl->ApplyDebug(instance);return true;}
 filament::MaterialInstance* RenderAssets::CreateGraphicsMaterial(){return m_impl&&m_impl->GraphicsMaterial?m_impl->GraphicsMaterial->createInstance():nullptr;}

@@ -48,6 +48,10 @@ public:
     void EndSelectionMask(filament::Scene& scene);
     void BeginEditorView(const std::unordered_set<UUID>& hidden);
     void EndEditorView();
+    void BeginDeformedView(const std::unordered_set<UUID>& sources);
+    void EndDeformedView();
+    filament::MaterialInstance* GetDeformedMaterial(UUID source,unsigned node,unsigned slot);
+    void SetDeformationRelease(std::function<void(UUID)> release);
     bool SetDebugMode(const std::string& mode);
     filament::Texture* GetGuiTexture(UUID id);
     filament::MaterialInstance* CreateCanvasMaterial(UUID asset);

@@ -16,7 +16,7 @@ namespace {
 struct Part {Entity Object;UUID Asset;std::uint32_t Node=Mesh::EntireAsset;Mat4 Local;bool Subtree=false;};
 void Parts(Entity entity,UUID asset,std::vector<Part>& parts,const Mat4& local={},int depth=0){
     if(!entity||depth>256)return;
-    if(depth>0&&entity.HasComponent<Rigidbody>())return;
+    if(depth>0&&(entity.HasComponent<Rigidbody>()||entity.HasComponent<Cloth>()||entity.HasComponent<Rope>()))return;
     if(asset){
         auto* mesh=entity.TryGetComponent<Mesh>();auto* node=entity.TryGetComponent<ModelNode>();
         if(mesh&&mesh->MeshAsset==asset)parts.push_back({entity,asset,mesh->ModelNodeIndex,local});
@@ -83,4 +83,36 @@ bool ReadPhysicsMesh(Entity entity,UUID assetId,const std::string& signature,std
     if(!indices.empty()&&used<=Limit){while(!cache.empty()&&(bytes+used>Limit||cache.size()>=128)){bytes-=cache.begin()->second.Vertices.size()*sizeof(Vec3)+cache.begin()->second.Indices.size()*sizeof(std::uint32_t);cache.erase(cache.begin());}cache.emplace(signature,Geometry{vertices,indices});bytes+=used;}
     return !indices.empty();
 }
+bool ReadSoftMesh(Entity entity,std::vector<SoftMeshPart>& output){
+    std::vector<Part> sources;Parts(entity,{},sources);std::size_t total=0;
+    for(auto& part:sources){
+        Mat4 inverse;if(!part.Local.TryInverse(inverse))throw std::invalid_argument("Cloth mesh has a singular source transform");const auto normals=inverse.Transposed();
+        if(!part.Asset){
+            const auto& primitive=part.Object.GetComponent<PrimitiveObject>();auto source=BuildPrimitiveGeometry(primitive);SoftMeshPart mesh;mesh.Owner=part.Object.GetUUID();mesh.Indices=source.Indices;
+            for(auto& v:source.Vertices){auto& t=v.TangentFrame;auto normal=Quaternion{t[0],t[1],t[2],t[3]}.Rotate({0,0,1});mesh.Vertices.push_back({part.Local.TransformPoint({v.Position[0],v.Position[1],v.Position[2]}),normals.TransformDirection(normal).Normalized(),{v.UV[0],v.UV[1]},{1,1,1,1}});}
+            total+=mesh.Indices.size();output.push_back(std::move(mesh));continue;
+        }
+        if(!part.Object.HasComponent<Mesh>())continue;
+        auto asset=Model(part.Asset);if(!asset)return false;
+        const auto append=[&](std::uint32_t node,const Mat4& transform){
+            if(node>=asset->SourceNodes.size()||!asset->SourceNodes[node])return;
+            Mat4 inverse;if(!transform.TryInverse(inverse))throw std::invalid_argument("Cloth source transform is singular");auto normalMatrix=inverse.Transposed();
+            std::map<unsigned,std::size_t> slots;std::map<unsigned,std::map<std::string,unsigned>> remaps;
+            for(auto& t:asset->SourceNodes[node]->Triangles){
+                auto [it,added]=slots.emplace(t.Slot,output.size());if(added){SoftMeshPart mesh;mesh.Owner=part.Object.GetUUID();mesh.Node=node;mesh.Slot=t.Slot;output.push_back(std::move(mesh));}auto& mesh=output[it->second];auto& remap=remaps[t.Slot];
+                const Vec3 positions[]{t.A,t.B,t.C},normals[]{t.NA,t.NB,t.NC};const Vec2 uv[]{t.UVA,t.UVB,t.UVC};
+                for(int i=0;i<3;++i){GraphicsVertex v;v.Position=transform.TransformPoint(positions[i]);v.Normal=normalMatrix.TransformDirection(normals[i]).Normalized();v.UV=uv[i];std::string key;AppendPhysicsKey(key,v.Position);AppendPhysicsKey(key,v.Normal);AppendPhysicsKey(key,v.UV.X);AppendPhysicsKey(key,v.UV.Y);auto [found,newVertex]=remap.emplace(key,unsigned(mesh.Vertices.size()));if(newVertex)mesh.Vertices.push_back(v);mesh.Indices.push_back(found->second);}
+                total+=3;if(total>262144)throw std::length_error("Cloth source exceeds the supported triangle budget");
+            }
+        };
+        if(part.Node!=Mesh::EntireAsset&&!part.Subtree)append(part.Node,part.Local);
+        else if(auto model=AssetManager::LoadModel(part.Asset)){
+            const auto visit=[&](auto&& self,std::uint32_t index,const Mat4& parent,int depth)->void{if(index>=model->Nodes.size()||depth>256)return;const auto& node=model->Nodes[index];auto transform=parent*Mat4::Transform(node.Position,node.Rotation,node.Scale);if(node.HasMesh())append(node.SourceIndex,transform);for(auto child:node.Children)self(self,child,transform,depth+1);};
+            if(part.Subtree){auto root=std::find_if(model->Nodes.begin(),model->Nodes.end(),[&](const auto& node){return node.SourceIndex==part.Node;});if(root==model->Nodes.end())return false;if(root->HasMesh())append(root->SourceIndex,part.Local);for(auto child:root->Children)visit(visit,child,part.Local,0);}
+            else for(auto root:model->Roots)visit(visit,root,part.Local,0);
+        }
+    }
+    return !output.empty()&&std::any_of(output.begin(),output.end(),[](const auto& mesh){return !mesh.Indices.empty();});
+}
+
 }

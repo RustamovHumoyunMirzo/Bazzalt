@@ -47,9 +47,12 @@ class PhysicsInspectorTests(unittest.TestCase):
         self.assertIn('Connected Body',fields);self.assertIn('Motor',fields);self.assertNotIn('Min Distance',fields)
         self.assertEqual(fields['Connected Body'].GetValue(),body)
         for kind in ('Cloth','Rope'):
-            entity=r.CreateEntity(kind);self.assertTrue(r.AddComponent(entity,kind));w.Controller.SelectEntity(entity,force=True)
+            entity=r.CreateEntity(kind);
+            if kind=='Cloth':self.assertTrue(r.AddComponent(entity,'Primitive Object'))
+            self.assertTrue(r.AddComponent(entity,kind));w.Controller.SelectEntity(entity,force=True)
             self.assertIn('Material Asset',w.Properties._sections['runtime.'+kind]._fields)
             self.assertIn('Mass',r.EntityDetails(entity)['component_data'][kind])
+            if kind=='Cloth':self.assertNotIn('Width',w.Properties._sections['runtime.Cloth']._fields)
             self.assertFalse(r.SetComponentProperty(entity,kind,'Mass',-1))
             self.assertTrue(r.RemoveComponent(entity,kind))
 
@@ -58,7 +61,7 @@ class PhysicsInspectorTests(unittest.TestCase):
         existing=r.CreateEntity('Keep in hierarchy');body=r.CreateEntity('Rigid body');self.assertTrue(r.AddComponent(body,'Rigidbody'))
         self.assertFalse(r.AddComponent(body,'Cloth'));self.assertNotIn('Cloth',r.EntityDetails(body)['components'])
         self.assertEqual({item['uuid'] for item in r.Entities()},{existing,body});self.assertTrue(r.Tick())
-        fabric=r.CreateEntity('Cloth');self.assertTrue(r.AddComponent(fabric,'Cloth'));self.assertTrue(r.Tick())
+        fabric=r.CreateEntity('Cloth');self.assertTrue(r.AddComponent(fabric,'Primitive Object'));self.assertTrue(r.AddComponent(fabric,'Cloth'));self.assertTrue(r.Tick())
         for component in ('Rigidbody','Shape Collider','Mesh Collider','Rope'):self.assertFalse(r.AddComponent(fabric,component))
         self.assertTrue(r.Tick());self.assertEqual({item['uuid'] for item in r.Entities()},{existing,body,fabric})
         self.assertTrue(r.RemoveComponent(fabric,'Cloth'));self.assertTrue(r.AddComponent(fabric,'Rope'));self.assertTrue(r.Tick())

@@ -277,11 +277,11 @@ UUID Engine::PickEditorPrimitive(Vec3 origin,Vec3 direction,Vec3* hitPosition,co
     direction=direction.Normalized();float nearest=std::numeric_limits<float>::max();UUID result{};
     const auto ignored=[&](UUID id){if(excluded.empty())return false;for(auto entity=m_scene->GetEntity(id);entity&&!entity.GetUUID().IsRoot();entity=entity.GetParent())if(excluded.contains(entity.GetUUID()))return true;return false;};
     auto view=m_scene->GetRegistry().view<PrimitiveObject>();
-    for(auto handle:view){const auto& primitive=view.get<PrimitiveObject>(handle);if(!primitive.IsEnabled()||!primitive.Visible)continue;Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));if(m_editorUnselectable.contains(entity.GetUUID())||m_editorHidden.contains(entity.GetUUID())||ignored(entity.GetUUID()))continue;Mat4 inverse;if(!entity.GetWorldMatrix().TryInverse(inverse))continue;Vec3 o=inverse.TransformPoint(origin),d=inverse.TransformDirection(direction);const auto geometry=BuildPrimitiveGeometry(primitive);
+    for(auto handle:view){const auto& primitive=view.get<PrimitiveObject>(handle);if(!primitive.IsEnabled()||!primitive.Visible)continue;Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));if(m_editorUnselectable.contains(entity.GetUUID())||m_editorHidden.contains(entity.GetUUID())||ignored(entity.GetUUID())||GraphicsAccess::IsDeformed(entity.GetUUID()))continue;Mat4 inverse;if(!entity.GetWorldMatrix().TryInverse(inverse))continue;Vec3 o=inverse.TransformPoint(origin),d=inverse.TransformDirection(direction);const auto geometry=BuildPrimitiveGeometry(primitive);
         for(std::size_t i=0;i+2<geometry.Indices.size();i+=3){Vec3 v[3];for(int j=0;j<3;++j){const auto& p=geometry.Vertices[geometry.Indices[i+j]];v[j]={p.Position[0],p.Position[1],p.Position[2]};}Vec3 e1=v[1]-v[0],e2=v[2]-v[0],p=Vec3::Cross(d,e2);float determinant=Vec3::Dot(e1,p);if(std::abs(determinant)<1e-8f)continue;float reciprocal=1/determinant;Vec3 offset=o-v[0];float u=Vec3::Dot(offset,p)*reciprocal;if(u<0||u>1)continue;Vec3 q=Vec3::Cross(offset,e1);float vcoord=Vec3::Dot(d,q)*reciprocal;if(vcoord<0||u+vcoord>1)continue;float t=Vec3::Dot(e2,q)*reciprocal;if(t>=0&&t<nearest){nearest=t;result=entity.GetUUID();}}
     }
     if(m_isInitialized)for(const auto& mesh:m_renderBackend->GetAssets().GetEditorMeshes()){
-        if(m_editorHidden.contains(mesh.Owner)||m_editorUnselectable.contains(mesh.Owner)||ignored(mesh.Owner))continue;
+        if(m_editorHidden.contains(mesh.Owner)||m_editorUnselectable.contains(mesh.Owner)||ignored(mesh.Owner)||GraphicsAccess::IsDeformed(mesh.Owner))continue;
         Mat4 inverse;if(!mesh.World.TryInverse(inverse))continue;
         if(mesh.Geometry->Raycast(inverse.TransformPoint(origin),inverse.TransformDirection(direction),nearest))result=mesh.Owner;
     }
@@ -300,7 +300,7 @@ std::unordered_map<UUID,std::pair<Vec3,Vec3>> Engine::GetEditorMeshBounds() cons
     // renderer. There are no loaded GPU meshes yet, and GetAssets is invalid.
     if(!m_isInitialized)return result;
     for(const auto& mesh:m_renderBackend->GetAssets().GetEditorMeshes()){
-        if(m_editorHidden.contains(mesh.Owner)||mesh.Geometry->Nodes.empty())continue;
+        if(m_editorHidden.contains(mesh.Owner)||mesh.Geometry->Nodes.empty()||GraphicsAccess::IsDeformed(mesh.Owner))continue;
         const auto& local=mesh.Geometry->Nodes.front();Vec3 minimum{std::numeric_limits<float>::max()},maximum{-std::numeric_limits<float>::max()};
         for(int corner=0;corner<8;++corner){auto p=mesh.World.TransformPoint({corner&1?local.Max.X:local.Min.X,corner&2?local.Max.Y:local.Min.Y,corner&4?local.Max.Z:local.Min.Z});minimum={std::min(minimum.X,p.X),std::min(minimum.Y,p.Y),std::min(minimum.Z,p.Z)};maximum={std::max(maximum.X,p.X),std::max(maximum.Y,p.Y),std::max(maximum.Z,p.Z)};}
         for(auto entity=m_scene->GetEntity(mesh.Owner);entity&&!entity.GetUUID().IsRoot();entity=entity.GetParent()){

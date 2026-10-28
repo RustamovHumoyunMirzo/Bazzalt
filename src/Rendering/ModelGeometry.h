@@ -9,7 +9,7 @@ namespace Bazzalt::Runtime {
 // CPU-side geometry shared by all instances of an imported mesh.
 // No renderer types or asset buffers escape into the public API.
 struct ModelGeometry {
-    struct Triangle { Vec3 A,B,C; };
+    struct Triangle { Vec3 A,B,C;Vec3 NA{},NB{},NC{};Vec2 UVA{},UVB{},UVC{};std::uint32_t Slot=0; };
     struct Node { Vec3 Min,Max; std::uint32_t Begin=0,Count=0,Left=0,Right=0; };
     std::vector<Triangle> Triangles;
     std::vector<Node> Nodes;

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Cloth declares the values and operations listed below. Types, defaults and overloads are part of its contract; it is not an editor panel.">
+  <meta name="description" content="Cloth deforms the attached PrimitiveObject or Mesh/model subtree. It uses the existing shape and primary UV coordinates; an empty MaterialAsset preserves source material slots. PinEdges refers to source-boundary edges. Width, Height, SegmentsX and SegmentsY remain only for older scene data and no longer generate a plane. PhysicsScene returns welded solver-particle positions and exposes zero-based particle controls.">
   <title>Cloth | BAZZALT Docs</title>
   <link rel="stylesheet" href="../../../../assets/docs.css">
   <script src="../../../../assets/theme.js"></script>
@@ -26,7 +26,7 @@
     <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
     <main id="content" tabindex="-1">
       <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / C++ / C++ API reference / Cloth</nav>
-      <article class="doc"><h1>Cloth</h1><p>Cloth declares the values and operations listed below. Types, defaults and overloads are part of its contract; it is not an editor panel.</p><!-- API-SOURCE-BEGIN -->
+      <article class="doc"><h1>Cloth</h1><p>Cloth deforms the attached PrimitiveObject or Mesh/model subtree. It uses the existing shape and primary UV coordinates; an empty MaterialAsset preserves source material slots. PinEdges refers to source-boundary edges. Width, Height, SegmentsX and SegmentsY remain only for older scene data and no longer generate a plane. PhysicsScene returns welded solver-particle positions and exposes zero-based particle controls.</p><!-- API-SOURCE-BEGIN -->
 <h2 id="source-contract">Public declarations</h2>
 <p>Header: <code>Bazzalt/Components/Cloth.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
 <pre><code class="language-cpp">struct Cloth {

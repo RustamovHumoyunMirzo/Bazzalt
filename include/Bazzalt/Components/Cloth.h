@@ -4,7 +4,10 @@
 #include "Bazzalt/UUID.h"
 #include <cmath>
 namespace Bazzalt {
-// Procedural XY cloth. Pin flags: left=1,right=2,top=4,bottom=8.
+// Deforms the attached primitive/mesh (or the model subtree). No extra plane.
+// Pin flags: left=1,right=2,top=4,bottom=8, evaluated on source bounds.
+// Width/Height/SegmentsX/SegmentsY are retained for old scene compatibility;
+// geometry and resolution now come from the source PrimitiveObject or Mesh.
 struct Cloth : Component {
     float Width=2,Height=2,Mass=1,Compliance=0,ShearCompliance=0,BendCompliance=.0001f;
     float Damping=.1f,GravityFactor=1,Friction=.5f,Restitution=0,MaxVelocity=100;

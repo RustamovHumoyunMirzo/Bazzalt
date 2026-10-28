@@ -757,8 +757,9 @@ void RenderBackend::Render(double materialTime) {
             bool outlined=false;
             if(!m_outlineSelected.empty()||!m_outlineHovered.empty()){
                 outlined=m_assets->BeginSelectionMask(*resource->MaskScene,m_outlineSelected,m_outlineHovered,m_gizmo->SelectedMask,m_gizmo->HoverMask);
-                try{if(outlined)m_renderer->render(resource->MaskView);}catch(...){m_assets->EndSelectionMask(*resource->MaskScene);throw;}
-                m_assets->EndSelectionMask(*resource->MaskScene);
+                if(m_graphics)outlined=m_graphics->BeginSelectionMask(*resource->MaskScene,m_outlineSelected,m_outlineHovered,m_gizmo->SelectedMask,m_gizmo->HoverMask)||outlined;
+                try{if(outlined)m_renderer->render(resource->MaskView);}catch(...){if(m_graphics)m_graphics->EndSelectionMask();m_assets->EndSelectionMask(*resource->MaskScene);throw;}
+                if(m_graphics)m_graphics->EndSelectionMask();m_assets->EndSelectionMask(*resource->MaskScene);
             }
             m_assets->BeginEditorView(m_editorHidden);
             std::vector<utils::Entity> suspendedLights;
