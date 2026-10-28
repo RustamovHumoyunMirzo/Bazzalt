@@ -131,7 +131,7 @@ def Install(entry: dict, archive: Path, versions: Path) -> Path:
                 for name in ("Editor/"+lua,"ScriptSDK/lib/"+lua):
                     if not (payload/name).is_file():raise ValueError("Missing Lua runtime library: "+name)
             if manifest.get("physics_abi"):
-                if type(manifest["physics_abi"]) is not int or manifest["physics_abi"]!=1:raise ValueError("Unsupported physics runtime ABI")
+                if type(manifest["physics_abi"]) is not int or manifest["physics_abi"]!=2:raise ValueError("Unsupported physics runtime ABI")
                 for name in ("Editor/"+physics,"ScriptSDK/lib/"+physics):
                     if not (payload/name).is_file():raise ValueError("Missing physics runtime library: "+name)
             if manifest.get("gui_abi"):

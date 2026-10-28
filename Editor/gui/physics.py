@@ -1,18 +1,35 @@
 """Physics authoring through the native scene API and shared editor widgets."""
 from PySide6.QtCore import Qt,QSignalBlocker
-from PySide6.QtWidgets import QDialog,QVBoxLayout,QDialogButtonBox,QTableWidget,QTableWidgetItem,QPushButton
-from .widgets import BoolInput,EnumInput,FloatInput,IntInput,MultiSelectInput,Vec3Input
+from PySide6.QtWidgets import QDialog,QVBoxLayout,QDialogButtonBox,QTableWidget,QTableWidgetItem,QPushButton,QListWidget,QListWidgetItem
+from .widgets import BoolInput,EnumInput,FloatInput,IntInput,MultiSelectInput,Vec3Input,ObjectPickerInput
 
 def Key(label):return label.lower().replace(' ','_')
 
 def ComponentField(controller,entity,component,name,value):
-    if component not in {'Rigidbody','Shape Collider','Mesh Collider'}:return None
+    if component not in {'Rigidbody','Shape Collider','Mesh Collider','Joint','Distance Joint','Hinge Joint','Slider Joint','Ball And Socket Joint','Fixed Joint','Cloth','Rope'}:return None
     tr=controller.Window.Localization.Translate
     commit=lambda v:controller._CommitComponent(entity,component,name,v)
-    enums={'Motion Type':('static','kinematic','dynamic'),'Collision Detection':('discrete','continuous'),'Interpolation':('none','interpolate'),'Shape':('box','sphere','capsule','cylinder','plane')}
+    enums={'Motion Type':('static','kinematic','dynamic'),'Collision Detection':('discrete','continuous'),'Interpolation':('none','interpolate'),'Shape':('box','sphere','capsule','cylinder','plane'),'Type':('distance','hinge','slider','ball_and_socket','fixed'),'Motor':('off','velocity','position')}
     if name in enums:
         field=EnumInput();field.SetOptions([(tr('physics.'+key),i) for i,key in enumerate(enums[name])]);field.SetValue(value)
         field.currentIndexChanged.connect(lambda _:commit(field.GetValue()));return field
+    if name=='Connected Body':
+        entities={str(item['uuid']):item for item in controller.Runtime.Entities() if str(item['uuid'])!=str(entity) and 'Rigidbody' in controller.Runtime.EntityDetails(str(item['uuid'])).get('components',[])}
+        field=ObjectPickerInput(validator=lambda v:v in entities)
+        field.SetValue(value if value in entities else None,entities.get(value,{}).get('name',''))
+        def assign(v):
+            field.Display.setText(entities.get(str(v),{}).get('name',''));commit(v or '00000000-0000-0000-0000-000000000000')
+        field.ValueChanged.connect(assign)
+        def pick():
+            dialog=QDialog(field);dialog.setWindowTitle(tr('physics.field.connected_body'));layout=QVBoxLayout(dialog);items=QListWidget(dialog);layout.addWidget(items)
+            for identity,item in entities.items():
+                row=QListWidgetItem(item.get('name',''));row.setData(Qt.ItemDataRole.UserRole,identity);items.addItem(row)
+            def accept(item):field.SetValue(item.data(Qt.ItemDataRole.UserRole));dialog.accept()
+            items.itemDoubleClicked.connect(accept);dialog.exec();dialog.deleteLater()
+        field.PickRequested.connect(pick);return field
+    if name=='Material Asset':return controller._AssetPicker(value,{'.matinst'},lambda v:commit(v or '00000000-0000-0000-0000-000000000000'))
+    if name=='Pin Edges':
+        field=MultiSelectInput(tr('physics.none'));field.SetOptions([(tr('physics.'+key),1<<i) for i,key in enumerate(('left','right','top','bottom'))]);field.SetValues([1<<i for i in range(4) if value&(1<<i)]);field.SelectionChanged.connect(lambda values:commit(sum(values)));return field
     if name=='Constraints':
         field=MultiSelectInput(tr('physics.none'));field.SetOptions([(tr('physics.constraint.'+key),1<<i) for i,key in enumerate(('position_x','position_y','position_z','rotation_x','rotation_y','rotation_z'))]);field.SetValues([1<<i for i in range(6) if value&(1<<i)])
         field.SelectionChanged.connect(lambda values:commit(sum(values)));return field
@@ -23,7 +40,7 @@ def ComponentField(controller,entity,component,name,value):
     if isinstance(value,float):
         limits={'Mass':(.0001,1e12),'Inertia Multiplier':(.0001,1e6),'Linear Damping':(0,1e6),'Angular Damping':(0,1e6),'Restitution':(0,1),'Friction':(0,1e6),'Radius':(.001,1e6),'Height':(.001,1e6),'Convex Radius':(0,1e6),'Max Linear Velocity':(.001,1e6),'Max Angular Velocity':(.001,1e6),'Gravity Factor':(-1e6,1e6)}
         lo,hi=limits.get(name,(-1e6,1e6));field=FloatInput(minimum=lo,maximum=hi,value=value);field.valueChanged.connect(commit);return field
-    if name in {'Velocity Iterations','Position Iterations'}:
+    if name in {'Segments','Sides','Segments X','Segments Y','Iterations','Velocity Iterations','Position Iterations'}:
         field=IntInput(minimum=0,maximum=255,value=value);field.valueChanged.connect(commit);return field
     return None
 

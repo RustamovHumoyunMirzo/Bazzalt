@@ -41,6 +41,38 @@ void CheckAttachedMeshSources(){
     first.AddComponent<Rigidbody>();assert(!world.Raycast({100,5,0},{0,-1,0},10));assert(world.Raycast({108,5,0},{0,-1,0},10).Object==group);first.RemoveComponent<Rigidbody>();assert(world.Raycast({100,5,0},{0,-1,0},10).Object==group);
     auto empty=scene.CreateEntity("Awaiting geometry");empty.AddComponent<MeshCollider>();world.Synchronize();assert(!world.Raycast({200,5,0},{0,-1,0},10));
 }
+void CheckJointsAndSoftBodies(){
+    Scene scene;auto settings=scene.GetPhysicsSettings();settings.AutoSimulation=false;settings.WorkerThreads=0;scene.SetPhysicsSettings(settings);auto world=scene.GetPhysics();
+    auto make=[&](const char* name,Vec3 p){auto e=scene.CreateEntity(name);e.GetComponent<Transform>().Position=p;e.AddComponent<ShapeCollider>().Size={.2f,.2f,.2f};e.AddComponent<Rigidbody>();return e;};
+    auto fixed=make("Fixed",{0,4,0});fixed.AddComponent<FixedJoint>();
+    auto distance=make("Distance",{3,4,0});auto& d=distance.AddComponent<DistanceJoint>();d.AutoConfigureConnectedAnchor=false;d.ConnectedAnchor={3,5,0};d.MinDistance=d.MaxDistance=1;
+    auto hinge=make("Hinge",{6,4,0});auto& h=hinge.AddComponent<HingeJoint>();h.Motor=JointMotorMode::Velocity;h.MotorVelocity=1;
+    auto slider=make("Slider",{9,4,0});slider.AddComponent<SliderJoint>();
+    auto ball=make("Ball",{12,4,0});ball.AddComponent<BallAndSocketJoint>();
+    auto cloth=scene.CreateEntity("Cloth");cloth.GetComponent<Transform>().Position={20,5,0};auto& c=cloth.AddComponent<Cloth>();c.SegmentsX=c.SegmentsY=4;c.Wind={0,0,2};
+    auto rope=scene.CreateEntity("Rope");rope.GetComponent<Transform>().Position={25,5,0};auto& r=rope.AddComponent<Rope>();r.Segments=8;r.Sides=4;r.Wind={1,0,0};
+    Runtime::PhysicsModule().Start(scene);assert(world.GetBodyCount()==7);auto before=world.GetSoftBodyVertices(cloth);auto ropeBefore=world.GetSoftBodyVertices(rope);assert(before.size()==25&&ropeBefore.size()==36);assert(world.Raycast({20,5,3},{0,0,-1},6).Object==cloth);
+    for(int i=0;i<60;++i)world.Simulate(1.f/60);
+    assert((fixed.GetWorldTransform().Position-Vec3{0,4,0}).Length()<.01f);
+    assert(std::abs((distance.GetWorldTransform().Position-Vec3{3,5,0}).Length()-1)<.03f);
+    assert(std::abs(slider.GetWorldTransform().Position.Y-4)<.01f);
+    assert(std::abs(ball.GetWorldTransform().Position.Y-4)<.01f);
+    assert(world.GetAngularVelocity(hinge).Length()>.1f);auto beforeMotor=world.GetAngularVelocity(hinge).Y;h.MotorVelocity=-1;world.Simulate(1.f/60);assert(world.GetAngularVelocity(hinge).Y*beforeMotor<0);
+    auto breakable=make("Breakable",{40,5,0});breakable.AddComponent<FixedJoint>().BreakForce=.01f;world.Simulate(1.f/60);assert(world.IsJointBroken(breakable,JointType::Fixed));
+    auto after=world.GetSoftBodyVertices(cloth);c.Damping=.2f;c.Wind={0,0,1};world.Synchronize();assert((world.GetSoftBodyVertices(cloth).back()-after.back()).Length()<.0001f);assert((after[0]-before[0]).Length()<.001f);assert((after.back()-before.back()).Length()>.05f);
+    auto ropeAfter=world.GetSoftBodyVertices(rope);assert((ropeAfter[0]-ropeBefore[0]).Length()<.001f);assert(ropeAfter.back().X>ropeBefore.back().X+.05f);
+    assert(world.ApplySoftBodyImpulse(cloth,{0,0,3}));assert(world.SetSoftBodyVertexPinned(cloth,24,true));auto pin=world.GetSoftBodyVertices(cloth)[24];world.Simulate(1.f/60);assert((world.GetSoftBodyVertices(cloth)[24]-pin).Length()<.001f);assert(world.SetSoftBodyVertexPinned(cloth,24,false));assert(!world.SetSoftBodyVertexPinned(cloth,99999,true));
+    assert(world.BreakJoint(fixed,JointType::Fixed));assert(world.IsJointBroken(fixed,JointType::Fixed));for(int i=0;i<10;++i)world.Simulate(1.f/60);assert(fixed.GetWorldTransform().Position.Y<3.95f);assert(world.RepairJoint(fixed,JointType::Fixed));assert(!world.IsJointBroken(fixed,JointType::Fixed));
+    // Body recreation must detach and rebind every referencing native constraint.
+    fixed.GetComponent<Rigidbody>().Mass=2;world.Simulate(1.f/60);
+    auto connected=make("Connected",{15,4,0});auto& j=connected.AddComponent<FixedJoint>();j.ConnectedBody=ball.GetUUID();world.Simulate(1.f/60);scene.DestroyEntity(ball);world.Simulate(1.f/60);
+    cloth.SetComponentEnabled<Cloth>(false);world.Synchronize();assert(world.GetSoftBodyVertices(cloth).empty());cloth.SetComponentEnabled<Cloth>(true);world.Synchronize();assert(world.GetSoftBodyVertices(cloth).size()==25);
+    auto path=std::filesystem::temp_directory_path()/("bazzalt-extras-"+UUID::Generate().ToString()+".bscene");Runtime::Engine host;assert(host.SaveSceneAsset(scene,path));auto loaded=host.LoadSceneAsset(path);std::filesystem::remove(path);assert(loaded);assert(loaded->FindEntityByName("Cloth").GetComponent<Cloth>().SegmentsX==4);assert(loaded->FindEntityByName("Connected").GetComponent<FixedJoint>().ConnectedBody==j.ConnectedBody);assert(loaded->FindEntityByName("Rope").GetComponent<Rope>().Sides==4);
+    auto floor=scene.CreateEntity("Soft floor");floor.GetComponent<Transform>().Position={30,0,0};floor.AddComponent<ShapeCollider>().Size={4,.2f,4};
+    auto falling=scene.CreateEntity("Falling cloth");falling.GetComponent<Transform>().Position={30,2,0};auto& free=falling.AddComponent<Cloth>();free.SegmentsX=free.SegmentsY=2;free.PinEdges=0;
+    for(int i=0;i<120;++i)world.Simulate(1.f/60);for(auto point:world.GetSoftBodyVertices(falling))assert(point.Y>-.1f);
+    Runtime::PhysicsModule().Stop(scene);
+}
 int main(){
     Rigidbody damping;damping.LinearDamping=10;damping.AngularDamping=10;assert(damping.IsValid());
     Scene scene;auto settings=scene.GetPhysicsSettings();settings.AutoSimulation=false;settings.WorkerThreads=0;assert(scene.SetPhysicsSettings(settings));
@@ -76,5 +108,5 @@ int main(){
     {auto temporary=std::make_unique<Scene>();auto stale=temporary->GetPhysics();temporary.reset();bool rejected=false;try{stale.GetBodyCount();}catch(const std::logic_error&){rejected=true;}assert(rejected);}
     bool cleaned=false;{Scene temporary;temporary.AddSystem<CleanupPhysics>(cleaned);}assert(cleaned);
     Runtime::PhysicsModule().Stop(scene);assert(!world.IsRunning());scene.Clear();assert(scene.GetPhysicsSettings().AutoSimulation);
-    CheckAttachedMeshSources();
+    CheckAttachedMeshSources();CheckJointsAndSoftBodies();
 }

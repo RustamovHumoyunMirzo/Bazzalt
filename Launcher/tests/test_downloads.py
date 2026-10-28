@@ -141,7 +141,7 @@ class DownloadTests(unittest.TestCase):
     def test_physics_module_abi_and_both_library_locations(self):
         archive=self.EditorZip()
         with zipfile.ZipFile(archive) as source:files={name:source.read(name) for name in source.namelist()}
-        metadata={"version":"0.5.0","architecture":"x64","executable":"Bazzalt.exe","physics_abi":1}
+        metadata={"version":"0.5.0","architecture":"x64","executable":"Bazzalt.exe","physics_abi":2}
         files["editor.json"]=json.dumps(metadata)
         with self.assertRaisesRegex(ValueError,"Missing physics runtime library"):
             archive=self.Zip(files);Install(self.MakeEntry(archive.read_bytes()),archive,self.Root/"missing-physics")
@@ -151,7 +151,7 @@ class DownloadTests(unittest.TestCase):
         files["ScriptSDK/lib/bazzalt_physics.dll"]=PE()
         archive=self.Zip(files);target=Install(self.MakeEntry(archive.read_bytes()),archive,self.Root/"physics")
         self.assertTrue((target/"Editor/bazzalt_physics.dll").is_file())
-        for abi in (2,"1",True):
+        for abi in (1,3,"2",True):
             metadata["physics_abi"]=abi;files["editor.json"]=json.dumps(metadata);archive=self.Zip(files)
             with self.assertRaisesRegex(ValueError,"Unsupported physics runtime ABI"):
                 Install(self.MakeEntry(archive.read_bytes()),archive,self.Root/"unknown-physics")

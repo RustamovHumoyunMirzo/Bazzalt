@@ -36,13 +36,14 @@ const PhysicsModuleApi* Load(){
     auto get=reinterpret_cast<GetPhysicsModuleApi>(dlsym(module,"BazzaltGetPhysicsModuleApi"));
 #endif
     const auto* api=get?get(PhysicsModuleVersion,sizeof(PhysicsModuleApi)):nullptr;
-    if(!api||api->Version!=PhysicsModuleVersion||api->Size!=sizeof(PhysicsModuleApi)||!api->Release||!api->Start||!api->Stop||!api->Step||!api->Synchronize||!api->IsRunning||!api->BodyCount||!api->Query||!api->Command||!api->Velocity||!api->Awake||!api->Subscribe||!api->Unsubscribe||!api->DisconnectOwner||!api->SetInterpolationAlpha||!api->RenderMatrix||!api->Guides)throw std::runtime_error("Incompatible physics runtime; reinstall matching bazzalt_physics");
+    if(!api||api->Version!=PhysicsModuleVersion||api->Size!=sizeof(PhysicsModuleApi)||!api->Release||!api->Start||!api->Stop||!api->Step||!api->Synchronize||!api->IsRunning||!api->BodyCount||!api->Query||!api->Command||!api->Velocity||!api->Awake||!api->Subscribe||!api->Unsubscribe||!api->DisconnectOwner||!api->SetInterpolationAlpha||!api->RenderMatrix||!api->Guides||!api->JointControl||!api->SoftVertices||!api->SoftControl||!api->Render)throw std::runtime_error("Incompatible physics runtime; reinstall matching bazzalt_physics");
     return api;
 }
 }
 const PhysicsModuleApi& PhysicsModule(){static const auto* api=Load();Loaded=api;return *api;}
 Mat4 PhysicsRenderMatrix(Scene& scene,Entity entity){return Loaded?Loaded->RenderMatrix(scene,entity):entity.GetWorldMatrix();}
 void DisconnectPhysicsOwner(const void* owner) noexcept {if(Loaded)try{Loaded->DisconnectOwner(owner);}catch(...) {}}
+void RenderPhysicsScene(Scene& scene){if(scene.GetRegistry().view<Cloth>().size()||scene.GetRegistry().view<Rope>().size())PhysicsModule().Render(scene);}
 void ReleasePhysicsScene(Scene& scene) noexcept {if(Loaded)try{Loaded->Release(scene);}catch(...) {}}
 }
 namespace Bazzalt {
@@ -87,4 +88,10 @@ bool PhysicsScene::SetGravity(Entity e,std::optional<Vec3> gravity){if(e.GetScen
 std::optional<Vec3> PhysicsScene::GetGravity(Entity e)const{if(e.GetScene()!=&GetScene()||!e||!e.HasComponent<Rigidbody>())return {};return e.GetComponent<Rigidbody>().Gravity;}
 PhysicsScene::Subscription PhysicsScene::Subscribe(PhysicsEventType type,Callback cb,Entity filter){return Runtime::PhysicsModule().Subscribe(GetScene(),type,std::move(cb),filter);}
 bool PhysicsScene::Unsubscribe(Subscription id){return Runtime::PhysicsModule().Unsubscribe(GetScene(),id);}
+bool PhysicsScene::BreakJoint(Entity e,JointType t){return Runtime::PhysicsModule().JointControl(GetScene(),e,t,0);}
+bool PhysicsScene::RepairJoint(Entity e,JointType t){return Runtime::PhysicsModule().JointControl(GetScene(),e,t,1);}
+bool PhysicsScene::IsJointBroken(Entity e,JointType t)const{return Runtime::PhysicsModule().JointControl(GetScene(),e,t,2);}
+std::vector<Vec3> PhysicsScene::GetSoftBodyVertices(Entity e)const{return Runtime::PhysicsModule().SoftVertices(GetScene(),e);}
+bool PhysicsScene::ApplySoftBodyImpulse(Entity e,Vec3 v,int index){return Runtime::PhysicsModule().SoftControl(GetScene(),e,v,index,0);}
+bool PhysicsScene::SetSoftBodyVertexPinned(Entity e,unsigned index,bool pinned){if(index>16384)return false;return Runtime::PhysicsModule().SoftControl(GetScene(),e,{},int(index),pinned?1:2);}
 }

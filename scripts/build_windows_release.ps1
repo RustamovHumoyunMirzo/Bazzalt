@@ -61,7 +61,7 @@ if ($Product -eq 'core') {
     python (Join-Path $Root 'scripts/stage_game_runtime.py') --build $Build --architecture $Architecture --output (Join-Path $Stage "RuntimeTemplates/windows-$Architecture")
     if ($LASTEXITCODE -ne 0) { throw 'Game runtime template packaging failed' }
     Copy-Item -LiteralPath (Join-Path $Root 'LICENSE') -Destination $Stage
-    @{version=$Version;architecture=$Architecture;platform='windows';abi=1;lua_version='5.4.9';gui_abi=6;physics_abi=1} | ConvertTo-Json | Set-Content (Join-Path $Stage 'core.json') -Encoding utf8
+    @{version=$Version;architecture=$Architecture;platform='windows';abi=1;lua_version='5.4.9';gui_abi=6;physics_abi=2} | ConvertTo-Json | Set-Content (Join-Path $Stage 'core.json') -Encoding utf8
 } else {
     python (Join-Path $Root 'scripts/compile_resources.py') --build-directory (Join-Path $Build 'CompiledResources')
     if ($LASTEXITCODE -ne 0) { throw 'Resource compilation failed' }
@@ -101,7 +101,7 @@ if ($Product -eq 'core') {
         foreach ($Tool in @('matc.exe','cmgen.exe','filamesh.exe')) {
             Copy-Item -LiteralPath (Join-Path $Filament "bin/$Tool") -Destination (Join-Path $Stage 'tools/filament')
         }
-        @{version=$Version;core_version=$Versions.core;architecture=$Architecture;executable='Bazzalt.exe';project_format_max=1;lua_version='5.4.9';gui_abi=6;physics_abi=1} | ConvertTo-Json | Set-Content (Join-Path $Stage 'editor.json') -Encoding utf8
+        @{version=$Version;core_version=$Versions.core;architecture=$Architecture;executable='Bazzalt.exe';project_format_max=1;lua_version='5.4.9';gui_abi=6;physics_abi=2} | ConvertTo-Json | Set-Content (Join-Path $Stage 'editor.json') -Encoding utf8
         python (Join-Path $Root 'scripts/collect_third_party.py') --output (Join-Path $Stage 'licenses') --python
         if ($LASTEXITCODE -ne 0) { throw 'Editor license staging failed' }
         $Check = Start-Process -FilePath (Join-Path $Stage 'Bazzalt.exe') -ArgumentList '--check-runtime' -WorkingDirectory $Stage -WindowStyle Hidden -Wait -PassThru

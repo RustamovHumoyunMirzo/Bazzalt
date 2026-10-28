@@ -243,7 +243,7 @@ for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id
     }
     for(auto h:m_scene->GetRegistry().view<AudioListener>()){auto e=m_scene->GetEntity(static_cast<Entity::Id>(h));if(!e.GetComponent<AudioListener>().IsEnabled()||m_editorHidden.contains(e.GetUUID()))continue;auto p=e.GetWorldTransform().Position;icons.push_back({p.X,p.Y,p.Z,false,2});}
     m_renderBackend->SetEditorIcons(m_editorIconsVisible?icons:std::vector<RenderBackend::EditorIcon>{});
-    if(m_editorIconsVisible){bool synchronized=false;for(auto selected:m_selectedObjects){auto entity=m_scene->GetEntity(selected);if(!entity||m_editorHidden.contains(selected)||(!entity.HasComponent<Rigidbody>()&&!entity.HasComponent<ShapeCollider>()&&!entity.HasComponent<MeshCollider>()))continue;try{if(!synchronized){PhysicsModule().Synchronize(*m_scene);synchronized=true;}for(const auto& p:PhysicsModule().Guides(*m_scene,selected))guides.push_back({p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9],true});}catch(const std::exception& error){if(m_lastError!=error.what()){m_lastError=error.what();Console::Warning(m_lastError,"Physics");}}}}
+    if(m_editorIconsVisible){bool synchronized=false;for(auto selected:m_selectedObjects){auto entity=m_scene->GetEntity(selected);if(!entity||m_editorHidden.contains(selected)||(!entity.HasComponent<Rigidbody>()&&!entity.HasComponent<ShapeCollider>()&&!entity.HasComponent<MeshCollider>()&&!entity.HasComponent<Joint>()&&!entity.HasComponent<DistanceJoint>()&&!entity.HasComponent<HingeJoint>()&&!entity.HasComponent<SliderJoint>()&&!entity.HasComponent<BallAndSocketJoint>()&&!entity.HasComponent<FixedJoint>()&&!entity.HasComponent<Cloth>()&&!entity.HasComponent<Rope>()))continue;try{if(!synchronized){PhysicsModule().Synchronize(*m_scene);synchronized=true;}for(const auto& p:PhysicsModule().Guides(*m_scene,selected))guides.push_back({p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9],true});}catch(const std::exception& error){if(m_lastError!=error.what()){m_lastError=error.what();Console::Warning(m_lastError,"Physics");}}}}
     if(!m_editorIconsVisible)guides.clear();
     std::unordered_set<UUID> selectedOwners,hoveredOwners;
     auto objects=m_scene->GetRegistry().view<Transform>();
@@ -285,6 +285,10 @@ UUID Engine::PickEditorPrimitive(Vec3 origin,Vec3 direction,Vec3* hitPosition,co
         Mat4 inverse;if(!mesh.World.TryInverse(inverse))continue;
         if(mesh.Geometry->Raycast(inverse.TransformPoint(origin),inverse.TransformDirection(direction),nearest))result=mesh.Owner;
     }
+    if(m_scene->GetRegistry().view<Cloth>().size()||m_scene->GetRegistry().view<Rope>().size())try{
+        PhysicsQueryOptions options;options.IncludeBackFaces=true;options.MaxResults=65536;
+        for(const auto& hit:m_scene->GetPhysics().RaycastAll(origin,direction,std::min(nearest,1000000.f),options))if((hit.Object.HasComponent<Cloth>()||hit.Object.HasComponent<Rope>())&&!m_editorHidden.contains(hit.Object.GetUUID())&&!m_editorUnselectable.contains(hit.Object.GetUUID())&&!ignored(hit.Object.GetUUID())){nearest=hit.Distance;result=hit.Object.GetUUID();break;}
+    }catch(const std::exception& error){Console::Warning(error.what(),"Physics");}
     if(hitPosition&&!result.IsRoot())*hitPosition=origin+direction*nearest;
     return result;
 }
@@ -302,7 +306,10 @@ std::unordered_map<UUID,std::pair<Vec3,Vec3>> Engine::GetEditorMeshBounds() cons
         for(auto entity=m_scene->GetEntity(mesh.Owner);entity&&!entity.GetUUID().IsRoot();entity=entity.GetParent()){
             auto [it,added]=result.emplace(entity.GetUUID(),std::pair{minimum,maximum});if(!added){auto& [a,b]=it->second;a={std::min(a.X,minimum.X),std::min(a.Y,minimum.Y),std::min(a.Z,minimum.Z)};b={std::max(b.X,maximum.X),std::max(b.Y,maximum.Y),std::max(b.Z,maximum.Z)};}
         }
-    }return result;
+    }
+    const auto softBounds=[&](auto view){for(auto handle:view){auto entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));if(m_editorHidden.contains(entity.GetUUID()))continue;auto points=m_scene->GetPhysics().GetSoftBodyVertices(entity);if(points.empty())continue;Vec3 lo=points.front(),hi=lo;for(auto p:points){lo={std::min(lo.X,p.X),std::min(lo.Y,p.Y),std::min(lo.Z,p.Z)};hi={std::max(hi.X,p.X),std::max(hi.Y,p.Y),std::max(hi.Z,p.Z)};}result[entity.GetUUID()]={lo,hi};}};
+    softBounds(m_scene->GetRegistry().view<Cloth>());softBounds(m_scene->GetRegistry().view<Rope>());
+    return result;
 }
 
 bool Engine::CreateEditorViewport(std::uint64_t id, std::uintptr_t nativeWindow, bool scene,

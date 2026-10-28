@@ -84,6 +84,7 @@ public:
     void RegisterCameraOutput(UUID id,filament::Texture* color,filament::Texture* history,filament::RenderTarget* target,filament::RenderTarget* historyTarget);
     filament::RenderTarget* GetCameraOutputTarget(UUID id) const;
     static void ConfigureEditorFog(filament::View& view,float gridScale);
+    bool IsEditorHidden(UUID id) const{return m_editorHidden.contains(id);}
     void SetEditorHidden(std::unordered_set<UUID> hidden){m_editorHidden=std::move(hidden);}
     void RegisterEditorLight(UUID id,utils::Entity entity){m_editorLights[id]=entity;}
     void UnregisterEditorLight(UUID id){m_editorLights.erase(id);}

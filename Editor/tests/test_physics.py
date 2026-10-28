@@ -37,6 +37,22 @@ class PhysicsInspectorTests(unittest.TestCase):
         dialog.Table.item(2,7).setCheckState(__import__('PySide6.QtCore',fromlist=['Qt']).Qt.CheckState.Unchecked)
         self.assertFalse(dialog.Masks[2]&(1<<7));self.assertFalse(dialog.Masks[7]&(1<<2));dialog.deleteLater()
 
+    def test_joint_and_soft_body_fields(self):
+        w=self.Window;r=w.Runtime;body=r.CreateEntity('Anchor');r.AddComponent(body,'Rigidbody')
+        joint=r.CreateEntity('Door');r.AddComponent(joint,'Rigidbody')
+        for kind in ('Joint','Distance Joint','Hinge Joint','Slider Joint','Ball And Socket Joint','Fixed Joint'):
+            self.assertTrue(r.AddComponent(joint,kind));self.assertTrue(r.SetComponentProperty(joint,kind,'Connected Body',body))
+        w.Controller.SelectEntity(joint,force=True)
+        fields=w.Properties._sections['runtime.Hinge Joint']._fields
+        self.assertIn('Connected Body',fields);self.assertIn('Motor',fields);self.assertNotIn('Min Distance',fields)
+        self.assertEqual(fields['Connected Body'].GetValue(),body)
+        for kind in ('Cloth','Rope'):
+            entity=r.CreateEntity(kind);self.assertTrue(r.AddComponent(entity,kind));w.Controller.SelectEntity(entity,force=True)
+            self.assertIn('Material Asset',w.Properties._sections['runtime.'+kind]._fields)
+            self.assertIn('Mass',r.EntityDetails(entity)['component_data'][kind])
+            self.assertFalse(r.SetComponentProperty(entity,kind,'Mass',-1))
+            self.assertTrue(r.RemoveComponent(entity,kind))
+
     def test_material_clock_freezes_in_paused_play(self):
         r=self.Window.Runtime;self.assertTrue(r.Play());r.Tick();before=r.Statistics()['material_time'];self.assertGreaterEqual(before,0)
         r.Pause(True)

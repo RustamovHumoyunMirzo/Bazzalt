@@ -16,9 +16,11 @@ struct GraphicsCommand {
     GraphicsDrawOptions Options;
     bool Scoped=false;
     UUID Camera{};
+    UUID Owner{};
     std::uint64_t Viewport=0;
 };
 struct GraphicsAccess {
+    static void DrawEntity(GraphicsMesh mesh,UUID material,UUID owner,GraphicsDrawOptions options);
     static void BindScene(Scene* scene);
     static void BeginFrame();
     static void BeforeCamera(GraphicsEvent event);

@@ -34,7 +34,7 @@ queues. The 16 MiB scratch arena uses Jolt's malloc fallback rather than abortin
 when a step needs more temporary memory. Scene destruction and Clear release the world before registry storage.
 
 Release packaging, standalone RuntimeTemplates, compiler validation and Hub
-manifests include physics_abi=1. Old Hub payloads without that declaration remain
+manifests include physics_abi=2. Old Hub payloads without that declaration remain
 installable; new payloads must provide the matching physics library. Physics is
 native game code and introduces no Python dependency in built games. Jolt's MIT
 notice is included by the common third-party collector.
@@ -152,8 +152,7 @@ editing. Keep standalone cooked-game, native C++/Lua and Windows/Linux x86/x64
 checks when changing the module. Preserve dependency-only registration/teardown
 checks as the fast build/ABI gate.
 
-This is a rigid-body foundation. Do not claim soft bodies, vehicles, character
-controllers, joints or cross-platform deterministic networking. Native callbacks
+Do not claim vehicles, character controllers or cross-platform deterministic networking. Native callbacks
 remain trusted C++ code. Jolt objects/streams/BodyID never become scene formats
 or gameplay ABI. Add public API changes to C++, Lua, generated references and
 What's New together.
@@ -203,3 +202,14 @@ synchronize once per selection batch. Regression fixtures verify node/subtree
 scope, exclusion of unrelated branches and nested bodies, transformed groups,
 geometry invalidation, cached queries, guide bounds, paused/scaled material time,
 and unchanged GPU upload suppression.
+
+
+## Joints and soft bodies
+
+Physics module ABI 2 adds joint control, soft vertex control/readback and render submission. Update packaging metadata and reject mismatched siblings. Public data remains Jolt-free. PhysicsExtras.inl implements the solver adapters; PhysicsExtras.h owns native references in World. DetachJoints must run before every rigid body destruction/recreation. Constraints retain stable component keys and break state while rebinding native bodies. Missing references are inactive. Collision suppression is immutable during Update. Break force/torque use solver impulse divided by step duration.
+
+Cloth and Rope create optimized Jolt SoftBodySharedSettings, including faces, stretch/shear and dihedral bend constraints. Pins are inverse-mass zero particles; runtime edits modify inverse mass and velocity only. No position teleport is used for pinning. Soft bodies keep entity transforms as authoring frames and expose particle positions in world space. Do not combine another physics body/collider on the same entity. Topology, mass, scale and compliance changes recreate the soft body. Wind, damping, gravity factor, solver iterations, contact material and render settings update in place. Geometry resolution is bounded to prevent accidental unbounded allocation.
+
+GraphicsAccess.BeginFrame calls RenderPhysicsScene after the graphics frame begins. The physics module submits current world-space deformed geometry via GraphicsMesh; unchanged geometry retains its revision. Each frame recomputes area-weighted normals. Gameplay and editor use the same surface/material pipeline. Selected guides show the deforming triangles. Soft-body collision resolution uses Jolt; rigid contact subscriptions do not currently include soft-body contact manifolds. No self-collision, tearing, runtime rigid attachment/skinning or cross-platform deterministic simulation is promised.
+
+Add field definitions once in PhysicsFields.h, then extend the serialization registry, bridge dispatch, Lua registration, inspector types and API inventory. Never expose native constraint/body handles. Tests must cover stepping, pins, body recreation, broken constraints, component disable/removal, serialization and teardown.

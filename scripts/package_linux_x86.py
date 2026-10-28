@@ -14,7 +14,7 @@ def main():
         for path in (build/'Editor').glob(pattern):shutil.copy2(path,stage/'lib'/path.name)
     Stage(build,stage/'RuntimeTemplates/linux-x86','x86',platform='linux')
     version=json.loads((ROOT/'releases/versions.json').read_text())['core']
-    (stage/'core.json').write_text(json.dumps(dict(version=version,architecture='x86',platform='linux',abi=1,lua_version='5.4.9',gui_abi=6,physics_abi=1)))
+    (stage/'core.json').write_text(json.dumps(dict(version=version,architecture='x86',platform='linux',abi=1,lua_version='5.4.9',gui_abi=6,physics_abi=2)))
     Audit(stage,'x86','core','linux');archive=output/f'Bazzalt-core-{version}-linux-x86.zip';Archive(stage,archive)
     archive.with_suffix('.zip.json').write_text(json.dumps(Entry(archive,'core',version,'x86','','linux'),indent=2))
 if __name__=='__main__':main()

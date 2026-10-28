@@ -33,6 +33,11 @@ int main(int argc,char** argv){
     Graphics::DrawMesh(mesh);auto revision=mesh.GetRevision();mesh.SetGeometry(vertices);assert(mesh.GetRevision()==revision+1);
     assert(GraphicsAccess::Commands().front().Geometry->Revision==revision);
     copy.Destroy();assert(!mesh.IsValid());assert(GraphicsAccess::Commands().front().Geometry->Vertices.size()==3);assert(Throws([&]{Graphics::DrawMesh(mesh);}));Graphics::ClearDraws();
+    // Soft surfaces enter the same public Graphics pipeline with stable mesh revisions.
+    auto fabric=scene.CreateEntity("Fabric");auto& cloth=fabric.AddComponent<Cloth>();cloth.SegmentsX=cloth.SegmentsY=2;
+    GraphicsAccess::BeginFrame();assert(GraphicsAccess::Commands().size()==1);assert(GraphicsAccess::Commands().front().Owner==fabric.GetUUID());auto softRevision=GraphicsAccess::Commands().front().Geometry->Revision;GraphicsAccess::EndFrame();
+    GraphicsAccess::BeginFrame();assert(GraphicsAccess::Commands().front().Geometry->Revision==softRevision);GraphicsAccess::EndFrame();
+    fabric.SetComponentEnabled<Cloth>(false);GraphicsAccess::BeginFrame();assert(GraphicsAccess::Commands().empty());GraphicsAccess::EndFrame();scene.DestroyEntity(fabric);
     auto owner=scene.CreateEntity("Owner");int dead=0;Graphics::OnBeginFrame([&](const auto&){++dead;},owner);scene.DestroyEntity(owner);
     int scoped=0;auto scope=GraphicsAccess::SetScope(&scoped);Graphics::OnBeginFrame([&](const auto&){++scoped;});GraphicsAccess::SetScope(scope);GraphicsAccess::DisconnectScope(&scoped);
     auto subscription=Graphics::OnBeforeCamera([](const GraphicsEvent&){Graphics::DrawLine({0,0,-3},{1,0,-3});});

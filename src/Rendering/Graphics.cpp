@@ -1,4 +1,5 @@
 #include "Runtime/GraphicsAccess.h"
+#include "Physics/PhysicsModuleApi.h"
 #include "Bazzalt/Console.h"
 #include "Bazzalt/Detail/ModuleLifetime.h"
 #include <algorithm>
@@ -78,8 +79,9 @@ namespace Runtime {
 Graphics::Subscription GraphicsAccess::SubscribeScoped(GraphicsEventType type,Graphics::Callback callback,Entity owner,const void* scope){ThreadCheck();auto& s=Get();if(!s.ScenePtr)throw std::logic_error("Graphics is not initialized");if(!callback||unsigned(type)>unsigned(GraphicsEventType::OnEndFrame))throw std::invalid_argument("Invalid Graphics callback");if(s.Listeners.size()>=4096)throw std::length_error("Graphics subscription limit exceeded");if(owner&&s.ScenePtr->GetEntity(owner.GetUUID())!=owner)throw std::invalid_argument("Graphics callback owner belongs to another scene");auto entry=std::make_shared<Listener>(Listener{Detail::GetCurrentGameplayModule(),std::move(callback),type,owner?owner.GetUUID():UUID{},scope});auto id=s.Next++;s.Listeners[id]=std::move(entry);return id;}
 const void* GraphicsAccess::SetScope(const void* scope){auto old=CurrentScope;CurrentScope=scope;return old;}
 void GraphicsAccess::DisconnectScope(const void* scope){if(!scope)return;std::erase_if(Get().Listeners,[&](const auto& v){return v.second->Scope==scope;});}
+void GraphicsAccess::DrawEntity(GraphicsMesh mesh,UUID material,UUID owner,GraphicsDrawOptions options){auto surface=Material::Load(material);Graphics::DrawMesh(mesh,surface.IsValid()?surface:Material{}, {},options);Get().Commands.back().Owner=owner;}
 void GraphicsAccess::BindScene(Scene* scene){auto& s=Get();if(s.ScenePtr!=scene){s.Listeners.clear();s.Commands.clear();s.Sizes.clear();s.Cameras.clear();s.ScenePtr=scene;}s.Thread=std::this_thread::get_id();}
-void GraphicsAccess::BeginFrame(){auto& s=Get();ThreadCheck();++s.Frame;s.Cameras.clear();GraphicsEvent event;event.Type=GraphicsEventType::OnBeginFrame;Emit(event,true);}
+void GraphicsAccess::BeginFrame(){auto& s=Get();ThreadCheck();++s.Frame;s.Cameras.clear();GraphicsEvent event;event.Type=GraphicsEventType::OnBeginFrame;Emit(event,true);if(s.ScenePtr)RenderPhysicsScene(*s.ScenePtr);}
 void GraphicsAccess::BeforeCamera(GraphicsEvent event){auto& s=Get();event.Frame=s.Frame;event.Scene=s.ScenePtr?s.ScenePtr->GetUUID():UUID{};s.Cameras.push_back(event);auto key=std::pair{event.Camera,event.Viewport};auto size=std::pair{event.Width,event.Height};if(s.Sizes[key]!=size){s.Sizes[key]=size;event.Type=GraphicsEventType::OnCameraResize;Emit(event,false);}event.Type=GraphicsEventType::OnBeforeCamera;Emit(event,true);}
 bool GraphicsAccess::Matches(const GraphicsCommand& c,const GraphicsEvent& e){return (!c.Options.Camera||c.Options.Camera==e.Camera)&&(!c.Scoped||(c.Camera==e.Camera&&c.Viewport==e.Viewport));}
 void GraphicsAccess::BeforeDraws(){auto& s=Get();for(auto event:s.Cameras){event.Type=GraphicsEventType::OnBeforeDraw;event.DrawCount=std::count_if(s.Commands.begin(),s.Commands.end(),[&](const auto& c){return Matches(c,event);});std::size_t index=0;for(const auto& c:s.Commands)if(Matches(c,event)){event.DrawIndex=index++;Emit(event,false);}}}

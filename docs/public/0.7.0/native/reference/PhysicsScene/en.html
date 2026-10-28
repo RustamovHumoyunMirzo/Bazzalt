@@ -73,6 +73,13 @@ using Subscription=std::uint64_t;
 using Callback=std::function&lt;void(const CollisionEvent&amp;)&gt;;
 Subscription Subscribe(PhysicsEventType type,Callback callback,Entity filter={});
 bool Unsubscribe(Subscription subscription);
+// Joint type identifies a component pool; Joint is the configurable base pool.
+    bool BreakJoint(Entity entity,JointType type);
+bool RepairJoint(Entity entity,JointType type);
+[[nodiscard]] bool IsJointBroken(Entity entity,JointType type) const;
+[[nodiscard]] std::vector&lt;Vec3&gt; GetSoftBodyVertices(Entity entity) const;
+bool ApplySoftBodyImpulse(Entity entity,Vec3 impulse,int vertex=-1);
+bool SetSoftBodyVertexPinned(Entity entity,unsigned vertex,bool pinned);
 };</code></pre>
 <!-- API-SOURCE-END --></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../PhysicsQueryOptions/en.html"><small>Previous</small>PhysicsQueryOptions</a>

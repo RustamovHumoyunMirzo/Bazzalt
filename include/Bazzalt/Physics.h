@@ -1,4 +1,7 @@
 #pragma once
+#include "Bazzalt/Components/Joint.h"
+#include "Bazzalt/Components/Cloth.h"
+#include "Bazzalt/Components/Rope.h"
 #include "Bazzalt/Export.h"
 #include "Bazzalt/Entity.h"
 #include "Bazzalt/Components/Transform.h"
@@ -99,6 +102,13 @@ public:
     using Callback=std::function<void(const CollisionEvent&)>;
     Subscription Subscribe(PhysicsEventType type,Callback callback,Entity filter={});
     bool Unsubscribe(Subscription subscription);
+    // Joint type identifies a component pool; Joint is the configurable base pool.
+    bool BreakJoint(Entity entity,JointType type);
+    bool RepairJoint(Entity entity,JointType type);
+    [[nodiscard]] bool IsJointBroken(Entity entity,JointType type) const;
+    [[nodiscard]] std::vector<Vec3> GetSoftBodyVertices(Entity entity) const;
+    bool ApplySoftBodyImpulse(Entity entity,Vec3 impulse,int vertex=-1);
+    bool SetSoftBodyVertexPinned(Entity entity,unsigned vertex,bool pinned);
 private:
     [[nodiscard]] Scene& GetScene() const;
     Scene* m_scene;

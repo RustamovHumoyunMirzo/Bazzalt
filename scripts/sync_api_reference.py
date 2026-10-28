@@ -160,7 +160,7 @@ def lua_types():
         text=macros[macro]
         for child in re.findall(r'(BAZZALT_\w+_FIELDS)\(X\)',text):text=text.replace(child+'(X)',macros[child])
         return re.findall(r'X\((\w+),',text)
-    for name,macro in (('Rigidbody','BAZZALT_BODY_FIELDS'),('ShapeCollider','BAZZALT_SHAPE_FIELDS'),('MeshCollider','BAZZALT_MESH_COLLIDER_FIELDS'),('PhysicsSettings','BAZZALT_PHYSICS_SETTINGS_FIELDS')):
+    for name,macro in (('Rigidbody','BAZZALT_BODY_FIELDS'),('ShapeCollider','BAZZALT_SHAPE_FIELDS'),('MeshCollider','BAZZALT_MESH_COLLIDER_FIELDS'),('PhysicsSettings','BAZZALT_PHYSICS_SETTINGS_FIELDS'),('Joint','BAZZALT_JOINT_FIELDS'),('DistanceJoint','BAZZALT_JOINT_FIELDS'),('HingeJoint','BAZZALT_JOINT_FIELDS'),('SliderJoint','BAZZALT_JOINT_FIELDS'),('BallAndSocketJoint','BAZZALT_JOINT_FIELDS'),('FixedJoint','BAZZALT_JOINT_FIELDS'),('Cloth','BAZZALT_CLOTH_FIELDS'),('Rope','BAZZALT_ROPE_FIELDS')):
         for field in fields(macro):result[name][1].setdefault(field,'&'+name+'::'+field)
     for variable,name in (('hit','PhysicsHit'),('event','CollisionEvent')):
         start=physics.index('#define FIELD(Name) '+variable);end=physics.index('#undef FIELD',start)
@@ -291,6 +291,14 @@ def supplement(language, name, record, types):
 
 
 OVERVIEWS = {
+    'Joint': 'Configurable joint component and base of DistanceJoint, HingeJoint, SliderJoint, BallAndSocketJoint and FixedJoint. Inherited fields include ConnectedBody, anchors, axes, limits, motors, collision suppression and break thresholds. Angles use radians. Zero ConnectedBody means the world.',
+    'DistanceJoint': 'Specialized Joint component. All public settings and IsValid are inherited from Joint; see the Joint reference for their declarations. Use Entity component access to configure it and PhysicsScene to break, repair or read its broken state.',
+    'HingeJoint': 'Specialized Joint component. All public settings and IsValid are inherited from Joint; see the Joint reference for their declarations. Use Entity component access to configure it and PhysicsScene to break, repair or read its broken state.',
+    'SliderJoint': 'Specialized Joint component. All public settings and IsValid are inherited from Joint; see the Joint reference for their declarations. Use Entity component access to configure it and PhysicsScene to break, repair or read its broken state.',
+    'BallAndSocketJoint': 'Specialized Joint component. All public settings and IsValid are inherited from Joint; see the Joint reference for their declarations. Use Entity component access to configure it and PhysicsScene to break, repair or read its broken state.',
+    'FixedJoint': 'Specialized Joint component. All public settings and IsValid are inherited from Joint; see the Joint reference for their declarations. Use Entity component access to configure it and PhysicsScene to break, repair or read its broken state.',
+    'Cloth': 'Procedural XY soft-body grid. PinEdges bits select left, right, top and bottom borders. Compliance controls stretch, shear and bending; Wind is world-space acceleration. MaterialAsset draws the deformed surface. Read and control zero-based vertices through PhysicsScene.',
+    'Rope': 'Procedural soft-body tube extending down local Y. PinStart and PinEnd pin complete end rings. Wind is world-space acceleration. Mass, compliance, bending, damping, collision material and render material are independent settings.',
     'Application': 'Global application controls: frame limits, background behavior, session state, window dimensions, metadata and deferred quit. This service is not owned by an entity.',
     'Subsystem': 'Base class for a registered C++ project-wide service. It has no entity or Transform. Implement OnRegister to subscribe to global lifecycle events; OnUnregister is optional.',
     'Subsystems': 'Find loaded C++ subsystems by registered type name, or obtain a checked shared project interface. Returned pointers and references expire when the subsystem is unloaded.',

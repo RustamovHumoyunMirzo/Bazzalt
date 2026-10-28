@@ -36,6 +36,33 @@ void BindLuaPhysics(sol::table api){
 #undef FIELD
     mesh["IsValid"]=&MeshCollider::IsValid;
     Operations<Rigidbody>(api,"Rigidbody");Operations<ShapeCollider>(api,"ShapeCollider");Operations<MeshCollider>(api,"MeshCollider");
+    api.new_enum("JointType","Distance",JointType::Distance,"Hinge",JointType::Hinge,"Slider",JointType::Slider,"BallAndSocket",JointType::BallAndSocket,"Fixed",JointType::Fixed);
+    api.new_enum("JointMotorMode","Off",JointMotorMode::Off,"Velocity",JointMotorMode::Velocity,"Position",JointMotorMode::Position);
+    auto typeJoint=api.new_usertype<Joint>("Joint",sol::constructors<Joint()>(),sol::base_classes,sol::bases<Component>());
+#define FIELD(Name,Label) typeJoint[#Name]=&Joint::Name;
+    BAZZALT_JOINT_FIELDS(FIELD)
+#undef FIELD
+    typeJoint["IsValid"]=&Joint::IsValid;Operations<Joint>(api,"Joint");
+    auto typeDistanceJoint=api.new_usertype<DistanceJoint>("DistanceJoint",sol::constructors<DistanceJoint()>(),sol::base_classes,sol::bases<Joint,Component>());
+    Operations<DistanceJoint>(api,"DistanceJoint"); // Properties and IsValid are inherited from Joint.
+    auto typeHingeJoint=api.new_usertype<HingeJoint>("HingeJoint",sol::constructors<HingeJoint()>(),sol::base_classes,sol::bases<Joint,Component>());
+    Operations<HingeJoint>(api,"HingeJoint"); // Properties and IsValid are inherited from Joint.
+    auto typeSliderJoint=api.new_usertype<SliderJoint>("SliderJoint",sol::constructors<SliderJoint()>(),sol::base_classes,sol::bases<Joint,Component>());
+    Operations<SliderJoint>(api,"SliderJoint"); // Properties and IsValid are inherited from Joint.
+    auto typeBallAndSocketJoint=api.new_usertype<BallAndSocketJoint>("BallAndSocketJoint",sol::constructors<BallAndSocketJoint()>(),sol::base_classes,sol::bases<Joint,Component>());
+    Operations<BallAndSocketJoint>(api,"BallAndSocketJoint"); // Properties and IsValid are inherited from Joint.
+    auto typeFixedJoint=api.new_usertype<FixedJoint>("FixedJoint",sol::constructors<FixedJoint()>(),sol::base_classes,sol::bases<Joint,Component>());
+    Operations<FixedJoint>(api,"FixedJoint"); // Properties and IsValid are inherited from Joint.
+    auto typeCloth=api.new_usertype<Cloth>("Cloth",sol::constructors<Cloth()>(),sol::base_classes,sol::bases<Component>());
+#define FIELD(Name,Label) typeCloth[#Name]=&Cloth::Name;
+    BAZZALT_CLOTH_FIELDS(FIELD)
+#undef FIELD
+    typeCloth["IsValid"]=&Cloth::IsValid;Operations<Cloth>(api,"Cloth");
+    auto typeRope=api.new_usertype<Rope>("Rope",sol::constructors<Rope()>(),sol::base_classes,sol::bases<Component>());
+#define FIELD(Name,Label) typeRope[#Name]=&Rope::Name;
+    BAZZALT_ROPE_FIELDS(FIELD)
+#undef FIELD
+    typeRope["IsValid"]=&Rope::IsValid;Operations<Rope>(api,"Rope");
     auto settings=api.new_usertype<PhysicsSettings>("PhysicsSettings",sol::constructors<PhysicsSettings()>());
 #define FIELD(Name,Label) settings[#Name]=&PhysicsSettings::Name;
     BAZZALT_PHYSICS_SETTINGS_FIELDS(FIELD)
@@ -61,10 +88,12 @@ void BindLuaPhysics(sol::table api){
     event["Contacts"]=sol::property([](const CollisionEvent& e){return sol::as_table(e.Contacts);});
     auto world=api.new_usertype<PhysicsScene>("PhysicsScene",sol::no_constructor);
 #define METHOD(Name) world[#Name]=&PhysicsScene::Name;
-    METHOD(GetSettings) METHOD(SetSettings) METHOD(SetLayerCollision) METHOD(GetLayerCollision) METHOD(IsRunning) METHOD(Simulate) METHOD(Synchronize) METHOD(GetBodyCount)
+    METHOD(BreakJoint) METHOD(RepairJoint) METHOD(IsJointBroken) METHOD(SetSoftBodyVertexPinned) METHOD(GetSettings) METHOD(SetSettings) METHOD(SetLayerCollision) METHOD(GetLayerCollision) METHOD(IsRunning) METHOD(Simulate) METHOD(Synchronize) METHOD(GetBodyCount)
     METHOD(ApplyForce) METHOD(ApplyForceAtPosition) METHOD(ApplyImpulse) METHOD(ApplyImpulseAtPosition) METHOD(ApplyTorque) METHOD(ApplyAngularImpulse)
     METHOD(SetLinearVelocity) METHOD(SetAngularVelocity) METHOD(GetLinearVelocity) METHOD(GetAngularVelocity) METHOD(MoveKinematic) METHOD(WakeUp) METHOD(Sleep) METHOD(IsAwake) METHOD(Unsubscribe)
 #undef METHOD
+    world["GetSoftBodyVertices"]=[](PhysicsScene w,Entity e){return sol::as_table(w.GetSoftBodyVertices(e));};
+    world["ApplySoftBodyImpulse"]=[](PhysicsScene w,Entity e,Vec3 impulse,sol::optional<int> index){return w.ApplySoftBodyImpulse(e,impulse,index.value_or(-1));};
     world["SetGravity"]=sol::overload([](PhysicsScene w,Vec3 value){w.SetGravity(value);},[](PhysicsScene w,Entity e,sol::optional<Vec3> value){return w.SetGravity(e,value?std::optional<Vec3>(*value):std::nullopt);});
     world["GetGravity"]=sol::overload([](PhysicsScene w){return w.GetGravity();},[](PhysicsScene w,Entity e){return w.GetGravity(e);});
     world["Teleport"]=[](PhysicsScene w,Entity e,Vec3 p,Quaternion q,sol::optional<bool> awake){return w.Teleport(e,p,q,awake.value_or(true));};

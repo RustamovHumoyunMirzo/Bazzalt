@@ -106,7 +106,7 @@ void GraphicsRenderer::Prepare(){
 }
 void GraphicsRenderer::BeforeCamera(filament::View* view,std::uint64_t viewport){
     auto& impl=*m_impl;auto context=std::find_if(impl.Cameras.begin(),impl.Cameras.end(),[&](const auto& c){return c.View==view&&c.Event.Viewport==viewport;});
-    const auto& commands=GraphicsAccess::Commands();for(std::size_t i=0;i<impl.Draws.size();++i){auto& draw=impl.Draws[i];const bool visible=draw.Valid&&context!=impl.Cameras.end()&&GraphicsAccess::Matches(commands[i],context->Event);
+    const auto& commands=GraphicsAccess::Commands();for(std::size_t i=0;i<impl.Draws.size();++i){auto& draw=impl.Draws[i];const bool visible=draw.Valid&&context!=impl.Cameras.end()&&GraphicsAccess::Matches(commands[i],context->Event)&&(!context->Event.IsEditorCamera||!commands[i].Owner||!impl.Backend.IsEditorHidden(commands[i].Owner));
         if(visible&&!draw.Added)impl.Backend.GetScene().addEntity(draw.Entity);else if(!visible&&draw.Added)impl.Backend.GetScene().remove(draw.Entity);draw.Added=visible;
     }
 }
