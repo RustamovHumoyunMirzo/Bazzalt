@@ -29,7 +29,11 @@ const PhysicsModuleApi* Load(){
 #if defined(__APPLE__)
     const auto path=std::filesystem::path(info.dli_fname).parent_path()/"libbazzalt_physics.dylib";
 #else
+#ifdef __APPLE__
+    const auto path=std::filesystem::path(info.dli_fname).parent_path()/"libbazzalt_physics.dylib";
+#else
     const auto path=std::filesystem::path(info.dli_fname).parent_path()/"libbazzalt_physics.so";
+#endif
 #endif
     auto module=dlopen(path.c_str(),RTLD_NOW|RTLD_LOCAL);
     if(!module){const auto* error=dlerror();throw std::runtime_error(std::string("Could not load sibling physics runtime: ")+(error?error:"unknown error"));}

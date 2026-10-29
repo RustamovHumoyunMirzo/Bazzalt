@@ -1,7 +1,8 @@
 """Editor-owned C++ behavior discovery and compilation."""
 from __future__ import annotations
+from bazzalt.platforms import HostPlatform,HostArchitecture
 from dataclasses import dataclass, field
-import ast, hashlib, json, os, re, subprocess
+import ast, hashlib, json, os, re, subprocess, sys
 from pathlib import Path
 
 _COMPONENT=re.compile(r"\b(?:COMPONENT|APPLICATION|SUBSYSTEM)\s*\(\s*([A-Za-z_]\w*)\s*\)")
@@ -38,7 +39,7 @@ class ScriptCompiler:
         self.Diagnostics=[]
         self.Tools = dict(tools or {})
         self.Architecture=architecture
-        if architecture not in (None,'x64','x86'):raise ValueError('Unsupported script target architecture')
+        if architecture not in (None,'x64','x86','arm64'):raise ValueError('Unsupported script target architecture')
     @staticmethod
     def Inspect(path: str|Path)->ScriptDescriptor|None:
         path=Path(path)
@@ -166,13 +167,13 @@ class ScriptCompiler:
         extension_includes=[];extension_libraries=[];extension_hash=b''
         if (self.project/'Extensions.lock.json').is_file():
             from Compiler.extensions import LockedItems
-            items=LockedItems(self.project,'windows' if os.name=='nt' else 'linux',self.Architecture or 'x64')
+            items=LockedItems(self.project,HostPlatform(),self.Architecture or HostArchitecture())
             for item in items:
                 native=item['Manifest']['Native'];extension_hash+=item['Digest'].encode()
                 if native.get('Scope','Runtime')!='Runtime':continue
                 extension_includes.extend(item['Root']/p for p in native.get('IncludeDirs',[]))
-                for folder in native.get('LibDirsWin' if os.name=='nt' else 'LibDirsLinux',[]):
-                    for pattern in (('*.lib',) if os.name=='nt' else ('*.so','*.so.*','*.a')):extension_libraries.extend((item['Root']/folder).glob(pattern))
+                for folder in native.get('LibDirsWin' if os.name=='nt' else 'LibDirsMac' if sys.platform=='darwin' else 'LibDirsLinux',[]):
+                    for pattern in (('*.lib',) if os.name=='nt' else ('*.so','*.so.*','*.dylib','*.a')):extension_libraries.extend((item['Root']/folder).glob(pattern))
         sdk_digest=hashlib.sha256(headers+library.read_bytes()+compiler_identity+extension_hash).digest()
         for descriptor in descriptors:
             wrapper_source=self._Wrapper(descriptor)
@@ -188,6 +189,7 @@ class ScriptCompiler:
             if os.name=="nt":
                 import struct
                 command.append("--target=" + ("x86_64" if self.Architecture=='x64' or self.Architecture is None and struct.calcsize("P")==8 else "i686") + "-pc-windows-msvc")
+            if os.sys.platform=="darwin":command.extend(["-arch","arm64" if (self.Architecture or HostArchitecture())=="arm64" else "x86_64","-mmacosx-version-min=12.0","-Wl,-rpath,@loader_path"])
             if os.name=="nt":command.extend(["-fms-runtime-lib=dll","-D_ITERATOR_DEBUG_LEVEL=0"])
             else:
                 command.extend(["-fPIC",f"-Wl,-rpath,{sdk/'lib'}"])

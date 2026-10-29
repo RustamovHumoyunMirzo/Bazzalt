@@ -16,6 +16,9 @@ def PlayerHash(executable):
     # Match the native reader: PE checksum and certificate-directory entries
     # change during Authenticode signing; executable code/resources do not.
     data=bytearray(Path(executable).read_bytes())
+    if data[:4]==bytes.fromhex('cffaedfe'):
+        from .macos import PlayerHash as MacHash
+        return MacHash(executable)
     if data[:4]==b'\x7fELF':return hashlib.sha256(data).hexdigest()
     if len(data)<64 or data[:2]!=b'MZ':raise ValueError('Invalid player executable')
     pe=struct.unpack_from('<I',data,60)[0];optional=pe+24
@@ -45,7 +48,7 @@ def Seal(folder, executable, *, security=None, content=None):
     records=[]
     for path in sorted(folder.rglob('*')):
         if path.is_symlink() or path.is_junction():raise ValueError('Linked build output is forbidden')
-        if not path.is_file() or path==executable or path.relative_to(folder).as_posix() in {'game.bootstrap','game.integrity','game.signature','.bazzalt-game-build'}:continue
+        if not path.is_file() or path==executable or path.relative_to(folder).as_posix() in {'game.bootstrap','game.integrity','game.signature','.bazzalt-game-build','game.seal'}:continue
         name=path.relative_to(folder).as_posix();SafeName(name)
         with path.open('rb') as file:digest=hashlib.file_digest(file,'sha256').hexdigest()
         records.append(dict(path=name,size=path.stat().st_size,sha256=digest))
@@ -57,5 +60,6 @@ def Seal(folder, executable, *, security=None, content=None):
     (folder/'game.integrity').write_bytes(payload)
     (folder/'game.signature').write_bytes(r.to_bytes(32,'big')+s.to_bytes(32,'big'))
     # Keep the existing key trailer so key delivery has a single parser.
-    with executable.open('ab') as file:
-        file.write(seal)
+    if executable.read_bytes()[:4]==bytes.fromhex('cffaedfe'):(folder/'game.seal').write_bytes(seal)
+    else:
+        with executable.open('ab') as file:file.write(seal)

@@ -10,7 +10,13 @@ inline std::array<unsigned char,32> HashPrefix(const std::filesystem::path& path
     std::unique_ptr<EVP_MD_CTX,decltype(&EVP_MD_CTX_free)> hash(EVP_MD_CTX_new(),EVP_MD_CTX_free);Require(hash&&EVP_DigestInit_ex(hash.get(),EVP_sha256(),nullptr)==1,"SHA-256 unavailable");std::ifstream file(path,std::ios::binary);std::vector<unsigned char> buffer(1024*1024);while(size){auto count=std::min<std::uint64_t>(size,buffer.size());Bytes(file,buffer.data(),count);Require(EVP_DigestUpdate(hash.get(),buffer.data(),count)==1,"Hash failed");size-=count;}std::array<unsigned char,32> result{};unsigned count=0;Require(EVP_DigestFinal_ex(hash.get(),result.data(),&count)==1&&count==32,"Hash failed");return result;
 }
 inline std::array<unsigned char,32> HashFile(const std::filesystem::path& path){return HashPrefix(path,std::filesystem::file_size(path));}
-inline std::string PlayerHash(const std::filesystem::path& path){return DigestHex(HashPrefix(path,PlayerSealOffset(path)));}
+inline std::string PlayerHash(const std::filesystem::path& path){
+#ifdef __APPLE__
+return MacPlayerHash(path);
+#else
+return DigestHex(HashPrefix(path,PlayerSealOffset(path)));
+#endif
+}
 struct FileLease {
     int Value=-1;
     explicit FileLease(const std::filesystem::path& path,bool directory=false){Value=open(path.c_str(),O_RDONLY|O_CLOEXEC|O_NOFOLLOW|(directory?O_DIRECTORY:0));Require(Value>=0,"Cannot open verified content");struct stat info{};if(fstat(Value,&info)||bool(S_ISDIR(info.st_mode))!=directory||(!directory&&!S_ISREG(info.st_mode))||flock(Value,LOCK_SH|LOCK_NB)){close(Value);Value=-1;throw std::runtime_error("Linked or invalid verified content");}}
@@ -32,10 +38,16 @@ struct VerifiedGame {
     ~VerifiedGame(){if(!PackageKey.empty())SecureZeroMemory(PackageKey.data(),PackageKey.size());if(!Configuration.empty())SecureZeroMemory(Configuration.data(),Configuration.size());if(!ContentIndex.empty())SecureZeroMemory(ContentIndex.data(),ContentIndex.size());}
 };
 inline VerifiedGame VerifyInventory(const std::filesystem::path& executable){
+#ifdef __APPLE__
+    CheckMacSignature(executable);
+#endif
     VerifiedGame verified;LockTree(executable.parent_path(),verified.OutputLeases);
     verified.OutputLeases.push_back(std::make_unique<FileLease>(executable));
+#ifdef __APPLE__
+    verified.OutputLeases.push_back(std::make_unique<FileLease>(SealPath(executable)));
+#endif
     for(const auto& name:{"game.bootstrap","game.integrity","game.signature"})verified.OutputLeases.push_back(std::make_unique<FileLease>(executable.parent_path()/name));
-    const auto folder=executable.parent_path();std::ifstream player(executable,std::ios::binary);player.seekg(std::streamoff(PlayerSealOffset(executable)));
+    const auto folder=executable.parent_path();std::ifstream player(SealPath(executable),std::ios::binary);player.seekg(std::streamoff(PlayerSealOffset(executable)));
     std::array<char,8> magic{};Bytes(player,magic.data(),magic.size());Require(std::string(magic.data(),8)=="BZSIG003","Missing version-3 content signature seal; rebuild the game");
     std::array<unsigned char,64> publicBytes{};Bytes(player,publicBytes.data(),publicBytes.size());
     auto bootstrap=Read(folder/"game.bootstrap",65536);auto payload=Read(folder/"game.integrity",64*1024*1024);auto signature=Read(folder/"game.signature",64);Require(signature.size()==64,"Invalid content signature size");
@@ -62,7 +74,11 @@ inline VerifiedGame VerifyInventory(const std::filesystem::path& executable){
     for(const auto& entry:std::filesystem::recursive_directory_iterator(folder)){
         Require(!entry.is_symlink(),"Linked game content is forbidden");
         if(!entry.is_regular_file())continue;const auto relative=entry.path().lexically_relative(folder);
-        Require(entry.path()==executable||relative=="game.bootstrap"||relative=="game.integrity"||relative=="game.signature"||relative==".bazzalt-game-build"||listed.count(relative)!=0,"Unexpected file in signed game output");
+        Require(entry.path()==executable||relative=="game.bootstrap"||relative=="game.integrity"||relative=="game.signature"||
+#ifdef __APPLE__
+relative=="game.seal"||
+#endif
+relative==".bazzalt-game-build"||listed.count(relative)!=0,"Unexpected file in signed game output");
     }
     verified.Configuration=ManifestText(Read(folder/"game.json"),rootKey,salt,id,"configuration",encrypted);
     verified.ContentIndex=std::move(payload);if(!rootKey.empty())verified.PackageKey=Derive(rootKey,salt,"packages");return verified;

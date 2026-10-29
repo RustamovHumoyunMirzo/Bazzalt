@@ -4,6 +4,7 @@
 [![Windows 64-bit](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/windows-64-bit.yml/badge.svg?event=push)](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/windows-64-bit.yml)
 [![Linux 64-bit](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/linux-64-bit.yml/badge.svg?event=push)](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/linux-64-bit.yml)
 [![Linux 32-bit Game Runtime](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/linux-32-bit.yml/badge.svg?event=push)](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/linux-32-bit.yml)
+[![macOS 64-bit](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/macos-64-bit.yml/badge.svg?event=push)](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/macos-64-bit.yml)
 
 BAZZALT is an editor-first C++20 game engine in active alpha development. It
 combines a native runtime with a PySide6 editor and Hub while keeping low-level
@@ -14,6 +15,9 @@ See [what is new in 0.8.0](docs/public/0.8.0/whats-new/en.html).
 > **Alpha status:** core workflows are functional, but APIs and file formats may
 > still change. BAZZALT is not yet recommended for production projects.
 
+macOS installation, native menus, signing and player Keychain provisioning are
+covered in the [macOS guide](docs/public/0.8.0/manual/macos/en.html).
+
 ## Supported platforms & backends
 
 ### Platforms
@@ -22,7 +26,7 @@ See [what is new in 0.8.0](docs/public/0.8.0/whats-new/en.html).
 | --- | --- | --- |
 | Windows | ✅ Supported: x64 | ✅ Supported: x64, x86 |
 | Linux | ✅ Supported: x64, X11/XWayland | ✅ Supported: x64, x86, X11/XWayland |
-| macOS | Not supported | Not supported |
+| macOS 12+ | Alpha: Intel x64 and Apple silicon | Alpha: x64 and arm64, Metal |
 | iOS / iPadOS | Not supported | Not supported |
 | Android | Not supported | Not supported |
 | Web / WebAssembly | Not supported | Not supported |
@@ -33,21 +37,22 @@ See [what is new in 0.8.0](docs/public/0.8.0/whats-new/en.html).
 
 Hub, Editor and game compiler require a 64-bit machine. x86 is a game-output
 option only. Build on the target OS with its matching prebuilt runtime SDK;
-cross-OS game compilation and ARM targets are not supported. Linux uses X11 or
+cross-OS builds are not supported. macOS uses a matching native x64 or arm64 SDK;
+Windows/Linux ARM and 32-bit macOS are not supported. Linux uses X11 or
 XWayland, not native Wayland surfaces. These are alpha support targets, not a
 promise of production readiness.
 
 ### Rendering backends
 
-| Backend | Windows | Linux | Notes |
-| --- | --- | --- | --- |
-| Vulkan | ✅ Supported | ✅ Supported | Requires a matching SDK backend and compatible GPU driver. |
-| OpenGL | ✅ Supported | ✅ Supported | Requires a matching SDK backend and compatible GPU driver. |
-| Direct3D 11 / 12 | Not supported | Not supported | No BAZZALT rendering backend. |
-| Metal | Not supported | Not supported | No supported Apple platform distribution. |
-| OpenGL ES | Not a supported target | Not a supported target | No supported mobile distribution. |
-| WebGPU / WebGL | Not a supported release backend | Not a supported release backend | No supported browser target. |
-| NOOP | Tests only | Tests only | No pixels; internal headless validation, not game presentation. |
+| Backend | Windows | Linux | macOS | Notes |
+| --- | --- | --- | --- | --- |
+| Automatic | Supported | Supported | Metal | Selects an available SDK backend. |
+| Vulkan | Supported | Supported | Unsupported | Compatible GPU/driver required. |
+| OpenGL | Supported | Supported | Unsupported | Compatible GPU/driver required. |
+| Metal | Unsupported | Unsupported | Supported | Native Cocoa / Metal presentation. |
+| Direct3D 11 / 12 | Unsupported | Unsupported | Unsupported | No backend. |
+| OpenGL ES / WebGPU / WebGL | Unsupported | Unsupported | Unsupported | No mobile/browser distribution. |
+| NOOP | Tests only | Tests only | Tests only | No presentation. |
 
 Backend choices depend on the backends included in the installed runtime SDK;
 Preferences lists those available in that build. A renderer dependency's support

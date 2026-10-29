@@ -13,6 +13,10 @@ MACHINES = {0x014c: "x86", 0x8664: "x64", 0xaa64: "arm64"}
 def Architecture(path: Path) -> str:
     with path.open("rb") as stream:
         header=stream.read(20)
+        if header[:4] in (b"\xcf\xfa\xed\xfe",b"\xca\xfe\xba\xbe",b"\xbe\xba\xfe\xca",b"\xca\xfe\xba\xbf",b"\xbf\xba\xfe\xca"):
+            from Compiler.macos import Architectures
+            values=Architectures(path)
+            return next(iter(values)) if len(values)==1 else "universal"
         if header[:4]==b"\x7fELF":
             if len(header)<20 or header[5]!=1 or header[4] not in (1,2):raise ValueError("Unsupported ELF format")
             machine=int.from_bytes(header[18:20],"little")
@@ -34,9 +38,26 @@ def PayloadArchitecture(relative: Path, architecture: str, platform: str) -> str
     if len(parts)>2 and parts[0]=='RuntimeTemplates':
         if parts[1]==platform+'-x86':return 'x86'
         if parts[1]==platform+'-x64':return 'x64'
+        if parts[1]==platform+'-arm64':return 'arm64'
     return architecture
 
 def Audit(root: Path, architecture: str, product: str, platform: str="windows") -> None:
+    if platform=="macos":
+        from Compiler.macos import Architectures
+        required={"editor":["Bazzalt.app/Contents/MacOS/Bazzalt","editor.json","Bazzalt.app/Contents/MacOS/Editor/libBazzalt.dylib","Bazzalt.app/Contents/MacOS/ScriptSDK/include/Bazzalt/Scene.h"],"hub":["BazzaltHub.app/Contents/MacOS/BazzaltHub"],"core":["include/Bazzalt/Scene.h","lib/libBazzalt.dylib","lib/libbazzalt_physics.dylib","lib/libbazzalt_gui.dylib","lib/libbazzalt_lua.dylib"],"compiler":["BazzaltCompiler","BazzaltCooker"]}.get(product,[])
+        for name in required:
+            if not (root/name).is_file():raise ValueError("Missing macOS file: "+name)
+        found=0
+        for path in root.rglob('*'):
+            if not path.is_file():continue
+            with path.open('rb') as stream:magic=stream.read(4)
+            if magic[:2]==b'MZ' or magic==b'\x7fELF':raise ValueError('Foreign binary in macOS package: '+str(path))
+            if magic in tuple(bytes.fromhex(v) for v in ('cffaedfe','cafebabe','bebafeca','cafebabf','bfbafeca')):
+                found+=1
+                if PayloadArchitecture(path.relative_to(root),architecture,platform) not in Architectures(path):raise ValueError('Wrong Mach-O architecture: '+str(path))
+            if product=='hub' and (path.name.startswith('_bazzalt_runtime') or path.name in {'libBazzalt.dylib','libbazzalt_gui.dylib','libbazzalt_physics.dylib'}):raise ValueError('Hub contains engine files')
+        if not found or architecture not in ('x64','arm64'):raise ValueError('Unsupported macOS payload')
+        return
     if platform=="linux":
         required={"editor":["Bazzalt","editor.json","Editor/libBazzalt.so","Editor/libbazzalt_gui.so","Editor/libbazzalt_physics.so","Editor/libbazzalt_lua.so","ScriptSDK/include/Bazzalt/Scene.h","ScriptSDK/lib/libBazzalt.so"],"core":["include/Bazzalt/Scene.h","lib/libBazzalt.so","lib/libbazzalt_lua.so","lib/libbazzalt_gui.so","lib/libbazzalt_physics.so"],"hub":["BazzaltHub"],"compiler":["BazzaltCompiler","BazzaltCooker"]}.get(product,[])
         for name in required:
@@ -74,11 +95,16 @@ def Audit(root: Path, architecture: str, product: str, platform: str="windows") 
             if not (root / required).is_file():raise ValueError(f"Missing core file: {required}")
 
 
-def Archive(root: Path, output: Path) -> None:
+def Archive(root: Path, output: Path, *, bundle_links=False) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
         for path in sorted(root.rglob("*")):
-            if path.is_file(): archive.write(path, path.relative_to(root).as_posix())
+            if path.is_symlink() and bundle_links:
+                import os,stat
+                link=os.readlink(path)
+                if not (path.parent/link).resolve().is_relative_to(root.resolve()):raise ValueError('External bundle link')
+                info=zipfile.ZipInfo(path.relative_to(root).as_posix());info.create_system=3;info.external_attr=(stat.S_IFLNK|0o777)<<16;archive.writestr(info,link.encode('utf-8'))
+            elif path.is_file(): archive.write(path, path.relative_to(root).as_posix())
 
 
 def Entry(path: Path, product: str, version: str, architecture: str, base_url: str, platform: str="windows") -> dict:
@@ -92,10 +118,10 @@ def Entry(path: Path, product: str, version: str, architecture: str, base_url: s
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--platform",choices=("windows","linux"),default="windows")
+    parser.add_argument("--platform",choices=("windows","linux","macos"),default="windows")
     parser.add_argument("--root", type=Path)
     parser.add_argument("--product", choices=("editor", "core", "hub", "compiler", "llvm"), required=True)
-    parser.add_argument("--architecture", choices=("x64", "x86"), required=True)
+    parser.add_argument("--architecture", choices=("x64", "x86","arm64"), required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--base-url", default="")

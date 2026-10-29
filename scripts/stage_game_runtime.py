@@ -5,11 +5,13 @@ try:from .release_artifacts import Architecture
 except ImportError:from release_artifacts import Architecture
 
 def Stage(build,output,architecture,root=None,platform=None):
-    platform=platform or ("windows" if os.name=="nt" else "linux");linux=platform=="linux"
+    from bazzalt.platforms import HostPlatform
+    platform=platform or HostPlatform();linux=platform!="windows"
     build=Path(build).resolve();output=Path(output).resolve();root=Path(root or Path(__file__).resolve().parents[1]);native=build/('Editor' if linux else 'Editor/Release')
     output.mkdir(parents=True,exist_ok=True)
     names=['BazzaltPlayer.exe','Bazzalt.dll','bazzalt_lua.dll','bazzalt_gui.dll','bazzalt_physics.dll'] if not linux else ['BazzaltPlayer','libbazzalt_player.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so','libbazzalt_physics.so']
-    if linux:
+    if platform=="macos":names=["BazzaltPlayer","libbazzalt_player.dylib","libBazzalt.dylib","libbazzalt_lua.dylib","libbazzalt_gui.dylib","libbazzalt_physics.dylib"]+sorted(p.name for p in native.glob("libbazzalt_lua.*.dylib"))
+    if platform=="linux":
         names+=sorted(p.name for p in native.glob('libbazzalt_lua.so.*'))
     for name in names:
         if Architecture(native/name)!=architecture:raise ValueError('Wrong runtime architecture: '+name)
@@ -53,4 +55,4 @@ def Stage(build,output,architecture,root=None,platform=None):
     (output/'runtime.json').write_text(json.dumps(dict(format_version=1,game_format_version=3,core_version=versions['core'],platform=platform,architecture=architecture,files=names),indent=2),encoding='utf-8')
     return output
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--platform',choices=('windows','linux'));parser.add_argument('--build',type=Path,default=Path('build'));parser.add_argument('--output',type=Path,required=True);parser.add_argument('--architecture',choices=('x64','x86'),required=True);args=parser.parse_args();Stage(args.build,args.output,args.architecture,platform=args.platform)
+    parser=argparse.ArgumentParser();parser.add_argument('--platform',choices=('windows','linux','macos'));parser.add_argument('--build',type=Path,default=Path('build'));parser.add_argument('--output',type=Path,required=True);parser.add_argument('--architecture',choices=('x64','x86','arm64'),required=True);args=parser.parse_args();Stage(args.build,args.output,args.architecture,platform=args.platform)

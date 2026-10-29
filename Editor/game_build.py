@@ -5,7 +5,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject,QProcess,QProcessEnvironment
 from .gui.build_settings import BuildSettingsDialog
 from .gui.build_progress import BuildProgressDialog,BuildCompleteDialog
-from Compiler.settings import Load
+from Compiler.settings import Load,Effective
 from .gui.panels.console import ConsoleLevel
 
 class GameBuildController(QObject):
@@ -24,7 +24,7 @@ class GameBuildController(QObject):
         if self.Editor.Controller.IsDirty:
             self._Message(tr('build.save_first'),True);return
         try:
-            project=Path(self.Editor.Runtime.ProjectInfo()['project_path']);settings=Load(project);
+            project=Path(self.Editor.Runtime.ProjectInfo()['project_path']);settings=Effective(Load(project));
             from bazzalt.platforms import TargetError
             error=TargetError({**settings['target'],'key_storage':settings['security']['key_storage']})
             if error:raise ValueError(tr('build.unsupported_target',error=error))

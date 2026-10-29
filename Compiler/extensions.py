@@ -1,19 +1,20 @@
 """Extension compilation/deployment using a supplied SDK, never an engine build."""
 from __future__ import annotations
+from bazzalt.platforms import HostPlatform,HostArchitecture
 import ctypes,hashlib,json,os,shutil,subprocess,sys,tempfile
 from pathlib import Path
 import yaml
 from bazzalt.extensions import (ExtensionError,ExtensionStore,ReadManifest,Validate,AssetPaths,Local,AtomicJson,BuildPackage,CheckCompatibility,NATIVE_DIRS)
 
 def StoreRoot():
-    base=Path(os.environ.get('LOCALAPPDATA',Path.home()/'AppData/Local')) if os.name=='nt' else Path(os.environ.get('XDG_DATA_HOME',Path.home()/'.local/share'))
+    base=Path(os.environ.get('LOCALAPPDATA',Path.home()/'AppData/Local')) if os.name=='nt' else Path.home()/'Library/Application Support' if sys.platform=='darwin' else Path(os.environ.get('XDG_DATA_HOME',Path.home()/'.local/share'))
     return base/'BAZZALT/data/Extensions'
 
 def EngineVersion():return json.loads((Path(__file__).resolve().parents[1]/'releases/versions.json').read_text(encoding='utf-8-sig'))['core']
 
 def LuaLibrary(runtime):
     runtime=Path(runtime)
-    names=('bazzalt_lua.dll',) if os.name=='nt' else ('libbazzalt_lua.so','libbazzalt_lua.so.5.4')
+    names=('bazzalt_lua.dll',) if os.name=='nt' else ('libbazzalt_lua.dylib','libbazzalt_lua.5.4.dylib') if sys.platform=='darwin' else ('libbazzalt_lua.so','libbazzalt_lua.so.5.4')
     # Bytecode is target word-size independent, but the compiler library must
     # execute on this host. Prefer the host editor's matching shared Lua.
     roots=(Path(sys.executable).parent,Path(__file__).resolve().parents[1]/'build/Editor/Release',Path(__file__).resolve().parents[1]/'build/Editor',runtime)
@@ -60,6 +61,7 @@ def CompileNative(source,output,runtime,architecture,compiler_path='',include_di
     output=Path(output);output.parent.mkdir(parents=True,exist_ok=True)
     command=[str(compiler),'-std=c++20','-shared','-fvisibility=hidden','-I'+str(sdk/'include'),*('-I'+str(p) for p in include_dirs),str(source),str(library),*('-L'+str(p) for p in library_dirs),*map(str,libraries),'-o',str(output)]
     if os.name=='nt':command+=['--target='+('i686' if architecture=='x86' else 'x86_64')+'-pc-windows-msvc','-fms-runtime-lib=dll','-D_ITERATOR_DEBUG_LEVEL=0']
+    elif sys.platform=='darwin':command+=['-fPIC','-arch','arm64' if architecture=='arm64' else 'x86_64','-mmacosx-version-min=12.0','-Wl,-rpath,@loader_path']
     else:
         command+=['-fPIC','-stdlib='+('libstdc++' if architecture=='x86' else 'libc++'),'-Wl,--no-undefined','-Wl,-rpath,$ORIGIN']
         if architecture=='x86':command+=['-m32','-msse2','-mfpmath=sse']
@@ -68,8 +70,8 @@ def CompileNative(source,output,runtime,architecture,compiler_path='',include_di
     return output
 
 def BuildExtensionPackage(source,destination,runtime,platform,architecture,compiler_path='',*,progress=lambda text:None,cancel=lambda:False):
-    source=Path(source).resolve();manifest=ReadManifest(source);CheckCompatibility(manifest,EngineVersion(),platform.title(),'x86_64' if architecture=='x64' else 'x86')
-    if platform!=('windows' if os.name=='nt' else 'linux') and any(Path(AssetPaths(manifest)[s['Id']]).suffix=='.cpp' for s in manifest['Scripts'].values()):raise ExtensionError('Build native extension artifacts on their target operating system using a matching SDK')
+    source=Path(source).resolve();manifest=ReadManifest(source);CheckCompatibility(manifest,EngineVersion(),('macOS' if platform=='macos' else platform.title()),'x86_64' if architecture=='x64' else architecture)
+    if platform!=(HostPlatform()) and any(Path(AssetPaths(manifest)[s['Id']]).suffix=='.cpp' for s in manifest['Scripts'].values()):raise ExtensionError('Build native extension artifacts on their target operating system using a matching SDK')
     with tempfile.TemporaryDirectory(prefix='bazzalt-extension-') as temporary:
         root=Path(temporary)
         # Copy only explicitly registered content and native SDK folders.
@@ -95,18 +97,18 @@ def BuildExtensionPackage(source,destination,runtime,platform,architecture,compi
             # component compiler; public native modules use ExtensionRegistry.
             component=any(v['Script']==name for v in manifest.get('Extends',{}).get('Component',{}).values())
             key='portable' if path.suffix=='.lua' else platform+'-'+architecture
-            output=Path('compiled')/key/(name+('.blua' if path.suffix=='.lua' else '.dll' if platform=='windows' else '.so'))
+            output=Path('compiled')/key/(name+('.blua' if path.suffix=='.lua' else '.dll' if platform=='windows' else '.dylib' if platform=='macos' else '.so'))
             if path.suffix=='.lua':CompileLua(path,root/output,runtime)
             else:
-                native=manifest['Native'];includes=[root/p for p in native.get('IncludeDirs',[])];libdirs=[root/p for p in native.get('LibDirsWin' if platform=='windows' else 'LibDirsLinux',[])]
-                if script.get('Scope')=='Editor':libdirs.extend(root/p for p in native.get('EditorLibDirsWin' if platform=='windows' else 'EditorLibDirsLinux',[]))
+                native=manifest['Native'];includes=[root/p for p in native.get('IncludeDirs',[])];libdirs=[root/p for p in native.get('LibDirsWin' if platform=='windows' else 'LibDirsMac' if platform=='macos' else 'LibDirsLinux',[])]
+                if script.get('Scope')=='Editor':libdirs.extend(root/p for p in native.get('EditorLibDirsWin' if platform=='windows' else 'EditorLibDirsMac' if platform=='macos' else 'EditorLibDirsLinux',[]))
                 compile_source=path
                 if component:
                     from Editor.scripting import ScriptCompiler
                     descriptor=ScriptCompiler.Inspect(path)
                     if not descriptor or descriptor.is_subsystem:raise ExtensionError('Extension components must declare COMPONENT behaviors')
                     compile_source=root/('wrapper_'+name+'.cpp');compile_source.write_text(ScriptCompiler._Wrapper(descriptor),encoding='utf-8')
-                CompileNative(compile_source,root/output,runtime,architecture,compiler_path,includes,libdirs,list(dict.fromkeys(p for d in libdirs for pattern in (('*.lib',) if platform=='windows' else ('*.so','*.so.*','*.a')) for p in d.glob(pattern))))
+                CompileNative(compile_source,root/output,runtime,architecture,compiler_path,includes,libdirs,list(dict.fromkeys(p for d in libdirs for pattern in (('*.lib',) if platform=='windows' else ('*.so','*.so.*','*.dylib','*.a')) for p in d.glob(pattern))))
             script.setdefault('Compiled',{})[key]={'Path':output.as_posix(),'EngineVersion':EngineVersion()}
             manifest['AssetRegistry'].append({'Id':'Compiled_'+name,'Path':output.as_posix()})
         manifest_path=root/'extension.yaml';manifest_path.write_text(yaml.safe_dump(manifest,sort_keys=False,allow_unicode=True),encoding='utf-8')
@@ -115,7 +117,7 @@ def BuildExtensionPackage(source,destination,runtime,platform,architecture,compi
 def RuntimeAssets(manifest):
     excluded={s['Id'] for s in manifest['Scripts'].values()}
     excluded.update(a['Id'] for a in manifest['AssetRegistry'] if a['Id'].startswith('Compiled_'))
-    return [a for a in manifest['AssetRegistry'] if a['Id'] not in excluded and a.get('Scope','Runtime')=='Runtime' and Path(a['Path']).suffix.lower() not in {'.cpp','.hpp','.h','.lua','.blua','.ui','.dll','.so','.lib','.a'}]
+    return [a for a in manifest['AssetRegistry'] if a['Id'] not in excluded and a.get('Scope','Runtime')=='Runtime' and Path(a['Path']).suffix.lower() not in {'.cpp','.hpp','.h','.lua','.blua','.ui','.dll','.so','.dylib','.lib','.a'}]
 
 def AssetUUID(identity,asset):
     import uuid
@@ -164,7 +166,7 @@ def MaterializeAssets(project,items):
 def RuntimeIndex(items,destination,platform,architecture,*,editor=False,runtime=None,compiler_path=""):
     destination=Path(destination);destination.mkdir(parents=True,exist_ok=True);modules=[];names=set();native_files=[];native_dirs=set();native_names={}
     for item in items:
-        manifest=item['Manifest'];identity=item['Id'];assets=AssetPaths(manifest);CheckCompatibility(manifest,EngineVersion(),platform.title(),'x86_64' if architecture=='x64' else 'x86')
+        manifest=item['Manifest'];identity=item['Id'];assets=AssetPaths(manifest);CheckCompatibility(manifest,EngineVersion(),('macOS' if platform=='macos' else platform.title()),'x86_64' if architecture=='x64' else architecture)
         for key,script in manifest['Scripts'].items():
             if not editor and script.get('Scope')=='Editor':continue
             if any(v['Script']==key for v in manifest['Extends'].get('Component',{}).values()):continue
@@ -173,10 +175,10 @@ def RuntimeIndex(items,destination,platform,architecture,*,editor=False,runtime=
             name=script['ModuleName'] if script.get('Public') and script.get('SelfContained',True) else identity+'.'+script['ModuleName']
             if name in names:raise ExtensionError('Extension module collision: '+name)
             names.add(name)
-            relative=Path(identity)/(Path('compiled')/target/(key+('.blua' if language=='lua' else '.dll' if platform=='windows' else '.so')));out=destination/relative;out.parent.mkdir(parents=True,exist_ok=True)
+            relative=Path(identity)/(Path('compiled')/target/(key+('.blua' if language=='lua' else '.dll' if platform=='windows' else '.dylib' if platform=='macos' else '.so')));out=destination/relative;out.parent.mkdir(parents=True,exist_ok=True)
             if language=='cpp' and runtime is not None and (not compiled or compiled.get('EngineVersion')!=EngineVersion()):
-                native=manifest['Native'];includes=[item['Root']/p for p in native.get('IncludeDirs',[])];libdirs=[item['Root']/p for p in native.get('LibDirsWin' if platform=='windows' else 'LibDirsLinux',[])]
-                CompileNative(Local(item['Root'],path),out,runtime,architecture,compiler_path,includes,libdirs,list(dict.fromkeys(p for d in libdirs for pattern in (('*.lib',) if platform=='windows' else ('*.so','*.so.*','*.a')) for p in d.glob(pattern))))
+                native=manifest['Native'];includes=[item['Root']/p for p in native.get('IncludeDirs',[])];libdirs=[item['Root']/p for p in native.get('LibDirsWin' if platform=='windows' else 'LibDirsMac' if platform=='macos' else 'LibDirsLinux',[])]
+                CompileNative(Local(item['Root'],path),out,runtime,architecture,compiler_path,includes,libdirs,list(dict.fromkeys(p for d in libdirs for pattern in (('*.lib',) if platform=='windows' else ('*.so','*.so.*','*.dylib','*.a')) for p in d.glob(pattern))))
             else:
                 if not compiled:raise ExtensionError('Extension '+identity+' has no compiled '+target+' module: '+key)
                 if language=='cpp' and compiled.get('EngineVersion')!=EngineVersion():raise ExtensionError('Native extension SDK version mismatch: '+identity)
@@ -185,8 +187,8 @@ def RuntimeIndex(items,destination,platform,architecture,*,editor=False,runtime=
             modules.append({'Name':name,'Path':relative.as_posix(),'Language':language,'Owner':identity,'Public':bool(script.get('Public'))})
         native=manifest['Native']
         if native.get('Enabled') and (editor or native.get('Scope','Runtime')=='Runtime'):
-            bins=list(native.get('BinDirsWin' if platform=='windows' else 'BinDirsLinux',[]))
-            if editor:bins.extend(native.get('EditorBinDirsWin' if platform=='windows' else 'EditorBinDirsLinux',[]))
+            bins=list(native.get('BinDirsWin' if platform=='windows' else 'BinDirsMac' if platform=='macos' else 'BinDirsLinux',[]))
+            if editor:bins.extend(native.get('EditorBinDirsWin' if platform=='windows' else 'EditorBinDirsMac' if platform=='macos' else 'EditorBinDirsLinux',[]))
             for directory in bins:
                 for source in Local(item['Root'],directory,directory=True).rglob('*'):
                     if source.is_file():
@@ -195,7 +197,7 @@ def RuntimeIndex(items,destination,platform,architecture,*,editor=False,runtime=
                         if not editor and (source.name.lower().startswith(('python','libpython','pyside','libpyside','qt6','libqt6','bazzalthub','_bazzalt')) or source.suffix.lower() in {'.py','.pyc','.ui','.pyd'}):raise ExtensionError('Editor/Python native dependencies cannot enter game SDK output: '+source.name)
                         if target.exists() and target.read_bytes()!=source.read_bytes():raise ExtensionError('Duplicate native binary: '+source.name)
                         if not target.exists():shutil.copy2(source,target)
-                        if source.suffix.lower()=='.dll' or source.name.endswith('.so') or '.so.' in source.name:
+                        if source.suffix.lower() in ('.dll','.dylib') or source.name.endswith('.so') or '.so.' in source.name:
                             digest=hashlib.sha256(source.read_bytes()).hexdigest();name=source.name.casefold()
                             if name in native_names and native_names[name]!=digest:raise ExtensionError('Conflicting native library basenames: '+source.name)
                             native_names[name]=digest;native_files.append(target.relative_to(destination).as_posix());native_dirs.add(target.parent.relative_to(destination).as_posix())
@@ -219,7 +221,7 @@ def LockedItems(project,platform,architecture):
     value=json.loads(lock.read_text(encoding='utf-8'))
     if value.get('FormatVersion')!=1:raise ExtensionError('Unsupported extension lock format')
     import re
-    store=ExtensionStore(StoreRoot(),EngineVersion(),platform.title(),'x86_64' if architecture=='x64' else 'x86');items=[]
+    store=ExtensionStore(StoreRoot(),EngineVersion(),('macOS' if platform=='macos' else platform.title()),'x86_64' if architecture=='x64' else architecture);items=[]
     for pin in value['Extensions']:
         if not re.fullmatch('[0-9a-f]{64}',pin['Digest']):raise ExtensionError('Invalid extension package digest')
         root=store.Root/'packages'/pin['Digest']
@@ -238,7 +240,7 @@ def StageGame(project,cooked,platform,architecture,runtime=None,compiler_path=""
 def main():
     import argparse
     parser=argparse.ArgumentParser(description='Build a self-contained .bpack using a supplied prebuilt SDK')
-    parser.add_argument('--manifest',required=True);parser.add_argument('--output',required=True);parser.add_argument('--runtime',required=True);parser.add_argument('--platform',choices=('windows','linux'),required=True);parser.add_argument('--architecture',choices=('x64','x86'),default='x64');parser.add_argument('--compiler',default='')
+    parser.add_argument('--manifest',required=True);parser.add_argument('--output',required=True);parser.add_argument('--runtime',required=True);parser.add_argument('--platform',choices=('windows','linux','macos'),required=True);parser.add_argument('--architecture',choices=('x64','x86','arm64'),default='x64');parser.add_argument('--compiler',default='')
     args=parser.parse_args()
     try:print(BuildExtensionPackage(args.manifest,args.output,args.runtime,args.platform,args.architecture,args.compiler));return 0
     except (OSError,ValueError) as error:print(str(error),file=sys.stderr);return 1

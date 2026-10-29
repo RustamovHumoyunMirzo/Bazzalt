@@ -1,3 +1,6 @@
+#ifdef __APPLE__
+#include "Rendering/MacSurface.h"
+#endif
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -67,6 +70,9 @@
 namespace Bazzalt::Runtime {
 
 struct RenderBackend::ViewportResource {
+#ifdef __APPLE__
+    void* MacSurface=nullptr;
+#endif
     ViewportKind Kind = ViewportKind::Game;
     filament::SwapChain* SwapChain = nullptr;
     filament::View* View = nullptr;
@@ -337,7 +343,14 @@ bool RenderBackend::CreateViewport(std::uint64_t id, std::uintptr_t nativeWindow
     viewport->Width = std::max(1u, width);
     viewport->Height = std::max(1u, height);
     viewport->PixelRatio = std::max(1.0f,pixelRatio);
+#ifdef __APPLE__
+    viewport->MacSurface=CreateMacSurface(nativeWindow,width,height,pixelRatio);
+    if(!viewport->MacSurface)return false;
+    viewport->SwapChain=m_engine->createSwapChain(MacSurfaceLayer(viewport->MacSurface));
+    if(!viewport->SwapChain){DestroyMacSurface(viewport->MacSurface);return false;}
+#else
     viewport->SwapChain = m_engine->createSwapChain(reinterpret_cast<void*>(nativeWindow));
+#endif
     if (!viewport->SwapChain) return false;
     viewport->CameraEntity = m_engine->getEntityManager().create();
     viewport->Camera = m_engine->createCamera(viewport->CameraEntity);
@@ -382,6 +395,9 @@ void RenderBackend::ResizeViewport(std::uint64_t id, std::uint32_t width,
     viewport.Width = std::max(1u, width);
     viewport.Height = std::max(1u, height);
     viewport.PixelRatio = std::max(1.0f,pixelRatio);
+#ifdef __APPLE__
+    ResizeMacSurface(viewport.MacSurface,viewport.Width,viewport.Height,viewport.PixelRatio);
+#endif
     if(viewport.MaskView){
         const filament::Viewport bounds{0,0,viewport.Width,viewport.Height};
         viewport.MaskView->setViewport(bounds);viewport.OutlineView->setViewport(bounds);viewport.GizmoView->setViewport(bounds);
@@ -442,6 +458,9 @@ void RenderBackend::DestroyViewport(std::uint64_t id) {
         // Complete the driver-side swapchain destruction while its HWND is alive.
         m_engine->flushAndWait();
     }
+#ifdef __APPLE__
+    DestroyMacSurface(viewport.MacSurface);
+#endif
     m_viewports.erase(found);
 }
 

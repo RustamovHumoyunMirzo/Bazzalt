@@ -48,15 +48,40 @@ inline std::vector<unsigned char> DecryptGcm(const std::vector<unsigned char>& k
     if(EVP_DecryptFinal_ex(context.get(),plain.data()+total,&count)!=1){SecureZeroMemory(plain.data(),plain.size());throw std::runtime_error("Game authentication failed");}plain.resize(total+count);Require(plain.size()==size,"Invalid GCM length");return plain;
 }
 inline std::vector<unsigned char> DecryptEnvelope(const std::vector<unsigned char>& key,const std::vector<unsigned char>& data,const std::vector<unsigned char>& aad){Require(data.size()>=28,"Truncated encrypted envelope");return DecryptGcm(key,data.data()+12,data.size()-28,data.data(),data.data()+data.size()-16,aad);}
-inline std::uint64_t PlayerSealOffset(const std::filesystem::path& path){std::ifstream file(path,std::ios::binary);const auto size=std::filesystem::file_size(path);Require(size>=132,"Missing player seal");std::array<char,4> elf{};Bytes(file,elf.data(),4);Require(std::string(elf.data(),4)==std::string("\x7f" "ELF",4),"Invalid ELF player");file.seekg(std::streamoff(size-112));std::array<char,8> marker{};Bytes(file,marker.data(),8);Require(std::string(marker.data(),8)=="BZSIG003","Missing player seal");return size-112;}
+}
+#ifdef __APPLE__
+#include "MacPlatform.h"
+#endif
+namespace Bazzalt::Game {
+inline std::uint64_t PlayerSealOffset(const std::filesystem::path& path){
+#ifdef __APPLE__
+    Require(std::filesystem::file_size(path.parent_path()/"game.seal")==112,"Missing player seal");return 0;
+#else
+    std::ifstream file(path,std::ios::binary);const auto size=std::filesystem::file_size(path);Require(size>=132,"Missing player seal");std::array<char,4> elf{};Bytes(file,elf.data(),4);Require(std::string(elf.data(),4)==std::string("\x7f" "ELF",4),"Invalid ELF player");file.seekg(std::streamoff(size-112));std::array<char,8> marker{};Bytes(file,marker.data(),8);Require(std::string(marker.data(),8)=="BZSIG003","Missing player seal");return size-112;
+#endif
+}
+inline std::filesystem::path SealPath(const std::filesystem::path& executable){
+#ifdef __APPLE__
+return executable.parent_path()/"game.seal";
+#else
+return executable;
+#endif
+}
 inline std::vector<unsigned char> LoadRootKey(ryml::ConstNodeRef boot,const std::filesystem::path& executable){
     if(Text(boot["content_encrypted"])=="false"){Require(Text(boot["manifests_encrypted"])=="false"&&Text(boot["key_storage"])=="none","Invalid unencrypted bootstrap");return {};}
     Require(Text(boot["content_encrypted"])=="true","Invalid encryption flag");const auto method=Text(boot["key_storage"]);auto id=DecodeHex(Text(boot["build_id"]),16),salt=DecodeHex(Text(boot["salt"]),32);std::vector<unsigned char> master;WipeBytes wipe{master};
-    if(method=="embedded"){std::ifstream file(executable,std::ios::binary);file.seekg(std::streamoff(PlayerSealOffset(executable)+80));master.resize(32);Bytes(file,master.data(),32);}
+    if(method=="embedded"){std::ifstream file(SealPath(executable),std::ios::binary);file.seekg(std::streamoff(PlayerSealOffset(executable)+80));master.resize(32);Bytes(file,master.data(),32);}
     else if(method=="file"){auto data=Read(executable.parent_path()/"game.key",32);Require(data.size()==32,"Invalid key file");master.assign(data.begin(),data.end());SecureZeroMemory(data.data(),data.size());}
     else if(method=="environment"){auto name=Text(boot["key_environment"]);Require(!name.empty()&&name.size()<=101&&name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")==std::string::npos,"Invalid key environment name");auto* value=std::getenv(name.c_str());Require(value&&std::strlen(value)==64,"Game key is unavailable");master=DecodeHex(value,32);}
-    else throw std::runtime_error("Unsupported Linux key protection method");
-    auto wrapping=Derive(master,salt,"wrapping");WipeBytes wipeWrapping{wrapping};return DecryptEnvelope(wrapping,DecodeHex(Text(boot["wrapped_key"]),60),id);
+#ifdef __APPLE__
+    else if(method=="keychain")master=KeychainKey(Text(boot["key_service"]),Text(boot["build_id"]),Text(boot["key_environment"]));
+#endif
+    else throw std::runtime_error("Unsupported platform key protection method");
+    auto wrapping=Derive(master,salt,"wrapping");WipeBytes wipeWrapping{wrapping};auto root=DecryptEnvelope(wrapping,DecodeHex(Text(boot["wrapped_key"]),60),id);
+#ifdef __APPLE__
+    if(method=="keychain")StoreKeychainKey(Text(boot["key_service"]),Text(boot["build_id"]),master);
+#endif
+    return root;
 }
 inline std::string ManifestText(const std::string& stored,const std::vector<unsigned char>& root,const std::vector<unsigned char>& salt,const std::vector<unsigned char>& id,const std::string& purpose,bool encrypted){
     if(!encrypted){Require(stored.rfind("BZENC003",0)!=0,"Unexpected encrypted manifest");return stored;}Require(stored.rfind("BZENC003",0)==0,"Missing encrypted manifest");auto key=Derive(root,salt,purpose);WipeBytes wipe{key};auto aad=id;aad.insert(aad.end(),purpose.begin(),purpose.end());auto plain=DecryptEnvelope(key,{stored.begin()+8,stored.end()},aad);WipeBytes wipePlain{plain};return {plain.begin(),plain.end()};

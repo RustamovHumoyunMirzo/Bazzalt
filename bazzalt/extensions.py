@@ -13,7 +13,7 @@ NAME=re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 MAX_FILE=64*1024*1024
 MAX_PACKAGE=512*1024*1024
 MAX_FILES=8192
-NATIVE_DIRS=("IncludeDirs","LibDirsWin","LibDirsLinux","BinDirsWin","BinDirsLinux","EditorLibDirsWin","EditorLibDirsLinux","EditorBinDirsWin","EditorBinDirsLinux")
+NATIVE_DIRS=("IncludeDirs","LibDirsWin","LibDirsLinux","BinDirsWin","BinDirsLinux","EditorLibDirsWin","EditorLibDirsLinux","EditorBinDirsWin","EditorBinDirsLinux","LibDirsMac","BinDirsMac","EditorLibDirsMac","EditorBinDirsMac")
 
 def AtomicJson(path,value):
     path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
@@ -82,7 +82,7 @@ def _Validate(value,root):
         if not isinstance(general.get(key),str) or not general[key].strip():raise ExtensionError('General.'+key+' is required')
     Version(general['Version']);minimum=Version(compat.get('MinEngineVersion',''))
     if compat.get('MaxEngineVersion') and Version(compat['MaxEngineVersion'])<minimum:raise ExtensionError('Maximum engine version precedes minimum')
-    for key,allowed_values in (('Platforms',{'Windows','Linux'}),('Architecture',{'x86','x86_64'})):
+    for key,allowed_values in (('Platforms',{'Windows','Linux','macOS'}),('Architecture',{'x86','x86_64','arm64'})):
         if key in compat and (not isinstance(compat[key],list) or not compat[key] or set(compat[key])-allowed_values):raise ExtensionError('Invalid Compatibility.'+key)
     for key in ('HomePageUrl','RepoUrl','DocsUrl'):
         if key in general and (not isinstance(general[key],str) or not general[key].startswith('https://')):raise ExtensionError(key+' must use HTTPS')

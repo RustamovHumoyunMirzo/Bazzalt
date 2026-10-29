@@ -28,7 +28,7 @@ class ExtensionEditorTests(unittest.TestCase):
             try:
                 self.assertEqual(window.MenuBar.BuildPackageAction.text(),'Build Package...')
                 manager=ExtensionsDialog(window);self.assertIs(manager.parent(),window);self.assertEqual(manager.Tree.topLevelItemCount(),0);manager.close();manager.deleteLater()
-                builder=PackageBuildDialog(window);self.assertIs(builder.parent(),window);self.assertEqual(builder.Target.count(),4);builder.close();builder.deleteLater()
+                builder=PackageBuildDialog(window);self.assertIs(builder.parent(),window);self.assertEqual([builder.Target.itemText(i) for i in range(builder.Target.count())],['windows-x64','windows-x86','linux-x64','linux-x86','macos-x64','macos-arm64']);builder.close();builder.deleteLater()
             finally:window.Controller.SetDirty(False);window.close();window.deleteLater();self.App.sendPostedEvents(None,QEvent.Type.DeferredDelete)
     def test_actual_controller_drives_ui_and_scene_fields_serialize(self):
         from Editor.runtime import _LoadNativeModule

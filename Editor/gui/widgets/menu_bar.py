@@ -1,6 +1,7 @@
 """Shared custom menu bar for every BAZZALT editor window."""
 
 from __future__ import annotations
+import sys
 
 from PySide6.QtCore import QRect, Qt, Signal
 from PySide6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QPainter, QPaintEvent
@@ -101,7 +102,7 @@ class EditorMenuBar(QMenuBar):
     ) -> None:
         super().__init__(parent)
         self.setObjectName("EditorMenuBar")
-        self.setNativeMenuBar(False)
+        self.setNativeMenuBar(sys.platform=="darwin")
         self._theme_manager = theme_manager
         self._localization = localization
         self._extension_window_actions=[]
@@ -113,6 +114,7 @@ class EditorMenuBar(QMenuBar):
         self.BrandLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.BrandLabel.setFixedWidth(40)
         self.setCornerWidget(self.BrandLabel,Qt.Corner.TopLeftCorner)
+        self.BrandLabel.setVisible(sys.platform!="darwin")
         self._UpdateBrandIcon()
         theme_manager.ThemeChanged.connect(lambda _:self._UpdateBrandIcon())
 
@@ -135,6 +137,8 @@ class EditorMenuBar(QMenuBar):
         self._BuildObjectMenu()
         self._BuildWindowMenu()
         self._BuildHelpMenu()
+        self.PreferencesAction.setMenuRole(QAction.MenuRole.PreferencesRole)
+        self.ExitAction.setMenuRole(QAction.MenuRole.QuitRole)
         self._localization.LocaleChanged.connect(lambda _: self._Retranslate())
         self._Retranslate()
 

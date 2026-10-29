@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -37,7 +38,7 @@ class DataPaths:
         instance = QCoreApplication.instance()
         return Path(instance.applicationDirPath()) if instance is not None else Path.cwd()
     @classmethod
-    def Versions(cls) -> Path: return cls.Program() / "versions"
+    def Versions(cls) -> Path: return (cls.Editors() if sys.platform=="darwin" else cls.Program()) / "versions"
 
 
 class SettingsStore:

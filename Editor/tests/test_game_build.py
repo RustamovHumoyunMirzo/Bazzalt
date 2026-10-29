@@ -56,3 +56,17 @@ class GameBuildTests(unittest.TestCase):
         with patch('Editor.game_build.BuildCompleteDialog') as complete:
             controller._Finished(2,QProcess.ExitStatus.NormalExit);complete.assert_not_called();controller.Progress.Finish.assert_called_once()
         dialog=BuildProgressDialog(editor);requested=Mock();dialog.CancelRequested.connect(requested);dialog.Cancel.click();requested.assert_called_once();self.assertFalse(dialog.Cancel.isEnabled());self.assertTrue(dialog.Active);dialog.Finish();dialog.deleteLater()
+
+    def test_platform_containers_preserve_inactive_options(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project=Path(folder)/'Game.bproject';editor=QWidget();editor.Runtime=Mock();editor.Runtime.ProjectInfo.return_value={'project_path':str(project)};editor.Localization=LocalizationManager(ResourceManager())
+            dialog=BuildSettingsDialog(editor)
+            try:
+                self.assertEqual(set(dialog.PlatformGroups),{'windows','linux','macos'})
+                mac=dialog.PlatformControls[('macos','backend')];self.assertEqual([mac.itemData(i) for i in range(mac.count())],['automatic','metal'])
+                windows=dialog.PlatformControls[('windows','architecture')];windows.setCurrentIndex(windows.findData('x86'))
+                platform=dialog.Controls[('target','platform')];platform.setCurrentIndex(platform.findData('macos'))
+                self.assertTrue(dialog.PlatformGroups['macos'][0].isChecked());self.assertEqual(dialog.GetValues()['target']['architecture'],'arm64');self.assertEqual(dialog.GetValues()['platforms']['windows']['architecture'],'x86')
+                platform.setCurrentIndex(platform.findData('windows'));self.assertEqual(dialog.GetValues()['target']['architecture'],'x86')
+                self.assertNotIn(('window','width'),dialog.PlatformControls);self.assertIn(('window','width'),dialog.Controls)
+            finally:dialog.deleteLater();editor.deleteLater()

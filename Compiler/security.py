@@ -42,7 +42,8 @@ class SecurityContext:
         security=settings['security'];self.Encrypted=security['encryption']!='none'
         self.EncryptManifests=bool(security['encrypt_manifests'])
         self.Method=security['key_storage'] if self.Encrypted else 'none'
-        self.Environment=security['key_environment'] if self.Method=='environment' else ''
+        self.Environment=security['key_environment'] if self.Method in ('environment','keychain') else ''
+        self.KeyService=settings.get('platforms',{}).get('macos',{}).get('bundle_identifier','com.bazzalt.game')+'.game'
         self.BuildId=os.urandom(16);self.Salt=os.urandom(32)
         self.Master=master if self.Encrypted else None
         if self.Encrypted and (master is None or len(master)!=32):raise ValueError('Missing encryption master key')
@@ -61,4 +62,5 @@ class SecurityContext:
         return json.dumps(dict(format_version=3,build_id=self.BuildId.hex(),salt=self.Salt.hex(),player_hash=player_hash,seal_hash=seal_hash,
             content_encrypted=self.Encrypted,manifests_encrypted=self.EncryptManifests,
             key_storage=self.Method,key_environment=self.Environment,
+            **(dict(key_service=self.KeyService) if self.Method=='keychain' else {}),
             wrapped_key=wrapped.hex(),protected_key=protected.hex()),separators=(',',':')).encode('ascii')

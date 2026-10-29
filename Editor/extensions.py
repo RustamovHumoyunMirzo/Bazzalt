@@ -1,4 +1,5 @@
 """Extension editor adapter: declarative widgets and scoped commands, no Python plugins."""
+from bazzalt.platforms import HostPlatform,HostArchitecture
 from pathlib import Path
 import json,shutil,sys
 from xml.etree import ElementTree as ET
@@ -30,7 +31,7 @@ def ValidateUI(path):
 
 class ExtensionController:
     def __init__(self,editor):
-        self.Editor=editor;self.Store=ExtensionStore(DataPaths.Root()/'Extensions',EngineVersion(),'Windows' if sys.platform=='win32' else 'Linux');self.Items=[];self.Hosts={};self.Panels={};self.Failed=set();self.UndoOwner=None;self.UndoBefore=None;self.RuntimeRoot=DataPaths.Root()/'ExtensionRuntime'/EngineVersion()
+        self.Editor=editor;self.Store=ExtensionStore(DataPaths.Root()/'Extensions',EngineVersion(),'macOS' if HostPlatform()=='macos' else HostPlatform().title(),'x86_64' if HostArchitecture()=='x64' else HostArchitecture());self.Items=[];self.Hosts={};self.Panels={};self.Failed=set();self.UndoOwner=None;self.UndoBefore=None;self.RuntimeRoot=DataPaths.Root()/'ExtensionRuntime'/EngineVersion()
         editor.MenuBar.ExtensionsRequested.connect(self.Open);editor.MenuBar.BuildPackageRequested.connect(self.BuildPackage);editor.Runtime.ProjectChanged.connect(self.ProjectLoaded)
         # Run after the base workspace exists, without exposing engine-loop APIs.
         QTimer.singleShot(0,editor,self.Load)
@@ -53,7 +54,7 @@ class ExtensionController:
             from .runtime import _LoadNativeModule
             self.Native=_LoadNativeModule()
             if self.Native is None or not hasattr(self.Native,'ExtensionScript'):raise ExtensionError('Native extension host is not built')
-            RuntimeIndex(self.Items,self.RuntimeRoot/'ext','windows' if sys.platform=='win32' else 'linux','x64',editor=True)
+            RuntimeIndex(self.Items,self.RuntimeRoot/'ext',HostPlatform(),HostArchitecture(),editor=True)
             self.Native.configure_extensions(str(self.RuntimeRoot))
             from PySide6.QtUiTools import QUiLoader
             class Loader(QUiLoader):
@@ -158,9 +159,9 @@ class ExtensionController:
         if not self.Items:return
         try:
             project=Path(path).parent
-            if (project/'Extensions.lock.json').exists():items=LockedItems(project,'windows' if sys.platform=='win32' else 'linux','x64')
+            if (project/'Extensions.lock.json').exists():items=LockedItems(project,HostPlatform(),HostArchitecture())
             else:items=self.Items;LockProject(project,items)
-            RuntimeIndex(items,project/'.bazzalt/Extensions','windows' if sys.platform=='win32' else 'linux','x64')
+            RuntimeIndex(items,project/'.bazzalt/Extensions',HostPlatform(),HostArchitecture())
             from Compiler.extensions import MaterializeAssets
             MaterializeAssets(path,items)
             self.Editor.Runtime.RefreshAssets()

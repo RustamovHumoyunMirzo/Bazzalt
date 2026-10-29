@@ -14,7 +14,7 @@ import time
 import uuid
 import zipfile
 import threading
-from .settings import Load,Validate
+from .settings import Load,Validate,Effective
 from .pak import Pack
 
 class BuildCancelled(Exception):pass
@@ -33,14 +33,14 @@ def ValidateCooker(path,platform):
     path=Path(path).resolve()
     if not path.is_file():raise ValueError('The content cooker tool is missing')
     with path.open('rb') as binary:magic=binary.read(4)
-    expected=b'\x7fELF' if platform=='linux' else b'MZ'
+    expected=bytes.fromhex('cffaedfe') if platform=='macos' else b'\x7fELF' if platform=='linux' else b'MZ'
     if not magic.startswith(expected):raise ValueError('Content cooker platform mismatch')
     architecture=Architecture(path)
     # A multilib Linux host can execute the x86 cooker built with its runtime.
     # Cooking is content-only and independent of the target game's word size.
-    supported=('x64','x86') if platform=='linux' else ('x64',)
+    supported=(__import__('bazzalt.platforms',fromlist=['HostArchitecture']).HostArchitecture(),) if platform=='macos' else ('x64','x86') if platform=='linux' else ('x64',)
     if architecture not in supported:raise ValueError('Content cooker architecture is incompatible with this host')
-    if platform=='linux' and not os.access(path,os.X_OK):raise ValueError('The content cooker tool is not executable')
+    if platform!='windows' and not os.access(path,os.X_OK):raise ValueError('The content cooker tool is not executable')
     return path
 @contextmanager
 def BuildLock(project):
@@ -90,19 +90,23 @@ def ValidateRuntime(runtime,architecture,platform="windows"):
     if manifest.get('core_version')!=core_version:raise ValueError('Runtime template does not match this compiler/core version')
     if manifest.get('platform','windows')!=platform:raise ValueError('Runtime platform mismatch')
     required=['BazzaltPlayer.exe','Bazzalt.dll','bazzalt_lua.dll','bazzalt_gui.dll','bazzalt_physics.dll'] if platform=='windows' else ['BazzaltPlayer','libbazzalt_player.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so','libbazzalt_physics.so']
+    if platform=='macos':required=['BazzaltPlayer','libbazzalt_player.dylib','libBazzalt.dylib','libbazzalt_lua.dylib','libbazzalt_gui.dylib','libbazzalt_physics.dylib']
     files=manifest.get('files',required)
     if not set(required)<=set(files):raise ValueError('Incomplete runtime template')
     for name in files:
         if Path(name).name!=name or (platform=='windows' and Path(name).suffix.lower() not in {'.exe','.dll'}):raise ValueError('Unsafe runtime manifest')
         with (runtime/name).open('rb') as binary:magic=binary.read(4)
         if (platform=='linux' and magic!=b'\x7fELF') or (platform=='windows' and magic[:2]!=b'MZ'):raise ValueError('Runtime binary platform mismatch: '+name)
-        if Architecture(runtime/name)!=architecture:raise ValueError('Runtime binary architecture mismatch: '+name)
+        if platform=='macos':
+            from .macos import Architectures
+            if architecture not in Architectures(runtime/name):raise ValueError('Runtime Mach-O architecture mismatch: '+name)
+        elif Architecture(runtime/name)!=architecture:raise ValueError('Runtime binary architecture mismatch: '+name)
         if name.lower().startswith(('python','libpython','pyside','libpyside','qt6','libqt6','bazzalthub','_bazzalt')):raise ValueError('Editor/Python binaries are forbidden in game output')
     return runtime,files
 def KeyFor(settings):
     security=settings['security']
     if security['encryption']=='none':return None
-    if security['key_storage']=='environment':
+    if security['key_storage'] in ('environment','keychain'):
         key=bytes.fromhex(os.environ.get(security['key_environment'],''))
         if len(key)!=32:raise ValueError('Set the configured key environment variable to 64 hex characters before building')
         return key
@@ -164,7 +168,7 @@ def CompileScripts(project,runtime,architecture,cache,compiler_path=''):
     if any(not Path(path).resolve().is_relative_to(project.parent) for path in sources):raise ValueError('Script attachments must reference sources inside the project')
     result=compiler.Build([p for p in sources if Path(p).suffix.lower()!='.lua'])
     if not result.success:raise ValueError('\n'.join(d.message for d in result.diagnostics))
-    return [binding for binding in attachments.RuntimeBindings(result.outputs) if Path(binding['module']).suffix.lower() in {'.dll','.so'}]
+    return [binding for binding in attachments.RuntimeBindings(result.outputs) if Path(binding['module']).suffix.lower() in {'.dll','.so','.dylib'}]
 def CookShaders(cooked,cooker,check=lambda:None):
     import yaml
     from Editor.materials import MaterialCompiler
@@ -202,7 +206,7 @@ def Publish(staged,output,owner):
         raise
     if backup.exists():shutil.rmtree(backup)
 def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
-    project=Path(project).resolve();settings=Validate(Load(project));arch=settings['target']['architecture']
+    project=Path(project).resolve();settings=Effective(Validate(Load(project)));arch=settings['target']['architecture']
     if not project.is_file() or project.suffix!='.bproject':raise ValueError('Select a valid project file')
     from bazzalt.platforms import TargetError
     platform=settings['target']['platform'];error=TargetError({**settings['target'],'key_storage':settings['security']['key_storage']})
@@ -239,11 +243,16 @@ def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
         destination=project.parent/'bin';destination.mkdir(exist_ok=True)
         name=settings['production']['name'];output=destination/f'{name}-{platform}-{arch}'
         with tempfile.TemporaryDirectory(prefix='.bazzalt-build-',dir=destination) as temp:
-            root=Path(temp)/'Game';root.mkdir()
+            publication=Path(temp)/(name+'.app' if platform=='macos' else 'Game')
+            if platform=='macos':
+                from . import macos
+                root=macos.CreateBundle(publication,settings);output=output.with_suffix('.app')
+            else:root=publication;root.mkdir()
             for filename in files:shutil.copy2(runtime/filename,root/(name+suffix if filename=='BazzaltPlayer'+suffix else filename))
             from .pe_resources import Apply
             if platform=='windows':Apply(root/(name+suffix),settings['production'])
             from .security import SecurityContext
+            if platform=='macos':macos.SignLibraries(cooked,settings['platforms']['macos'])
             security=SecurityContext(settings,KeyFor(settings));packages=[];content_hashes={}
             if settings['packaging']['format']=='pak':
                 Emit('package','Packing game content')
@@ -255,17 +264,25 @@ def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
             (root/'LICENSE.txt').write_text(settings['production']['license'],encoding='utf-8')
             if (runtime/'licenses').is_dir():shutil.copytree(runtime/'licenses',root/'licenses')
             from .integrity import Seal
+            if platform=='macos':
+                owner=hashlib.sha256(str(project).encode('utf-8')).hexdigest();(publication/'.bazzalt-game-build').write_text(owner,encoding='utf-8')
+                macos.SignLibraries(root,settings['platforms']['macos']);macos.Sign(publication,settings['platforms']['macos'])
             Seal(root,root/(name+suffix),security=security,content=content_hashes)
+            if platform=='macos':macos.Finalize(publication,settings['platforms']['macos'])
             check()
             Emit('verify','Verifying the packaged game')
-            Run([root/(name+suffix),'--verify-package'],cwd=root,timeout=120)
+            verify_environment=dict(os.environ)
+            if security.Method=='keychain':verify_environment[settings['security']['key_environment']]=security.Master.hex()
+            Run([root/(name+suffix),'--verify-package'],cwd=root,timeout=120,env=verify_environment)
             check()
             if settings['packaging']['archive']:
                 archive=destination/f'{name}-{platform}-{arch}.zip';temporary=work/'Game.zip'
-                with zipfile.ZipFile(temporary,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as zipped:
-                    for path in root.rglob('*'):
-                        check()
-                        if path.is_file():zipped.write(path,path.relative_to(root).as_posix())
+                if platform=='macos':macos.Archive(publication,temporary)
+                else:
+                    with zipfile.ZipFile(temporary,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as zipped:
+                        for path in root.rglob('*'):
+                            check()
+                            if path.is_file():zipped.write(path,path.relative_to(root).as_posix())
                 # Existing archives require the compiler's companion ownership marker.
                 marker=archive.with_suffix('.zip.owner');owner=hashlib.sha256(str(project).encode('utf-8')).hexdigest()
                 if archive.exists() and (not marker.is_file() or marker.read_text()!=owner):raise ValueError('Archive is not owned by this project')
@@ -275,12 +292,12 @@ def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
                 if launch:
                     # The game outlives the disposable cook workspace. Keep one
                     # compiler-owned launch image rather than one per build.
-                    launch_output=cache/(arch if platform=='windows' else platform+'-'+arch)/'Launch'
-                    Publish(root,launch_output,owner);launch_path=launch_output/(name+suffix)
+                    launch_output=cache/(arch if platform=='windows' else platform+'-'+arch)/('Launch.app' if platform=='macos' else 'Launch')
+                    Publish(publication,launch_output,owner);launch_path=launch_output/('Contents/MacOS' if platform=='macos' else '')/(name+suffix)
             else:
                 check();Emit('publish','Publishing verified game output')
-                Publish(root,output,hashlib.sha256(str(project).encode('utf-8')).hexdigest());result=output
-                if launch:launch_path=output/(name+suffix)
+                Publish(publication,output,hashlib.sha256(str(project).encode('utf-8')).hexdigest());result=output
+                if launch:launch_path=output/('Contents/MacOS' if platform=='macos' else '')/(name+suffix)
     # Exit both the staging context and build lock before reporting success or
     # launching. Cleanup failures must never arrive after a game was launched.
     Emit('complete','Game build completed',output=str(result))

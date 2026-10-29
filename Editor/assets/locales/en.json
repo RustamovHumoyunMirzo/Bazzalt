@@ -1060,5 +1060,13 @@
   "events.type.Vec3": "Vec3",
   "events.type.Vec4": "Vec4",
   "events.type.Quaternion": "Quaternion",
-  "events.type.UUID": "UUID"
+  "events.type.UUID": "UUID",
+  "build.option.macos": "macOS",
+  "build.option.arm64": "Apple silicon (ARM64)",
+  "build.option.metal": "Metal",
+  "build.option.keychain": "Player login Keychain (first-launch provisioning)",
+  "build.field.bundle_identifier": "Bundle identifier",
+  "build.field.minimum_version": "Minimum macOS version",
+  "build.field.signing_identity": "Code-signing identity (- for development)",
+  "build.field.notarization_profile": "Notarytool Keychain profile (optional)"
 }
