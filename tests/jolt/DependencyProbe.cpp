@@ -1,3 +1,7 @@
+// This module shares C++ exceptions with core; solver-local flags must not leak.
+#if defined(_MSC_VER) && defined(_HAS_EXCEPTIONS) && !_HAS_EXCEPTIONS
+#error Bazzalt physics consumers require standard MSVC exception handling
+#endif
 // Dependency ABI/link check only. No bodies, colliders or simulation are created.
 #include <Jolt/Jolt.h>
 #include <Jolt/RegisterTypes.h>

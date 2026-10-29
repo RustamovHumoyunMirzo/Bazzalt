@@ -57,6 +57,13 @@ function(_bazzalt_add_jolt)
     endforeach()
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
     add_subdirectory("${BAZZALT_JOLT_DIR}/Build" "${CMAKE_BINARY_DIR}/deps/jolt" EXCLUDE_FROM_ALL)
+    # Jolt disables STL exceptions internally. MSVC changes the exception base
+    # class with this macro, so exporting it across our DLL boundary prevents
+    # core/editor catch(std::exception&) from catching physics validation errors.
+    # Keep Jolt's own COMPILE_DEFINITIONS untouched; sanitize only its consumers.
+    get_target_property(_jolt_consumer_definitions Jolt INTERFACE_COMPILE_DEFINITIONS)
+    list(FILTER _jolt_consumer_definitions EXCLUDE REGEX "_HAS_EXCEPTIONS=0")
+    set_property(TARGET Jolt PROPERTY INTERFACE_COMPILE_DEFINITIONS "${_jolt_consumer_definitions}")
     set_target_properties(Jolt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endfunction()
 if(BAZZALT_JOLT_LIBRARY)

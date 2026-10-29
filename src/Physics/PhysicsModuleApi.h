@@ -1,4 +1,8 @@
 #pragma once
+// This module shares C++ exceptions with core; solver-local flags must not leak.
+#if defined(_MSC_VER) && defined(_HAS_EXCEPTIONS) && !_HAS_EXCEPTIONS
+#error Bazzalt physics consumers require standard MSVC exception handling
+#endif
 #include "Bazzalt/Physics.h"
 namespace Bazzalt { class ComponentSerializationRegistry; }
 namespace Bazzalt::Runtime {
