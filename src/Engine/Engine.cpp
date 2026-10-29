@@ -670,6 +670,15 @@ bool Engine::ExportCookedProject(const std::filesystem::path& destination,const 
         if(project.StartupScene.empty())throw std::runtime_error("A startup scene is required for a game build");
         std::map<std::string,UUID> modules;
         auto utf8=[](const std::filesystem::path& path){auto value=path.generic_u8string();return std::string(reinterpret_cast<const char*>(value.data()),value.size());};
+        // AssetDatabase records use canonical paths. Match that spelling before
+        // deriving output names (Windows TEMP commonly uses a RUNNER~1 alias).
+        const auto projectRoot=std::filesystem::weakly_canonical(std::filesystem::absolute(m_projectPath)).parent_path();
+        const auto cookedRoot=std::filesystem::weakly_canonical(std::filesystem::absolute(destination));
+        const auto cookedPath=[&](const std::filesystem::path& source){
+            const auto relative=source.lexically_relative(projectRoot);
+            if(relative.empty()||relative.is_absolute()||std::any_of(relative.begin(),relative.end(),[](const auto& part){return part=="..";}))throw std::runtime_error("Cooked scene path is outside the project: "+utf8(source));
+            return cookedRoot/relative;
+        };
         std::ofstream index(destination/".bazzalt/CookedAssets.yaml",std::ios::binary|std::ios::app);
         for(const auto& binding:bindings)if(!modules.contains(binding.TypeName)){
             auto id=UUID::Generate();modules[binding.TypeName]=id;
@@ -701,11 +710,13 @@ bool Engine::ExportCookedProject(const std::filesystem::path& destination,const 
             }
             for(auto handle:scene->GetRegistry().view<ScriptComponents>())for(auto& script:scene->GetRegistry().get<ScriptComponents>(handle).Values){
                 UUID sourceId;if(UUID::TryParse(script.Source,sourceId))continue;
-                auto source=std::filesystem::u8path(script.Source);if(source.is_relative())source=m_projectPath.parent_path()/source;
+                auto source=std::filesystem::u8path(script.Source);if(source.is_relative())source=projectRoot/source;
                 if(auto sourceAsset=m_assetDatabase->Find(source))script.Source=sourceAsset->Id.ToString();
                 else throw std::runtime_error("Script source is outside project assets: "+script.Source);
             }
-            if(!SaveSceneAsset(*scene,destination/asset.SourcePath.lexically_relative(m_projectPath.parent_path()))||!SaveSceneAsset(*scene,destination/asset.CachePath.lexically_relative(m_projectPath.parent_path())))throw std::runtime_error("Could not save cooked scene");
+            for(const auto& source:{asset.SourcePath,asset.CachePath}){
+                if(!SaveSceneAsset(*scene,cookedPath(source)))throw std::runtime_error("Could not save cooked scene: "+m_lastError);
+            }
         }
         if(!index)throw std::runtime_error("Could not write script index");return true;
     }catch(const std::exception& error){m_lastError=error.what();return false;}
