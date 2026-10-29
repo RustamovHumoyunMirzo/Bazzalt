@@ -65,7 +65,7 @@ bool ReadPhysicsMesh(Entity entity,UUID assetId,const std::string& signature,std
     std::vector<Part> parts;Parts(entity,assetId,parts);
     const auto add=[&](Vec3 point){if(vertices.size()>=3000000)throw std::length_error("MeshCollider exceeds one million triangles");indices.push_back(std::uint32_t(vertices.size()));vertices.push_back(point);};
     for(auto& part:parts){
-        if(!part.Asset){auto geometry=BuildPrimitiveGeometry(part.Object.GetComponent<PrimitiveObject>());for(auto index:geometry.Indices){const auto& p=geometry.Vertices.at(index).Position;add(part.Local.TransformPoint({p[0],p[1],p[2]}));}continue;}
+        if(!part.Asset){const auto cached=GetCachedPrimitiveGeometry(part.Object.GetComponent<PrimitiveObject>());const auto& geometry=*cached;for(auto index:geometry.Indices){const auto& p=geometry.Vertices.at(index).Position;add(part.Local.TransformPoint({p[0],p[1],p[2]}));}continue;}
         auto geometry=Model(part.Asset);if(!geometry)return false;
         const auto append=[&](std::uint32_t node,const Mat4& transform){if(node>=geometry->SourceNodes.size()||!geometry->SourceNodes[node])return;for(auto& triangle:geometry->SourceNodes[node]->Triangles)for(auto point:{triangle.A,triangle.B,triangle.C})add(transform.TransformPoint(point));};
         if(part.Node!=Mesh::EntireAsset&&!part.Subtree)append(part.Node,part.Local);
@@ -88,7 +88,7 @@ bool ReadSoftMesh(Entity entity,std::vector<SoftMeshPart>& output){
     for(auto& part:sources){
         Mat4 inverse;if(!part.Local.TryInverse(inverse))throw std::invalid_argument("Cloth mesh has a singular source transform");const auto normals=inverse.Transposed();
         if(!part.Asset){
-            const auto& primitive=part.Object.GetComponent<PrimitiveObject>();auto source=BuildPrimitiveGeometry(primitive);SoftMeshPart mesh;mesh.Owner=part.Object.GetUUID();mesh.Indices=source.Indices;
+            const auto& primitive=part.Object.GetComponent<PrimitiveObject>();const auto cached=GetCachedPrimitiveGeometry(primitive);const auto& source=*cached;SoftMeshPart mesh;mesh.Owner=part.Object.GetUUID();mesh.Indices=source.Indices;
             for(auto& v:source.Vertices){auto& t=v.TangentFrame;auto normal=Quaternion{t[0],t[1],t[2],t[3]}.Rotate({0,0,1});mesh.Vertices.push_back({part.Local.TransformPoint({v.Position[0],v.Position[1],v.Position[2]}),normals.TransformDirection(normal).Normalized(),{v.UV[0],v.UV[1]},{1,1,1,1}});}
             total+=mesh.Indices.size();output.push_back(std::move(mesh));continue;
         }

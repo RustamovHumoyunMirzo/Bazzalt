@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Camera anti-aliasing mode. Anti-aliasing reduces stair-stepped edges; temporal modes also use previous frames.">
+  <title>AntiAliasing | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / C++ / C++ API reference / AntiAliasing</nav>
+      <article class="doc"><h1>AntiAliasing</h1>
+<p class="lead">Camera anti-aliasing mode. Anti-aliasing reduces stair-stepped edges; temporal modes also use previous frames.</p>
+<p><strong>C++ header:</strong> <code>Bazzalt/Components/Camera.h</code>.</p>
+<p>Read signatures together with the behavior notes below. The <a href="../en.html">reference introduction</a> explains arguments, return values, value copies, and errors.</p>
+<pre><code>#include &lt;Bazzalt/Components/Camera.h&gt;</code></pre>
+<pre><code>enum class AntiAliasing</code></pre>
+<h2 id="None">None</h2>
+<pre><code>None</code></pre>
+<p>No camera anti-aliasing.</p>
+<h2 id="FXAA">FXAA</h2>
+<pre><code>FXAA</code></pre>
+<p>Fast approximate spatial anti-aliasing.</p>
+<h2 id="TAA">TAA</h2>
+<pre><code>TAA</code></pre>
+<p>Temporal anti-aliasing using frame history. Reduces temporal shimmer but can soften detail or leave ghosting on motion.</p>
+<h2 id="MSAA2x">MSAA2x</h2><pre><code>MSAA2x = 3</code></pre><p>Two-sample geometry coverage anti-aliasing, without temporal history.</p>
+<h2 id="MSAA4x">MSAA4x</h2><pre><code>MSAA4x = 4</code></pre><p>Four-sample geometry coverage anti-aliasing. Higher bandwidth and memory cost than 2×; a useful starting point when temporal filtering is unwanted.</p>
+<h2 id="TAAFXAA">TAAFXAA</h2><pre><code>TAAFXAA = 5</code></pre><p>Temporal anti-aliasing followed by FXAA. Can smooth remaining spatial edges at the cost of another pass and additional softness.</p>
+<h2 id="MSAA2xFXAA">MSAA2xFXAA</h2><pre><code>MSAA2xFXAA = 6</code></pre><p>Two-sample MSAA followed by FXAA.</p>
+<h2 id="MSAA4xFXAA">MSAA4xFXAA</h2><pre><code>MSAA4xFXAA = 7</code></pre><p>Four-sample MSAA followed by FXAA.</p>
+<h2 id="usage">Applying a mode</h2><pre><code class="language-cpp">auto&amp; camera = entity.GetComponent&lt;Bazzalt::Camera&gt;();
+camera.PostProcessing.Enabled = true;
+camera.PostProcessing.AntiAliasingMode = Bazzalt::AntiAliasing::MSAA4xFXAA;</code></pre>
+<p>Settings apply live to each enabled camera, including split-screen views and camera-to-Texture captures. CameraPostProcessing.Enabled=false disables the camera AA stages; re-enabling restores the chosen mode. Switching modes resets unused stages instead of leaving old MSAA/TAA enabled. Invalid C++ enum casts fall back to no camera AA; serialized and editor values outside 0–7 are rejected.</p>
+<p>MSAA treats geometry coverage, not every shader/texture shimmer. FXAA is inexpensive but can blur detail. TAA uses previous frames. Combined modes trade more work and softness for coverage of different artifacts. There is no SMAA, SSAA, DLSS or FSR anti-aliasing mode behind these names.</p>
+<p>Sample counts are requests; Filament adapts to backend/device capabilities. TextureDescriptor.Samples is a separate destination attachment setting, not another name for CameraPostProcessing.AntiAliasingMode. For ordinary camera captures, a single-sample destination may be used with camera MSAA. Explicitly multisampled destination assets remain independent. The editor Scene navigation camera is separate from game Camera components.</p>
+<p>When both a camera MSAA mode and a multisampled Texture asset are used, the internal render stage requests the larger sample count up to the supported view limit of 4×, then resolves into a single-sample output texture. Counts are not multiplied. Prefer TextureDescriptor.Samples=1 when the camera alone should choose the MSAA level.</p>
+<p>Camera MSAA presets currently stop at 4×. An 8× preset is not exposed: the integrated Vulkan view path failed real-GPU tests despite the device advertising 8× support. Low-level Texture sample requests do not raise the camera's internal MSAA stage beyond 4×.</p>
+<p>Existing scene values remain stable: None=0, FXAA=1 and TAA=2. The default remains TAA.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Public declarations</h2>
+<p>Header: <code>Bazzalt/Components/Camera.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
+<pre><code class="language-cpp">enum class AntiAliasing {
+None=0, FXAA=1, TAA=2,
+    MSAA2x=3, MSAA4x=4,
+    TAAFXAA=5, MSAA2xFXAA=6, MSAA4xFXAA=7
+};</code></pre>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../en.html"><small>Previous</small>C++ API reference</a>
+<a class="next" href="../Application/en.html"><small>Next</small>Application</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#None">None</a><a class="toc-link" href="#FXAA">FXAA</a><a class="toc-link" href="#TAA">TAA</a><a class="toc-link" href="#MSAA2x">MSAA2x</a><a class="toc-link" href="#MSAA4x">MSAA4x</a><a class="toc-link" href="#TAAFXAA">TAAFXAA</a><a class="toc-link" href="#MSAA2xFXAA">MSAA2xFXAA</a><a class="toc-link" href="#MSAA4xFXAA">MSAA4xFXAA</a><a class="toc-link" href="#usage">Applying a mode</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

@@ -6,10 +6,11 @@ void BindLuaConsole(sol::table api);
 void BindLuaAudio(sol::table api);
 void BindLuaPhysics(sol::table api);
 void BindLuaVehicles(sol::table api);
+void BindLuaLOD(sol::table api);
 void BindLuaApplicationEvents(sol::table api);
 void BindLuaServices(sol::table api){
     BindLuaScene(api);BindLuaAssets(api);BindLuaConsole(api);
-    BindLuaAudio(api);BindLuaPhysics(api);BindLuaVehicles(api);
+    BindLuaAudio(api);BindLuaPhysics(api);BindLuaVehicles(api);BindLuaLOD(api);
     BindLuaApplicationEvents(api);
     {auto type=api.create_named("Time");
      type["GetDeltaTime"]=&Time::GetDeltaTime;

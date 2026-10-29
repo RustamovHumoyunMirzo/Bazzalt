@@ -15,7 +15,7 @@ struct ModelGeometry {
     std::vector<Node> Nodes;
     std::vector<std::uint32_t> Order;
     void Build();
-    bool Raycast(Vec3 origin,Vec3 direction,float& distance) const;
+    bool Raycast(Vec3 origin,Vec3 direction,float& distance,float determinantEpsilon=1e-10f) const;
 };
 struct ModelGeometryAsset { std::vector<std::shared_ptr<ModelGeometry>> SourceNodes; };
 std::shared_ptr<ModelGeometryAsset> ReadModelGeometry(const std::vector<std::uint8_t>& preparedGltf,const std::filesystem::path& source={});

@@ -272,6 +272,10 @@ function W:OnCreate()
  local bar=car:AddComponent('VehicleAntiRollBar');bar.LeftWheel=wheels[1]:GetUUID();bar.RightWheel=wheels[2]:GetUUID();car:SetComponent('VehicleAntiRollBar',bar)
  world:Synchronize();assert(world:SetVehicleInput(car,.5,0));assert(world:GetVehicleState(car).WheelCount==4);assert(world:GetVehicleWheelState(wheels[1])~=nil)
  assert(not world:SetVehicleGear(car,2))
+ local group=scene:CreateEntity('Lua LOD');local high=scene:CreateEntity('Detailed');local low=scene:CreateEntity('Simple');high:SetParent(group);low:SetParent(group)
+ local lod=group:AddComponent('LOD');local a=B.LODLevel.new();a.ScreenHeight=.5;a.Roots={high:GetUUID()};local b=B.LODLevel.new();b.ScreenHeight=.1;b.Roots={low:GetUUID()};lod.Levels={a,b};assert(lod:IsValid() and lod:SelectLevel(.2)==1);group:SetComponent('LOD',lod)
+ local copy=group:GetComponent('LOD');assert(#copy.Levels==2 and copy.Levels[2].Roots[1]==low:GetUUID());copy:ForceLevel(0);group:SetComponent('LOD',copy);assert(group:GetComponent('LOD'):SelectLevel(.01)==0)
+
  local options=B.PhysicsQueryOptions.new();options.ExcludedEntities={self.Entity:GetUUID()}
  assert(not world:Raycast(p+B.Vec3.new(0,4,0),B.Vec3.new(0,-1,0),10,options):IsValid())
 end

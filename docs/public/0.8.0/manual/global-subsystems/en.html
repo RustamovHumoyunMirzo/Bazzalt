@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Subsystems are project-wide C++ services. Unlike entity scripts, they are registered for the project rather than added to an object in the Hierarchy.">
+  <title>Global subsystems | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Editor manual / Global subsystems</nav>
+      <article class="doc"><h1>Global subsystems</h1>
+<p>Subsystems are project-wide C++ services. Unlike entity scripts, they are registered for the project rather than added to an object in the Hierarchy.</p>
+<h2 id="register">Create and register</h2><p>In Asset Browser choose Create &gt; Subsystem Script. Open Window &gt; Global Subsystems. Pick the C++ asset, choose its startup level and select Add. The modal child window groups entries by startup level. Apply saves registrations; changes take effect on the next Play or build. Remove Selected unregisters the service for the next session.</p>
+<h2 id="levels">Choose a startup level</h2><p>Boot runs earliest, followed by Window, Initialization, the Before/Input/After Input stages, Before/Audio/After Audio stages, Before/Physics/After Physics stages, Content and Ready. Choose Ready for a service that needs the loaded scene. Earlier levels are for startup work; choosing an earlier level does not make unavailable services ready. Order within a level follows the dialogâ€™s registration order.</p>
+<h2 id="validation">Conflicting scripts and errors</h2><p>A registered source cannot also be attached to an entity, even as a disabled component. Resolve conflicting attachments before applying or playing. The editor reports invalid registrations and lifecycle access in Console and stops the failed Play session. Game builds report fatal subsystem errors in a native error dialog.</p>
+<h2 id="headers">Shared headers</h2><p>Create &gt; C++ Header creates a project header. Header files are edited with the configured external application. Only trust native code from known sources; project C++ is not sandboxed.</p>
+<h2 id="programming">Programming reference</h2><p>For implementing services, startup readiness, listener restrictions and shared interfaces, read the <a href="../../native/subsystems/en.html">C++ subsystem programming guide</a> and the <a href="../../native/reference/Subsystem/en.html">Subsystem</a>, <a href="../../native/reference/Subsystems/en.html">Subsystems</a>, <a href="../../native/reference/Scripts/en.html">Scripts</a> and <a href="../../native/reference/Application/en.html">Application</a> references. Lua supports <a href="../../lua/reference/Application/en.html">application controls</a>, not subsystem registration.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../building-games/en.html"><small>Previous</small>Building a game</a>
+<a class="next" href="../gui/en.html"><small>Next</small>Author GUI layout and inheritance</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#register">Create and register</a><a class="toc-link" href="#levels">Choose a startup level</a><a class="toc-link" href="#validation">Conflicting scripts and errors</a><a class="toc-link" href="#headers">Shared headers</a><a class="toc-link" href="#programming">Programming reference</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

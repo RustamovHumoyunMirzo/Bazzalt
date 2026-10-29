@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Read-only runtime snapshot from PhysicsScene.GetVehicleWheelState. Position, ContactPoint and ContactNormal are world-space. Contact values are meaningful only when Grounded. AngularVelocity is rad/s, SteerAngle and LateralSlip are degrees, SuspensionLength is metres and SuspensionForce is N. LongitudinalSlip is a ratio.">
+  <title>VehicleWheelState | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / Lua API reference / VehicleWheelState</nav>
+      <article class="doc"><h1>VehicleWheelState</h1><p>Read-only runtime snapshot from PhysicsScene.GetVehicleWheelState. Position, ContactPoint and ContactNormal are world-space. Contact values are meaningful only when Grounded. AngularVelocity is rad/s, SteerAngle and LateralSlip are degrees, SuspensionLength is metres and SuspensionForce is N. LongitudinalSlip is a ratio.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Lua members and signatures</h2>
+<p>Use <code>Bazzalt.VehicleWheelState</code>. Each member below is actually registered in Lua. The adapter declarations are C++ binding notation, not Lua example code. <code>sol::property</code> exposes a field, <code>sol::overload</code> lists alternatives, <code>sol::optional</code> accepts an omitted/nil argument, and <code>std::make_tuple</code> returns multiple Lua values. <code>sol::as_table</code> returns a Lua table. Instance methods use <code>value:Method(...)</code>; service/static calls use <code>Bazzalt.VehicleWheelState.Method(...)</code> unless a colon overload is explicitly registered. An engine exception becomes a Lua script error. See the examples and behavior notes above for usage.</p><h3 id="lua-AngularVelocity">AngularVelocity</h3><pre><code class="language-lua">value:AngularVelocity()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>float AngularVelocity=0,SteerAngle=0,SuspensionLength=0,SuspensionForce=0;</code></pre><pre><code>sol::readonly(&amp;VehicleWheelState::AngularVelocity)</code></pre></details><h3 id="lua-ContactNormal">ContactNormal</h3><pre><code class="language-lua">value:ContactNormal()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>Vec3 Position{},ContactPoint{},ContactNormal{};</code></pre><pre><code>sol::readonly(&amp;VehicleWheelState::ContactNormal)</code></pre></details><h3 id="lua-ContactPoint">ContactPoint</h3><pre><code class="language-lua">value:ContactPoint()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>Vec3 Position{},ContactPoint{},ContactNormal{};</code></pre><pre><code>sol::readonly(&amp;VehicleWheelState::ContactPoint)</code></pre></details><h3 id="lua-Grounded">Grounded</h3><pre><code class="language-lua">value:Grounded()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>bool Grounded=false;</code></pre><pre><code>sol::readonly(&amp;VehicleWheelState::Grounded)</code></pre></details><h3 id="lua-LateralSlip">LateralSlip</h3><pre><code class="language-lua">value:LateralSlip()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>float LongitudinalSlip=0,LateralSlip=0;</code></pre><pre><code>sol::readonly(&amp;VehicleWheelState::LateralSlip)</code></pre></details><h3 id="lua-LongitudinalSlip">LongitudinalSlip</h3><pre><code class="language-lua">value:LongitudinalSlip()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>float LongitudinalSlip=0,LateralSlip=0;</code></pre><pre><code>sol::readonly(&amp;VehicleWheelState::LongitudinalSlip)</code></pre></details><h3 id="lua-Position">Position</h3><pre><code class="language-lua">value:Position()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>Vec3 Position{},ContactPoint{},ContactNormal{};</code></pre><pre><code>sol::readonly(&amp;VehicleWheelState::Position)</code></pre></details><h3 id="lua-SteerAngle">SteerAngle</h3><pre><code class="language-lua">value:SteerAngle()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>float AngularVelocity=0,SteerAngle=0,SuspensionLength=0,SuspensionForce=0;</code></pre><pre><code>sol::readonly(&amp;VehicleWheelState::SteerAngle)</code></pre></details><h3 id="lua-SuspensionForce">SuspensionForce</h3><pre><code class="language-lua">value:SuspensionForce()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>float AngularVelocity=0,SteerAngle=0,SuspensionLength=0,SuspensionForce=0;</code></pre><pre><code>sol::readonly(&amp;VehicleWheelState::SuspensionForce)</code></pre></details><h3 id="lua-SuspensionLength">SuspensionLength</h3><pre><code class="language-lua">value:SuspensionLength()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>float AngularVelocity=0,SteerAngle=0,SuspensionLength=0,SuspensionForce=0;</code></pre><pre><code>sol::readonly(&amp;VehicleWheelState::SuspensionLength)</code></pre></details><h3 id="lua-construction">Construction / enum values</h3><p>Construct a value with <code>Bazzalt.VehicleWheelState()</code>. Constructor overloads, when available, are shown in the binding details.</p><details><summary>Native declaration and binding adapter</summary><pre><code>api.new_usertype&lt;VehicleWheelState&gt;(&quot;VehicleWheelState&quot;);</code></pre></details><p>Binding source: <code>src/Script/LuaVehicles.cpp</code>. Inherited component operations use the Entity component APIs.</p>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../VehicleWheel/en.html"><small>Previous</small>VehicleWheel</a>
+<a class="next" href="../Vignette/en.html"><small>Next</small>Vignette</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#source-contract">Lua members and signatures</a><a class="toc-link sub" href="#lua-AngularVelocity">AngularVelocity</a><a class="toc-link sub" href="#lua-ContactNormal">ContactNormal</a><a class="toc-link sub" href="#lua-ContactPoint">ContactPoint</a><a class="toc-link sub" href="#lua-Grounded">Grounded</a><a class="toc-link sub" href="#lua-LateralSlip">LateralSlip</a><a class="toc-link sub" href="#lua-LongitudinalSlip">LongitudinalSlip</a><a class="toc-link sub" href="#lua-Position">Position</a><a class="toc-link sub" href="#lua-SteerAngle">SteerAngle</a><a class="toc-link sub" href="#lua-SuspensionForce">SuspensionForce</a><a class="toc-link sub" href="#lua-SuspensionLength">SuspensionLength</a><a class="toc-link sub" href="#lua-construction">Construction / enum values</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

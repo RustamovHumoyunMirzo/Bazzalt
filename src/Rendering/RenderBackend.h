@@ -12,6 +12,7 @@
 #include <utils/BitmaskEnum.h>
 
 #include "Bazzalt/PostProcessing.h"
+#include "Rendering/LODVisibility.h"
 #include "Bazzalt/SceneEnvironment.h"
 
 namespace filament {
@@ -75,17 +76,21 @@ public:
     void Render(double materialTime=-1);
     std::unordered_map<std::string,double> GetStatistics() const;
     void SetEditorStatisticsText(std::string text,bool visible){m_statisticsText=std::move(text);m_statisticsVisible=visible;}
-    void RenderCameraView(filament::View* view,std::uint64_t viewport=0);
+    void RenderCameraView(filament::View* view,std::uint64_t viewport=0,bool applyLOD=true);
     void SetGuiScene(Bazzalt::Scene* scene);
     void ClearGuiResources();
     filament::Texture* GetCameraTexture(UUID id) const;
-    void RegisterCameraView(UUID id,filament::View* view){m_cameraViews[id]=view;}
-    void UnregisterCameraView(UUID id){m_cameraViews.erase(id);m_cameraOutputs.erase(id);}
+    void RegisterCameraView(UUID id,filament::View* view){if(auto old=m_cameraViews.find(id);old!=m_cameraViews.end()&&old->second!=view)m_lodViews.erase(old->second);m_cameraViews[id]=view;}
+    void UnregisterCameraView(UUID id){if(auto old=m_cameraViews.find(id);old!=m_cameraViews.end())m_lodViews.erase(old->second);m_cameraViews.erase(id);m_cameraOutputs.erase(id);}
     void RegisterCameraOutput(UUID id,filament::Texture* color,filament::Texture* history,filament::RenderTarget* target,filament::RenderTarget* historyTarget);
     filament::RenderTarget* GetCameraOutputTarget(UUID id) const;
     static void ConfigureEditorFog(filament::View& view,float gridScale);
+    const std::unordered_set<UUID>& GetLODHidden(filament::View* view);
+    bool IsLODHidden(UUID id) const{return m_currentLODHidden&&m_currentLODHidden->contains(id);}
+    bool IsEditorLODHidden(UUID id);
     bool IsEditorHidden(UUID id) const{return m_editorHidden.contains(id);}
     void SetEditorHidden(std::unordered_set<UUID> hidden){m_editorHidden=std::move(hidden);}
+    void RecordLightUpload(){++m_lightUploads;}
     void RegisterEditorLight(UUID id,utils::Entity entity){m_editorLights[id]=entity;}
     void UnregisterEditorLight(UUID id){m_editorLights.erase(id);}
     void SetEnvironment(const SceneEnvironment& value);
@@ -148,7 +153,7 @@ private:
     std::unordered_map<std::uint64_t, std::unique_ptr<ViewportResource>> m_viewports;
     std::unordered_set<std::uint64_t> m_presentedViewports;
     double m_materialTime=0;
-    std::uint64_t m_guideUploads=0;
+    std::uint64_t m_guideUploads=0,m_lightUploads=0;
     std::vector<EditorGuide> m_editorGuideCache;
     std::chrono::steady_clock::time_point m_previewEpoch=std::chrono::steady_clock::now();
     std::unique_ptr<GizmoResource> m_gizmo;
@@ -159,6 +164,9 @@ private:
     int m_gizmoHover = -1;
     bool m_gridVisible = true;
     bool m_orientationVisible = true;
+    std::unordered_map<const filament::View*,LODViewState> m_lodViews;
+    const std::unordered_set<UUID>* m_currentLODHidden=nullptr;
+    std::uint64_t m_lodFrame=1;
     std::unordered_set<UUID> m_editorHidden;
     std::unordered_set<UUID> m_outlineSelected,m_outlineHovered;
     std::unordered_map<UUID,utils::Entity> m_editorLights;

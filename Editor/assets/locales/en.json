@@ -1033,5 +1033,16 @@
   "physics.sphere_cast": "Sphere cast",
   "physics.cylinder_cast": "Cylinder cast",
   "physics.field.left_wheel": "Left wheel",
-  "physics.field.right_wheel": "Right wheel"
+  "physics.field.right_wheel": "Right wheel",
+  "lod.pick_root": "Select LOD subtree",
+  "lod.search": "Search entities…",
+  "lod.screen_height": "Screen height fraction (0–1)",
+  "lod.add_root": "Add subtree",
+  "lod.remove_root": "Remove",
+  "lod.add_level": "Add LOD level",
+  "lod.remove_level": "Remove level",
+  "lod.automatic": "Automatic",
+  "lod.culled": "Culled",
+  "lod.level": "LOD {index}",
+  "lod.missing_root": "Missing entity"
 }

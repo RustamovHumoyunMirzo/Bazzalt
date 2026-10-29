@@ -632,3 +632,19 @@ if(BUILD_TESTING)
     bazzalt_enable_test_assertions(BazzaltNativeScriptRuntimeTests)
     add_test(NAME BazzaltNativeScriptRuntimeTests COMMAND BazzaltNativeScriptRuntimeTests $<TARGET_FILE:BazzaltScriptLifecycleModule>)
 endif()
+
+# Explicit, deterministic workloads for release profiling; never a timing-gated CTest.
+if(BUILD_TESTING)
+    add_executable(BazzaltPerformanceBench EXCLUDE_FROM_ALL tests/PerformanceBench.cpp)
+    target_link_libraries(BazzaltPerformanceBench PRIVATE Bazzalt)
+    target_include_directories(BazzaltPerformanceBench PRIVATE src)
+endif()
+
+
+if(BUILD_TESTING)
+    add_executable(BazzaltLODTests tests/LODTests.cpp)
+    target_link_libraries(BazzaltLODTests PRIVATE Bazzalt Filament::Filament)
+    target_include_directories(BazzaltLODTests PRIVATE src)
+    bazzalt_enable_test_assertions(BazzaltLODTests)
+    add_test(NAME BazzaltLODTests COMMAND BazzaltLODTests)
+endif()

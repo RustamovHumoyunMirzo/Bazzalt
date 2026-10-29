@@ -138,12 +138,12 @@ void ModelGeometry::Build(){
     };build(build,0,static_cast<std::uint32_t>(Order.size()));
 }
 
-bool ModelGeometry::Raycast(Vec3 origin,Vec3 direction,float& distance) const{
+bool ModelGeometry::Raycast(Vec3 origin,Vec3 direction,float& distance,float determinantEpsilon) const{
     if(Nodes.empty()||!Finite(origin)||!Finite(direction))return false;bool hit=false;
-    std::vector<std::uint32_t> stack{0};
-    while(!stack.empty()){auto index=stack.back();stack.pop_back();const auto& node=Nodes[index];if(!Box(origin,direction,node.Min,node.Max,distance))continue;
-        if(!node.Count){stack.push_back(node.Left);stack.push_back(node.Right);continue;}
-        for(std::size_t i=node.Begin;i<node.Begin+node.Count;++i){const auto& t=Triangles[Order[i]];auto e1=t.B-t.A,e2=t.C-t.A,p=Vec3::Cross(direction,e2);float determinant=Vec3::Dot(e1,p);if(std::abs(determinant)<1e-10f)continue;
+    std::array<std::uint32_t,64> stack{};std::size_t pending=1;
+    while(pending){auto index=stack[--pending];const auto& node=Nodes[index];if(!Box(origin,direction,node.Min,node.Max,distance))continue;
+        if(!node.Count){if(pending+2>stack.size())throw std::runtime_error("Invalid geometry BVH depth");stack[pending++]=node.Left;stack[pending++]=node.Right;continue;}
+        for(std::size_t i=node.Begin;i<node.Begin+node.Count;++i){const auto& t=Triangles[Order[i]];auto e1=t.B-t.A,e2=t.C-t.A,p=Vec3::Cross(direction,e2);float determinant=Vec3::Dot(e1,p);if(std::abs(determinant)<determinantEpsilon)continue;
             float reciprocal=1/determinant;auto offset=origin-t.A;float u=Vec3::Dot(offset,p)*reciprocal;if(u<0||u>1)continue;auto q=Vec3::Cross(offset,e1);float v=Vec3::Dot(direction,q)*reciprocal;if(v<0||u+v>1)continue;float d=Vec3::Dot(e2,q)*reciprocal;if(d>=0&&d<distance){distance=d;hit=true;}}
     }return hit;
 }

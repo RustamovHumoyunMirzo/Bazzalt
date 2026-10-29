@@ -182,6 +182,8 @@ struct RenderAssets::Impl {
         filament::IndexBuffer* PrimitiveIndices=nullptr;
         filament::MaterialInstance* PrimitiveMaterial=nullptr;
         std::vector<filament::MaterialInstance*> MaterialInstances;
+        Mat4 LastTransform;bool TransformReady=false,FlagsReady=false,ColorReady=false;
+        std::uint8_t LastLayer=0;bool LastCast=false,LastReceive=false;Vec4 LastColor{};
         bool AddedToScene = false;
         bool DebugWireframeAdded = false;
         std::vector<Original> Originals;
@@ -207,7 +209,9 @@ struct RenderAssets::Impl {
     std::unordered_map<UUID,CachedGeometry> GeometryCache;
     Handle NextHandle = 1;
     std::unordered_map<Handle, Instance> Instances;
-    std::vector<utils::Entity> EditorSuspended,DeformedSuspended;
+    std::vector<utils::Entity> EditorSuspended,DeformedSuspended,LODSuspended;
+    const std::unordered_set<UUID>* LODHidden=nullptr;
+    std::uint64_t TransformUploads=0,StateUploads=0,ColorUploads=0;
     std::function<void(UUID)> DeformationRelease;
     std::unordered_set<UUID> DeformedSources;
     std::vector<Instance::Original> MaskOriginals;
@@ -369,9 +373,19 @@ struct RenderAssets::Impl {
         auto& renderables = Engine.getRenderableManager();
         const auto instance = renderables.getInstance(entity);
         if (!instance) return;
+        ++StateUploads;
         renderables.setLayerMask(instance, 0xff, component.LayerMask);
         renderables.setCastShadows(instance, component.CastShadows);
         renderables.setReceiveShadows(instance, component.ReceiveShadows);
+    }
+    void UpdateTransform(Instance& value,utils::Entity entity,const Mat4& transform){
+        if(value.TransformReady&&value.LastTransform.Values==transform.Values)return;
+        auto& manager=Engine.getTransformManager();auto instance=manager.getInstance(entity);if(!instance)return;
+        manager.setTransform(instance,ToFilamentMatrix(transform));value.LastTransform=transform;value.TransformReady=true;++TransformUploads;
+    }
+    template<class T> bool FlagsChanged(Instance& v,const T& c){
+        if(v.FlagsReady&&v.LastLayer==c.LayerMask&&v.LastCast==c.CastShadows&&v.LastReceive==c.ReceiveShadows)return false;
+        v.FlagsReady=true;v.LastLayer=c.LayerMask;v.LastCast=c.CastShadows;v.LastReceive=c.ReceiveShadows;return true;
     }
     bool ApplyMaterialValues(filament::MaterialInstance* instance,UUID asset) {
         bool cameraFeed=false;
@@ -584,9 +598,7 @@ void RenderAssets::UpdateMesh(Handle handle, const Mat4& transform, const Mesh& 
     const utils::Entity root = instance.Type == Impl::Kind::Gltf
         ? (instance.SelectedGltfEntity ? instance.SelectedGltfEntity : instance.Gltf->getRoot())
         : instance.Filamesh.renderable;
-    auto& transforms = m_impl->Engine.getTransformManager();
-    const auto transformInstance = transforms.getInstance(root);
-    if (transformInstance) transforms.setTransform(transformInstance, ToFilamentMatrix(transform));
+    m_impl->UpdateTransform(instance,root,transform);
     const bool visibilityChanged=component.Visible != instance.AddedToScene;
     if (visibilityChanged) {
         if (instance.Type == Impl::Kind::Gltf) {
@@ -602,11 +614,13 @@ void RenderAssets::UpdateMesh(Handle handle, const Mat4& transform, const Mesh& 
         }
         instance.AddedToScene = component.Visible;
     }
+    if(m_impl->FlagsChanged(instance,component)){
     if (instance.Type == Impl::Kind::Gltf) {
         if (instance.SelectedGltfEntity) m_impl->ApplyRenderable(instance.SelectedGltfEntity, component);
         else for (std::size_t index = 0; index < instance.Gltf->getEntityCount(); ++index)
             m_impl->ApplyRenderable(instance.Gltf->getEntities()[index], component);
     } else m_impl->ApplyRenderable(root, component);
+    }
     if(visibilityChanged&&m_impl->DebugMode!="lit")m_impl->ApplyDebug(instance);
 }
 
@@ -637,16 +651,24 @@ void RenderAssets::DestroyMesh(Handle handle) {
 }
 
 RenderAssets::Handle RenderAssets::CreatePrimitive(const PrimitiveObject& component){
-    if(!m_impl||!m_impl->PrimitiveMaterial)return InvalidHandle;auto geometry=BuildPrimitiveGeometry(component);if(geometry.Vertices.empty()||geometry.Indices.empty())return InvalidHandle;
+    if(!m_impl||!m_impl->PrimitiveMaterial)return InvalidHandle;const auto prototype=GetCachedPrimitiveGeometry(component);const auto& geometry=*prototype;if(geometry.Vertices.empty()||geometry.Indices.empty())return InvalidHandle;
     Impl::Instance instance;instance.Type=Impl::Kind::Primitive;instance.PrimitiveMaterial=m_impl->PrimitiveMaterial->createInstance();instance.PrimitiveMaterial->setParameter("baseColor",filament::math::float4{component.Color.X,component.Color.Y,component.Color.Z,component.Color.W});
     instance.PrimitiveVertices=filament::VertexBuffer::Builder().vertexCount(static_cast<std::uint32_t>(geometry.Vertices.size())).bufferCount(1).attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3,0,sizeof(PrimitiveVertex)).attribute(filament::VertexAttribute::TANGENTS,0,filament::VertexBuffer::AttributeType::FLOAT4,12,sizeof(PrimitiveVertex)).attribute(filament::VertexAttribute::UV0,0,filament::VertexBuffer::AttributeType::FLOAT2,28,sizeof(PrimitiveVertex)).build(m_impl->Engine);
-    auto* vertices=new std::vector<PrimitiveVertex>(std::move(geometry.Vertices));instance.PrimitiveVertices->setBufferAt(m_impl->Engine,0,{vertices->data(),vertices->size()*sizeof(PrimitiveVertex),[](void*,size_t,void* user){delete static_cast<std::vector<PrimitiveVertex>*>(user);},vertices});
-    instance.PrimitiveIndices=filament::IndexBuffer::Builder().indexCount(static_cast<std::uint32_t>(geometry.Indices.size())).bufferType(filament::IndexBuffer::IndexType::UINT).build(m_impl->Engine);auto* indices=new std::vector<std::uint32_t>(std::move(geometry.Indices));instance.PrimitiveIndices->setBuffer(m_impl->Engine,{indices->data(),indices->size()*sizeof(std::uint32_t),[](void*,size_t,void* user){delete static_cast<std::vector<std::uint32_t>*>(user);},indices});
+    auto* vertices=new std::shared_ptr<const PrimitiveGeometry>(prototype);instance.PrimitiveVertices->setBufferAt(m_impl->Engine,0,{const_cast<PrimitiveVertex*>(geometry.Vertices.data()),geometry.Vertices.size()*sizeof(PrimitiveVertex),[](void*,size_t,void* user){delete static_cast<std::shared_ptr<const PrimitiveGeometry>*>(user);},vertices});
+    instance.PrimitiveIndices=filament::IndexBuffer::Builder().indexCount(static_cast<std::uint32_t>(geometry.Indices.size())).bufferType(filament::IndexBuffer::IndexType::UINT).build(m_impl->Engine);auto* indices=new std::shared_ptr<const PrimitiveGeometry>(prototype);instance.PrimitiveIndices->setBuffer(m_impl->Engine,{const_cast<std::uint32_t*>(geometry.Indices.data()),geometry.Indices.size()*sizeof(std::uint32_t),[](void*,size_t,void* user){delete static_cast<std::shared_ptr<const PrimitiveGeometry>*>(user);},indices});
     instance.PrimitiveEntity=m_impl->Engine.getEntityManager().create();m_impl->Engine.getTransformManager().create(instance.PrimitiveEntity);filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{geometry.Extents.X,geometry.Extents.Y,geometry.Extents.Z}}).material(0,instance.PrimitiveMaterial).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,instance.PrimitiveVertices,instance.PrimitiveIndices).castShadows(component.CastShadows).receiveShadows(component.ReceiveShadows).build(m_impl->Engine,instance.PrimitiveEntity);m_impl->Scene.addEntity(instance.PrimitiveEntity);instance.AddedToScene=true;m_impl->ApplyRenderable(instance.PrimitiveEntity,component);
     auto handle=m_impl->NextHandle++;auto [stored,_]=m_impl->Instances.emplace(handle,std::move(instance));Mesh material;material.MaterialAsset=component.MaterialAsset;m_impl->RegisterOverrides(stored->second,material);m_impl->UpdateMaterials(stored->second);m_impl->ApplyDebug(stored->second);return handle;
 }
 
-void RenderAssets::UpdatePrimitive(Handle handle,const Mat4& transform,const PrimitiveObject& component){if(!m_impl)return;auto found=m_impl->Instances.find(handle);if(found==m_impl->Instances.end()||found->second.Type!=Impl::Kind::Primitive)return;auto& value=found->second;auto ti=m_impl->Engine.getTransformManager().getInstance(value.PrimitiveEntity);if(ti)m_impl->Engine.getTransformManager().setTransform(ti,ToFilamentMatrix(transform));value.PrimitiveMaterial->setParameter("baseColor",filament::math::float4{component.Color.X,component.Color.Y,component.Color.Z,component.Color.W});if(component.Visible!=value.AddedToScene){if(component.Visible)m_impl->Scene.addEntity(value.PrimitiveEntity);else m_impl->Scene.remove(value.PrimitiveEntity);value.AddedToScene=component.Visible;}m_impl->ApplyRenderable(value.PrimitiveEntity,component);m_impl->UpdateMaterials(value);}
+void RenderAssets::UpdatePrimitive(Handle handle,const Mat4& transform,const PrimitiveObject& component){
+    if(!m_impl)return;auto found=m_impl->Instances.find(handle);if(found==m_impl->Instances.end()||found->second.Type!=Impl::Kind::Primitive)return;auto& value=found->second;
+    m_impl->UpdateTransform(value,value.PrimitiveEntity,transform);
+    const auto c=component.Color;const auto old=value.LastColor;
+    if(!value.ColorReady||c.X!=old.X||c.Y!=old.Y||c.Z!=old.Z||c.W!=old.W){value.PrimitiveMaterial->setParameter("baseColor",filament::math::float4{c.X,c.Y,c.Z,c.W});value.LastColor=c;value.ColorReady=true;++m_impl->ColorUploads;}
+    if(component.Visible!=value.AddedToScene){if(component.Visible)m_impl->Scene.addEntity(value.PrimitiveEntity);else m_impl->Scene.remove(value.PrimitiveEntity);value.AddedToScene=component.Visible;}
+    if(m_impl->FlagsChanged(value,component))m_impl->ApplyRenderable(value.PrimitiveEntity,component);
+    m_impl->UpdateMaterials(value);
+}
 
 void RenderAssets::Update() {
     if (m_impl && m_impl->GltfTextures) m_impl->GltfTextures->updateQueue();
@@ -662,7 +684,7 @@ bool RenderAssets::BeginSelectionMask(filament::Scene& scene,const std::unordere
                                      filament::MaterialInstance* selectedMaterial,filament::MaterialInstance* hoverMaterial){
     if(!m_impl)return false;EndSelectionMask(scene);auto& manager=m_impl->Engine.getRenderableManager();
     for(const auto& [_,value]:m_impl->Instances){
-        if(!value.AddedToScene||m_impl->DeformedSources.contains(value.EditorOwner))continue;
+        if(!value.AddedToScene||m_impl->DeformedSources.contains(value.EditorOwner)||(m_impl->LODHidden&&m_impl->LODHidden->contains(value.EditorOwner)))continue;
         auto* material=selected.contains(value.EditorOwner)?selectedMaterial:hovered.contains(value.EditorOwner)?hoverMaterial:nullptr;
         if(!material)continue;
         const auto add=[&](utils::Entity entity){if(scene.hasEntity(entity))return;auto ri=manager.getInstance(entity);if(!ri)return;
@@ -704,6 +726,16 @@ std::vector<RenderAssets::EditorMeshGeometry> RenderAssets::GetEditorMeshes() co
         else for(std::uint32_t index=0;index<value.Geometry->SourceNodes.size();++index)append(index);
     }return result;
 }
+std::array<std::uint64_t,3> RenderAssets::GetUploadCounts()const{return m_impl?std::array<std::uint64_t,3>{m_impl->TransformUploads,m_impl->StateUploads,m_impl->ColorUploads}:std::array<std::uint64_t,3>{};}
+void RenderAssets::BeginLODView(const std::unordered_set<UUID>& hidden){
+    if(!m_impl)return;EndLODView();m_impl->LODHidden=&hidden;if(hidden.empty())return;
+    for(const auto& [id,value]:m_impl->Instances){if(!value.AddedToScene||!hidden.contains(value.EditorOwner))continue;
+        const auto suspend=[&](utils::Entity entity){if(m_impl->Scene.hasEntity(entity)){m_impl->Scene.remove(entity);m_impl->LODSuspended.push_back(entity);}};
+        if(value.Type==Impl::Kind::Gltf){if(value.SelectedGltfEntity)suspend(value.SelectedGltfEntity);else{for(std::size_t i=0;i<value.Gltf->getEntityCount();++i)suspend(value.Gltf->getEntities()[i]);if(value.DebugWireframeAdded)suspend(value.Gltf->getWireframe());}}
+        else suspend(value.Type==Impl::Kind::Primitive?value.PrimitiveEntity:value.Filamesh.renderable);
+    }
+}
+void RenderAssets::EndLODView(){if(!m_impl)return;for(auto entity:m_impl->LODSuspended)m_impl->Scene.addEntity(entity);m_impl->LODSuspended.clear();m_impl->LODHidden=nullptr;}
 void RenderAssets::BeginEditorView(const std::unordered_set<UUID>& hidden){
     if(!m_impl)return;EndEditorView();
     for(const auto& [_,value]:m_impl->Instances){

@@ -93,6 +93,7 @@ public:
     void SetEditorGizmoHover(int axis);
     void SetEditorTransformTrail(std::vector<std::array<float,10>> lines);
     UUID PickEditorPrimitive(Vec3 origin, Vec3 direction,Vec3* hitPosition=nullptr,const std::unordered_set<UUID>& excluded={});
+    bool IsEditorLODHidden(UUID id) const;
     std::unordered_map<UUID,std::pair<Vec3,Vec3>> GetEditorMeshBounds() const;
     void SetEditorEntityState(std::vector<UUID> hidden,std::vector<UUID> unselectable);
     void SetEditorObjectHover(UUID id, Vec3 eye) { m_hoveredObject=id; m_hoverEye=eye; }

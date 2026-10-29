@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <array>
 #include <memory>
 #include <string>
 #include <unordered_set>
@@ -46,6 +47,9 @@ public:
     bool BeginSelectionMask(filament::Scene& scene,const std::unordered_set<UUID>& selected,const std::unordered_set<UUID>& hovered,
                             filament::MaterialInstance* selectedMaterial,filament::MaterialInstance* hoverMaterial);
     void EndSelectionMask(filament::Scene& scene);
+    void BeginLODView(const std::unordered_set<UUID>& hidden);
+    void EndLODView();
+    std::array<std::uint64_t,3> GetUploadCounts() const;
     void BeginEditorView(const std::unordered_set<UUID>& hidden);
     void EndEditorView();
     void BeginDeformedView(const std::unordered_set<UUID>& sources);

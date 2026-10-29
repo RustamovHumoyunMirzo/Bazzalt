@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Piecewise-linear longitudinal and lateral tire grip curves. Longitudinal slip is a ratio; lateral angles are degrees. Peak values describe grip near adhesion limits and tail values describe sliding. These are contact friction curves, not a tire thermal or wear simulation.">
+  <title>WheelTire | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / Lua API reference / WheelTire</nav>
+      <article class="doc"><h1>WheelTire</h1><p>Piecewise-linear longitudinal and lateral tire grip curves. Longitudinal slip is a ratio; lateral angles are degrees. Peak values describe grip near adhesion limits and tail values describe sliding. These are contact friction curves, not a tire thermal or wear simulation.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Lua members and signatures</h2>
+<p>Use <code>Bazzalt.WheelTire</code>. Each member below is actually registered in Lua. The adapter declarations are C++ binding notation, not Lua example code. <code>sol::property</code> exposes a field, <code>sol::overload</code> lists alternatives, <code>sol::optional</code> accepts an omitted/nil argument, and <code>std::make_tuple</code> returns multiple Lua values. <code>sol::as_table</code> returns a Lua table. Instance methods use <code>value:Method(...)</code>; service/static calls use <code>Bazzalt.WheelTire.Method(...)</code> unless a colon overload is explicitly registered. An engine exception becomes a Lua script error. See the examples and behavior notes above for usage.</p><h3 id="lua-IsValid">IsValid</h3><pre><code class="language-lua">value:IsValid()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] bool IsValid() const;</code></pre></details><h3 id="lua-LateralPeakAngle">LateralPeakAngle</h3><pre><code>value.LateralPeakAngle: number</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>float LateralPeakAngle=3,LateralPeakGrip=1.2f,LateralTailAngle=20,LateralTailGrip=1;</code></pre></details><h3 id="lua-LateralPeakGrip">LateralPeakGrip</h3><pre><code>value.LateralPeakGrip: number</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>float LateralPeakAngle=3,LateralPeakGrip=1.2f,LateralTailAngle=20,LateralTailGrip=1;</code></pre></details><h3 id="lua-LateralTailAngle">LateralTailAngle</h3><pre><code>value.LateralTailAngle: number</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>float LateralPeakAngle=3,LateralPeakGrip=1.2f,LateralTailAngle=20,LateralTailGrip=1;</code></pre></details><h3 id="lua-LateralTailGrip">LateralTailGrip</h3><pre><code>value.LateralTailGrip: number</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>float LateralPeakAngle=3,LateralPeakGrip=1.2f,LateralTailAngle=20,LateralTailGrip=1;</code></pre></details><h3 id="lua-LongitudinalPeakGrip">LongitudinalPeakGrip</h3><pre><code>value.LongitudinalPeakGrip: number</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>float LongitudinalPeakSlip=.1f,LongitudinalPeakGrip=1.2f,LongitudinalTailSlip=1,LongitudinalTailGrip=1;</code></pre></details><h3 id="lua-LongitudinalPeakSlip">LongitudinalPeakSlip</h3><pre><code>value.LongitudinalPeakSlip: number</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>float LongitudinalPeakSlip=.1f,LongitudinalPeakGrip=1.2f,LongitudinalTailSlip=1,LongitudinalTailGrip=1;</code></pre></details><h3 id="lua-LongitudinalTailGrip">LongitudinalTailGrip</h3><pre><code>value.LongitudinalTailGrip: number</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>float LongitudinalPeakSlip=.1f,LongitudinalPeakGrip=1.2f,LongitudinalTailSlip=1,LongitudinalTailGrip=1;</code></pre></details><h3 id="lua-LongitudinalTailSlip">LongitudinalTailSlip</h3><pre><code>value.LongitudinalTailSlip: number</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>float LongitudinalPeakSlip=.1f,LongitudinalPeakGrip=1.2f,LongitudinalTailSlip=1,LongitudinalTailGrip=1;</code></pre></details><h3 id="lua-construction">Construction / enum values</h3><p>Construct a value with <code>Bazzalt.WheelTire()</code>. Constructor overloads, when available, are shown in the binding details.</p><details><summary>Native declaration and binding adapter</summary><pre><code>api.new_usertype&lt;WheelTire&gt;(&quot;WheelTire&quot;,sol::constructors&lt;WheelTire()&gt;(),sol::base_classes,sol::bases&lt;Component&gt;());</code></pre></details><p>Binding source: <code>src/Script/LuaVehicles.cpp</code>. Inherited component operations use the Entity component APIs.</p>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../WheelSuspension/en.html"><small>Previous</small>WheelSuspension</a>
+<a class="next" href="../../../bshader/en.html"><small>Next</small>Shaders and material assets</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#source-contract">Lua members and signatures</a><a class="toc-link sub" href="#lua-IsValid">IsValid</a><a class="toc-link sub" href="#lua-LateralPeakAngle">LateralPeakAngle</a><a class="toc-link sub" href="#lua-LateralPeakGrip">LateralPeakGrip</a><a class="toc-link sub" href="#lua-LateralTailAngle">LateralTailAngle</a><a class="toc-link sub" href="#lua-LateralTailGrip">LateralTailGrip</a><a class="toc-link sub" href="#lua-LongitudinalPeakGrip">LongitudinalPeakGrip</a><a class="toc-link sub" href="#lua-LongitudinalPeakSlip">LongitudinalPeakSlip</a><a class="toc-link sub" href="#lua-LongitudinalTailGrip">LongitudinalTailGrip</a><a class="toc-link sub" href="#lua-LongitudinalTailSlip">LongitudinalTailSlip</a><a class="toc-link sub" href="#lua-construction">Construction / enum values</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

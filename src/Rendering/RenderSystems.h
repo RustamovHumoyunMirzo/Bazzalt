@@ -39,12 +39,13 @@ private:
 class LightSystem final : public ComponentSystem<Transform, Light> {
 public:
     explicit LightSystem(RenderBackend& backend) : m_backend(backend) {}
+    void Synchronize(Scene& scene){OnUpdate(scene,0);}
 protected:
     void OnCreate(Scene& scene) override;
     void OnUpdate(Scene& scene, float deltaTime) override;
     void OnDestroy(Scene& scene) override;
 private:
-    struct Resource { utils::Entity Entity; LightType Type = LightType::Point; };
+    struct Resource { utils::Entity Entity; LightType Type = LightType::Point;Mat4 World;std::array<float,11> State{};bool Ready=false; };
     void Destroy(UUID id);
     RenderBackend& m_backend;
     std::unordered_map<UUID, Resource> m_resources;
@@ -75,6 +76,7 @@ private:
 class PrimitiveSystem final : public ComponentSystem<Transform, PrimitiveObject> {
 public:
     explicit PrimitiveSystem(RenderBackend& backend) : m_backend(backend) {}
+    void Synchronize(Scene& scene){OnUpdate(scene,0);}
 protected:
     void OnCreate(Scene&) override;
     void OnUpdate(Scene& scene, float deltaTime) override;

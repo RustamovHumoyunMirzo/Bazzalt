@@ -1,0 +1,68 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Hub, Editor and Compiler target Linux x86-64, built on Ubuntu 24.04. Games can target x64 or x86 with a matching runtime template. Hub is a native Qt application. Editor presentation and standalone games use X11, including XWayland on a Wayland desktop. Native Wayland rendering is not supported.">
+  <title>Linux | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Editor manual / Linux</nav>
+      <article class="doc"><h1>Linux</h1>
+<p>Hub, Editor and Compiler target Linux x86-64, built on Ubuntu 24.04. Games can target x64 or x86 with a matching runtime template. Hub is a native Qt application. Editor presentation and standalone games use X11, including XWayland on a Wayland desktop. Native Wayland rendering is not supported.</p>
+<h2 id="install">Install and launch</h2>
+<p>Extract the Linux Hub ZIP while preserving executable permissions, then run BazzaltHub from its extracted directory. The optional scripts/install_linux.sh helper installs this directory for your user and creates a desktop launcher. Install a matching Linux editor from Hub, then open a project. Editors remain managed programs; Hub chooses the version. Project files are portable between Windows and Linux, but generated caches, native script modules and game outputs must be rebuilt on each OS.</p>
+<p>Qt uses XDG app-data and Documents paths for settings and projects. On a typical Linux desktop, settings live under ~/.local/share/BAZZALT/data. Native C++ scripting requires clang++, libc++-dev, libc++abi-dev and C++20 development headers, found through PATH or Preferences &gt; Tools. Unlike Windows, no Microsoft build tools or import libraries are used.</p>
+<h2 id="dependencies">System libraries</h2>
+<p>Install the distribution's X11/XWayland, OpenGL/Vulkan drivers, OpenSSL 3 libcrypto and normal C/C++ runtime libraries. The editor's Qt deployment also needs XCB cursor and XKB libraries. Ubuntu package examples are libc++1, libc++abi1, libssl3t64, libx11-6, libgl1, libvulkan1, libxcb-cursor0 and libxkbcommon-x11-0. Use your GPU vendor's Linux driver. Mesa software rendering is used for CI smoke tests, not performance comparisons.</p>
+<h2 id="build-games">Build a game</h2>
+<p>Linux x86 games require an SSE2-capable CPU and the 32-bit atomic runtime (libatomic1:i386 on an Ubuntu x64 system). Keep this installed alongside the 32-bit graphics, crypto and C++ runtime libraries.</p>
+<p>Open Build &gt; Build Settings, choose Platform: Linux and Architecture: x64 or x86, then select a startup scene. Use the bundled matching runtime template, or point Runtime Directory at a Linux SDK template. Build writes disposable content under .bazzalt/Cache/Build and publishes the verified game under bin. The executable has no .exe suffix. ZIP output preserves executable permissions. Run an extracted game from its whole directory, keeping its shared libraries beside it.</p>
+<p>Unsupported targets show a warning and fail in the Console before build work begins. A Windows editor cannot generate Linux binaries, and a Linux editor cannot generate Windows binaries. On Linux, account-bound DPAPI protection is unavailable; embedded, external file and environment keys are supported. BPAK payloads are compressed using Zstandard and use the same authenticated encryption and signed manifests as Windows.</p>
+<h2 id="source">Develop from source</h2>
+<pre><code>python3 -m pip install -r requirements-build.txt PySide6==6.10.2 pybind11==3.0.2
+# Install clang, libc++-dev, libc++abi-dev, cmake, ninja, libssl-dev,
+# libx11-dev, libx11-xcb-dev, libxcb1-dev, OpenGL development libraries and GPU drivers.
+for dependency in entt rapidyaml filament sdl3 lua sol2 miniaudio freetype text_shaping pybind11; do
+    sh scripts/get_${dependency}.sh
+done
+CC=clang CXX=clang++ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel 2
+ctest --test-dir build --output-on-failure
+# Open the project using the normal development Hub/editor launcher.</code></pre>
+<p>Filament is downloaded as a pinned prebuilt SDK. The Linux CI workflows perform full native and packaged-game checks. To create distributable products from an existing build, run python scripts/build_linux_release.py. It packages Core, Compiler, Editor and Hub independently and includes the standalone compiler inside the editor's tool directory. No engine compilation occurs when a user builds game content.</p>
+<h2 id="security">File permissions and content security</h2>
+<p>Encrypted game content is extracted into a private per-session user cache. Files are checked against the signed inventory before use. Linux file locks are advisory; users who control the process or executable can bypass client-side protections, as they can on other platforms. These protections detect corruption and unauthorized changes against an unchanged player, not a hostile owner or administrator.</p><h2 id="x86">32-bit game output</h2><p>Select Linux/x86 and use RuntimeTemplates/linux-x86. The 64-bit compiler needs g++-multilib to compile C++ scripts. The x86 SDK uses Clang -m32 and libstdc++, while the official x64 SDK uses libc++. Build verification and target PCs require i386 libcrypto, X11, OpenGL/Vulkan, C++ runtime libraries and 32-bit graphics drivers. On Ubuntu enable i386 packages with dpkg --add-architecture i386. The Linux 32-bit Game Runtime workflow builds and tests the full x86 SDK on CI; game compilation never builds the engine.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../gui/en.html"><small>Previous</small>Author GUI layout and inheritance</a>
+<a class="next" href="../preferences/en.html"><small>Next</small>Editor preferences</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#install">Install and launch</a><a class="toc-link" href="#dependencies">System libraries</a><a class="toc-link" href="#build-games">Build a game</a><a class="toc-link" href="#source">Develop from source</a><a class="toc-link" href="#security">File permissions and content security</a><a class="toc-link" href="#x86">32-bit game output</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

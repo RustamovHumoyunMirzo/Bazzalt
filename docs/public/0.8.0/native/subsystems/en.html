@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A Subsystem Script is a project-wide C++ service. Unlike an entity behavior, it has no owning entity, Transform, or component lifecycle. It remains loaded across scene replacements and is removed at the end of the game/Play session. Lua is for entity gameplay and application controls, not global lifecycle registration.">
+  <title>Global subsystems | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / C++ / Global subsystems</nav>
+      <article class="doc"><h1>Global subsystems</h1>
+<p>A Subsystem Script is a project-wide C++ service. Unlike an entity behavior, it has no owning entity, Transform, or component lifecycle. It remains loaded across scene replacements and is removed at the end of the game/Play session. Lua is for entity gameplay and application controls, not global lifecycle registration.</p>
+<h2 id="register">Create and register</h2>
+<p>In the Asset Browser, choose Create &gt; Subsystem Script. Open Window &gt; Global Subsystems, select the C++ asset, choose a load level, and Add it. The dialog groups registrations by startup level. Apply saves project metadata; changes take effect on the next Play or build. Remove Selected unregisters a service for the next session. This is a modal child window, not a docked panel.</p>
+<p>A registered source cannot also be an entity script. Registration checks saved scenes and the attachment manifest; Play validates active scene attachments again. Even disabled attachments conflict. A manually edited scene cannot silently run the same source as both a component and a subsystem. A C++ source must implement the subsystem contract: SUBSYSTEM(Name) with OnRegister(). Existing unattached COMPONENT sources may be compiled in subsystem mode, but entity-only methods and GetEntity() will fail compilation rather than be emulated.</p>
+<h2 id="levels">Startup levels</h2>
+<table><thead><tr><th>Level</th><th>Load boundary</th></tr></thead><tbody>
+<tr><td>0 â€” Boot</td><td>Before OnBoot. Packages are authenticated and project metadata is available; no scene or drivers are ready.</td></tr>
+<tr><td>1 â€” Window</td><td>Before OnBeforeWindowCreate.</td></tr>
+<tr><td>2 â€” Initialization</td><td>Before OnInit. This begins driver initialization, not its completion.</td></tr>
+<tr><td>3 â€” Content</td><td>Before OnLoad. Rendering, input, audio and physics services are initialized; initial scene content is not ready yet.</td></tr>
+<tr><td>4 â€” Ready</td><td>Before OnPostWindowCreate. The startup scene and rendering surface are available.</td></tr>
+</tbody></table>
+<p>Numeric IDs are stable for saved projects; startup order follows the table rather than numeric sorting. Physics stepping emits OnBeforePhysicsStep and OnAfterPhysicsStep with DeltaTime; teardown emits OnBeforePhysicsShutdown and OnAfterPhysicsShutdown.</p>
+<p>A subsystem may subscribe to its own level or higher levels. A Ready subsystem subscribing to OnBoot or OnInit is an error. A Boot subsystem may subscribe to OnLateUpdate and access the scene inside that later callback. Loading early does not give permission to use uninitialized services early. Registration order within a level follows the dialog order; shutdown unregisters in reverse loading order.</p>
+<p>Editor Play simulates these application startup phases against the existing editor host; it does not create a second editor window. Boot still follows package/project and native module setup. OnBoot is not literally the first CPU instruction or a bypass of package verification.</p>
+<h2 id="api">Subsystem API</h2>
+<p>Include Bazzalt/Subsystem.h. SUBSYSTEM(Name) derives from Bazzalt::Subsystem, not Component or Behavior. Override OnRegister() to connect listeners, and optionally OnUnregister() to release owned transient state. GetScene() returns the active scene only when it is ready. Use normal scene APIs such as GetScene().FindEntityByName("Player"). Avoid keeping entity references across scene unloads.</p>
+<p>Application::OnX(callback) returns a subscription token. Application::Unsubscribe(token) disconnects it early. Listeners registered in subsystem callbacks are disconnected automatically before its object/module is destroyed. Generic Application::Subscribe(type, callback) receives an ApplicationEvent; named listeners receive the arguments listed below. Ordinary entity behaviors cannot acquire registration authority.</p>
+<h2 id="callbacks">Events and arguments</h2>
+<p>Boot: OnBoot(). Window: OnBeforeWindowCreate(). Initialization: OnInit(). Content: OnLoad() and OnSceneLoad(path).</p>
+<p>Ready: OnPostWindowCreate(), OnPlay(), OnStop(), OnPreRender(), OnRender(), OnPostRender(), OnPreShutdown(), OnShutdown(), and OnWindowCloseRequested(). Window changes use OnWindowResize(width, height) and OnWindowFocusChanged(bool). Scene notifications use OnSceneLoaded(sceneUUID), OnSceneUnload(sceneUUID), and OnSceneUnloaded(sceneUUID).</p>
+<p>Also at Ready: OnPreUpdate(deltaTime), OnUpdate(deltaTime), OnFixedUpdate(fixedDeltaTime), and OnLateUpdate(deltaTime). Entity behaviors still have their own update and late-update callbacks; those do not become global listeners. OnPostRender reports return from the backend call, not GPU completion. A close request is a notification, not a cancellable operation.</p>
+<p>Input is prepared before OnPreUpdate; fixed updates precede normal gameplay, then late updates and rendering follow. Scene-load requests are deferred to a safe frame boundary. OnSceneUnload runs before teardown, OnSceneUnloaded afterward. Audio playback services start with gameplay: use OnPlay or later for playback operations. Shutdown hooks cannot be guaranteed after an OS kill or fatal driver/native-code fault.</p>
+<h2 id="headers">Sharing code and headers</h2>
+<p>Native entity scripts also expose Scripts::Find(entity, typeName) and Scripts::Get&lt;Interface&gt;(entity, typeName), declared in Bazzalt/Script.h. They return an optional Behavior pointer or a checked shared-interface reference. This lets C++ entity scripts and subsystems call one another through project headers. Resolve instances after initialization; a script may be constructed before its OnCreate has run. References expire on scene/script teardown. Lua does not gain arbitrary native-interface invocation through this API.</p>
+<p>Create &gt; C++ Header creates a header asset using the header.svg icon. Include project headers normally and expose interfaces or inline helpers there. Subsystems::Find(name) returns a loaded Subsystem pointer or null; Subsystems::Get&lt;Interface&gt;(name) returns a checked interface reference and throws if unavailable/incompatible. This supports calling a service through an interface shared in a project header without exposing runtime internals. Do not retain the pointer after the session ends.</p>
+<h2 id="failures">Errors and security</h2>
+<p>Invalid level subscriptions and guarded early scene/asset/input/audio access throw descriptive errors. The editor reports subsystem failures in Console and stops the failed Play session. A standalone game stops and presents a native OS error dialog. This is controlled failure, not continued execution with invalid service state.</p>
+<p>Only public SDK headers are staged. Compilation rejects absolute, escaping, and recognizable private-header includes, and fingerprints included project headers so changes rebuild modules. These checks prevent accidental internal API dependencies; native C++ is trusted code, not a security sandbox. Arbitrary machine code, forged declarations, static initializers, invalid pointers, filesystem access, and third-party code cannot be isolated by an include validator. Run only trusted project C++ code. Put service use and listener registration in OnRegister/callbacks, not static constructors.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../application/en.html"><small>Previous</small>Application controls</a>
+<a class="next" href="../../lua/en.html"><small>Next</small>Write a Lua behavior</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#register">Create and register</a><a class="toc-link" href="#levels">Startup levels</a><a class="toc-link" href="#api">Subsystem API</a><a class="toc-link" href="#callbacks">Events and arguments</a><a class="toc-link" href="#headers">Sharing code and headers</a><a class="toc-link" href="#failures">Errors and security</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

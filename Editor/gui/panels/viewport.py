@@ -205,6 +205,7 @@ class NativeRenderSurface(QWidget):
         if right-left<=4 and bottom-top<=4:return []
         selected=[]
         for entity in self.Runtime.Entities():
+            if entity.get("editor_lod_hidden") and not {"Camera","Light","Audio Source","Audio Listener"}.intersection(entity.get("components",())):continue
             if hasattr(self.Runtime,"IsEditorSelectable") and not self.Runtime.IsEditorSelectable(str(entity.get("uuid",""))):continue
             entity_id=str(entity.get("uuid","") or "")
             components=entity.get("components",())

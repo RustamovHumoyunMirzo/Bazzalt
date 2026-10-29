@@ -23,6 +23,8 @@
         "audio",
         "physics",
         "vehicles",
+        "performance",
+        "lod",
         "settings",
         "extensions",
         "glossary"
@@ -50,6 +52,7 @@
         "audio",
         "physics",
         "vehicles",
+        "lod",
         "gui",
         "extensions",
         "reference"
@@ -64,6 +67,7 @@
         "audio",
         "physics",
         "vehicles",
+        "lod",
         "gui",
         "extensions",
         "reference"

@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Vehicle components are public headers under Bazzalt/Components. Scene.h provides the PhysicsScene facade. All native solver, wheel and drivetrain types remain private to bazzalt_physics.">
+  <title>Vehicles in C++ | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / C++ / Vehicles in C++</nav>
+      <article class="doc"><h1>Vehicles in C++</h1><p>Vehicle components are public headers under Bazzalt/Components. Scene.h provides the PhysicsScene facade. All native solver, wheel and drivetrain types remain private to bazzalt_physics.</p>
+<h2 id="example">Create a rear-wheel-drive car</h2><pre><code class="language-cpp">#include &lt;Bazzalt/Scene.h&gt;
+using namespace Bazzalt;
+Entity MakeCar(Scene&amp; scene) {
+    auto car = scene.CreateEntity("Car");
+    car.GetComponent&lt;Transform&gt;().Position = {0, 1.2f, 0};
+    car.AddComponent&lt;ShapeCollider&gt;().Size = {1.6f, .4f, 3};
+    auto&amp; body = car.AddComponent&lt;Rigidbody&gt;();
+    body.Mass = 1200;
+    body.CenterOfMassOffset = {0, -.15f, 0};
+    car.AddComponent&lt;Vehicle&gt;();
+    car.AddComponent&lt;VehicleEngine&gt;();
+    car.AddComponent&lt;VehicleTransmission&gt;();
+    Entity wheels[4];
+    for (unsigned i = 0; i &lt; 4; ++i) {
+        wheels[i] = scene.CreateEntity("Wheel");
+        wheels[i].SetParent(car);
+        wheels[i].AddComponent&lt;VehicleWheel&gt;().Position =
+            {(i &amp; 1) ? .9f : -.9f, 0, i &lt; 2 ? 1.2f : -1.2f};
+        wheels[i].AddComponent&lt;WheelSuspension&gt;();
+        wheels[i].AddComponent&lt;WheelTire&gt;();
+        wheels[i].AddComponent&lt;WheelBrake&gt;();
+        if (i &lt; 2) wheels[i].AddComponent&lt;WheelSteering&gt;();
+    }
+    auto&amp; axle = car.AddComponent&lt;VehicleDifferential&gt;();
+    axle.LeftWheel = wheels[2].GetUUID();
+    axle.RightWheel = wheels[3].GetUUID();
+    return car;
+}
+// During Play, after the vehicle has been registered with physics:
+auto physics = scene.GetPhysics();
+physics.SetVehicleInput(car, 1.0f, 0.0f); // Throttle, steering; optional brake and handbrake.
+if (auto state = physics.GetVehicleState(car)) {
+    float speedMetersPerSecond = state-&gt;Speed;
+}</code></pre>
+<p>SetVehicleInput accepts throttle and steering in [−1, 1], brake/handbrake in [0, 1]. Automatic transmission uses negative throttle for reverse. For manual mode, set VehicleTransmission.Automatic false and call SetVehicleGear(car, gear, clutch), where −1 is reverse, 0 neutral, 1–GearCount forward and clutch is [0, 1]. Use nonnegative throttle in manual mode. Input methods return false when the entity is not an active registered vehicle; invalid nonfinite/out-of-range input throws invalid_argument. They never capture keyboard/gamepad state: read Bazzalt Input or supply AI/network controls yourself.</p><h2 id="composition">Components and ownership</h2>
+<table><thead><tr><th>Component</th><th>Attach to</th><th>Purpose</th></tr></thead><tbody>
+<tr><td>Vehicle</td><td>Chassis</td><td>Local up/forward axes, wheel contact test, collision layer and optional pitch/roll limit. Requires a dynamic Rigidbody and chassis collider.</td></tr>
+<tr><td>VehicleWheel</td><td>One child per wheel</td><td>Suspension attachment Position in chassis-local metres, radius, width, inertia, damping, camber/toe axes, and visual animation.</td></tr>
+<tr><td>WheelSuspension</td><td>Wheel</td><td>Required for an active wheel. Direction, minimum/maximum travel, preload, spring frequency in Hz, damping ratio and optional chassis force point.</td></tr>
+<tr><td>WheelTire</td><td>Wheel</td><td>Longitudinal slip-ratio and lateral slip-angle grip curves. Peak and tail values distinguish adhesion from sliding. Omit for Jolt's default tire curve.</td></tr>
+<tr><td>WheelSteering</td><td>Steered wheel</td><td>Steering axis and maximum angle in degrees. Omit for a non-steering wheel.</td></tr>
+<tr><td>WheelBrake</td><td>Braked wheel</td><td>Service-brake and handbrake torque in Nm. Omit for a freely rolling wheel.</td></tr>
+<tr><td>VehicleEngine</td><td>Chassis</td><td>Engine torque, operating RPM, inertia, damping and a normalized three-point torque curve. Omit for an unpowered trailer.</td></tr>
+<tr><td>VehicleTransmission</td><td>Chassis</td><td>Automatic/manual shifting, one to ten forward ratios, reverse, clutch strength/timing and shift thresholds.</td></tr>
+<tr><td>VehicleDifferential</td><td>Chassis or axle child</td><td>Left/right wheel entity references, final-drive ratio, torque split, limited-slip ratio and drivetrain torque share. Add one per driven axle; shares are normalized.</td></tr>
+<tr><td>VehicleAntiRollBar</td><td>Chassis or axle child</td><td>Connect two wheels and resist differential suspension travel, with stiffness in N/m.</td></tr>
+<tr><td>VehicleAerodynamics</td><td>Chassis</td><td>Air density, frontal area, drag, downforce and a chassis-local center of pressure. Forces depend on speed squared.</td></tr>
+</tbody></table>
+<h2 id="coordinates">Coordinates and visual wheels</h2>
+<p>The default vehicle uses +Y up, +Z forward and +X along the wheel axle. Distances are metres, mass is kilograms, torque is Nm, and authored angles are degrees. Rigidbody supplies mass, center of mass, collision detection and body interpolation; chassis collision geometry is built from its ordinary colliders.</p>
+<p>Wheel entities must be descendants of their chassis and have no separate Rigidbody or collider. Put a wheel mesh on the wheel entity or under it. Colliders in that visual subtree are excluded from the chassis compound; a nested independent Rigidbody remains a separate body. Rotate a mesh child to match its imported model axis. VehicleWheel.Position is an explicit chassis-local suspension attachment; it is independent of the wheel entity's animated Transform. The simulation positions, steers and spins the wheel entity without changing that attachment. Disable Animate to drive visuals yourself from wheel telemetry. Stop in the editor restores the authored scene.</p>
+<p>Positive uniform chassis world scale is supported. Nonuniform or mirrored chassis scale is rejected. A vehicle has 2–32 active wheels. A wheel needs both enabled VehicleWheel and WheelSuspension components. Disabling Vehicle stops its wheel solver; the Rigidbody remains an ordinary body. Disabling an optional component removes its contribution. Without both an enabled engine and transmission the powertrain stays disconnected in neutral, while steering, brakes and suspension continue working. An absent/disabled engine reports zero RPM. Invalid or cross-vehicle wheel references are reported instead of silently connecting another car. Drive torque reaches wheels only through an enabled differential; without one the vehicle rolls passively. Disabled wheels disconnect from the differential, and anti-roll bars suspend their action until both linked wheels are active. Each wheel can belong to only one differential.</p>
+<h2 id="tuning">Arcade and physical tuning</h2>
+<p>For an arcade car, start with ray contacts, a lower Rigidbody center of mass, a limited Max Pitch Roll Angle, short suspension travel, strong grip and fast automatic shifts. For a more physical car, allow the full 180-degree pitch/roll range, use sphere or cylinder contacts, realistic chassis mass and center of mass, measured wheel inertia, suspension travel, damping, torque/RPM and gearbox ratios. Use different steering/brake components on front and rear wheels; split torque across two axle differentials for all-wheel drive.</p>
+<p>WheelTire uses piecewise-linear grip curves, not a thermodynamic tire model. Tire temperature, tire wear, fluid brakes, body damage and engine combustion are not simulated. Contact forces do affect dynamic ground objects. Use normal joints and rigidbodies to compose articulated trailers. Core simulation is independent of visual polygon count.</p>
+<h2 id="editing">Editing and runtime state</h2>
+<p>Select a chassis or wheel with Scene Gizmos enabled to see wheel circles and suspension travel. Component fields are saved in scene YAML and are available in C++ and Lua. Structural/configuration edits rebuild the vehicle constraint safely while retaining the chassis body's motion and current driver input; engine/wheel rotational state is reinitialized. Use SetVehicleInput and SetVehicleGear for driving, rather than rebuilding component settings every frame.</p>
+<p>GetVehicleState returns signed forward speed in m/s, RPM, gear, clutch friction and grounded wheel count. GetVehicleWheelState returns current wheel position, ground contact, suspension length/force, angular velocity in rad/s, steering angle in degrees and tire slip. ContactPoint and ContactNormal are meaningful only when Grounded is true. Telemetry is absent outside a running simulation or for disabled/unregistered components. Read it after a physics step. Wheel contacts are reported through telemetry, rather than ordinary chassis collision callbacks; scene OnBeforePhysicsStep/OnAfterPhysicsStep events remain available for control and telemetry.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../physics/en.html"><small>Previous</small>Physics in C++</a>
+<a class="next" href="../lod/en.html"><small>Next</small>LOD in C++</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Create a rear-wheel-drive car</a><a class="toc-link" href="#composition">Components and ownership</a><a class="toc-link" href="#coordinates">Coordinates and visual wheels</a><a class="toc-link" href="#tuning">Arcade and physical tuning</a><a class="toc-link" href="#editing">Editing and runtime state</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

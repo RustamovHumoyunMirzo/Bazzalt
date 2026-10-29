@@ -308,7 +308,7 @@ class EditorController(QObject):
                 for property_name, value in dict(component_data.get(component, {})).items():
                     editor = self._ComponentEditor(inspected_entity, component, property_name, value)
                     if editor is not None:
-                        if component=="Camera" and property_name=="Post Process Materials":section.AddWideWidget(editor);section._fields[property_name]=editor
+                        if (component=="Camera" and property_name=="Post Process Materials") or (component=="LOD" and property_name=="Levels"):section.AddWideWidget(editor);section._fields[property_name]=editor
                         else:section.AddField(property_name,editor)
                 if component=="GuiElement":
                     from .stylesheet_fields import Field
@@ -708,20 +708,23 @@ class EditorController(QObject):
                              "Scale":details.get("scale",(1,1,1))}}
         values.update({f"runtime.{name}":dict(fields) for name,fields in details.get("component_data",{}).items()})
         self._updating_inspector=True
+        focus=QApplication.focusWidget()
         try:
             for component,state in details.get("component_enabled",{}).items():
                 section=self.Window.Properties._sections.get(f"runtime.{component}")
-                if section is not None:
+                if section is not None and section.Enabled.isChecked()!=bool(state):
                     blocker=QSignalBlocker(section.Enabled);section.Enabled.setChecked(bool(state));del blocker
             for section_id,fields in values.items():
                 section=self.Window.Properties._sections.get(section_id)
                 if section is None:continue
                 for name,value in fields.items():
                     editor=section._fields.get(name);setter=getattr(editor,"SetValue",None) if editor else None
-                    focus=QApplication.focusWidget()
                     if preserve_editing and editor is not None and focus is not None and (focus is editor or editor.isAncestorOf(focus)):continue
                     if callable(setter):
+                        if preserve_editing and getattr(editor,'_inspector_last_value',object())==value:continue
                         blocker=QSignalBlocker(editor);setter(value);del blocker
+                        from copy import deepcopy
+                        editor._inspector_last_value=deepcopy(value)
         finally:self._updating_inspector=False
 
     def SelectSceneEntity(self,entity_id:str,additive:bool=False)->None:
@@ -745,6 +748,12 @@ class EditorController(QObject):
         return self.Window.Resources.Icon(f"icons/{filename}") if filename else None
 
     def _ComponentEditor(self, entity_id: str, component: str, name: str, value):  # type: ignore[no-untyped-def]
+        if component=="LOD" and name=="Levels":
+            from .lod import LODLevelsInput
+            field=LODLevelsInput(self,entity_id,value);field.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return field
+        if component=="LOD" and name=="Forced Level":
+            field=EnumInput();count=len(self.Runtime.EntityDetails(entity_id).get("component_data",{}).get("LOD",{}).get("Levels",[]));tr=self.Window.Localization.Translate
+            field.SetOptions([(tr('lod.automatic'),-1),(tr('lod.culled'),-2)]+[(tr('lod.level',index=i),i) for i in range(count)]);field.SetValue(value);field.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,field.GetValue()));return field
         from .physics import ComponentField
         physics_field=ComponentField(self,entity_id,component,name,value)
         if physics_field is not None:return physics_field
@@ -935,11 +944,13 @@ class EditorController(QObject):
         return list(result)
 
     def _CommitComponent(self, entity_id: str, component: str, name: str, value) -> None:  # type: ignore[no-untyped-def]
-        if not self._updating_inspector and entity_id==self.SelectedEntity and self._Mutate(f"Edit {component}",lambda:self.Runtime.SetComponentProperty(entity_id,component,name,value)):
-            self.SetDirty(True)
-            if component=="Light" and name!="Type":self._RefreshInspectorValues()
-            if component=="GuiElement" and name=="Stylesheet":self.SelectEntity(entity_id,force=True)
-            if component in {"Rigidbody","Shape Collider","Mesh Collider","Joint","Distance Joint","Hinge Joint","Slider Joint","Ball And Socket Joint","Fixed Joint","Cloth","Vehicle","Vehicle Transmission","Wheel Suspension"} and name in {"Use Scene Gravity","Shape","Convex","Type","Motor","Bend Mode","Collision Test","Gear Count","Automatic","Use Force Point"}:self.SelectEntity(entity_id,force=True)
+        if self._updating_inspector or entity_id!=self.SelectedEntity:return
+        if not self._Mutate(f"Edit {component}",lambda:self.Runtime.SetComponentProperty(entity_id,component,name,value)):
+            self._RefreshInspectorValues();return
+        self.SetDirty(True)
+        if component=="Light" and name!="Type":self._RefreshInspectorValues()
+        if component=="GuiElement" and name=="Stylesheet":self.SelectEntity(entity_id,force=True)
+        if component in {"Rigidbody","Shape Collider","Mesh Collider","Joint","Distance Joint","Hinge Joint","Slider Joint","Ball And Socket Joint","Fixed Joint","Cloth","Vehicle","Vehicle Transmission","Wheel Suspension"} and name in {"Use Scene Gravity","Shape","Convex","Type","Motor","Bend Mode","Collision Test","Gear Count","Automatic","Use Force Point"}:self.SelectEntity(entity_id,force=True)
 
     def _CommitLightType(self,entity_id:str,value:int)->None:
         self._CommitComponent(entity_id,"Light","Type",value)
@@ -1222,26 +1233,26 @@ class EditorController(QObject):
         if not entity_ids:return
         previous=self._hierarchy_clipboard
         self.CopyHierarchyEntities(entity_ids);nodes=self._hierarchy_clipboard;self._hierarchy_clipboard=previous
-        self.History.Begin("Duplicate entities");created=[];scenes=set();remap={}
+        self.History.Begin("Duplicate entities");created=[];scenes=set();remap={};self._clone_lod_fields=[]
         try:
             for node in nodes:
                 details=node["details"];parent=str(details.get("parent") or "")
                 if not parent or parent=="00000000-0000-0000-0000-000000000000":parent=str(details.get("scene_uuid") or "")
                 value=self._CloneHierarchyNode(node,parent,True,remap)
                 if value:created.append(value);scenes.add(str(details.get("scene_uuid","")))
-            self._RemapClonedVehicleReferences(remap)
+            self._RemapClonedEntityReferences(remap)
         except Exception:self.History.Cancel();raise
         if not created:self.History.Cancel();return
         self.History.Commit();self.SetDirty(True,scenes);self.RefreshHierarchy();self.SelectEntities(created)
 
     def PasteHierarchyEntities(self,parent_id)->None:
         if not self._hierarchy_clipboard:return
-        self.History.Begin("Paste entities");created=[];remap={}
+        self.History.Begin("Paste entities");created=[];remap={};self._clone_lod_fields=[]
         try:
             for node in self._hierarchy_clipboard:
                 value=self._CloneHierarchyNode(node,str(parent_id or ""),True,remap)
                 if value:created.append(value)
-            self._RemapClonedVehicleReferences(remap)
+            self._RemapClonedEntityReferences(remap)
         except Exception:
             self.History.Cancel();raise
         if not created:self.History.Cancel();return
@@ -1256,12 +1267,14 @@ class EditorController(QObject):
         supported=set(self.Runtime.ComponentTypes())
         for component,fields in details.get("component_data",{}).items():
             if component not in supported or not self.Runtime.AddComponent(entity,component):continue
+            if component=="LOD":
+                self._clone_lod_fields.append((entity,dict(fields)));self.Runtime.SetComponentEnabled(entity,component,bool(details.get("component_enabled",{}).get(component,True)));continue
             for field,value in dict(fields).items():self.Runtime.SetComponentProperty(entity,component,field,value)
             self.Runtime.SetComponentEnabled(entity,component,bool(details.get("component_enabled",{}).get(component,True)))
         for child in node.get("children",()):self._CloneHierarchyNode(child,entity,remap=remap)
         return entity
 
-    def _RemapClonedVehicleReferences(self,remap):
+    def _RemapClonedEntityReferences(self,remap):
         # Resolve wheel references after all siblings have been created.
         for entity in remap.values():
             data=self.Runtime.EntityDetails(entity).get("component_data",{})
@@ -1269,6 +1282,13 @@ class EditorController(QObject):
                 for field in ("Left Wheel","Right Wheel"):
                     original=str(data.get(component,{}).get(field,""))
                     if original in remap:self.Runtime.SetComponentProperty(entity,component,field,remap[original])
+
+        for entity,fields in getattr(self,"_clone_lod_fields",[]):
+            levels=[dict(level,Roots=[remap.get(str(root),str(root)) for root in level.get("Roots",[])]) for level in fields.get("Levels",[])]
+            if not self.Runtime.SetComponentProperty(entity,"LOD","Levels",levels):raise ValueError("Could not restore copied LOD levels")
+            for field,value in fields.items():
+                if field!="Levels":self.Runtime.SetComponentProperty(entity,"LOD",field,value)
+        self._clone_lod_fields=[]
 
     def ReparentEntity(self, entity_id: str, parent_id: str) -> None:
         scene_id=str(self.Runtime.EntityDetails(entity_id).get("scene_uuid",""))

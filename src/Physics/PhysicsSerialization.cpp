@@ -1,5 +1,6 @@
 #include "Physics/PhysicsSerialization.h"
 #include "Physics/PhysicsFields.h"
+#include "Bazzalt/Components/LOD.h"
 #include "Utils/NumberParsing.h"
 #include <sstream>
 #include <iomanip>
@@ -37,6 +38,15 @@ void RegisterPhysicsComponents(ComponentSerializationRegistry& registry){
 #define REGISTER(Type,Visit) registry.Register<Type>("Bazzalt." #Type,1,[](const Type& value,PropertyMap& p){Visit(value,[&](const char* name,const char*,const auto& field){p[name]=Encode(field);});},[](Type& output,const PropertyMap& p,std::uint32_t version){if(version!=1)return false;Type value;bool valid=true;Visit(value,[&](const char* name,const char*,auto& field){auto it=p.find(name);if(it==p.end()||!Decode(it->second,field))valid=false;});if(!valid||!value.IsValid())return false;output=value;return true;});
     REGISTER(Rigidbody,VisitBody) REGISTER(ShapeCollider,VisitShapeCollider) REGISTER(MeshCollider,VisitMeshCollider) REGISTER(Joint,VisitJoint) REGISTER(DistanceJoint,VisitJoint) REGISTER(HingeJoint,VisitJoint) REGISTER(SliderJoint,VisitJoint) REGISTER(BallAndSocketJoint,VisitJoint) REGISTER(FixedJoint,VisitJoint) REGISTER(Rope,VisitRope)
     REGISTER(Vehicle,VisitVehicle) REGISTER(VehicleWheel,VisitVehicleWheel) REGISTER(WheelSuspension,VisitWheelSuspension) REGISTER(WheelTire,VisitWheelTire) REGISTER(WheelBrake,VisitWheelBrake) REGISTER(WheelSteering,VisitWheelSteering) REGISTER(VehicleEngine,VisitVehicleEngine) REGISTER(VehicleTransmission,VisitVehicleTransmission) REGISTER(VehicleDifferential,VisitVehicleDifferential) REGISTER(VehicleAntiRollBar,VisitVehicleAntiRollBar) REGISTER(VehicleAerodynamics,VisitVehicleAerodynamics)
+    registry.Register<LOD>("Bazzalt.LOD",1,[](const LOD& v,PropertyMap& p){
+        p["Center"]=Encode(v.Center);p["Size"]=Encode(v.Size);p["Bias"]=Encode(v.Bias);p["Hysteresis"]=Encode(v.Hysteresis);p["Cull"]=Encode(v.Cull);p["ForcedLevel"]=Encode(v.ForcedLevel);p["Count"]=Encode(v.Levels.size());
+        for(std::size_t i=0;i<v.Levels.size();++i){auto prefix="Level."+std::to_string(i)+".";p[prefix+"ScreenHeight"]=Encode(v.Levels[i].ScreenHeight);p[prefix+"Count"]=Encode(v.Levels[i].Roots.size());for(std::size_t j=0;j<v.Levels[i].Roots.size();++j)p[prefix+"Root."+std::to_string(j)]=Encode(v.Levels[i].Roots[j]);}
+    },[](LOD& v,const PropertyMap& p,std::uint32_t version){
+        if(version!=1)return false;const auto read=[&](const std::string& key,auto& output){auto it=p.find(key);return it!=p.end()&&Decode(it->second,output);};unsigned count=0;
+        if(!read("Center",v.Center)||!read("Size",v.Size)||!read("Bias",v.Bias)||!read("Hysteresis",v.Hysteresis)||!read("Cull",v.Cull)||!read("ForcedLevel",v.ForcedLevel)||!read("Count",count)||count<1||count>8)return false;
+        v.Levels.resize(count);for(unsigned i=0;i<count;++i){auto prefix="Level."+std::to_string(i)+".";unsigned roots=0;if(!read(prefix+"ScreenHeight",v.Levels[i].ScreenHeight)||!read(prefix+"Count",roots)||roots>256)return false;v.Levels[i].Roots.resize(roots);for(unsigned j=0;j<roots;++j)if(!read(prefix+"Root."+std::to_string(j),v.Levels[i].Roots[j]))return false;}
+        return v.IsValid();
+    });
     registry.Register<Cloth>("Bazzalt.Cloth",2,[](const Cloth& value,PropertyMap& p){VisitCloth(value,[&](const char* name,const char*,const auto& field){p[name]=Encode(field);});},[](Cloth& output,const PropertyMap& p,std::uint32_t version){
         if(version!=1&&version!=2)return false;Cloth value;bool valid=true;VisitCloth(value,[&](const char* name,const char*,auto& field){auto it=p.find(name);if(it==p.end()){const std::string_view key=name;if(version!=1||(key!="BendMode"&&key!="SubdivisionLevel"&&key!="Pressure"&&key!="CollisionRadius"))valid=false;}else if(!Decode(it->second,field))valid=false;});
         if(version==1&&!p.contains("BendMode")){

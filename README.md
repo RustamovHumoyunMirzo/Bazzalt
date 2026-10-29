@@ -9,13 +9,7 @@ BAZZALT is an editor-first C++20 game engine in active alpha development. It
 combines a native runtime with a PySide6 editor and Hub while keeping low-level
 engine lifetime, rendering, importing, and persistence away from game code.
 
-Version 0.7.0 supports Windows and Linux x64 Hub, Editor, game compiler and runtime.
-Linux presentation uses X11/XWayland; see the [Linux guide](docs/public/0.7.0/manual/linux/en.html).
-Windows and Linux also support x86 game output; Hub, Editor and game compiler always require x64.
-Build games on their target OS with a matching prebuilt runtime SDK.
-Physics runs in a separate Jolt-based native library, with rigid bodies, colliders, scene queries, cloth/rope, composable wheeled vehicles and C++/Lua contact callbacks. Vehicle composition includes suspension, tires, brakes, steering and drivetrain parts; see the [vehicle guide](docs/public/0.7.0/manual/vehicles/en.html). See the [physics guide](docs/public/0.7.0/manual/physics/en.html).
-
-See [what is new in 0.7.0](docs/public/0.7.0/whats-new/en.html).
+See [what is new in 0.8.0](docs/public/0.8.0/whats-new/en.html).
 
 > **Alpha status:** core workflows are functional, but APIs and file formats may
 > still change. BAZZALT is not yet recommended for production projects.
@@ -45,7 +39,7 @@ promise of production readiness.
 
 ### Rendering backends
 
-| Backend / mode | Windows | Linux | Notes |
+| Backend | Windows | Linux | Notes |
 | --- | --- | --- | --- |
 | Vulkan | ✅ Supported | ✅ Supported | Requires a matching SDK backend and compatible GPU driver. |
 | OpenGL | ✅ Supported | ✅ Supported | Requires a matching SDK backend and compatible GPU driver. |
@@ -58,7 +52,7 @@ promise of production readiness.
 Backend choices depend on the backends included in the installed runtime SDK;
 Preferences lists those available in that build. A renderer dependency's support
 for another platform does not make it a supported BAZZALT target. See the
-[platform and backend guide](docs/public/0.7.0/manual/platforms/en.html).
+[platform and backend guide](docs/public/0.8.0/manual/platforms/en.html).
 
 ## Documentation
 

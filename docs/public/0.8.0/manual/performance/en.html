@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="0.8.0 removes repeated work in shared engine paths rather than lowering simulation rates or rendering resolution. The same core is used by the editor and standalone players. LOD is an optional new way to reduce geometry; existing scenes without it keep their representations.">
+  <title>Performance and profiling | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Editor manual / Performance and profiling</nav>
+      <article class="doc"><h1>Performance and profiling</h1><p>0.8.0 removes repeated work in shared engine paths rather than lowering simulation rates or rendering resolution. The same core is used by the editor and standalone players. LOD is an optional new way to reduce geometry; existing scenes without it keep their representations.</p><h2 id="changes">What changed</h2><ul><li>Affine transform composition constructs scaled rotation columns directly. The general matrix operations and legacy handling of nonfinite inputs remain available.</li><li>Physics reuses each body's world pose within one synchronization and appends comparison keys without allocating a temporary string per field. Public mutable components are still read on every synchronization.</li><li>Primitive geometry and picking BVHs are shared in a bounded 32 MiB CPU payload cache. Repeated hover queries no longer tessellate a shape or linearly scan every triangle. Model ray queries use a bounded stack instead of allocating a work stack.</li><li>Unchanged mesh/primitive transforms, render flags, primitive colors and light parameters are not uploaded again. Live material values, animated shader time, moving objects and changed properties continue updating.</li><li>The inspector avoids resetting unchanged fields and enabled checkboxes during Play. Rejected component edits restore the stored value. New values are not delayed behind a lower inspector refresh rate.</li></ul><h2 id="measure">Measure your project</h2><p>Use Scene Statistics to inspect renderable counts and frame time. The native editor statistics dictionary additionally reports transform_uploads, render_state_uploads, primitive_color_uploads, light_uploads, primitive_cache_hits, primitive_cache_builds and primitive_cache_bytes. Upload counts are cumulative for the renderer instance. A static scene should stop accumulating unchanged-property uploads, while animation and editing should resume them.</p><p>Compare the same project, camera, rendering backend, resolution and build configuration. Warm shader/asset caches before measuring steady-state interaction. Separate first import/startup time, CPU work, GPU time and display frame rate; a microbenchmark improvement is not a promise of the same percentage increase in game FPS.</p><h2 id="lod">Reducing geometry with LOD</h2><p>Use authored simpler models and screen-height thresholds for distant objects. LOD reduces submitted geometry and shadow geometry per camera while retaining resources for smooth switches. See the <a href="../lod/en.html">LOD guide</a>. It does not disable gameplay or physics and does not automatically simplify a model.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../vehicles/en.html"><small>Previous</small>Building a vehicle</a>
+<a class="next" href="../lod/en.html"><small>Next</small>Level of detail (LOD)</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#changes">What changed</a><a class="toc-link" href="#measure">Measure your project</a><a class="toc-link" href="#lod">Reducing geometry with LOD</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

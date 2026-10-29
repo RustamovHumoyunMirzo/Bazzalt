@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Lua uses the same independent texture resources and producer/consumer rules as C++. No native engine loop or GPU object is exposed.">
+  <title>Texture | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / Lua API reference / Texture</nav>
+      <article class="doc"><h1>Texture</h1><p>Lua uses the same independent texture resources and producer/consumer rules as C++. No native engine loop or GPU object is exposed.</p>
+<h2 id="example">Create and share a camera texture</h2>
+<pre><code class="language-lua">local B = Bazzalt
+local settings = B.TextureDescriptor.new()
+settings.Width = 1024; settings.Height = 512
+settings.Samples = 4; settings.Mipmaps = true
+settings.ColorFormat = B.TextureColorFormat.RGBA16F
+local texture = B.Texture.Create(settings)
+local camera = cameraEntity:GetComponent("Camera")
+camera:SetRenderTarget(texture)
+cameraEntity:SetComponent("Camera", camera)
+local image = imageEntity:GetComponent("GuiImage")
+image:SetTexture(texture)
+imageEntity:SetComponent("GuiImage", image)
+material:SetTexture("baseColorTexture", texture)
+-- For project assets: B.Texture.Load(assetUUID)
+</code></pre>
+<h2 id="methods">Method reference</h2>
+<table><thead><tr><th>Method</th><th>Contract</th></tr></thead><tbody>
+<tr><td>B.Texture.new()</td><td>Empty handle.</td></tr><tr><td>B.Texture.Load(UUID)</td><td>Non-owning asset/resource reference.</td></tr><tr><td>B.Texture.Create([descriptor])</td><td>Transient writable texture; default settings if omitted. Invalid settings raise an error.</td></tr>
+<tr><td>GetAssetUUID()</td><td>Stable resource UUID shared by all consumers.</td></tr><tr><td>IsValid()</td><td>Valid writable descriptor or ready ordinary image asset.</td></tr><tr><td>IsRenderTarget()</td><td>True only for writable .btexture/transient resources.</td></tr><tr><td>IsRuntime()</td><td>True for transient runtime descriptors.</td></tr>
+<tr><td>GetDescriptor()</td><td>Copy of writable settings; ordinary image assets do not expose a writable descriptor.</td></tr><tr><td>SetDescriptor(descriptor)</td><td>Runtime override; never writes asset files.</td></tr><tr><td>ResetDescriptor()</td><td>Restores source/original descriptor.</td></tr><tr><td>Resize(width,height)</td><td>Validates dimensions, constrains explicit mip counts and preserves resource identity.</td></tr><tr><td>Destroy()</td><td>Destroys transient resources only; returns false for assets/already-destroyed handles.</td></tr>
+</tbody></table>
+<h2 id="consumers">Components and materials</h2><p>Camera:SetRenderTarget(texture), Camera:GetRenderTarget(), GuiImage:SetTexture(texture or UUID), Material:SetTexture(name, texture or UUID), and MaterialBuilder:SetTexture(name, texture or UUID) share this resource. Lua entity components are copies: call SetComponent after editing a Camera or GuiImage. Texture setters modify their resource directly.</p>
+<h2 id="lifetime">Lifetime and history</h2><p>Disabled/inactive/removed producers restore ClearColor. Conflicting active writers are suppressed, not raced. Chained GUI captures use producer-first scheduling; cycles/shared world feeds use completed history. Runtime textures/overrides are reset on Stop. CameraRenderTarget remains a legacy transient configuration; new scenes use the Camera picker. <a href="../../../native/reference/Texture/en.html">Shared C++ contract</a></p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Lua members and signatures</h2>
+<p>Use <code>Bazzalt.Texture</code>. Each member below is actually registered in Lua. The adapter declarations are C++ binding notation, not Lua example code. <code>sol::property</code> exposes a field, <code>sol::overload</code> lists alternatives, <code>sol::optional</code> accepts an omitted/nil argument, and <code>std::make_tuple</code> returns multiple Lua values. <code>sol::as_table</code> returns a Lua table. Instance methods use <code>value:Method(...)</code>; service/static calls use <code>Bazzalt.Texture.Method(...)</code> unless a colon overload is explicitly registered. An engine exception becomes a Lua script error. See the examples and behavior notes above for usage.</p><h3 id="lua-Create">Create</h3><pre><code class="language-lua">Bazzalt.Texture.Create(d: TextureDescriptor (optional))</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] static Texture Create(const TextureDescriptor&amp; descriptor={});</code></pre><pre><code>[](sol::optional&lt;TextureDescriptor&gt; d){return Texture::Create(d.value_or(TextureDescriptor{}));}</code></pre></details><h3 id="lua-Destroy">Destroy</h3><pre><code class="language-lua">value:Destroy()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>bool Destroy();</code></pre></details><h3 id="lua-GetAssetUUID">GetAssetUUID</h3><pre><code class="language-lua">value:GetAssetUUID()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] UUID GetAssetUUID() const;</code></pre></details><h3 id="lua-GetDescriptor">GetDescriptor</h3><pre><code class="language-lua">value:GetDescriptor()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] TextureDescriptor GetDescriptor() const;</code></pre></details><h3 id="lua-IsRenderTarget">IsRenderTarget</h3><pre><code class="language-lua">value:IsRenderTarget()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] bool IsRenderTarget() const;</code></pre></details><h3 id="lua-IsRuntime">IsRuntime</h3><pre><code class="language-lua">value:IsRuntime()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] bool IsRuntime() const;</code></pre></details><h3 id="lua-IsValid">IsValid</h3><pre><code class="language-lua">value:IsValid()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] bool IsValid() const;</code></pre></details><h3 id="lua-Load">Load</h3><pre><code class="language-lua">Bazzalt.Texture.Load(id: UUID)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] static Texture Load(UUID id);</code></pre></details><h3 id="lua-ResetDescriptor">ResetDescriptor</h3><pre><code class="language-lua">value:ResetDescriptor()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>void ResetDescriptor();</code></pre></details><h3 id="lua-Resize">Resize</h3><pre><code class="language-lua">value:Resize(width: number, height: number)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>void Resize(std::uint32_t width,std::uint32_t height);</code></pre></details><h3 id="lua-SetDescriptor">SetDescriptor</h3><pre><code class="language-lua">value:SetDescriptor(descriptor: TextureDescriptor)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>void SetDescriptor(const TextureDescriptor&amp; descriptor);</code></pre></details><h3 id="lua-construction">Construction / enum values</h3><p>Construct a value with <code>Bazzalt.Texture()</code>. Constructor overloads, when available, are shown in the binding details.</p><details><summary>Native declaration and binding adapter</summary><pre><code>api.new_usertype&lt;Texture&gt;(&quot;Texture&quot;,sol::constructors&lt;Texture()&gt;());</code></pre></details><p>Binding source: <code>src/Script/LuaAssets.cpp</code>. Inherited component operations use the Entity component APIs.</p>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../SliderJoint/en.html"><small>Previous</small>SliderJoint</a>
+<a class="next" href="../TextureColorFormat/en.html"><small>Next</small>TextureColorFormat</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Create and share a camera texture</a><a class="toc-link" href="#methods">Method reference</a><a class="toc-link" href="#consumers">Components and materials</a><a class="toc-link" href="#lifetime">Lifetime and history</a><a class="toc-link" href="#source-contract">Lua members and signatures</a><a class="toc-link sub" href="#lua-Create">Create</a><a class="toc-link sub" href="#lua-Destroy">Destroy</a><a class="toc-link sub" href="#lua-GetAssetUUID">GetAssetUUID</a><a class="toc-link sub" href="#lua-GetDescriptor">GetDescriptor</a><a class="toc-link sub" href="#lua-IsRenderTarget">IsRenderTarget</a><a class="toc-link sub" href="#lua-IsRuntime">IsRuntime</a><a class="toc-link sub" href="#lua-IsValid">IsValid</a><a class="toc-link sub" href="#lua-Load">Load</a><a class="toc-link sub" href="#lua-ResetDescriptor">ResetDescriptor</a><a class="toc-link sub" href="#lua-Resize">Resize</a><a class="toc-link sub" href="#lua-SetDescriptor">SetDescriptor</a><a class="toc-link sub" href="#lua-construction">Construction / enum values</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

@@ -336,6 +336,8 @@ void LightSystem::OnUpdate(Scene& scene, float) {
                                            0.001f, Pi * 0.5f);
         const float innerCone = std::clamp(FiniteOr(light.InnerConeAngle, ToRadians(20.0f)),
                                            0.0f, outerCone);
+        const Mat4 world=PhysicsRenderMatrix(scene,entity);
+        const std::array<float,11> state{color.X,color.Y,color.Z,intensity,range,innerCone,outerCone,light.SunAngularRadius,light.SunHaloSize,light.SunHaloFalloff,float(light.CastShadows)};
         auto found = m_resources.find(id);
         if (found != m_resources.end() && found->second.Type != type) {
             Destroy(id);
@@ -347,7 +349,7 @@ void LightSystem::OnUpdate(Scene& scene, float) {
             builder.color(ToFilament(color))
                    .intensity(intensity)
                    .castShadows(light.CastShadows);
-            const Mat4 initialWorld = PhysicsRenderMatrix(scene,entity);
+            const Mat4& initialWorld = world;
             if (type == LightType::Point || type == LightType::Spot)
                 builder.position(ToFilament(SafeVector(initialWorld.TransformPoint({})))).falloff(range);
             if (type != LightType::Point)
@@ -361,12 +363,13 @@ void LightSystem::OnUpdate(Scene& scene, float) {
             builder.build(engine, resource);
             m_backend.GetScene().addEntity(resource);
             found = m_resources.emplace(id, Resource{resource, type}).first;
+            m_backend.RegisterEditorLight(id,resource);
         }
+        if(found->second.Ready&&found->second.State==state&&found->second.World.Values==world.Values)continue;
+        found->second.Ready=true;found->second.State=state;found->second.World=world;m_backend.RecordLightUpload();
         const auto instance = manager.getInstance(found->second.Entity);
-        m_backend.RegisterEditorLight(id,found->second.Entity);
         manager.setColor(instance, ToFilament(color));
         manager.setIntensity(instance, intensity);
-        const Mat4 world = PhysicsRenderMatrix(scene,entity);
         if (type == LightType::Point || type == LightType::Spot) {
             manager.setFalloff(instance, range);
             manager.setPosition(instance, ToFilament(SafeVector(world.TransformPoint({}))));

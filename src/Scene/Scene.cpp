@@ -167,7 +167,9 @@ Mat4 Scene::GetWorldMatrix(Entity entity) const {
 
     Mat4 world = entity.GetComponent<Transform>().GetMatrix();
     Entity current = entity;
+    std::size_t remaining=GetEntityCount()+1;
     while (!current.GetUUID().IsRoot()) {
+        if(!remaining--)throw std::logic_error("Cycle in scene transform hierarchy");
         const UUID parentUuid = current.GetComponent<Hierarchy>().Parent;
         const auto found = m_uuidLookup.find(parentUuid);
         if (found == m_uuidLookup.end() || !m_registry.valid(found->second)) break;

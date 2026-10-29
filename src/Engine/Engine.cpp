@@ -243,7 +243,7 @@ for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id
     }
     for(auto h:m_scene->GetRegistry().view<AudioListener>()){auto e=m_scene->GetEntity(static_cast<Entity::Id>(h));if(!e.GetComponent<AudioListener>().IsEnabled()||m_editorHidden.contains(e.GetUUID()))continue;auto p=e.GetWorldTransform().Position;icons.push_back({p.X,p.Y,p.Z,false,2});}
     m_renderBackend->SetEditorIcons(m_editorIconsVisible?icons:std::vector<RenderBackend::EditorIcon>{});
-    if(m_editorIconsVisible){bool synchronized=false;for(auto selected:m_selectedObjects){auto entity=m_scene->GetEntity(selected);if(!entity||m_editorHidden.contains(selected)||(!entity.HasComponent<Rigidbody>()&&!entity.HasComponent<ShapeCollider>()&&!entity.HasComponent<MeshCollider>()&&!entity.HasComponent<Joint>()&&!entity.HasComponent<DistanceJoint>()&&!entity.HasComponent<HingeJoint>()&&!entity.HasComponent<SliderJoint>()&&!entity.HasComponent<BallAndSocketJoint>()&&!entity.HasComponent<FixedJoint>()&&!entity.HasComponent<Cloth>()&&!entity.HasComponent<Rope>()))continue;try{if(!synchronized){PhysicsModule().Synchronize(*m_scene);synchronized=true;}for(const auto& p:PhysicsModule().Guides(*m_scene,selected))guides.push_back({p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9],true});}catch(const std::exception& error){if(m_lastError!=error.what()){m_lastError=error.what();Console::Warning(m_lastError,"Physics");}}}}
+    if(m_editorIconsVisible){bool synchronized=false;for(auto selected:m_selectedObjects){auto entity=m_scene->GetEntity(selected);if(!entity||m_editorHidden.contains(selected)||(!entity.HasComponent<Rigidbody>()&&!entity.HasComponent<ShapeCollider>()&&!entity.HasComponent<MeshCollider>()&&!entity.HasComponent<Joint>()&&!entity.HasComponent<DistanceJoint>()&&!entity.HasComponent<HingeJoint>()&&!entity.HasComponent<SliderJoint>()&&!entity.HasComponent<BallAndSocketJoint>()&&!entity.HasComponent<FixedJoint>()&&!entity.HasComponent<Cloth>()&&!entity.HasComponent<Rope>()&&!entity.HasComponent<Vehicle>()&&!entity.HasComponent<VehicleWheel>()&&!entity.HasComponent<VehicleAntiRollBar>()))continue;try{if(!synchronized){PhysicsModule().Synchronize(*m_scene);synchronized=true;}for(const auto& p:PhysicsModule().Guides(*m_scene,selected))guides.push_back({p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9],true});}catch(const std::exception& error){if(m_lastError!=error.what()){m_lastError=error.what();Console::Warning(m_lastError,"Physics");}}}}
     if(!m_editorIconsVisible)guides.clear();
     std::unordered_set<UUID> selectedOwners,hoveredOwners;
     auto objects=m_scene->GetRegistry().view<Transform>();
@@ -277,30 +277,32 @@ UUID Engine::PickEditorPrimitive(Vec3 origin,Vec3 direction,Vec3* hitPosition,co
     direction=direction.Normalized();float nearest=std::numeric_limits<float>::max();UUID result{};
     const auto ignored=[&](UUID id){if(excluded.empty())return false;for(auto entity=m_scene->GetEntity(id);entity&&!entity.GetUUID().IsRoot();entity=entity.GetParent())if(excluded.contains(entity.GetUUID()))return true;return false;};
     auto view=m_scene->GetRegistry().view<PrimitiveObject>();
-    for(auto handle:view){const auto& primitive=view.get<PrimitiveObject>(handle);if(!primitive.IsEnabled()||!primitive.Visible)continue;Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));if(m_editorUnselectable.contains(entity.GetUUID())||m_editorHidden.contains(entity.GetUUID())||ignored(entity.GetUUID())||GraphicsAccess::IsDeformed(entity.GetUUID()))continue;Mat4 inverse;if(!entity.GetWorldMatrix().TryInverse(inverse))continue;Vec3 o=inverse.TransformPoint(origin),d=inverse.TransformDirection(direction);const auto geometry=BuildPrimitiveGeometry(primitive);
-        for(std::size_t i=0;i+2<geometry.Indices.size();i+=3){Vec3 v[3];for(int j=0;j<3;++j){const auto& p=geometry.Vertices[geometry.Indices[i+j]];v[j]={p.Position[0],p.Position[1],p.Position[2]};}Vec3 e1=v[1]-v[0],e2=v[2]-v[0],p=Vec3::Cross(d,e2);float determinant=Vec3::Dot(e1,p);if(std::abs(determinant)<1e-8f)continue;float reciprocal=1/determinant;Vec3 offset=o-v[0];float u=Vec3::Dot(offset,p)*reciprocal;if(u<0||u>1)continue;Vec3 q=Vec3::Cross(offset,e1);float vcoord=Vec3::Dot(d,q)*reciprocal;if(vcoord<0||u+vcoord>1)continue;float t=Vec3::Dot(e2,q)*reciprocal;if(t>=0&&t<nearest){nearest=t;result=entity.GetUUID();}}
+    for(auto handle:view){const auto& primitive=view.get<PrimitiveObject>(handle);if(!primitive.IsEnabled()||!primitive.Visible)continue;Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));if(m_editorUnselectable.contains(entity.GetUUID())||m_editorHidden.contains(entity.GetUUID())||(m_renderBackend&&m_renderBackend->IsEditorLODHidden(entity.GetUUID()))||ignored(entity.GetUUID())||GraphicsAccess::IsDeformed(entity.GetUUID()))continue;Mat4 inverse;if(!entity.GetWorldMatrix().TryInverse(inverse))continue;Vec3 o=inverse.TransformPoint(origin),d=inverse.TransformDirection(direction);const auto geometry=GetCachedPrimitiveGeometry(primitive);
+        if(geometry->Picking&&geometry->Picking->Raycast(o,d,nearest,1e-8f))result=entity.GetUUID();
     }
+
     if(m_isInitialized)for(const auto& mesh:m_renderBackend->GetAssets().GetEditorMeshes()){
-        if(m_editorHidden.contains(mesh.Owner)||m_editorUnselectable.contains(mesh.Owner)||ignored(mesh.Owner)||GraphicsAccess::IsDeformed(mesh.Owner))continue;
+        if(m_renderBackend->IsEditorLODHidden(mesh.Owner)||m_editorHidden.contains(mesh.Owner)||m_editorUnselectable.contains(mesh.Owner)||ignored(mesh.Owner)||GraphicsAccess::IsDeformed(mesh.Owner))continue;
         Mat4 inverse;if(!mesh.World.TryInverse(inverse))continue;
         if(mesh.Geometry->Raycast(inverse.TransformPoint(origin),inverse.TransformDirection(direction),nearest))result=mesh.Owner;
     }
     if(m_scene->GetRegistry().view<Cloth>().size()||m_scene->GetRegistry().view<Rope>().size())try{
         PhysicsQueryOptions options;options.IncludeBackFaces=true;options.MaxResults=65536;
-        for(const auto& hit:m_scene->GetPhysics().RaycastAll(origin,direction,std::min(nearest,1000000.f),options))if((hit.Object.HasComponent<Cloth>()||hit.Object.HasComponent<Rope>())&&!m_editorHidden.contains(hit.Object.GetUUID())&&!m_editorUnselectable.contains(hit.Object.GetUUID())&&!ignored(hit.Object.GetUUID())){nearest=hit.Distance;result=hit.Object.GetUUID();break;}
+        for(const auto& hit:m_scene->GetPhysics().RaycastAll(origin,direction,std::min(nearest,1000000.f),options))if((hit.Object.HasComponent<Cloth>()||hit.Object.HasComponent<Rope>())&&!IsEditorLODHidden(hit.Object.GetUUID())&&!m_editorHidden.contains(hit.Object.GetUUID())&&!m_editorUnselectable.contains(hit.Object.GetUUID())&&!ignored(hit.Object.GetUUID())){nearest=hit.Distance;result=hit.Object.GetUUID();break;}
     }catch(const std::exception& error){Console::Warning(error.what(),"Physics");}
     if(hitPosition&&!result.IsRoot())*hitPosition=origin+direction*nearest;
     return result;
 }
 void Engine::SetEditorEntityState(std::vector<UUID> hidden,std::vector<UUID> unselectable){m_editorHidden={hidden.begin(),hidden.end()};m_editorUnselectable={unselectable.begin(),unselectable.end()};m_renderBackend->SetEditorHidden(m_editorHidden);}
 
+bool Engine::IsEditorLODHidden(UUID id)const{return m_isInitialized&&m_renderBackend&&m_renderBackend->IsEditorLODHidden(id);}
 std::unordered_map<UUID,std::pair<Vec3,Vec3>> Engine::GetEditorMeshBounds() const {
     std::unordered_map<UUID,std::pair<Vec3,Vec3>> result;
     // Hierarchy / theme refreshes run before the first Qt viewport creates the
     // renderer. There are no loaded GPU meshes yet, and GetAssets is invalid.
     if(!m_isInitialized)return result;
     for(const auto& mesh:m_renderBackend->GetAssets().GetEditorMeshes()){
-        if(m_editorHidden.contains(mesh.Owner)||mesh.Geometry->Nodes.empty()||GraphicsAccess::IsDeformed(mesh.Owner))continue;
+        if(m_renderBackend->IsEditorLODHidden(mesh.Owner)||m_editorHidden.contains(mesh.Owner)||mesh.Geometry->Nodes.empty()||GraphicsAccess::IsDeformed(mesh.Owner))continue;
         const auto& local=mesh.Geometry->Nodes.front();Vec3 minimum{std::numeric_limits<float>::max()},maximum{-std::numeric_limits<float>::max()};
         for(int corner=0;corner<8;++corner){auto p=mesh.World.TransformPoint({corner&1?local.Max.X:local.Min.X,corner&2?local.Max.Y:local.Min.Y,corner&4?local.Max.Z:local.Min.Z});minimum={std::min(minimum.X,p.X),std::min(minimum.Y,p.Y),std::min(minimum.Z,p.Z)};maximum={std::max(maximum.X,p.X),std::max(maximum.Y,p.Y),std::max(maximum.Z,p.Z)};}
         for(auto entity=m_scene->GetEntity(mesh.Owner);entity&&!entity.GetUUID().IsRoot();entity=entity.GetParent()){

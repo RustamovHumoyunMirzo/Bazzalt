@@ -1,0 +1,203 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A 4×4 row-major transformation matrix operating on column vectors. Translation occupies the last column; combined TRS applies scaling, rotation, then translation.">
+  <title>Mat4 | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / Lua API reference / Mat4</nav>
+      <article class="doc"><h1>Mat4</h1>
+<p class="lead">A 4×4 row-major transformation matrix operating on column vectors. Translation occupies the last column; combined TRS applies scaling, rotation, then translation.</p>
+<p><strong>Underlying public header:</strong> <code>Bazzalt/Math.h</code>.</p>
+<p>Read signatures together with the behavior notes below. The <a href="../en.html">reference introduction</a> explains arguments, return values, value copies, and errors.</p>
+<p>In call notation, <code>argument = default</code> describes an optional argument and its default; Lua does not use named arguments here. Supply the value positionally or omit it. The C++ declaration below is comparison data, not Lua syntax.</p>
+<h2 id="construction">Construction</h2><pre><code>Bazzalt.Mat4.new()
+Bazzalt.Mat4.new(diagonal)</code></pre><p>Each line is an accepted construction form. The argument names stand for values you supply; an empty call uses default values. Plain data types construct with their declared default fields.</p>
+<h2 id="example">Example</h2><p>Gameplay snippets run inside a behavior callback or helper. Variables such as scene, camera, savedText and assetUUID are existing values, not automatically declared global variables.</p><pre><code>local matrix = Bazzalt.Mat4.Translation(Bazzalt.Vec3.new(0, 1, 0))
+local moved = matrix:TransformPoint(Bazzalt.Vec3.new())</code></pre>
+<h2 id="Decompose">Decompose</h2>
+<pre><code>matrix:Decompose()</code></pre>
+<p>Attempts to split a matrix into translation, quaternion rotation and scale. Returns false for unusable homogeneous/scale values. Lua returns (success, position, rotation, scale); not every sheared matrix is representable as TRS.</p>
+<p><strong>Returns:</strong> success, Vec3 position, Quaternion rotation, Vec3 scale.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Vec3 &amp; position</code></td><td>Translation/world center as specified by the operation.</td></tr>
+<tr><td><code>Quaternion &amp; rotation</code></td><td>Quaternion rotation, preferably normalized.</td></tr>
+<tr><td><code>Vec3 &amp; scale</code></td><td>Scale vector or time multiplier as specified by the operation.</td></tr>
+</tbody></table>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>bool Decompose(Vec3 &amp; position, Quaternion &amp; rotation, Vec3 &amp; scale) const</code></pre></details>
+<h2 id="Get">Get</h2>
+<pre><code>matrix:Get(row, column)</code></pre>
+<p>Lua matrix element read at zero-based row/column, returning a number. Indices outside the matrix dimensions raise an error.</p>
+<p><strong>Returns:</strong> number.</p>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<h2 id="Identity">Identity</h2>
+<pre><code>Bazzalt.Mat4.Identity()</code></pre>
+<p>Returns an identity matrix/rotation that leaves positions or directions unchanged.</p>
+<p><strong>Returns:</strong> Mat4.</p>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>static constexpr Mat4 Identity()</code></pre></details>
+<h2 id="Inversed">Inversed</h2>
+<pre><code>value:Inversed()</code></pre>
+<p>Returns an inverse. Singular matrices return an all-zero matrix; a near-zero quaternion returns identity. Use TryInverse when you need explicit failure.</p>
+<p><strong>Returns:</strong> Mat4.</p>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>Mat4 Inversed() const</code></pre></details>
+<h2 id="LookAt">LookAt</h2>
+<pre><code>Bazzalt.Mat4.LookAt(eye, target, up)</code></pre>
+<p>Returns a view matrix from eye toward target using up. Supply distinct eye/target and an up vector not parallel to their direction.</p>
+<p><strong>Returns:</strong> Mat4.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Vec3 eye</code></td><td>World-space camera/view origin.</td></tr>
+<tr><td><code>Vec3 target</code></td><td>World-space point being looked at.</td></tr>
+<tr><td><code>Vec3 up</code></td><td>Nonparallel reference up direction.</td></tr>
+</tbody></table>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>static Mat4 LookAt(Vec3 eye, Vec3 target, Vec3 up)</code></pre></details>
+<h2 id="Orthographic">Orthographic</h2>
+<pre><code>Bazzalt.Mat4.Orthographic(left, right, bottom, top, nearPlane, farPlane)</code></pre>
+<p>Returns a right-handed orthographic matrix for left/right/bottom/top and near/far extents. Avoid equal/opposed zero-width bounds.</p>
+<p><strong>Returns:</strong> Mat4.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>float left</code></td><td>First operand or left projection extent.</td></tr>
+<tr><td><code>float right</code></td><td>Second operand or right projection extent.</td></tr>
+<tr><td><code>float bottom</code></td><td>Bottom orthographic extent.</td></tr>
+<tr><td><code>float top</code></td><td>Top orthographic extent.</td></tr>
+<tr><td><code>float nearPlane</code></td><td>Positive near clipping distance.</td></tr>
+<tr><td><code>float farPlane</code></td><td>Far clipping distance greater than near.</td></tr>
+</tbody></table>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>static Mat4 Orthographic(float left, float right, float bottom, float top, float nearPlane, float farPlane)</code></pre></details>
+<h2 id="Perspective">Perspective</h2>
+<pre><code>Bazzalt.Mat4.Perspective(verticalFieldOfViewRadians, aspectRatio, nearPlane, farPlane)</code></pre>
+<p>Returns a right-handed perspective matrix. FOV is vertical radians; aspect must be positive; near/far must be distinct valid clipping distances. This math helper does not validate every projection input.</p>
+<p><strong>Returns:</strong> Mat4.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>float verticalFieldOfViewRadians</code></td><td>Vertical perspective FOV in radians.</td></tr>
+<tr><td><code>float aspectRatio</code></td><td>Width divided by height, positive.</td></tr>
+<tr><td><code>float nearPlane</code></td><td>Positive near clipping distance.</td></tr>
+<tr><td><code>float farPlane</code></td><td>Far clipping distance greater than near.</td></tr>
+</tbody></table>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>static Mat4 Perspective(float verticalFieldOfViewRadians, float aspectRatio, float nearPlane, float farPlane)</code></pre></details>
+<h2 id="Rotation">Rotation</h2>
+<pre><code>Bazzalt.Mat4.Rotation(rotation)</code></pre>
+<p>Returns the matrix for a normalized form of the supplied quaternion.</p>
+<p><strong>Returns:</strong> Mat4.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>const Quaternion &amp; rotation</code></td><td>Quaternion rotation, preferably normalized.</td></tr>
+</tbody></table>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>static Mat4 Rotation(const Quaternion &amp; rotation)</code></pre></details>
+<h2 id="Scaling">Scaling</h2>
+<pre><code>Bazzalt.Mat4.Scaling(scale)</code></pre>
+<p>Returns a matrix with the supplied X/Y/Z scale on the diagonal.</p>
+<p><strong>Returns:</strong> Mat4.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Vec3 scale</code></td><td>Scale vector or time multiplier as specified by the operation.</td></tr>
+</tbody></table>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>static Mat4 Scaling(Vec3 scale)</code></pre></details>
+<h2 id="Set">Set</h2>
+<pre><code>matrix:Set(row, column, value)</code></pre>
+<p>Lua matrix element write at zero-based row/column. Invalid indices raise an error; this modifies the matrix value.</p>
+<p><strong>Returns:</strong> no value.</p>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<h2 id="Transform">Transform</h2>
+<pre><code>Bazzalt.Mat4.Transform(position, rotation, scale)</code></pre>
+<p>Returns Translation(position)×Rotation(rotation)×Scaling(scale), acting on column vectors.</p>
+<p><strong>Returns:</strong> Mat4.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Vec3 position</code></td><td>Translation/world center as specified by the operation.</td></tr>
+<tr><td><code>const Quaternion &amp; rotation</code></td><td>Quaternion rotation, preferably normalized.</td></tr>
+<tr><td><code>Vec3 scale</code></td><td>Scale vector or time multiplier as specified by the operation.</td></tr>
+</tbody></table>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>static Mat4 Transform(Vec3 position, const Quaternion &amp; rotation, Vec3 scale)</code></pre></details>
+<h2 id="TransformDirection">TransformDirection</h2>
+<pre><code>value:TransformDirection(direction)</code></pre>
+<p>Transforms a direction with W=0, so translation does not affect it. Scale/rotation can change its length; normalize explicitly if needed.</p>
+<p><strong>Returns:</strong> Vec3.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Vec3 direction</code></td><td>Direction treated as W=0.</td></tr>
+</tbody></table>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>Vec3 TransformDirection(Vec3 direction) const</code></pre></details>
+<h2 id="TransformPoint">TransformPoint</h2>
+<pre><code>value:TransformPoint(point)</code></pre>
+<p>Transforms a point with homogeneous W=1 and divides by the resulting W where usable. Translation affects the point.</p>
+<p><strong>Returns:</strong> Vec3.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Vec3 point</code></td><td>Position treated as homogeneous W=1.</td></tr>
+</tbody></table>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>Vec3 TransformPoint(Vec3 point) const</code></pre></details>
+<h2 id="Translation">Translation</h2>
+<pre><code>Bazzalt.Mat4.Translation(translation)</code></pre>
+<p>Returns an identity-based matrix with the supplied translation in the last column.</p>
+<p><strong>Returns:</strong> Mat4.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Vec3 translation</code></td><td>Translation vector in the current Transform/local space.</td></tr>
+</tbody></table>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>static Mat4 Translation(Vec3 translation)</code></pre></details>
+<h2 id="Transposed">Transposed</h2>
+<pre><code>value:Transposed()</code></pre>
+<p>Returns a copy with rows and columns exchanged; does not modify the input matrix.</p>
+<p><strong>Returns:</strong> Mat4.</p>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>Mat4 Transposed() const</code></pre></details>
+<h2 id="TryInverse">TryInverse</h2>
+<pre><code>matrix:TryInverse()</code></pre>
+<p>Returns false if the matrix is singular under Epsilon; C++ fills an output Mat4 on success. Lua returns (success, inverse).</p>
+<p><strong>Returns:</strong> success, Mat4.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>Mat4 &amp; result</code></td><td>Output value filled on success.</td></tr>
+</tbody></table>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>bool TryInverse(Mat4 &amp; result) const</code></pre></details>
+<h2 id="operator-multiply">operator*</h2>
+<pre><code>left * right</code></pre>
+<p>Returns composed matrices; matrix×Vec4 is also supported.</p>
+<p><strong>Returns:</strong> matrix or transformed vector.</p>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Lua members and signatures</h2>
+<p>Use <code>Bazzalt.Mat4</code>. Each member below is actually registered in Lua. The adapter declarations are C++ binding notation, not Lua example code. <code>sol::property</code> exposes a field, <code>sol::overload</code> lists alternatives, <code>sol::optional</code> accepts an omitted/nil argument, and <code>std::make_tuple</code> returns multiple Lua values. <code>sol::as_table</code> returns a Lua table. Instance methods use <code>value:Method(...)</code>; service/static calls use <code>Bazzalt.Mat4.Method(...)</code> unless a colon overload is explicitly registered. An engine exception becomes a Lua script error. See the examples and behavior notes above for usage.</p><h3 id="lua-Decompose">Decompose</h3><pre><code class="language-lua">value:Decompose()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] bool Decompose(Vec3&amp; position, Quaternion&amp; rotation, Vec3&amp; scale) const;</code></pre><pre><code>[](const Mat4&amp; value){Vec3 p,s;Quaternion r;bool valid=value.Decompose(p,r,s);return std::make_tuple(valid,p,r,s);}</code></pre></details><h3 id="lua-Get">Get</h3><pre><code class="language-lua">value:Get(value: T, row: number, column: number)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[](const T&amp; value,int row,int column){if(row&lt;0||column&lt;0||row&gt;=N||column&gt;=N)throw std::out_of_range(&quot;Matrix index&quot;)</code></pre></details><h3 id="lua-Identity">Identity</h3><pre><code class="language-lua">Bazzalt.Mat4.Identity()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] static constexpr Mat4 Identity();</code></pre></details><h3 id="lua-Inversed">Inversed</h3><pre><code class="language-lua">value:Inversed()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] Mat4 Inversed() const;</code></pre></details><h3 id="lua-LookAt">LookAt</h3><pre><code class="language-lua">Bazzalt.Mat4.LookAt(eye: Vec3, target: Vec3, up: Vec3)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] static Mat4 LookAt(Vec3 eye, Vec3 target, Vec3 up);</code></pre></details><h3 id="lua-Orthographic">Orthographic</h3><pre><code class="language-lua">Bazzalt.Mat4.Orthographic(left: number, right: number, bottom: number, top: number, nearPlane: number, farPlane: number)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] static Mat4 Orthographic(float left, float right, float bottom, float top,
+                                           float nearPlane, float farPlane);</code></pre></details><h3 id="lua-Perspective">Perspective</h3><pre><code class="language-lua">Bazzalt.Mat4.Perspective(verticalFieldOfViewRadians: number, aspectRatio: number, nearPlane: number, farPlane: number)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] static Mat4 Perspective(float verticalFieldOfViewRadians, float aspectRatio,
+                                          float nearPlane, float farPlane);</code></pre></details><h3 id="lua-Rotation">Rotation</h3><pre><code class="language-lua">Bazzalt.Mat4.Rotation(rotation: Quaternion)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] static Mat4 Rotation(const Quaternion&amp; rotation);</code></pre></details><h3 id="lua-Scaling">Scaling</h3><pre><code class="language-lua">Bazzalt.Mat4.Scaling(scale: Vec3)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] static Mat4 Scaling(Vec3 scale);</code></pre></details><h3 id="lua-Set">Set</h3><pre><code class="language-lua">value:Set(value: T, row: number, column: number, number: number)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[](T&amp; value,int row,int column,float number){if(row&lt;0||column&lt;0||row&gt;=N||column&gt;=N)throw std::out_of_range(&quot;Matrix index&quot;)</code></pre></details><h3 id="lua-Transform">Transform</h3><pre><code class="language-lua">Bazzalt.Mat4.Transform(position: Vec3, rotation: Quaternion, scale: Vec3)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] static Mat4 Transform(Vec3 position, const Quaternion&amp; rotation, Vec3 scale);</code></pre></details><h3 id="lua-TransformDirection">TransformDirection</h3><pre><code class="language-lua">value:TransformDirection(direction: Vec3)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] Vec3 TransformDirection(Vec3 direction) const;</code></pre></details><h3 id="lua-TransformPoint">TransformPoint</h3><pre><code class="language-lua">value:TransformPoint(point: Vec3)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] Vec3 TransformPoint(Vec3 point) const;</code></pre></details><h3 id="lua-Translation">Translation</h3><pre><code class="language-lua">Bazzalt.Mat4.Translation(translation: Vec3)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] static Mat4 Translation(Vec3 translation);</code></pre></details><h3 id="lua-Transposed">Transposed</h3><pre><code class="language-lua">value:Transposed()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] Mat4 Transposed() const;</code></pre></details><h3 id="lua-TryInverse">TryInverse</h3><pre><code class="language-lua">value:TryInverse()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] bool TryInverse(Mat4&amp; result) const;</code></pre><pre><code>[](const Mat4&amp; value){Mat4 inverse;bool valid=value.TryInverse(inverse);return std::make_tuple(valid,inverse);}</code></pre></details><p>Binding source: <code>src/Script/LuaMath.cpp</code>. Inherited component operations use the Entity component APIs.</p>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../Mat3/en.html"><small>Previous</small>Mat3</a>
+<a class="next" href="../Material/en.html"><small>Next</small>Material</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#construction">Construction</a><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#Decompose">Decompose</a><a class="toc-link" href="#Get">Get</a><a class="toc-link" href="#Identity">Identity</a><a class="toc-link" href="#Inversed">Inversed</a><a class="toc-link" href="#LookAt">LookAt</a><a class="toc-link" href="#Orthographic">Orthographic</a><a class="toc-link" href="#Perspective">Perspective</a><a class="toc-link" href="#Rotation">Rotation</a><a class="toc-link" href="#Scaling">Scaling</a><a class="toc-link" href="#Set">Set</a><a class="toc-link" href="#Transform">Transform</a><a class="toc-link" href="#TransformDirection">TransformDirection</a><a class="toc-link" href="#TransformPoint">TransformPoint</a><a class="toc-link" href="#Translation">Translation</a><a class="toc-link" href="#Transposed">Transposed</a><a class="toc-link" href="#TryInverse">TryInverse</a><a class="toc-link" href="#operator-multiply">operator*</a><a class="toc-link" href="#source-contract">Lua members and signatures</a><a class="toc-link sub" href="#lua-Decompose">Decompose</a><a class="toc-link sub" href="#lua-Get">Get</a><a class="toc-link sub" href="#lua-Identity">Identity</a><a class="toc-link sub" href="#lua-Inversed">Inversed</a><a class="toc-link sub" href="#lua-LookAt">LookAt</a><a class="toc-link sub" href="#lua-Orthographic">Orthographic</a><a class="toc-link sub" href="#lua-Perspective">Perspective</a><a class="toc-link sub" href="#lua-Rotation">Rotation</a><a class="toc-link sub" href="#lua-Scaling">Scaling</a><a class="toc-link sub" href="#lua-Set">Set</a><a class="toc-link sub" href="#lua-Transform">Transform</a><a class="toc-link sub" href="#lua-TransformDirection">TransformDirection</a><a class="toc-link sub" href="#lua-TransformPoint">TransformPoint</a><a class="toc-link sub" href="#lua-Translation">Translation</a><a class="toc-link sub" href="#lua-Transposed">Transposed</a><a class="toc-link sub" href="#lua-TryInverse">TryInverse</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

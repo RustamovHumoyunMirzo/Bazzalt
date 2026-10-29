@@ -1,0 +1,96 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Effects on this camera image, independent of other cameras. Nested values belong to the Camera component and must be committed with it in Lua.">
+  <title>CameraPostProcessing | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / Lua API reference / CameraPostProcessing</nav>
+      <article class="doc"><h1>CameraPostProcessing</h1>
+<p class="lead">Effects on this camera image, independent of other cameras. Nested values belong to the Camera component and must be committed with it in Lua.</p>
+<p><strong>Underlying public header:</strong> <code>Bazzalt/Components/Camera.h</code>.</p>
+<p>Read signatures together with the behavior notes below. The <a href="../en.html">reference introduction</a> explains arguments, return values, value copies, and errors.</p>
+<p>In call notation, <code>argument = default</code> describes an optional argument and its default; Lua does not use named arguments here. Supply the value positionally or omit it. The C++ declaration below is comparison data, not Lua syntax.</p>
+<h2 id="construction">Construction</h2><pre><code>Bazzalt.CameraPostProcessing.new()</code></pre><p>Each line is an accepted construction form. The argument names stand for values you supply; an empty call uses default values. Plain data types construct with their declared default fields.</p>
+<div class="notice"><p>Component values returned by Entity are copies. After changing fields or methods, call entity:SetComponent(typeName, value). Derived components inherit Component.Enabled, IsEnabled and SetEnabled; core Identity, Hierarchy, Name and Transform have entity-level restrictions.</p></div>
+<h2 id="example">Example</h2><p>Gameplay snippets run inside a behavior callback or helper. Variables such as scene, camera, savedText and assetUUID are existing values, not automatically declared global variables.</p><pre><code>local camera = self.Entity:GetComponent(&quot;Camera&quot;)
+camera.PostProcessing.Enabled = true
+camera.PostProcessing.DepthOfField.Enabled = true
+camera.PostProcessing.DepthOfField.FocusDistance = 5
+self.Entity:SetComponent(&quot;Camera&quot;, camera)</code></pre>
+<h2 id="AmbientOcclusion">AmbientOcclusion</h2>
+<pre><code>value.AmbientOcclusion</code></pre>
+<p>Enables screen-space ambient occlusion.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>bool AmbientOcclusion = true</code></pre></details>
+<h2 id="AntiAliasingMode">AntiAliasingMode</h2>
+<pre><code>value.AntiAliasingMode</code></pre>
+<p>None, FXAA, TAA, MSAA 2×/4×, TAA + FXAA, or MSAA 2×/4× + FXAA. See <a href="../AntiAliasing/en.html">AntiAliasing</a> for enum names and examples. Disabling Enabled turns off the camera AA stages.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>AntiAliasing AntiAliasingMode = AntiAliasing::TAA</code></pre></details>
+<h2 id="Bloom">Bloom</h2>
+<pre><code>value.Bloom</code></pre>
+<p>Enables glow from bright rendered regions.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>bool Bloom = true</code></pre></details>
+<h2 id="CustomEffects">CustomEffects</h2>
+<pre><code>value.CustomEffects</code></pre>
+<p>Ordered custom full-screen effect stack.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>PostProcessingStack CustomEffects{}</code></pre></details>
+<h2 id="DepthOfField">DepthOfField</h2>
+<pre><code>value.DepthOfField</code></pre>
+<p>Nested focus/lens blur settings. Disabled by default.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>DepthOfFieldSettings DepthOfField{}</code></pre></details>
+<h2 id="Enabled">Enabled</h2>
+<pre><code>value.Enabled</code></pre>
+<p>Master camera post-processing enable flag.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>bool Enabled = true</code></pre></details>
+<h2 id="Exposure">Exposure</h2>
+<pre><code>value.Exposure</code></pre>
+<p>Exposure compensation in EV stops; 0 is neutral.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>float Exposure = 0.0f</code></pre></details>
+<h2 id="ToneMappingMode">ToneMappingMode</h2>
+<pre><code>value.ToneMappingMode</code></pre>
+<p>Linear, Filmic or ACES output mapping.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>ToneMapping ToneMappingMode = ToneMapping::ACES</code></pre></details><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Lua members and signatures</h2>
+<p>Use <code>Bazzalt.CameraPostProcessing</code>. Each member below is actually registered in Lua. The adapter declarations are C++ binding notation, not Lua example code. <code>sol::property</code> exposes a field, <code>sol::overload</code> lists alternatives, <code>sol::optional</code> accepts an omitted/nil argument, and <code>std::make_tuple</code> returns multiple Lua values. <code>sol::as_table</code> returns a Lua table. Instance methods use <code>value:Method(...)</code>; service/static calls use <code>Bazzalt.CameraPostProcessing.Method(...)</code> unless a colon overload is explicitly registered. An engine exception becomes a Lua script error. See the examples and behavior notes above for usage.</p><h3 id="lua-AddMaterial">AddMaterial</h3><pre><code class="language-lua">value:AddMaterial(m: Material, enabled: boolean (optional))</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>BAZZALT_API std::size_t AddMaterial(Material material, bool enabled = true);</code></pre><pre><code>[](CameraPostProcessing&amp; v,Material m,sol::optional&lt;bool&gt; enabled){return v.AddMaterial(m,enabled.value_or(true));}</code></pre></details><h3 id="lua-AmbientOcclusion">AmbientOcclusion</h3><pre><code>value.AmbientOcclusion: boolean</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>bool AmbientOcclusion = true;</code></pre></details><h3 id="lua-AntiAliasingMode">AntiAliasingMode</h3><pre><code>value.AntiAliasingMode: AntiAliasing</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>AntiAliasing AntiAliasingMode = AntiAliasing::TAA;</code></pre></details><h3 id="lua-Bloom">Bloom</h3><pre><code>value.Bloom: boolean</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>bool Bloom = true;</code></pre></details><h3 id="lua-ClearMaterials">ClearMaterials</h3><pre><code class="language-lua">value:ClearMaterials()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>BAZZALT_API void ClearMaterials();</code></pre></details><h3 id="lua-CustomEffects">CustomEffects</h3><pre><code>value.CustomEffects: PostProcessingStack</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>PostProcessingStack CustomEffects{};</code></pre></details><h3 id="lua-DepthOfField">DepthOfField</h3><pre><code>value.DepthOfField: }</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>} DepthOfField{};</code></pre></details><h3 id="lua-Enabled">Enabled</h3><pre><code>value.Enabled: boolean</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>bool Enabled = true;
+struct DepthOfFieldSettings {
+        bool Enabled = false;</code></pre></details><h3 id="lua-Exposure">Exposure</h3><pre><code>value.Exposure: number</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>// Exposure compensation in EV stops (0 is neutral).
+    float Exposure = 0.0f;</code></pre></details><h3 id="lua-GetMaterial">GetMaterial</h3><pre><code class="language-lua">value:GetMaterial()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] BAZZALT_API Material GetMaterial()const;</code></pre></details><h3 id="lua-GetMaterials">GetMaterials</h3><pre><code class="language-lua">value:GetMaterials()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] BAZZALT_API std::vector&lt;CameraMaterialPass&gt; GetMaterials() const;</code></pre><pre><code>[](const CameraPostProcessing&amp; v){return sol::as_table(v.GetMaterials());}</code></pre></details><h3 id="lua-MaterialAsset">MaterialAsset</h3><pre><code>value.MaterialAsset: UUID</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>// Legacy single pass is evaluated first. SetMaterials migrates it away.
+    UUID MaterialAsset{};</code></pre></details><h3 id="lua-Materials">Materials</h3><pre><code class="language-lua">value:Materials()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>std::vector&lt;CameraMaterialPass&gt; Materials;</code></pre><pre><code>sol::property([](const CameraPostProcessing&amp; v){return sol::as_table(v.GetMaterials());},[](CameraPostProcessing&amp; v,sol::table table){if(table.size()&gt;CameraPostProcessing::MaxMaterials)throw std::length_error(&quot;Too many camera materials&quot;);std::vector&lt;CameraMaterialPass&gt; passes;for(std::size_t i=1;i&lt;=table.size();++i)passes.push_back(table.get&lt;CameraMaterialPass&gt;(i));v.SetMaterials(std::move(passes));})</code></pre></details><h3 id="lua-MaxMaterials">MaxMaterials</h3><pre><code class="language-lua">Bazzalt.CameraPostProcessing.MaxMaterials()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static constexpr std::size_t MaxMaterials = 32;</code></pre><pre><code>sol::var(CameraPostProcessing::MaxMaterials)</code></pre></details><h3 id="lua-MoveMaterial">MoveMaterial</h3><pre><code class="language-lua">value:MoveMaterial(from: number, to: number)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>BAZZALT_API void MoveMaterial(std::size_t from, std::size_t to);</code></pre></details><h3 id="lua-RemoveMaterial">RemoveMaterial</h3><pre><code class="language-lua">value:RemoveMaterial(index: number)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>BAZZALT_API void RemoveMaterial(std::size_t index);</code></pre></details><h3 id="lua-SetMaterial">SetMaterial</h3><pre><code class="language-lua">value:SetMaterial(material: Material)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>BAZZALT_API void SetMaterial(Material material);</code></pre></details><h3 id="lua-SetMaterialAt">SetMaterialAt</h3><pre><code class="language-lua">value:SetMaterialAt(index: number, material: Material)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>BAZZALT_API void SetMaterialAt(std::size_t index, Material material);</code></pre></details><h3 id="lua-SetMaterialEnabled">SetMaterialEnabled</h3><pre><code class="language-lua">value:SetMaterialEnabled(index: number, enabled: boolean)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>BAZZALT_API void SetMaterialEnabled(std::size_t index, bool enabled);</code></pre></details><h3 id="lua-SetMaterials">SetMaterials</h3><pre><code class="language-lua">value:SetMaterials(table: sol::table)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>// Legacy single pass is evaluated first. SetMaterials migrates it away.
+    UUID MaterialAsset{};
+BAZZALT_API void SetMaterials(std::vector&lt;CameraMaterialPass&gt; passes);</code></pre><pre><code>[](CameraPostProcessing&amp; v,sol::table table){if(table.size()&gt;CameraPostProcessing::MaxMaterials)throw std::length_error(&quot;Too many camera materials&quot;);std::vector&lt;CameraMaterialPass&gt; passes;for(std::size_t i=1;i&lt;=table.size();++i)passes.push_back(table.get&lt;CameraMaterialPass&gt;(i));v.SetMaterials(std::move(passes));}</code></pre></details><h3 id="lua-ToneMappingMode">ToneMappingMode</h3><pre><code>value.ToneMappingMode: ToneMapping</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>ToneMapping ToneMappingMode = ToneMapping::ACES;</code></pre></details><h3 id="lua-construction">Construction / enum values</h3><p>Construct a value with <code>Bazzalt.CameraPostProcessing()</code>. Constructor overloads, when available, are shown in the binding details.</p><details><summary>Native declaration and binding adapter</summary><pre><code>api.new_usertype&lt;CameraPostProcessing&gt;(&quot;CameraPostProcessing&quot;,sol::constructors&lt;CameraPostProcessing()&gt;());</code></pre></details><p>Binding source: <code>src/Script/LuaComponents.cpp</code>. Inherited component operations use the Entity component APIs.</p>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../CameraMaterialPass/en.html"><small>Previous</small>CameraMaterialPass</a>
+<a class="next" href="../CameraProjection/en.html"><small>Next</small>CameraProjection</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#construction">Construction</a><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#AmbientOcclusion">AmbientOcclusion</a><a class="toc-link" href="#AntiAliasingMode">AntiAliasingMode</a><a class="toc-link" href="#Bloom">Bloom</a><a class="toc-link" href="#CustomEffects">CustomEffects</a><a class="toc-link" href="#DepthOfField">DepthOfField</a><a class="toc-link" href="#Enabled">Enabled</a><a class="toc-link" href="#Exposure">Exposure</a><a class="toc-link" href="#ToneMappingMode">ToneMappingMode</a><a class="toc-link" href="#source-contract">Lua members and signatures</a><a class="toc-link sub" href="#lua-AddMaterial">AddMaterial</a><a class="toc-link sub" href="#lua-AmbientOcclusion">AmbientOcclusion</a><a class="toc-link sub" href="#lua-AntiAliasingMode">AntiAliasingMode</a><a class="toc-link sub" href="#lua-Bloom">Bloom</a><a class="toc-link sub" href="#lua-ClearMaterials">ClearMaterials</a><a class="toc-link sub" href="#lua-CustomEffects">CustomEffects</a><a class="toc-link sub" href="#lua-DepthOfField">DepthOfField</a><a class="toc-link sub" href="#lua-Enabled">Enabled</a><a class="toc-link sub" href="#lua-Exposure">Exposure</a><a class="toc-link sub" href="#lua-GetMaterial">GetMaterial</a><a class="toc-link sub" href="#lua-GetMaterials">GetMaterials</a><a class="toc-link sub" href="#lua-MaterialAsset">MaterialAsset</a><a class="toc-link sub" href="#lua-Materials">Materials</a><a class="toc-link sub" href="#lua-MaxMaterials">MaxMaterials</a><a class="toc-link sub" href="#lua-MoveMaterial">MoveMaterial</a><a class="toc-link sub" href="#lua-RemoveMaterial">RemoveMaterial</a><a class="toc-link sub" href="#lua-SetMaterial">SetMaterial</a><a class="toc-link sub" href="#lua-SetMaterialAt">SetMaterialAt</a><a class="toc-link sub" href="#lua-SetMaterialEnabled">SetMaterialEnabled</a><a class="toc-link sub" href="#lua-SetMaterials">SetMaterials</a><a class="toc-link sub" href="#lua-ToneMappingMode">ToneMappingMode</a><a class="toc-link sub" href="#lua-construction">Construction / enum values</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

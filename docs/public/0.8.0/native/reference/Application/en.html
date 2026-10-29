@@ -1,0 +1,125 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Global application controls: frame limits, background behavior, session state, window dimensions, metadata and deferred quit. This service is not owned by an entity.">
+  <title>Application | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / C++ / C++ API reference / Application</nav>
+      <article class="doc"><h1>Application</h1><p>Global application controls: frame limits, background behavior, session state, window dimensions, metadata and deferred quit. This service is not owned by an entity.</p><h2 id="reference">Methods, results and limits</h2>
+<table><thead><tr><th>Method</th><th>Result or action</th></tr></thead><tbody>
+<tr><td>SetTargetFrameRate(int), GetTargetFrameRate()</td><td>Set/read the foreground software frame cap. Default 60.</td></tr>
+<tr><td>SetBackgroundFrameRate(int), GetBackgroundFrameRate()</td><td>Set/read the unfocused cap. Default 30; the tighter positive cap wins.</td></tr>
+<tr><td>SetRunInBackground(bool), GetRunInBackground()</td><td>Set/read whether unfocused gameplay continues. Default true.</td></tr>
+<tr><td>GetFrameRate()</td><td>Smoothed measured gameplay updates per unscaled second; zero before a measured frame.</td></tr>
+<tr><td>GetFrameCount()</td><td>Number of measured gameplay updates in this application session.</td></tr>
+<tr><td>IsFocused(), IsPlaying(), IsEditor(), IsQuitting()</td><td>Read current global session flags.</td></tr>
+<tr><td>Quit(int exitCode = 0), GetExitCode()</td><td>Request clean shutdown/read its code (0..255). In the editor, stops Play rather than closing the editor.</td></tr>
+<tr><td>GetWindowWidth(), GetWindowHeight()</td><td>Last reported Game viewport drawable dimensions in pixels; zero before a size notification.</td></tr>
+<tr><td>GetName(), GetCompanyName(), GetVersion()</td><td>Project name and project.company/project.version metadata; unset strings are empty.</td></tr>
+<tr><td>GetPlatform()</td><td>Windows, macOS, Linux, or Unknown for the compiled host. This does not promise player support for every platform.</td></tr>
+</tbody></table>
+<p>Application settings reset when a new game/Play session starts; save project-specific preferences yourself when persistence is needed. Controls do not expose initialization, rendering backend ownership, or the engine loop.</p>
+<h2 id="availability">Availability and errors</h2><p>Rates accept 0 (uncapped) or 1–1000; other values throw. Quit accepts codes 0–255. Controls reset each session. Measured FPS is not a promised target. All operations run on the main gameplay thread.</p><p>Event registration is restricted to registered C++ subsystem scopes. Named listeners return subscription tokens, automatically removed before their owner unloads. For arguments, timing and readiness see <a href="../ApplicationEvents/en.html">ApplicationEvents</a> and the <a href="../../subsystems/en.html">subsystem guide</a>.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Public declarations</h2>
+<p>Header: <code>Bazzalt/ApplicationControl.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
+<pre><code class="language-cpp">class Application {
+Application()=delete;
+using Subscription=ApplicationEvents::Subscription;
+// Only C++ subsystem scopes may register global event listeners.
+    static Subscription Subscribe(ApplicationEventType type,ApplicationEvents::Callback callback);
+static bool Unsubscribe(Subscription subscription);
+static void SetTargetFrameRate(int framesPerSecond);
+// 0 = uncapped; otherwise 1..1000.
+    static int GetTargetFrameRate();
+static void SetBackgroundFrameRate(int framesPerSecond);
+static int GetBackgroundFrameRate();
+static void SetRunInBackground(bool enabled);
+static bool GetRunInBackground();
+static double GetFrameRate();
+static std::uint64_t GetFrameCount();
+static bool IsFocused();
+static bool IsPlaying();
+static bool IsEditor();
+static bool IsQuitting();
+static void Quit(int exitCode=0);
+static int GetExitCode();
+static std::uint32_t GetWindowWidth();
+static std::uint32_t GetWindowHeight();
+static std::string GetName();
+static std::string GetCompanyName();
+static std::string GetVersion();
+static std::string GetPlatform();
+static Subscription OnBoot(std::function&lt;void()&gt; callback);
+static Subscription OnBeforeWindowCreate(std::function&lt;void()&gt; callback);
+static Subscription OnInit(std::function&lt;void()&gt; callback);
+static Subscription OnLoad(std::function&lt;void()&gt; callback);
+static Subscription OnPostWindowCreate(std::function&lt;void()&gt; callback);
+static Subscription OnPreRender(std::function&lt;void()&gt; callback);
+static Subscription OnRender(std::function&lt;void()&gt; callback);
+static Subscription OnPostRender(std::function&lt;void()&gt; callback);
+static Subscription OnWindowCloseRequested(std::function&lt;void()&gt; callback);
+static Subscription OnPlay(std::function&lt;void()&gt; callback);
+static Subscription OnStop(std::function&lt;void()&gt; callback);
+static Subscription OnPreShutdown(std::function&lt;void()&gt; callback);
+static Subscription OnShutdown(std::function&lt;void()&gt; callback);
+static Subscription OnBeforeInputInit(std::function&lt;void()&gt; callback);
+static Subscription OnInputInit(std::function&lt;void()&gt; callback);
+static Subscription OnAfterInputInit(std::function&lt;void()&gt; callback);
+static Subscription OnBeforeAudioInit(std::function&lt;void()&gt; callback);
+static Subscription OnAudioInit(std::function&lt;void()&gt; callback);
+static Subscription OnAfterAudioInit(std::function&lt;void()&gt; callback);
+static Subscription OnBeforePhysicsInit(std::function&lt;void()&gt; callback);
+static Subscription OnPhysicsInit(std::function&lt;void()&gt; callback);
+static Subscription OnAfterPhysicsInit(std::function&lt;void()&gt; callback);
+static Subscription OnBeforePhysicsShutdown(std::function&lt;void()&gt; callback);
+static Subscription OnAfterPhysicsShutdown(std::function&lt;void()&gt; callback);
+static Subscription OnPreUpdate(std::function&lt;void(float)&gt; callback);
+static Subscription OnUpdate(std::function&lt;void(float)&gt; callback);
+static Subscription OnFixedUpdate(std::function&lt;void(float)&gt; callback);
+static Subscription OnBeforePhysicsStep(std::function&lt;void(float)&gt; callback);
+static Subscription OnAfterPhysicsStep(std::function&lt;void(float)&gt; callback);
+static Subscription OnLateUpdate(std::function&lt;void(float)&gt; callback);
+static Subscription OnSceneLoad(std::function&lt;void(const std::string&amp;)&gt; callback);
+static Subscription OnSceneLoaded(std::function&lt;void(const std::string&amp;)&gt; callback);
+static Subscription OnSceneUnload(std::function&lt;void(const std::string&amp;)&gt; callback);
+static Subscription OnSceneUnloaded(std::function&lt;void(const std::string&amp;)&gt; callback);
+static Subscription OnWindowResize(std::function&lt;void(std::uint32_t,std::uint32_t)&gt; callback);
+static Subscription OnWindowFocusChanged(std::function&lt;void(bool)&gt; callback);
+};</code></pre>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../AntiAliasing/en.html"><small>Previous</small>AntiAliasing</a>
+<a class="next" href="../ApplicationEvent/en.html"><small>Next</small>ApplicationEvent</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#reference">Methods, results and limits</a><a class="toc-link" href="#availability">Availability and errors</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

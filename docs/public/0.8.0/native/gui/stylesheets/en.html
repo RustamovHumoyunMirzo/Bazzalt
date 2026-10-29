@@ -1,0 +1,249 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Import a .css asset and assign it to GuiElement.Stylesheet in the inspector or through C++/Lua. Add GuiElement to author an ID, whitespace-separated Classes and Tags, or Attributes such as [state=&quot;active&quot;]. Rules apply to that Frame hierarchy; a nested Frame starts its own scope. GuiElement.Stylesheet scopes additional rules to its subtree. Computed styles never replace your authored component values.">
+  <title>GUI stylesheets | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / C++ / GUI in C++ / GUI stylesheets</nav>
+      <article class="doc"><h1>GUI stylesheets</h1>
+
+<p>Import a .css asset and assign it to GuiElement.Stylesheet in the inspector or through C++/Lua. Add GuiElement to author an ID, whitespace-separated Classes and Tags, or Attributes such as [state=&quot;active&quot;]. Rules apply to that Frame hierarchy; a nested Frame starts its own scope. GuiElement.Stylesheet scopes additional rules to its subtree. Computed styles never replace your authored component values.</p>
+
+<h2 id="engine-model">Engine terms, familiar syntax</h2>
+
+<p>A stylesheet describes GUI entities, not web pages. A type selector names a widget such as Button, an ID identifies one widget, a class identifies a reusable group and an attribute describes explicit widget metadata. Hierarchy relations mean GUI parent/child or sibling relations within a Frame. States such as hover and focus come from engine input. There is no DOM, JavaScript, browser history or network loading.</p>
+
+<pre><code>/* Assign this asset to the Frame entity’s GuiElement Stylesheet field. */
+
+@layer defaults, theme;
+
+@layer defaults {
+
+    Button { color: white; gap: 8px; }
+
+}
+
+:root { --accent: #4a90e2; --spacing: 12px; }
+
+.toolbar &gt; Button.primary:hover {
+
+    color: var(--accent, rgb(74 144 226));
+
+    margin: calc(var(--spacing) * 2);
+
+}
+
+@viewport (min-width: 900px) and (orientation: landscape) {
+
+    .toolbar { gap: clamp(8px, 2vw, 24px); }
+
+}</code></pre>
+
+<p>Supported properties are color, background-color, background-image, border-color, border-width, opacity, font-family, font-size, font-kerning, letter-spacing, line-height, white-space, display, visibility, pointer-events, flex-direction, align-items, justify-content, overflow, z-index, width/height and their min/max variants, left/top, gap, flex-grow/shrink, padding and margin (including sides). Unknown properties produce diagnostics. Percent lengths use parent content bounds; em uses font size and rem uses the Frame root size. See <a href="../layout/en.html">layout and inheritance</a>.</p><p>Widget types are Frame, Button, TextInput, Image, Text, Rectangle and Container. Set GuiElement.ID explicitly, or use the entity name as its default ID. Tags are available through the tags attribute. Attributes use presence or exact-value syntax, for example [disabled] [state=&quot;active&quot;]. Hover, active and focus update from engine input. Disabled Frames and controls expose :disabled.</p>
+
+<h2 id="selectors">Selectors</h2>
+
+<table><thead><tr><th>Syntax</th><th>Meaning</th></tr></thead><tbody>
+
+<tr><td>* / Button / #play / .primary</td><td>Every GUI entity / widget type / exact ID / class.</td></tr>
+
+<tr><td>[disabled], [state="active"]</td><td>Attribute presence or exact value. Other operators: ~= word, |= language-prefix, ^= starts with, $= ends with, *= substring. Optional i/s flags choose ASCII-insensitive/sensitive value matching.</td></tr>
+
+<tr><td>.container Button / .container &gt; Button</td><td>Any descendant / direct child.</td></tr>
+
+<tr><td>Button + Label / Button ~ Label</td><td>Immediately following sibling / any later sibling.</td></tr>
+
+<tr><td>:hover, :active, :focus, :focus-visible, :focus-within</td><td>Explicit GUI interaction states.</td></tr>
+
+<tr><td>:disabled, :enabled, :checked, :selected, :state(name)</td><td>Engine state queries; :enabled means not disabled.</td></tr>
+
+<tr><td>:root, :empty</td><td>Frame-root and explicit empty-state queries supplied by the GUI adapter.</td></tr>
+
+<tr><td>:first-child, :last-child, :only-child</td><td>Sibling-position queries. First/last/only-of-type variants restrict the sibling count to the same widget type.</td></tr>
+
+<tr><td>:nth-child(2n + 1)</td><td>An+B, odd/even and integer forms. nth-last-child, nth-of-type and nth-last-of-type are also supported.</td></tr>
+
+<tr><td>:is(...), :not(...), :where(...)</td><td>Selector lists. :where contributes no specificity; :is/:not use the most specific argument.</td></tr>
+
+</tbody></table>
+
+<p>Comma-separated selectors share a declaration block. Widget type and pseudo names are ASCII-insensitive; IDs, classes, attributes and custom-property names are case-sensitive by default. Unsupported/malformed selectors produce diagnostics rather than silently becoming a broader match. Pseudo-elements, namespaces, :has and nested style-rule syntax are not implemented.</p>
+
+<h2 id="cascade">Cascading and variables</h2>
+
+<p>The winning declaration is chosen by !important, layer precedence, specificity, then declaration order. ID specificity outranks classes/attributes/pseudo-classes, which outrank widget types. Unlayered normal rules beat layered normal rules; important rules reverse layer order. Duplicate declarations preserve their order. Layer names may have dotted paths; full browser nested-layer/revert-layer behavior is not claimed.</p>
+
+<pre><code>:root { --accent: #acf; --padding: 12px; }
+
+Button { color: var(--accent); padding: var(--missing, var(--padding)); }
+
+#play { color: rgb(255 255 255 / 80%) !important; }</code></pre>
+
+<p>Custom properties inherit through the GUI snapshot hierarchy. Parent variables are computed before child redefinitions. Variables are substituted as tokens, not executable text. Nested fallbacks work. Missing variables without a usable fallback, cycles (including fallback dependencies), excessive depth or expansion size invalidate the declaration and produce a diagnostic. A losing lower-priority declaration is not substituted as a fallback for an invalid winning value.</p>
+
+<p>Ordinary inherit, initial and unset are resolved into per-frame computed component copies. Local authored values remain intact. Explicit component Inherit flags still work; a CSS declaration overriding that property takes precedence in the computed copy.</p>
+
+<h2 id="values">Values and conversion</h2>
+
+<table><thead><tr><th>Value family</th><th>Supported conversion</th></tr></thead><tbody>
+
+<tr><td>Numbers and lengths</td><td>Signed/exponent numbers; px/dp, %, em/rem, vw/vh/vmin/vmax. The layout context supplies percentage and font-size bases. Unitless values are retained for scalar properties.</td></tr>
+
+<tr><td>Math</td><td>calc with +, −, *, /; min, max and clamp. Invalid dimensional arithmetic, division by zero and nonfinite results are rejected.</td></tr>
+
+<tr><td>Colors</td><td>#RGB, #RGBA, #RRGGBB, #RRGGBBAA; rgb/rgba comma or space/slash forms; hsl/hsla with angle hues; hwb; color(srgb ...); transparent/currentColor. Basic CSS 16-color names plus grey, orange, rebeccapurple, cyan and magenta are recognized.</td></tr>
+
+<tr><td>Strings and booleans</td><td>Escaped UTF-8 strings/identifiers; true/false literals. Strings never execute commands.</td></tr>
+
+<tr><td>References</td><td>url("asset://...") and asset(...) are parsed references. The parser never fetches, opens or imports them; the asset adapter accepts project UUIDs and validates font/image types. External URLs are not loaded.</td></tr>
+
+</tbody></table>
+
+<p>Balanced unknown functions and units remain available in parsed data, but typed conversion can reject them. This is not full browser CSS: every named color, CSS Color 4/5 color space, animation and web-only unit is not implemented. Parsed colors are encoded sRGB values; renderer conversion is a separate responsibility.</p>
+
+<h2 id="at-rules">At-rules</h2>
+
+<p>@viewport and @media conditionally contain rules. Supported features are min/max/exact width, height and aspect ratio, orientation, prefers-color-scheme and prefers-reduced-motion. Width/height also accept range syntax: (width &gt;= 600px) and (400px &lt; width &lt;= 1200px). Conditions use the current Frame destination size in logical GUI pixels and are reevaluated after resizing. Queries support screen/all, and/or/not, comma alternatives and parentheses. @viewport is an engine conditional, not a way to create or resize the native game window.</p>
+
+<p>@layer statements and blocks define cascade order. Other at-rules, including @import, @font-face, @keyframes and @supports, are retained with warnings and not executed. Their bodies do not leak into the normal cascade. In particular, @import never downloads or reads another file, fonts are assigned directly with font-family: asset(&quot;UUID&quot;) or the Font picker instead of @font-face.</p>
+
+<h2 id="borders">Rounded borders</h2>
+
+<p>border-width accepts one, two, three or four lengths in CSS order: top, right, bottom, left. Use border-top-width, border-right-width, border-bottom-width and border-left-width for individual sides. border-color uses the same shorthand order and has corresponding side fields. border: 2px solid #aaccee is supported; border-style accepts solid or none. Shorthands and longhands participate in specificity, !important and source order, including values supplied through variables.</p>
+
+<pre><code>.card {
+
+    border-width: 1px 2px 3px 4px;
+
+    border-color: #555 #777 #999 #bbb;
+
+    border-radius: 12px 18px 24px 30px / 8px 12px 16px 20px;
+
+    border-top-left-radius: 20px 10px;
+
+}</code></pre>
+
+<p>Corner shorthand order is top-left, top-right, bottom-right, bottom-left. A slash separates horizontal and vertical ellipse radii. Percentages use the corresponding box dimension; overlapping corners are reduced together to fit. The other longhands are border-top-right-radius, border-bottom-right-radius and border-bottom-left-radius. Borders overlay the box rather than adding to its measured size. overflow:hidden/clip creates a rounded clipping group for descendants.</p>
+
+<h2 id="gradients">Gradient backgrounds</h2>
+
+<pre><code>.banner { background-image: linear-gradient(to right, #173453, #6d91bf 70%, white); }
+
+.radial { background-image: radial-gradient(circle at 30% 40%, white, transparent); }
+
+.wheel { background-image: conic-gradient(from 45deg at center, red 0deg, lime 120deg, blue 240deg, red 360deg); }
+
+.stripes { background-image: repeating-linear-gradient(45deg, #333 0px 8px, #555 8px 16px); }</code></pre>
+
+<p>linear-gradient, radial-gradient and conic-gradient have repeating- equivalents. Linear directions accept angles or to left/right/top/bottom combinations. Radial backgrounds support circle/ellipse with side/corner extents, explicit radii and an at position. Conic backgrounds accept from angle and at position. Stops accept supported CSS colors and one or two positions; omitted positions are distributed between their neighbors. There are at most eight stops per gradient and four gradient layers. The first listed gradient is painted on top. background is a single color, asset reference or gradient shorthand; background-image is preferred for layered gradients. Arbitrary web image-loading URLs and interpolation-color-space syntax are not supported.</p>
+
+<h2 id="filters">Element and backdrop filters</h2>
+
+<pre><code>.soft { filter: blur(15px) contrast(110%); }
+
+.glass {
+
+    background-color: rgb(255 255 255 / 15%);
+
+    border-radius: 16px;
+
+    backdrop-filter: blur(10px) saturate(140%);
+
+}
+
+.shadow { filter: drop-shadow(3px 5px 8px rgb(0 0 0 / 50%)); }</code></pre>
+
+<p>Both properties support the same ordered operations: blur, brightness, contrast, grayscale, invert, opacity, saturate, sepia, hue-rotate and drop-shadow. blur accepts a nonnegative logical-pixel radius through 128px. Color filters accept nonnegative numbers or percentages through 16 (1600%); grayscale/invert/opacity/sepia clamp to 1 (100%); hue-rotate accepts an angle. drop-shadow accepts horizontal offset, vertical offset, optional blur radius and a color. Each chain is limited to eight operations. none removes the chain. Unsupported functions or invalid arguments produce diagnostics.</p>
+
+<p>filter renders an element and its descendants as a group before applying the chain. backdrop-filter samples already painted content behind the element, excludes its foreground and clips the filtered result to its rounded box. Viewport and CameraBound destinations include the current camera/background image. Spatial Frames sample earlier GUI content on their own plane; they do not sample arbitrary world geometry behind that plane. A filter establishes a grouping boundary, so descendant z-index stays within that group. New paint properties accept inherit, initial and unset; explicit inheritance copies computed values while local component data remains intact. A plain opacity declaration still affects the entity's own layers; filter:opacity(...) applies to the composited group.</p>
+
+<p>Effects use private GPU render targets and separable Gaussian passes, with no gameplay renderer handles or CPU framebuffer readbacks. Targets are allocated before rendering and do not sample themselves. The main accumulation and camera input stay at full destination resolution. Per destination, effect scratch resolution is reduced when needed to stay within a 16-million-pixel allocation budget and a 4096-pixel maximum dimension. Full-size effect destinations are limited to 16384 pixels per edge and 32 million pixels. Other limits are 128 scratch targets, 256 passes and 16 nested groups; exceeding them reports a diagnostic and falls back to unfiltered drawing.</p>
+
+<h2 id="placement">Additional placement controls</h2>
+
+<p>position:absolute opts a child out of row/column flow; position:relative keeps it in flow. right and bottom place the box relative to the parent content area when left/top are absent. aspect-ratio:16/9 derives the missing dimension when exactly one of width or height is specified. Existing min/max constraints still apply. These values are computed without modifying authored transforms.</p>
+
+<h2 id="diagnostics">Errors and safety</h2>
+
+<p>Diagnostics carry severity, UTF-8 byte offset and one-based line/byte column. The parser recovers enough to report later errors, but a syntax-invalid sheet is not authoritative for cascading. UTF-8 and NUL validation, finite-number checks and byte/token/rule/declaration/recursion/expansion/work limits prevent unbounded input processing. Unknown conditions fail closed. All functions operate on owned data and caller-provided hierarchy snapshots; no editor loop, renderer or OS access is exposed.</p>
+
+<h2 id="assets">Assets, fonts and live editing</h2>
+
+<p>Create a stylesheet with Asset Browser &gt; Create &gt; Stylesheet. Edit it with Open or Open With. Assign it using a Stylesheet picker, then give GUI entities reusable Classes. Font and image references use asset(&quot;UUID&quot;) or url(&quot;asset://UUID&quot;). Obtain the UUID from the asset metadata or AssetManager; it is a stable project identity, not a filesystem path.</p>
+
+<pre><code>.title { font-family: asset("FONT-UUID"); font-size: 24px; }
+
+.card { background-image: url("asset://IMAGE-UUID"); padding: 12px; }
+
+Button:hover { background-color: #467cb8; }
+
+.hidden { display: none; }</code></pre>
+
+<p>Used stylesheet/font files are watched in the editor. Saving them triggers targeted import and updates computed values and font atlases. Imported stylesheet dependency manifests retain referenced fonts/images in cooked games. Query GUI::GetStyleDiagnostics(entity) for application diagnostics; changed diagnostics also appear in the editor Console. Syntax-invalid assets are marked failed in the Asset Browser.</p>
+
+<p>Fonts use the same rendering path for Viewport, CameraBound and Spatial Frames. See <a href="../fonts/en.html">font assets and measurement</a>. CSS opacity currently affects each entity's own layers, not an offscreen composited group. This dialect does not implement CSS Grid, flex wrapping, auto content sizing, animation, browser DOM or arbitrary web stylesheets. Resource and traversal limits may use the built-in fallback glyph instead of allocating without bounds.</p><h2 id="required-properties">Typed stylesheet inputs</h2>
+<p>A stylesheet can declare editable inputs. Select the stylesheet in a GuiElement component: its declarations appear underneath as inspector fields. Values belong to that GuiElement, are saved with its scene and support editor undo/redo. Sharing the stylesheet does not share instance overrides.</p>
+<pre><code>@require(accent, #4da3ff, color, label("Accent color"));
+@require(spacing, 12px, length, min(0), max(64));
+@require(icon, none, texture);
+@require(face, none, font);
+@require(caption, "Continue", string);
+@require(enabled, true, bool);
+@require(alignment, center, enum, options(start, center, end));
+@require(insets, 8px 12px 8px 12px, vec4);
+Button {
+    background-color: require(accent);
+    background-image: require(icon);
+    font-family: require(face);
+    padding: require(insets);
+    gap: require(spacing);
+    content: require(caption);
+    interactable: require(enabled);
+    text-align: require(alignment);
+}</code></pre>
+<p>The spelling <code>require(-&gt; accent &lt;-)</code> also works. Declarations must be at the stylesheet root. Supported types are float (number), int (integer), bool (boolean), string, color, length, vec2, vec3, vec4, texture (image), font and enum. Vectors are whitespace-separated CSS numeric/length values. String defaults require quotes. Asset defaults use <code>none</code> or <code>asset("asset-uuid")</code>. Texture and font fields use filtered project asset pickers with drag/drop validation.</p>
+<p>Optional metadata is <code>min(value)</code>, <code>max(value)</code>, <code>label("Caption")</code>, <code>tooltip("Description")</code> and <code>options(first, second)</code>. Bounds apply to numeric values (or each vector element) in their declared units; enum defaults must be one of their options. The length field retains its declared unit. Right-click a generated field to reset it to the stylesheet default.</p>
+<p>Duplicate names, invalid defaults, unsupported types, invalid options and unknown require references fail import with a diagnostic. Invalid overrides loaded from data fall back to the current default. Requirements are scoped to the stylesheet-owning GuiElement; parent and child sheets may declare the same name independently. A nested Frame still starts a new GUI scope. Declaration changes refresh the inspector; removed/stale overrides are retained as dormant scene data but do not create fields or affect rendering.</p>
+<h3 id="required-properties-api">Programmatic values</h3>
+<pre><code>auto fields = Bazzalt::GUI::GetStylesheetProperties(stylesheetUUID);
+bool accepted = Bazzalt::GUI::SetStyleProperty(button, "accent", "#ff8844");
+Bazzalt::GUI::SetStyleProperty(button, "caption", "\"Start\"");
+auto value = Bazzalt::GUI::GetStyleProperty(button, "caption");
+Bazzalt::GUI::ResetStyleProperty(button, "accent");</code></pre>
+<p>SetStyleProperty validates the selected stylesheet declaration, range and asset type, returning false without modifying data if invalid. Its value is one CSS literal, never a declaration or a file path. GetStyleProperty returns an effective CSS literal or an empty string for an unknown name. GuiStyleProperty describes the name, type, default, label, tooltip, optional bounds and enum choices. GuiElement.StyleProperties is the persisted map; prefer the validated GUI setter when changing values at runtime.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../layout/en.html"><small>Previous</small>GUI layout and style inheritance</a>
+<a class="next" href="../../extensions/en.html"><small>Next</small>Using extension SDKs in C++</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#engine-model">Engine terms, familiar syntax</a><a class="toc-link" href="#selectors">Selectors</a><a class="toc-link" href="#cascade">Cascading and variables</a><a class="toc-link" href="#values">Values and conversion</a><a class="toc-link" href="#at-rules">At-rules</a><a class="toc-link" href="#borders">Rounded borders</a><a class="toc-link" href="#gradients">Gradient backgrounds</a><a class="toc-link" href="#filters">Element and backdrop filters</a><a class="toc-link" href="#placement">Additional placement controls</a><a class="toc-link" href="#diagnostics">Errors and safety</a><a class="toc-link" href="#assets">Assets, fonts and live editing</a><a class="toc-link" href="#required-properties">Typed stylesheet inputs</a><a class="toc-link sub" href="#required-properties-api">Programmatic values</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

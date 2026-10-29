@@ -390,7 +390,14 @@ inline Mat4 Mat4::Rotation(const Quaternion& value) {
 }
 
 inline Mat4 Mat4::Transform(Vec3 position, const Quaternion& rotation, Vec3 scale) {
-    return Translation(position) * Rotation(rotation) * Scaling(scale);
+    // Compose the affine columns directly; keep legacy nonfinite propagation.
+    if(!std::isfinite(rotation.X)||!std::isfinite(rotation.Y)||!std::isfinite(rotation.Z)||!std::isfinite(rotation.W)||!std::isfinite(position.X)||!std::isfinite(position.Y)||!std::isfinite(position.Z)||
+       !std::isfinite(scale.X)||!std::isfinite(scale.Y)||!std::isfinite(scale.Z))
+        return Translation(position) * Rotation(rotation) * Scaling(scale);
+    Mat4 result=Rotation(rotation);
+    for(std::size_t row=0;row<3;++row){result(row,0)*=scale.X;result(row,1)*=scale.Y;result(row,2)*=scale.Z;}
+    result(0,3)=position.X;result(1,3)=position.Y;result(2,3)=position.Z;
+    return result;
 }
 
 inline bool Mat4::Decompose(Vec3& position, Quaternion& rotation, Vec3& scale) const {

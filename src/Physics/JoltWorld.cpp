@@ -242,6 +242,8 @@ JPH::RefConst<JPH::Shape> CookMesh(const ColliderBuild& part,const MeshCollider&
 void World::Synchronize(){
     if(Dead)return;if(Stepping)throw std::logic_error("Cannot synchronize physics during simulation");Configure();
     std::map<UUID,std::vector<ColliderBuild>> groups;PhysicsMeshRevisions revisions;
+    std::unordered_map<UUID,Transform> rootPoses;
+    const auto poseFor=[&](Entity root)->const Transform&{auto it=rootPoses.find(root.GetUUID());if(it!=rootPoses.end())return it->second;return rootPoses.emplace(root.GetUUID(),root.GetWorldTransform()).first->second;};
     const auto collect=[&](Entity entity,bool mesh){
         // Cloth and vehicle wheels own their surfaces. Animated wheel/model colliders
         // must not be recooked into the chassis; nested rigidbodies remain separate.
@@ -249,10 +251,10 @@ void World::Synchronize(){
 
         Entity owner=entity;for(auto parent=entity;parent;parent=parent.GetParent())if(parent.HasComponent<Rigidbody>()){if(!parent.GetComponent<Rigidbody>().Enabled)return;owner=parent;break;}
         if(!entity.GetComponent<Transform>().Enabled||owner.GetUUID().IsRoot())return;
-        auto rootPose=owner.GetWorldTransform();RequireVector(rootPose.Position);(void)Q(rootPose.Rotation);Mat4 relative;for(auto current=entity;current&&current!=owner;current=current.GetParent())relative=current.GetComponent<Transform>().GetMatrix()*relative;relative=Mat4::Scaling(rootPose.Scale)*relative;Mat4 matrix;
+        const auto& rootPose=poseFor(owner);RequireVector(rootPose.Position);(void)Q(rootPose.Rotation);Mat4 relative;for(auto current=entity;current&&current!=owner;current=current.GetParent())relative=current.GetComponent<Transform>().GetMatrix()*relative;relative=Mat4::Scaling(rootPose.Scale)*relative;Mat4 matrix;
         std::string signature;
-        if(mesh){const auto& c=entity.GetComponent<MeshCollider>();if(!c.Enabled)return;if(!c.IsValid())throw std::invalid_argument("Invalid MeshCollider on "+entity.GetUUID().ToString());matrix=relative*Mat4::Transform(c.Offset,c.Rotation,c.Scale);VisitMeshCollider(c,[&](const char*,const char*,const auto& field){signature+=Stamp(field)+";";});}
-        else{const auto& c=entity.GetComponent<ShapeCollider>();if(!c.Enabled)return;if(!c.IsValid())throw std::invalid_argument("Invalid ShapeCollider on "+entity.GetUUID().ToString());matrix=relative*Mat4::Transform(c.Offset,c.Rotation,c.Scale);VisitShapeCollider(c,[&](const char*,const char*,const auto& field){signature+=Stamp(field)+";";});}
+        if(mesh){const auto& c=entity.GetComponent<MeshCollider>();if(!c.Enabled)return;if(!c.IsValid())throw std::invalid_argument("Invalid MeshCollider on "+entity.GetUUID().ToString());matrix=relative*Mat4::Transform(c.Offset,c.Rotation,c.Scale);VisitMeshCollider(c,[&](const char*,const char*,const auto& field){AppendPhysicsKey(signature,field);signature.push_back(';');});}
+        else{const auto& c=entity.GetComponent<ShapeCollider>();if(!c.Enabled)return;if(!c.IsValid())throw std::invalid_argument("Invalid ShapeCollider on "+entity.GetUUID().ToString());matrix=relative*Mat4::Transform(c.Offset,c.Rotation,c.Scale);VisitShapeCollider(c,[&](const char*,const char*,const auto& field){AppendPhysicsKey(signature,field);signature.push_back(';');});}
         Transform local;if(!matrix.Decompose(local.Position,local.Rotation,local.Scale)||local.Scale.X<=0||local.Scale.Y<=0||local.Scale.Z<=0)throw std::invalid_argument("Physics colliders require non-singular positive world scale");
         RequireVector(local.Position);RequireVector(local.Scale);(void)Q(local.Rotation);
         std::string meshKey;if(mesh){const auto& collider=entity.GetComponent<MeshCollider>();meshKey=PhysicsMeshSignature(entity,collider.MeshAsset,revisions);if(meshKey.empty()&&!collider.MeshAsset)return;signature+=meshKey;}
@@ -266,8 +268,8 @@ void World::Synchronize(){
     for(auto it=Bodies.begin();it!=Bodies.end();)if(!groups.contains(it->first)){DetachVehicle(it->second.Id);DetachJoints(it->second.Id);interface.RemoveBody(it->second.Id);interface.DestroyBody(it->second.Id);BodyOwners.erase(it->second.Id.GetIndexAndSequenceNumber());for(auto key:it->second.Shapes)Colliders.erase(key);it=Bodies.erase(it);}else ++it;
     for(auto& [uuid,parts]:groups){
         auto entity=ScenePtr->GetEntity(uuid);Rigidbody body;const auto* authored=entity.TryGetComponent<Rigidbody>();if(authored){body=*authored;if(!body.IsValid())throw std::invalid_argument("Invalid Rigidbody on "+uuid.ToString());}else body.MotionType=BodyMotionType::Static;
-        std::string signature;VisitBody(body,[&](const char*,const char*,const auto& field){signature+=Stamp(field)+";";});for(const auto& c:parts)signature+=Stamp(c.EntityValue.GetUUID())+c.Signature;
-        auto pose=entity.GetWorldTransform();auto old=Bodies.find(uuid);retained.insert(uuid);
+        std::string signature;VisitBody(body,[&](const char*,const char*,const auto& field){AppendPhysicsKey(signature,field);signature.push_back(';');});for(const auto& c:parts){AppendPhysicsKey(signature,c.EntityValue.GetUUID());signature+=c.Signature;}
+        auto pose=poseFor(entity);auto old=Bodies.find(uuid);retained.insert(uuid);
         if(old!=Bodies.end()&&old->second.Signature==signature){
             if(!Same(pose,old->second.LastScene)){interface.SetPositionAndRotation(old->second.Id,V(pose.Position),Q(pose.Rotation),body.StartAwake?JPH::EActivation::Activate:JPH::EActivation::DontActivate);old->second.LastScene=pose;old->second.PreviousScene=pose;}
             continue;

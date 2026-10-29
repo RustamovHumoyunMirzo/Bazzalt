@@ -18,6 +18,7 @@
 #include "Bazzalt/Components/Hierarchy.h"
 #include "Bazzalt/Components/Identity.h"
 #include "Bazzalt/Components/Transform.h"
+#include "Bazzalt/Components/LOD.h"
 #include "Bazzalt/Entity.h"
 #include "Bazzalt/ModelAsset.h"
 #include "Bazzalt/SceneQuery.h"

@@ -68,7 +68,9 @@ return Walk
                 start=declaration.end();depth=1;end=start
                 while depth and end<len(text):
                     depth+=(text[end]=="{")-(text[end]=="}");end+=1
-                body=text[start:end-1]
+                # Inspect declarations, excluding locals in inline method bodies.
+                from scripts.sync_api_reference import public_contract
+                body=public_contract(text,"struct",start-1,end-1)
                 # Nested DoF settings have their own binding and must not be
                 # mistaken for CameraPostProcessing's direct data members.
                 body=re.sub(r"struct\s+\w+\s*\{[\s\S]*?\}","",body)

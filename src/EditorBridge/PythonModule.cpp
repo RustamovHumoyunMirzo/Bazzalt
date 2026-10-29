@@ -1,3 +1,4 @@
+#include "EditorBridge/LODBridge.h"
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -131,7 +132,7 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
     if (const auto* vignette=entity.TryGetComponent<Vignette>()) { py::dict v;v["Color"]=py::make_tuple(vignette->Color.X,vignette->Color.Y,vignette->Color.Z,vignette->Color.W);v["Intensity"]=vignette->Intensity;v["Smoothness"]=vignette->Smoothness;v["Roundness"]=vignette->Roundness;data["Vignette"]=v; }
     if (const auto* bounds=entity.TryGetComponent<SceneQueryBounds>()) { py::dict v;v["Shape"]=static_cast<int>(bounds->Shape);v["Center"]=py::make_tuple(bounds->Center.X,bounds->Center.Y,bounds->Center.Z);v["Extents"]=py::make_tuple(bounds->Extents.X,bounds->Extents.Y,bounds->Extents.Z);v["Radius"]=bounds->Radius;v["Layer Mask"]=bounds->LayerMask;data["Scene Query Bounds"]=v; }
     InspectGUI(entity,components,enabled,data);
-    InspectAudio(entity,components,enabled,data);InspectPhysics(entity,components,enabled,data);
+    InspectAudio(entity,components,enabled,data);InspectPhysics(entity,components,enabled,data);InspectLOD(entity,components,enabled,data);
     result["components"]=components;result["component_enabled"]=enabled;
     result["component_data"] = data;
     return result;
@@ -348,6 +349,7 @@ public:
         std::function<void(Entity)> append = [&](Entity parent) {
             for (Entity child : parent.GetChildren()) {
                 auto snapshot=SnapshotEntity(scene,child);
+                snapshot["editor_lod_hidden"]=(&scene==&m_engine->GetScene())&&m_engine->IsEditorLODHidden(child.GetUUID());
                 if(auto found=meshBounds.find(child.GetUUID());found!=meshBounds.end()){
                     const auto& [minimum,maximum]=found->second;
                     snapshot["mesh_bounds"]=py::make_tuple(py::make_tuple(minimum.X,minimum.Y,minimum.Z),py::make_tuple(maximum.X,maximum.Y,maximum.Z));
@@ -454,6 +456,7 @@ public:
 
     bool AddComponent(const std::string& id, const std::string& type) {
         Entity entity = RequireEntity(id);
+        if(type=="LOD"){if(!entity.HasComponent<LOD>())entity.AddComponent<LOD>();return true;}
         if(!PhysicsAdditionAllowed(entity,type)){Console::Error("Cannot add "+type+": incompatible physics components on this entity.","Physics");return false;}
         if(PhysicsDispatch(entity,type,[]<class T>(Entity e){if(!e.HasComponent<T>())e.AddComponent<T>();}))return true;
         if(AudioDispatch(entity,type,[]<class T>(Entity e){if(!e.HasComponent<T>())e.AddComponent<T>();}))return true;
@@ -469,6 +472,7 @@ public:
     }
     bool RemoveComponent(const std::string& id, const std::string& type) {
         Entity entity = RequireEntity(id);
+        if(type=="LOD"){if(entity.HasComponent<LOD>())entity.RemoveComponent<LOD>();return true;}
         if(PhysicsDispatch(entity,type,[]<class T>(Entity e){if(e.HasComponent<T>())e.RemoveComponent<T>();}))return true;
         if(AudioDispatch(entity,type,[]<class T>(Entity e){if(e.HasComponent<T>())e.RemoveComponent<T>();}))return true;
         if (type == "Camera" && entity.HasComponent<Camera>()) entity.RemoveComponent<Camera>();
@@ -483,6 +487,7 @@ public:
     }
     bool SetComponentEnabled(const std::string& id, const std::string& type, bool enabled) {
         Entity entity = RequireEntity(id);
+        if(type=="LOD"){if(entity.HasComponent<LOD>())entity.SetComponentEnabled<LOD>(enabled);return true;}
         if(PhysicsDispatch(entity,type,[enabled]<class T>(Entity e){if(e.HasComponent<T>())e.SetComponentEnabled<T>(enabled);}))return true;
         if(AudioDispatch(entity,type,[enabled]<class T>(Entity e){if(e.HasComponent<T>())e.SetComponentEnabled<T>(enabled);}))return true;
         if (type == "Camera" && entity.HasComponent<Camera>()) entity.SetComponentEnabled<Camera>(enabled);
@@ -499,7 +504,7 @@ public:
     }
     py::list ComponentTypes() const {
         py::list result;
-        result.append("Rigidbody");result.append("Shape Collider");result.append("Mesh Collider");result.append("Joint");result.append("Distance Joint");result.append("Hinge Joint");result.append("Slider Joint");result.append("Ball And Socket Joint");result.append("Fixed Joint");result.append("Cloth");result.append("Rope");result.append("Vehicle");result.append("Vehicle Wheel");result.append("Wheel Suspension");result.append("Wheel Tire");result.append("Wheel Brake");result.append("Wheel Steering");result.append("Vehicle Engine");result.append("Vehicle Transmission");result.append("Vehicle Differential");result.append("Vehicle Anti Roll Bar");result.append("Vehicle Aerodynamics");result.append("Audio Source");result.append("Audio Listener");
+        result.append("LOD");result.append("Rigidbody");result.append("Shape Collider");result.append("Mesh Collider");result.append("Joint");result.append("Distance Joint");result.append("Hinge Joint");result.append("Slider Joint");result.append("Ball And Socket Joint");result.append("Fixed Joint");result.append("Cloth");result.append("Rope");result.append("Vehicle");result.append("Vehicle Wheel");result.append("Wheel Suspension");result.append("Wheel Tire");result.append("Wheel Brake");result.append("Wheel Steering");result.append("Vehicle Engine");result.append("Vehicle Transmission");result.append("Vehicle Differential");result.append("Vehicle Anti Roll Bar");result.append("Vehicle Aerodynamics");result.append("Audio Source");result.append("Audio Listener");
         for (const char* name : {"Camera", "Light", "Mesh", "Primitive Object", "Scene Query Bounds", "Gaussian Blur", "Vignette"})
             result.append(name);
         for(auto name:GuiNames)result.append(name);
@@ -560,6 +565,7 @@ public:
             const auto mode=value.cast<int>();if(mode<0||mode>7)return false;
         }
         Entity entity=RequireEntity(id);
+        if(type=="LOD")return SetLODProperty(entity,property,value);
         if(type=="Rigidbody"||type=="Shape Collider"||type=="Mesh Collider"||type=="Joint"||type=="Distance Joint"||type=="Hinge Joint"||type=="Slider Joint"||type=="Ball And Socket Joint"||type=="Fixed Joint"||type=="Cloth"||type=="Rope"||type=="Vehicle"||type=="Vehicle Wheel"||type=="Wheel Suspension"||type=="Wheel Tire"||type=="Wheel Brake"||type=="Wheel Steering"||type=="Vehicle Engine"||type=="Vehicle Transmission"||type=="Vehicle Differential"||type=="Vehicle Anti Roll Bar"||type=="Vehicle Aerodynamics")return SetPhysicsProperty(entity,type,property,value);
         if(type=="Audio Source"||type=="Audio Listener")return SetAudioProperty(entity,type,property,value);
         if(GuiRegistry().Find("Bazzalt."+type))return SetGUIProperty(entity,type,property,value);
