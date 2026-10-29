@@ -24,10 +24,13 @@
 #include <chrono>
 #include <limits>
 #include <string_view>
+#include <cstdio>
+#include <utils/Panic.h>
 using namespace Bazzalt;
 using namespace Bazzalt::Runtime;
 template<class F> bool Throws(F f){try{f();return false;}catch(const std::exception&){return true;}}
-int main(int argc,char** argv){
+void RunGraphicsTests(int argc,char** argv){
+    std::puts("Graphics: host and mesh validation");
     Engine host;auto& scene=host.GetScene();GraphicsAccess::BindScene(&scene);
     auto vertex=[](Vec3 p){GraphicsVertex v;v.Position=p;v.Color={0,1,0,1};return v;};
     const std::vector<GraphicsVertex> vertices{vertex({-1,-1,-3}),vertex({1,-1,-3}),vertex({0,1,-3})};
@@ -39,15 +42,20 @@ int main(int argc,char** argv){
     Graphics::DrawMesh(mesh);auto revision=mesh.GetRevision();mesh.SetGeometry(vertices);assert(mesh.GetRevision()==revision+1);
     assert(GraphicsAccess::Commands().front().Geometry->Revision==revision);
     copy.Destroy();assert(!mesh.IsValid());assert(GraphicsAccess::Commands().front().Geometry->Vertices.size()==3);assert(Throws([&]{Graphics::DrawMesh(mesh);}));Graphics::ClearDraws();
+    std::puts("Graphics: soft surfaces");
     // Soft surfaces enter the same public Graphics pipeline with stable mesh revisions.
     auto fabric=scene.CreateEntity("Fabric");fabric.AddComponent<PrimitiveObject>();auto& cloth=fabric.AddComponent<Cloth>();cloth.SubdivisionLevel=0;cloth.SegmentsX=cloth.SegmentsY=2;
     GraphicsAccess::BeginFrame();assert(GraphicsAccess::Commands().size()==1);assert(GraphicsAccess::Commands().front().Owner==fabric.GetUUID());assert(GraphicsAccess::Commands().front().Source==fabric.GetUUID());assert(GraphicsAccess::Commands().front().Geometry->Vertices.size()==24);assert(GraphicsAccess::Commands().front().Geometry->Indices.size()==36);auto softRevision=GraphicsAccess::Commands().front().Geometry->Revision;GraphicsAccess::EndFrame();
     GraphicsAccess::BeginFrame();assert(GraphicsAccess::Commands().front().Geometry->Revision==softRevision);GraphicsAccess::EndFrame();
+    std::puts("Graphics: invalid soft-body preview");
     auto invalidSoft=scene.CreateEntity("Conflicting cloth");invalidSoft.AddComponent<PrimitiveObject>();invalidSoft.AddComponent<Rigidbody>();invalidSoft.AddComponent<Cloth>();
     GraphicsAccess::BeginFrame();assert(GraphicsAccess::Commands().size()==1);assert(GraphicsAccess::Commands().front().Owner==fabric.GetUUID());GraphicsAccess::EndFrame();
+    std::puts("Graphics: strict soft-body validation");
     assert(Throws([&]{scene.GetPhysics().Synchronize();})); // Explicit simulation validation stays strict.
+    std::puts("Graphics: soft-body repair");
     invalidSoft.RemoveComponent<Rigidbody>();GraphicsAccess::BeginFrame();assert(GraphicsAccess::Commands().size()==2);GraphicsAccess::EndFrame();scene.DestroyEntity(invalidSoft);
     fabric.SetComponentEnabled<Cloth>(false);GraphicsAccess::BeginFrame();assert(GraphicsAccess::Commands().empty());GraphicsAccess::EndFrame();scene.DestroyEntity(fabric);
+    std::puts("Graphics: graphics events");
     auto owner=scene.CreateEntity("Owner");int dead=0;Graphics::OnBeginFrame([&](const auto&){++dead;},owner);scene.DestroyEntity(owner);
     int scoped=0;auto scope=GraphicsAccess::SetScope(&scoped);Graphics::OnBeginFrame([&](const auto&){++scoped;});GraphicsAccess::SetScope(scope);GraphicsAccess::DisconnectScope(&scoped);
     auto subscription=Graphics::OnBeforeCamera([](const GraphicsEvent&){Graphics::DrawLine({0,0,-3},{1,0,-3});});
@@ -56,6 +64,7 @@ int main(int argc,char** argv){
     assert(GraphicsAccess::Commands().size()==1&&GraphicsAccess::Matches(GraphicsAccess::Commands()[0],camera));
     auto other=camera;other.Camera=UUID::Generate();assert(!GraphicsAccess::Matches(GraphicsAccess::Commands()[0],other));
     Graphics::Unsubscribe(subscription);GraphicsAccess::EndFrame();assert(GraphicsAccess::Commands().empty());
+    std::puts("Graphics: camera materials");
     // Ordered material passes: migration, validation, atomic changes and old scenes.
     auto a=Material::Create(ShaderPreset::Canvas),b=Material::Create(ShaderPreset::Canvas);assert(a.IsValid()&&b.IsValid());
     CameraPostProcessing post;post.SetMaterial(a);assert(post.AddMaterial(b,false)==1);assert(!post.MaterialAsset);
@@ -69,6 +78,7 @@ int main(int argc,char** argv){
     auto legacy=properties;legacy["Post.Material"]=b.GetAssetUUID().ToString();legacy.erase("Post.Materials.Count");auto old=scene.CreateEntity("Old");assert(descriptor->Deserialize(old,legacy,3));assert(old.GetComponent<Camera>().PostProcessing.GetMaterials()[0].MaterialAsset==b.GetAssetUUID());
     properties["Post.Materials.Count"]="33";assert(!descriptor->Deserialize(restored,properties,4));
     post.ClearMaterials();assert(post.GetMaterials().empty());
+    std::puts("Graphics: renderer buffers");
     // Exercise real buffer/material creation even on CI's NOOP backend.
     RenderBackend backend;const bool gpu=argc>1&&std::string_view(argv[1])=="--gpu";
     if(gpu)assert(backend.ConfigureBackend("vulkan"));assert(backend.Initialize(!gpu));
@@ -108,6 +118,7 @@ int main(int argc,char** argv){
         Graphics::Unsubscribe(token);capture.RemoveSystem<CameraSystem>();backend.SetGuiScene(nullptr);output.Destroy();
     }
     backend.Shutdown();GraphicsAccess::BindScene(nullptr);
+    std::puts("Graphics: editor soft-body preview");
     {
         Engine preview;assert(preview.Init(true,false));auto& authoring=preview.GetScene();
         auto broken=authoring.CreateEntity("Legacy invalid cloth");broken.AddComponent<PrimitiveObject>();broken.AddComponent<Rigidbody>();broken.AddComponent<Cloth>();
@@ -116,4 +127,9 @@ int main(int argc,char** argv){
         preview.RenderEditorFrame();auto after=preview.GetEditorMeshBounds();assert(after.contains(valid.GetUUID()));assert(authoring.GetEntity(broken.GetUUID()));
         broken.RemoveComponent<Rigidbody>();preview.RenderEditorFrame();assert(preview.GetEditorMeshBounds().contains(broken.GetUUID()));
     }
+}
+
+int main(int argc,char** argv){
+    try{RunGraphicsTests(argc,argv);}
+    catch(const utils::Panic& error){std::fprintf(stderr,"Graphics Filament panic: %s\n",error.what());return 1;}
 }
