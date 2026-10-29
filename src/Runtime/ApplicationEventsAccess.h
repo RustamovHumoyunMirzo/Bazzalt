@@ -8,6 +8,8 @@ struct ApplicationEventsAccess {
     static const void* SetOwner(const void* owner) noexcept;
     static int SetSubsystemLevel(int level) noexcept;
     static int GetSubsystemLevel() noexcept;
+    static bool SetAssetAccess(bool enabled) noexcept;
+    static bool GetAssetAccess() noexcept;
     static int GetLevelOrder(int level) noexcept;
     static int GetEventLevel(ApplicationEventType type) noexcept;
     static void BindStageLoader(std::function<void(int)> loader);

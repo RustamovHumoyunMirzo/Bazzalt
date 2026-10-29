@@ -25,6 +25,7 @@
         "vehicles",
         "performance",
         "lod",
+        "global-events",
         "settings",
         "extensions",
         "glossary"
@@ -53,6 +54,7 @@
         "physics",
         "vehicles",
         "lod",
+        "global-events",
         "gui",
         "extensions",
         "reference"
@@ -68,6 +70,7 @@
         "physics",
         "vehicles",
         "lod",
+        "global-events",
         "gui",
         "extensions",
         "reference"

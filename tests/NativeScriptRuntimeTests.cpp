@@ -27,5 +27,6 @@ int main(int argc,char** argv){
     auto settings=engine.GetScene().GetPhysicsSettings();settings.AutoSimulation=false;settings.WorkerThreads=0;assert(engine.GetScene().SetPhysicsSettings(settings));
     Bazzalt::Runtime::PhysicsModule().Start(engine.GetScene());engine.GetScene().GetPhysics().Simulate(1.f/60);runtime.Stop();Bazzalt::Runtime::PhysicsModule().Stop(engine.GetScene());
     std::ifstream stream(log);std::string contents((std::istreambuf_iterator<char>(stream)),{});stream.close();std::string expected;for(const auto* action:{"create","fixed","update","late","trigger","destroy"})expected+=std::string(action)+":"+binding.Entity+"\n";assert(contents==expected);assert(!Bazzalt::Scripts::Find(entity,"LifecycleProbe"));
+    binding.Properties.clear();binding.Properties["Signal"]="99999999-1234-4234-8234-123456789abc";assert(runtime.Configure({binding},message));assert(!runtime.Start(message));assert(message.find("Signal")!=std::string::npos);assert(!Bazzalt::Scripts::Find(entity,"LifecycleProbe"));
     std::filesystem::remove(log,error);return 0;
 }

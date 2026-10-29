@@ -1,3 +1,4 @@
+#include <Bazzalt/GlobalEvent.h>
 #include <Bazzalt/Script.h>
 #include <Bazzalt/Material.h>
 #include <cstring>
@@ -8,8 +9,9 @@ COMPONENT(LifecycleProbe) {
 public:
     PROPERTY(std::string, LogPath, "")
     PROPERTY(Bazzalt::Material, Surface, {})
+    PROPERTY(Bazzalt::GlobalEvent, Signal, {})
     void Write(const char* value){std::ofstream(LogPath,std::ios::app)<<value<<':'<<GetEntityUUID()<<'\n';}
-    void OnCreate() override { if(!Bazzalt::Detail::BoundMaterialServices)throw std::runtime_error("Material host service was not bound");if(Surface.IsValid())Surface.SetFloat("roughness",0.1f);Bazzalt::Time::SetSlowMotion(0.25f);Write("create"); }
+    void OnCreate() override { if(!Bazzalt::Detail::BoundMaterialServices)throw std::runtime_error("Material host service was not bound");if(Surface.IsValid())Surface.SetFloat("roughness",0.1f);Bazzalt::Time::SetSlowMotion(0.25f);if(Signal.IsValid())Signal.Fire({5.0,std::string("hit")});Write("create"); }
     void OnUpdate(float delta) override { if(Bazzalt::Time::GetDeltaTime()!=delta)throw std::runtime_error("Module clock was not shared");Write("update");if(Bazzalt::Input::GetKeyDown(Bazzalt::KeyCode::W))Write("input_w"); }
     void OnFixedUpdate(float delta) override { if(!Bazzalt::Time::IsInFixedTimeStep()||Bazzalt::Time::GetDeltaTime()!=delta)throw std::runtime_error("Module fixed clock was not shared");Write("fixed"); }
     void OnTriggerEnter(const Bazzalt::CollisionEvent& event) override { if(event.Contacts.empty())throw std::runtime_error("Missing trigger contact manifold");Write("trigger"); }
@@ -23,7 +25,7 @@ void Destroy(void* value){delete static_cast<LifecycleProbe*>(value);}
 void OnCreate(void* value){static_cast<LifecycleProbe*>(value)->OnCreate();}
 void OnUpdate(void* value,float delta){static_cast<LifecycleProbe*>(value)->OnUpdate(delta);}
 void OnDestroy(void* value){static_cast<LifecycleProbe*>(value)->OnDestroy();}
-bool SetProperty(void* value,const char* name,const char* text){if(!std::strcmp(name,"Surface")){Bazzalt::UUID id;if(!Bazzalt::UUID::TryParse(text,id))return false;static_cast<LifecycleProbe*>(value)->Surface=Bazzalt::Material::Load(id);return true;}if(std::strcmp(name,"LogPath"))return false;static_cast<LifecycleProbe*>(value)->LogPath=text;return true;}
+bool SetProperty(void* value,const char* name,const char* text){if(!std::strcmp(name,"Signal")){Bazzalt::UUID id;if(!Bazzalt::UUID::TryParse(text,id))return false;static_cast<LifecycleProbe*>(value)->Signal=Bazzalt::GlobalEvent::Load(id);return true;}if(!std::strcmp(name,"Surface")){Bazzalt::UUID id;if(!Bazzalt::UUID::TryParse(text,id))return false;static_cast<LifecycleProbe*>(value)->Surface=Bazzalt::Material::Load(id);return true;}if(std::strcmp(name,"LogPath"))return false;static_cast<LifecycleProbe*>(value)->LogPath=text;return true;}
 const Bazzalt::ScriptModuleApi Api{Bazzalt::ScriptAbiVersion,"LifecycleProbe",Create,Destroy,OnCreate,OnUpdate,OnDestroy,SetProperty};
 }
 #ifdef _WIN32

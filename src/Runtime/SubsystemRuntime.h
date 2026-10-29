@@ -4,7 +4,7 @@
 #include <memory>
 #include <vector>
 namespace Bazzalt::Runtime {
-struct SubsystemBinding { UUID Asset;std::filesystem::path Module;int Level=4; };
+struct SubsystemBinding { UUID Asset;std::filesystem::path Module;int Level=4;bool AssetAccess=false; };
 class SubsystemRuntime final {
 public:
     SubsystemRuntime();~SubsystemRuntime();

@@ -24,4 +24,5 @@ void BindLuaComponents(sol::table api);
 void BindLuaGUI(sol::table api);
 void BindLuaServices(sol::table api);
 void BindLuaGraphics(sol::table api,Entity owner);
+void BindLuaGlobalEvents(sol::table api,Entity owner);
 }

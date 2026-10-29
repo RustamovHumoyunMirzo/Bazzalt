@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="UUID-backed project global event asset. Load validates a ready event, GetDefinition returns its typed contract, Subscribe returns a removable token, Fire validates values then drains bounded FIFO invocations, and Unsubscribe removes one listener. Script/module ownership is retained safely. See the global-events guide for argument types, lifecycle and limits.">
+  <title>GlobalEvent | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / Lua API reference / GlobalEvent</nav>
+      <article class="doc"><h1>GlobalEvent</h1><p>UUID-backed project global event asset. Load validates a ready event, GetDefinition returns its typed contract, Subscribe returns a removable token, Fire validates values then drains bounded FIFO invocations, and Unsubscribe removes one listener. Script/module ownership is retained safely. See the global-events guide for argument types, lifecycle and limits.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Lua members and signatures</h2>
+<p>Use <code>Bazzalt.GlobalEvent</code>. Each member below is actually registered in Lua. The adapter declarations are C++ binding notation, not Lua example code. <code>sol::property</code> exposes a field, <code>sol::overload</code> lists alternatives, <code>sol::optional</code> accepts an omitted/nil argument, and <code>std::make_tuple</code> returns multiple Lua values. <code>sol::as_table</code> returns a Lua table. Instance methods use <code>value:Method(...)</code>; service/static calls use <code>Bazzalt.GlobalEvent.Method(...)</code> unless a colon overload is explicitly registered. An engine exception becomes a Lua script error. See the examples and behavior notes above for usage.</p><h3 id="lua-Fire">Fire</h3><pre><code class="language-lua">value:Fire(input: sol::table (optional))</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>// Positional values must match the schema exactly. Nested fires are queued FIFO.
+    void Fire(std::vector&lt;EventValue&gt; arguments={})const;</code></pre><pre><code>[](GlobalEvent event,sol::optional&lt;sol::table&gt; input){auto definition=event.GetDefinition();std::vector&lt;EventValue&gt; values;
+        if(input){std::size_t count=0;for(auto pair:*input){if(pair.first.get_type()!=sol::type::string)throw std::invalid_argument(&quot;Use named Global Event arguments&quot;);++count;}if(count!=definition.Arguments.size())throw std::invalid_argument(&quot;Global Event argument count mismatch&quot;);}
+        else if(!definition.Arguments.empty())throw std::invalid_argument(&quot;Missing event arguments&quot;);
+        for(const auto&amp; field:definition.Arguments){sol::object value=(*input)[field.Name];values.push_back(Value(field.Type,value));}event.Fire(std::move(values));}</code></pre></details><h3 id="lua-GetAssetUUID">GetAssetUUID</h3><pre><code class="language-lua">value:GetAssetUUID()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] UUID GetAssetUUID()const;</code></pre></details><h3 id="lua-GetDefinition">GetDefinition</h3><pre><code class="language-lua">value:GetDefinition()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] EventDefinition GetDefinition()const;</code></pre></details><h3 id="lua-IsValid">IsValid</h3><pre><code class="language-lua">value:IsValid()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] bool IsValid()const;</code></pre></details><h3 id="lua-Load">Load</h3><pre><code class="language-lua">Bazzalt.GlobalEvent.Load(asset: UUID)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] static GlobalEvent Load(UUID asset);</code></pre></details><h3 id="lua-Subscribe">Subscribe</h3><pre><code class="language-lua">value:Subscribe(callback: function, entity: Entity (optional))</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] Subscription Subscribe(Callback callback,Entity owner={})const;</code></pre><pre><code>[owner](GlobalEvent event,sol::protected_function callback,sol::optional&lt;Entity&gt; entity){auto* state=callback.lua_state();auto previous=ApplicationEventsAccess::SetOwner(state);
+        struct Restore{const void* Previous;~Restore(){ApplicationEventsAccess::SetOwner(Previous);}} restore{previous};
+        return event.Subscribe([callback=std::move(callback),state](const EventInvocation&amp; e)mutable{auto hook=lua_gethook(state);int mask=lua_gethookmask(state),count=lua_gethookcount(state);lua_sethook(state,Budget,LUA_MASKCOUNT,1000000);auto result=callback(EventInvocation(e));lua_sethook(state,hook,mask,count);if(!result.valid()){sol::error error=result;throw std::runtime_error(error.what());}},entity.value_or(owner));}</code></pre></details><h3 id="lua-Unsubscribe">Unsubscribe</h3><pre><code class="language-lua">value:Unsubscribe(subscription: Subscription)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>bool Unsubscribe(Subscription subscription)const;</code></pre></details><h3 id="lua-construction">Construction / enum values</h3><p>Construct a value with <code>Bazzalt.GlobalEvent()</code>. Constructor overloads, when available, are shown in the binding details.</p><details><summary>Native declaration and binding adapter</summary><pre><code>api.new_usertype&lt;GlobalEvent&gt;(&quot;GlobalEvent&quot;,sol::constructors&lt;GlobalEvent()&gt;());</code></pre></details><p>Binding source: <code>src/Script/LuaGlobalEvents.cpp</code>. Inherited component operations use the Entity component APIs.</p>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../GaussianBlur/en.html"><small>Previous</small>GaussianBlur</a>
+<a class="next" href="../Graphics/en.html"><small>Next</small>Graphics</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#source-contract">Lua members and signatures</a><a class="toc-link sub" href="#lua-Fire">Fire</a><a class="toc-link sub" href="#lua-GetAssetUUID">GetAssetUUID</a><a class="toc-link sub" href="#lua-GetDefinition">GetDefinition</a><a class="toc-link sub" href="#lua-IsValid">IsValid</a><a class="toc-link sub" href="#lua-Load">Load</a><a class="toc-link sub" href="#lua-Subscribe">Subscribe</a><a class="toc-link sub" href="#lua-Unsubscribe">Unsubscribe</a><a class="toc-link sub" href="#lua-construction">Construction / enum values</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

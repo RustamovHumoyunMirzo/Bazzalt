@@ -1,5 +1,7 @@
 #include "Runtime/ApplicationEventsAccess.h"
 #include "Runtime/ApplicationAccess.h"
+#include "Runtime/GlobalEventsAccess.h"
+#include "Runtime/GraphicsAccess.h"
 #include "Physics/PhysicsModuleApi.h"
 #include "Bazzalt/Console.h"
 #include "Bazzalt/Detail/ModuleLifetime.h"
@@ -20,11 +22,13 @@ struct Entry {
     ApplicationEventType Type;
     const void* Owner;
     int Level=-1;
+    bool AssetAccess=false;
 };
 struct Registry { std::map<std::uint64_t,std::shared_ptr<Entry>> Entries;std::uint64_t Next=1; };
 Registry& State(){static Registry state;return state;}
 thread_local const void* CurrentOwner=nullptr;
 thread_local int CurrentLevel=-1;
+thread_local bool CurrentAssetAccess=false;
 std::function<void(int)> StageLoader;
 std::string Failure;
 bool WindowReady=false;
@@ -44,6 +48,8 @@ bool ApplicationEvents::Unsubscribe(Subscription id){auto found=State().Entries.
 const void* Runtime::ApplicationEventsAccess::SetOwner(const void* owner) noexcept {auto previous=CurrentOwner;CurrentOwner=owner;return previous;}
 int Runtime::ApplicationEventsAccess::SetSubsystemLevel(int level) noexcept{const auto previous=CurrentLevel;CurrentLevel=level;return previous;}
 int Runtime::ApplicationEventsAccess::GetSubsystemLevel() noexcept{return CurrentLevel;}
+bool Runtime::ApplicationEventsAccess::SetAssetAccess(bool enabled) noexcept{const bool old=CurrentAssetAccess;CurrentAssetAccess=enabled;return old;}
+bool Runtime::ApplicationEventsAccess::GetAssetAccess() noexcept{return CurrentAssetAccess;}
 int Runtime::ApplicationEventsAccess::GetLevelOrder(int level) noexcept {
     constexpr int order[]={0,10,20,60,70,21,22,23,30,31,32,40,41,42};
     return level>=0&&level<int(std::size(order))?order[level]:-1;
@@ -68,10 +74,12 @@ void Runtime::ApplicationEventsAccess::Fail(const std::string& error) noexcept{i
 ApplicationEvents::Subscription Runtime::ApplicationEventsAccess::Subscribe(ApplicationEventType type,ApplicationEvents::Callback callback,const void* owner){
     if(!callback||std::string_view(ApplicationEvents::GetName(type))=="Unknown")throw std::invalid_argument("Invalid application event subscription");
     auto& state=State();const auto id=state.Next++;
-    state.Entries.emplace(id,std::make_shared<Entry>(Entry{Detail::GetCurrentGameplayModule(),std::move(callback),type,owner,CurrentLevel}));return id;
+    state.Entries.emplace(id,std::make_shared<Entry>(Entry{Detail::GetCurrentGameplayModule(),std::move(callback),type,owner,CurrentLevel,CurrentAssetAccess}));return id;
 }
 void Runtime::ApplicationEventsAccess::DisconnectOwner(const void* owner) noexcept {
     DisconnectPhysicsOwner(owner);
+    GlobalEventsAccess::DisconnectOwner(owner);
+    GraphicsAccess::DisconnectScope(owner);
     // Destroy callbacks outside map iteration: captures may unsubscribe others.
     std::vector<ApplicationEvents::Subscription> ids;for(auto& [id,entry]:State().Entries)if(entry->Owner==owner)ids.push_back(id);
     for(auto id:ids)ApplicationEvents::Unsubscribe(id);
@@ -98,10 +106,11 @@ void Runtime::ApplicationEventsAccess::Emit(ApplicationEvent event) noexcept {
         auto previous=Detail::SetCurrentGameplayModule(entry->Module);
         auto owner=SetOwner(entry->Owner);
         const int level=SetSubsystemLevel(entry->Level);
+        const bool access=SetAssetAccess(entry->AssetAccess);
         try{entry->Callback(event);}catch(const std::exception& error){failed(std::string(ApplicationEvents::GetName(event.Type))+": "+error.what());}catch(...){failed("Subsystem callback failed");}
         Detail::SetCurrentGameplayModule(std::move(previous));
         SetOwner(owner);
-        SetSubsystemLevel(level);
+        SetSubsystemLevel(level);SetAssetAccess(access);
     }
     if(event.Type==ApplicationEventType::OnPostWindowCreate){
         auto resize=std::move(PendingResize);PendingResize.reset();if(resize)Emit(*resize);

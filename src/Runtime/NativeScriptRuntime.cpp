@@ -142,7 +142,12 @@ bool NativeScriptRuntime::Start(std::string& error,bool application){
         auto asBehavior=reinterpret_cast<Behavior*(*)(void*)>(dlsym(instance.Library,"BazzaltGetBehaviorV1"));
 #endif
         if(asBehavior)instance.BehaviorObject=asBehavior(instance.Object);
-        for(const auto& [name,value]:binding.Properties)if(instance.Api->SetProperty&&!instance.Api->SetProperty(instance.Object,name.c_str(),value.c_str())){error="Invalid property '"+name+"' on "+binding.TypeName;m_instances.push_back(instance);Stop();return false;}
+        for(const auto& [name,value]:binding.Properties){
+            bool valid=false;std::string reason;
+            try{valid=!instance.Api->SetProperty||instance.Api->SetProperty(instance.Object,name.c_str(),value.c_str());}
+            catch(const std::exception& failure){reason=failure.what();}catch(...){reason="Property setter threw an unknown exception";}
+            if(!valid){error="Invalid property '"+name+"' on "+binding.TypeName+(reason.empty()?"":": "+reason);m_instances.push_back(instance);Stop();return false;}
+        }
         m_instances.push_back(instance);
         try{BehaviorAccess::Register(binding.Entity,binding.TypeName,instance.BehaviorObject);}catch(const std::exception& failure){error=failure.what();Stop();return false;}
     }

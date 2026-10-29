@@ -1,3 +1,4 @@
+#include "Runtime/GlobalEventsAccess.h"
 #include "Runtime/AssetDatabase.h"
 #include "GUI/GuiAssetImport.h"
 #include "Audio/AudioRuntime.h"
@@ -395,6 +396,14 @@ public:
     }
 };
 
+class GlobalEventImporter final : public AssetImporter {
+public:
+    std::string GetName()const override{return "Bazzalt.GlobalEvent";}
+    std::uint32_t GetVersion()const override{return 1;}
+    bool Supports(const std::filesystem::path& path)const override{return LowerExtension(path)==".event";}
+    bool Import(const AssetImportContext& context,std::string& error)override{EventDefinition definition;return GlobalEventsAccess::Read(context.SourcePath,definition,error)&&CopyAsset(context,error);}
+};
+
 class RawImporter final : public AssetImporter {
 public:
     std::string GetName() const override { return "Bazzalt.Raw"; }
@@ -435,6 +444,7 @@ AssetDatabase::AssetDatabase() {
         }
     };
     RegisterImporter(std::make_unique<RawImporter>());
+    RegisterImporter(std::make_unique<GlobalEventImporter>());
     RegisterImporter(std::make_unique<GuiDataImporter>(false));RegisterImporter(std::make_unique<GuiDataImporter>(true));
     RegisterImporter(std::make_unique<LuaImporter>());
     RegisterImporter(std::make_unique<GltfImporter>());

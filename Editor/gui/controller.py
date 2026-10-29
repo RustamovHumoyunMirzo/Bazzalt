@@ -414,7 +414,7 @@ class EditorController(QObject):
         self._inspected_asset=Path(path)
         path=Path(path);self.SelectedEntity="";self.SelectedEntities=[];self.Window.Scene.Surface.SetSelection(None);self.Runtime.SetGizmo("",0);self.Window.Properties.Clear();self.Window.Properties.AddComponentButton.setVisible(False)
         resolver=getattr(self.Runtime,'ResolveAssetRecord',None)
-        if path.suffix.lower() in AUDIO_EXTENSIONS|FONT_EXTENSIONS|{'.bmixer','.css'} and callable(resolver):resolver(path)
+        if path.suffix.lower() in AUDIO_EXTENSIONS|FONT_EXTENSIONS|{'.bmixer','.css','.event'} and callable(resolver):resolver(path)
         self.InspectedScene="";self._UpdateGizmo()
         section=self.Window.Properties.AddComponentSection("asset",self.Window.Localization.Translate("properties.asset"),removable=False)
         for label,value in (("Name",path.name),("Type",path.suffix.lower() or "Folder"),("Path",str(path)),("Size",self._FormatAssetSize(self._AssetSize(path)))):section.AddField(self.Window.Localization.Translate(f"properties.asset_{label.lower()}") if label!="Name" else self.Window.Localization.Translate("properties.asset_name"),QLabel(value))
@@ -425,6 +425,9 @@ class EditorController(QObject):
             warning.AddWideWidget(label);self.Window.AssetBrowser.UpdateAssetIssues();return
         if path.suffix.lower()==".matinst":self._InspectMaterial(path)
         elif path.suffix.lower()==".btexture":self._InspectTexture(path)
+        elif path.suffix.lower()==".event":
+            from .global_event import GlobalEventEditor
+            field=GlobalEventEditor(self,path);section.AddWideWidget(field)
         elif path.suffix.lower() in FONT_EXTENSIONS:self._InspectFont(path)
         elif path.suffix.lower()==".css":self._InspectStylesheet(path)
         elif path.suffix.lower() in AUDIO_EXTENSIONS:self._InspectAudioClip(path)
@@ -899,6 +902,7 @@ class EditorController(QObject):
             return self._AssetPicker(value,{".matinst"} if "Material" in prop.type else {".mat",".shad",".bshader"},commit)
         if prop and prop.type.replace("Bazzalt::","").strip()=="Texture":return self._AssetPicker(value,set(IMAGE_EXTENSIONS)|{".btexture"},commit)
         if prop and prop.type.replace("Bazzalt::","").strip()=="AudioClip":return self._AssetPicker(value,AUDIO_EXTENSIONS,commit)
+        if prop and prop.type.replace("Bazzalt::","").strip()=="GlobalEvent":return self._AssetPicker(value,(".event",),commit)
         if prop and prop.type.replace("Bazzalt::","").strip()=="Font":return self._AssetPicker(value,FONT_EXTENSIONS,commit)
         if isinstance(value,bool):editor=BoolInput(value);editor.ValueChanged.connect(commit);return editor
         if isinstance(value,int):editor=IntInput(value=value);editor.valueChanged.connect(commit);return editor

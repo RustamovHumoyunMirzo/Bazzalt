@@ -3,27 +3,28 @@ import json
 from pathlib import Path
 from PySide6.QtCore import Qt,QTimer
 from PySide6.QtWidgets import QDialog,QVBoxLayout,QHBoxLayout,QTreeWidget,QTreeWidgetItem,QPushButton,QLabel,QDialogButtonBox
-from .widgets.fields import AssetPickerInput,EnumInput
+from .widgets.fields import AssetPickerInput,EnumInput,BoolInput
 from ..subsystems import Registrations,Sources,KEY,LEVELS,LEVEL_ORDER
 
 class GlobalSubsystemsDialog(QDialog):
     def __init__(self,editor):
         super().__init__(editor);self.Editor=editor;self.Tr=editor.Localization.Translate;self.Info=editor.Runtime.ProjectInfo()
         self.setWindowTitle(self.Tr('subsystems.title'));self.setWindowModality(Qt.WindowModality.WindowModal);self.setModal(True);self.resize(680,480)
-        root=QVBoxLayout(self);self.Tree=QTreeWidget();self.Tree.setHeaderLabels([self.Tr('subsystems.script'),self.Tr('subsystems.level')]);root.addWidget(self.Tree,1)
+        root=QVBoxLayout(self);self.Tree=QTreeWidget();self.Tree.setHeaderLabels([self.Tr('subsystems.script'),self.Tr('subsystems.level'),self.Tr('subsystems.asset_access')]);root.addWidget(self.Tree,1)
         self.Error=QLabel();self.Error.setWordWrap(True);root.addWidget(self.Error)
         row=QHBoxLayout();self.Picker=AssetPickerInput(self.Tr('subsystems.select'),accepted_extensions=('.cpp',),picker_title=self.Tr('subsystems.select'),search_placeholder=self.Tr('properties.search_project_assets'),missing_label=self.Tr('properties.missing_asset'))
         self.Picker.ConfigureAssets(editor.Controller._ProjectAssets());self.Picker.AssetResolver=editor.Runtime.ResolveAssetRecord;self.Picker.PickRequested.connect(self.Picker.OpenProjectPicker)
+        self.AssetAccess=BoolInput();self.AssetAccess.setToolTip(self.Tr("subsystems.asset_access"))
         self.Level=EnumInput();self.Level.SetOptions([(self.Tr('subsystems.level.'+name),index) for index,name in ((i,LEVELS[i]) for i in LEVEL_ORDER)]);self.Level.SetValue(4)
         add=QPushButton(self.Tr('subsystems.add'));add.clicked.connect(self._Add);remove=QPushButton(self.Tr('subsystems.remove'));remove.clicked.connect(self._Remove)
-        row.addWidget(self.Picker,1);row.addWidget(self.Level);row.addWidget(add);row.addWidget(remove);root.addLayout(row)
+        row.addWidget(self.Picker,1);row.addWidget(self.Level);row.addWidget(QLabel(self.Tr("subsystems.asset_access")));row.addWidget(self.AssetAccess);row.addWidget(add);row.addWidget(remove);root.addLayout(row)
         buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Apply|QDialogButtonBox.StandardButton.Close);buttons.button(QDialogButtonBox.StandardButton.Apply).clicked.connect(self._Apply);buttons.rejected.connect(self.reject);root.addWidget(buttons)
         self.Values=[]
         try:self.Values=Registrations(self.Info.get('properties',{}))
         except (ValueError,TypeError) as error:self.Error.setText(str(error))
         self._Refresh()
         enabled=bool(self.Info) and not editor.Runtime.IsPlaying()
-        for widget in (self.Tree,self.Picker,self.Level,add,remove,buttons.button(QDialogButtonBox.StandardButton.Apply)):widget.setEnabled(enabled)
+        for widget in (self.Tree,self.Picker,self.Level,self.AssetAccess,add,remove,buttons.button(QDialogButtonBox.StandardButton.Apply)):widget.setEnabled(enabled)
         if not enabled:self.Error.setText(self.Tr('subsystems.stop_playing' if self.Info else 'subsystems.no_project'))
     def _Refresh(self):
         self.Tree.clear();groups={}
@@ -35,6 +36,7 @@ class GlobalSubsystemsDialog(QDialog):
             if record:item.setToolTip(0,record['path'])
             groups[value['level']].addChild(item)
             level=EnumInput();level.SetOptions([(self.Tr('subsystems.level.'+name),i) for i,name in ((i,LEVELS[i]) for i in LEVEL_ORDER)]);level.SetValue(value['level']);self.Tree.setItemWidget(item,1,level)
+            access=BoolInput();access.SetValue(value.get("asset_access",False));self.Tree.setItemWidget(item,2,access);access.toggled.connect(lambda state,i=index:self.Values[i].__setitem__("asset_access",bool(state)))
             level.currentIndexChanged.connect(lambda _,i=index,field=level:self._ChangeLevel(i,field.GetValue()))
         self.Tree.setColumnWidth(0,420)
     def _Validate(self,values):
@@ -45,7 +47,7 @@ class GlobalSubsystemsDialog(QDialog):
     def _Add(self):
         identity=self.Picker.GetValue()
         if not identity:return
-        try:self.Values=self._Validate([*self.Values,dict(asset=identity,level=int(self.Level.GetValue()))]);self.Error.clear();self._Refresh();self.Picker.Clear()
+        try:self.Values=self._Validate([*self.Values,dict(asset=identity,level=int(self.Level.GetValue()),asset_access=self.AssetAccess.GetValue())]);self.Error.clear();self._Refresh();self.Picker.Clear()
         except (ValueError,OSError,TypeError) as error:self.Error.setText(str(error))
     def _Remove(self):
         item=self.Tree.currentItem();index=item.data(0,Qt.ItemDataRole.UserRole) if item else None

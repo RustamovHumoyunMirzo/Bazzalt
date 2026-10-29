@@ -123,9 +123,11 @@ class NativeBuildTests(unittest.TestCase):
             project.write_text('FormatVersion: 1\nProjectUUID: "23456789-1234-4234-8234-123456789abc"\nName: Test\nAssetDirectory: Assets\nStartupScene: Assets/Main.bscene\nProperties: {}\n',encoding='utf-8')
             log=root/'lifecycle.txt'
             application_id='45678901-1234-4234-8234-123456789abc'
+            (assets/'Signal.event').write_text('Version: 1\nName: Signal\nArguments:\n  - Name: Amount\n    Type: Number\n',encoding='utf-8')
+            (assets/'Signal.event.meta').write_text('FormatVersion: 1\nUUID: "98765432-1234-4234-8234-123456789abc"\nImporter: Bazzalt.GlobalEvent\nImporterVersion: 1\n',encoding='utf-8')
             (assets/'Subsystem.cpp').write_text('#include <Bazzalt/Subsystem.h>\nSUBSYSTEM(SubsystemProbe) { public: void OnRegister() override {} };\n',encoding='utf-8')
             (assets/'Subsystem.cpp.meta').write_text(f'FormatVersion: 1\nUUID: "{application_id}"\nImporter: Bazzalt.Raw\nImporterVersion: 1\n',encoding='utf-8')
-            project.write_text(project.read_text(encoding='utf-8').replace('Properties: {}','Properties:\n  application.subsystems: '+json.dumps(json.dumps([dict(asset=application_id,level=0)]))),encoding='utf-8')
+            project.write_text(project.read_text(encoding='utf-8').replace('Properties: {}','Properties:\n  application.subsystems: '+json.dumps(json.dumps([dict(asset=application_id,level=0,asset_access=True)]))),encoding='utf-8')
             bindings=[dict(module=str(ROOT/'build/Release/BazzaltScriptLifecycleModule.dll'),entity=entity,type='LifecycleProbe',properties={'LogPath':str(log)})]
             bindings.append(dict(module=str(ROOT/'build/Release/BazzaltSubsystemProbe.dll'),entity='@subsystem:'+application_id,type='SubsystemProbe',properties={}))
             for mode in ('windowed','maximized','borderless','fullscreen'):
@@ -135,11 +137,15 @@ class NativeBuildTests(unittest.TestCase):
                 events=result.stdout.decode('utf-8',errors='replace')
                 sequence=('OnBoot','OnBeforeWindowCreate','OnInit','OnLoad','OnSceneLoaded','OnPostWindowCreate','OnPlay','OnPreUpdate','OnLateUpdate','OnPreRender','OnRender','OnPostRender','OnPreShutdown','OnShutdown')
                 positions=[events.index('SUBSYSTEM:'+name) for name in sequence];self.assertEqual(positions,sorted(positions),events)
+            with patch.dict(os.environ,{'BAZZALT_SUBSYSTEM_PROBE':'event'}):result=subprocess.run([str(output/'Game.exe'),'--smoke-test'],timeout=60,capture_output=True)
+            self.assertEqual(result.returncode,0,result.stderr);self.assertIn(b'GLOBAL_EVENT:4',result.stdout)
             text=log.read_text();self.assertIn('create:'+entity,text);self.assertIn('update:'+entity,text);self.assertIn('destroy:'+entity,text)
             registrations=[dict(asset=application_id,level=4)]
             text=project.read_text(encoding='utf-8');prefix=text[:text.index('Properties:')]
             project.write_text(prefix+'Properties:\n  application.subsystems: '+json.dumps(json.dumps(registrations))+'\n',encoding='utf-8')
             with patch('Compiler.build.CompileScripts',return_value=bindings):output=Build(project,runtime,ROOT/'build/Editor/Release/BazzaltCooker.exe')
+            with patch.dict(os.environ,{'BAZZALT_SUBSYSTEM_PROBE':'event'}):result=subprocess.run([str(output/'Game.exe'),'--smoke-test'],timeout=60,capture_output=True)
+            self.assertNotEqual(result.returncode,0);self.assertIn(b'enable Asset Access',result.stderr)
             with patch.dict(os.environ,{'BAZZALT_SUBSYSTEM_PROBE':'lower'}):result=subprocess.run([str(output/'Game.exe'),'--smoke-test'],timeout=60,capture_output=True)
             self.assertNotEqual(result.returncode,0);self.assertIn(b'lower-level event',result.stderr)
             project.write_text(prefix+'Properties:\n  application.subsystems: '+json.dumps(json.dumps([dict(asset=application_id,level=0)]))+'\n',encoding='utf-8')

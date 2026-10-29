@@ -1,4 +1,5 @@
 #include "Runtime/GraphicsAccess.h"
+#include "Runtime/ApplicationEventsAccess.h"
 #include <set>
 #include "Physics/PhysicsModuleApi.h"
 #include "Bazzalt/Console.h"
@@ -13,7 +14,7 @@
 namespace Bazzalt {
 namespace Detail {struct GraphicsMeshState {std::shared_ptr<const Runtime::GraphicsGeometry> Geometry;};}
 namespace {
-struct Listener {std::shared_ptr<void> Module;Graphics::Callback Callback;GraphicsEventType Type;UUID Owner;const void* Scope=nullptr;};
+struct Listener {std::shared_ptr<void> Module;Graphics::Callback Callback;GraphicsEventType Type;UUID Owner;const void* Scope=nullptr;const void* ApplicationOwner=nullptr;int Level=-1;bool AssetAccess=false;};
 struct State {
     Scene* ScenePtr=nullptr;std::thread::id Thread;
     std::vector<Runtime::GraphicsCommand> Commands;
@@ -43,7 +44,7 @@ void Emit(GraphicsEvent event,bool drawing){
     std::vector<std::pair<std::uint64_t,std::shared_ptr<Listener>>> listeners(s.Listeners.begin(),s.Listeners.end());
     for(auto& [id,entry]:listeners){if(!s.Listeners.contains(id)||entry->Type!=event.Type)continue;
         if(entry->Owner&&(!s.ScenePtr||!s.ScenePtr->GetEntity(entry->Owner))){s.Listeners.erase(id);continue;}
-        try{struct Scope {std::shared_ptr<void> Previous;const void* Owner;~Scope(){Detail::SetCurrentGameplayModule(std::move(Previous));CurrentScope=Owner;}} scope{Detail::SetCurrentGameplayModule(entry->Module),CurrentScope};CurrentScope=entry->Scope;entry->Callback(event);}catch(const std::exception& e){s.Listeners.erase(id);Console::Error(std::string("Graphics callback disabled: ")+e.what(),"Graphics");}catch(...){s.Listeners.erase(id);Console::Error("Graphics callback disabled after an unknown exception","Graphics");}
+        try{struct Scope {std::shared_ptr<void> Previous;const void* Owner;const void* AppOwner;int Level;bool Access;~Scope(){Detail::SetCurrentGameplayModule(std::move(Previous));CurrentScope=Owner;Runtime::ApplicationEventsAccess::SetOwner(AppOwner);Runtime::ApplicationEventsAccess::SetSubsystemLevel(Level);Runtime::ApplicationEventsAccess::SetAssetAccess(Access);}} scope{Detail::SetCurrentGameplayModule(entry->Module),CurrentScope,Runtime::ApplicationEventsAccess::SetOwner(entry->ApplicationOwner),Runtime::ApplicationEventsAccess::SetSubsystemLevel(entry->Level),Runtime::ApplicationEventsAccess::SetAssetAccess(entry->AssetAccess)};CurrentScope=entry->Scope;entry->Callback(event);}catch(const std::exception& e){s.Listeners.erase(id);if(entry->Level>=0)Runtime::ApplicationEventsAccess::Fail(e.what());else Console::Error(std::string("Graphics callback disabled: ")+e.what(),"Graphics");}catch(...){s.Listeners.erase(id);if(entry->Level>=0)Runtime::ApplicationEventsAccess::Fail("Subsystem Graphics callback failed");else Console::Error("Graphics callback disabled after an unknown exception","Graphics");}
     }s.Context=old;s.InCallback=in;s.CanDraw=can;
 }
 }
@@ -78,9 +79,9 @@ bool Graphics::IsAvailable(){return Get().ScenePtr!=nullptr;}
 Graphics::Subscription Graphics::Subscribe(GraphicsEventType type,Callback callback,Entity owner){return Runtime::GraphicsAccess::SubscribeScoped(type,std::move(callback),owner,CurrentScope);}
 bool Graphics::Unsubscribe(Subscription id){ThreadCheck();return Get().Listeners.erase(id)!=0;}
 namespace Runtime {
-Graphics::Subscription GraphicsAccess::SubscribeScoped(GraphicsEventType type,Graphics::Callback callback,Entity owner,const void* scope){ThreadCheck();auto& s=Get();if(!s.ScenePtr)throw std::logic_error("Graphics is not initialized");if(!callback||unsigned(type)>unsigned(GraphicsEventType::OnEndFrame))throw std::invalid_argument("Invalid Graphics callback");if(s.Listeners.size()>=4096)throw std::length_error("Graphics subscription limit exceeded");if(owner&&s.ScenePtr->GetEntity(owner.GetUUID())!=owner)throw std::invalid_argument("Graphics callback owner belongs to another scene");auto entry=std::make_shared<Listener>(Listener{Detail::GetCurrentGameplayModule(),std::move(callback),type,owner?owner.GetUUID():UUID{},scope});auto id=s.Next++;s.Listeners[id]=std::move(entry);return id;}
+Graphics::Subscription GraphicsAccess::SubscribeScoped(GraphicsEventType type,Graphics::Callback callback,Entity owner,const void* scope){ThreadCheck();auto& s=Get();if(!s.ScenePtr)throw std::logic_error("Graphics is not initialized");if(!callback||unsigned(type)>unsigned(GraphicsEventType::OnEndFrame))throw std::invalid_argument("Invalid Graphics callback");if(s.Listeners.size()>=4096)throw std::length_error("Graphics subscription limit exceeded");if(owner&&s.ScenePtr->GetEntity(owner.GetUUID())!=owner)throw std::invalid_argument("Graphics callback owner belongs to another scene");auto appOwner=ApplicationEventsAccess::SetOwner(nullptr);ApplicationEventsAccess::SetOwner(appOwner);auto entry=std::make_shared<Listener>(Listener{Detail::GetCurrentGameplayModule(),std::move(callback),type,owner?owner.GetUUID():UUID{},scope,appOwner,ApplicationEventsAccess::GetSubsystemLevel(),ApplicationEventsAccess::GetAssetAccess()});auto id=s.Next++;s.Listeners[id]=std::move(entry);return id;}
 const void* GraphicsAccess::SetScope(const void* scope){auto old=CurrentScope;CurrentScope=scope;return old;}
-void GraphicsAccess::DisconnectScope(const void* scope){if(!scope)return;std::erase_if(Get().Listeners,[&](const auto& v){return v.second->Scope==scope;});}
+void GraphicsAccess::DisconnectScope(const void* scope){if(!scope)return;auto& entries=Get().Listeners;std::vector<std::uint64_t> ids;for(const auto& [id,entry]:entries)if(entry->Scope==scope||entry->ApplicationOwner==scope)ids.push_back(id);for(auto id:ids){auto found=entries.find(id);if(found!=entries.end()){auto retained=found->second;entries.erase(found);}}}
 void GraphicsAccess::DrawEntity(GraphicsMesh mesh,UUID material,UUID owner,GraphicsDrawOptions options,UUID source,unsigned node,unsigned slot){auto surface=Material::Load(material);Graphics::DrawMesh(mesh,surface.IsValid()?surface:Material{}, {},options);auto& command=Get().Commands.back();command.Owner=owner;command.Source=source;command.SourceNode=node;command.SourceSlot=slot;if(source)Get().Deformed.insert(source);}
 bool GraphicsAccess::IsDeformed(UUID source){return Get().Deformed.contains(source);}
 void GraphicsAccess::BindScene(Scene* scene){auto& s=Get();if(s.ScenePtr!=scene){s.Listeners.clear();s.Commands.clear();s.Sizes.clear();s.Cameras.clear();s.ScenePtr=scene;s.Deformed.clear();}s.Thread=std::this_thread::get_id();}

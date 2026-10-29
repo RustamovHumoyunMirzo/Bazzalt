@@ -76,6 +76,7 @@ void Runtime::ApplicationAccess::Advance(double delta){if(!std::isfinite(delta)|
 int Runtime::ApplicationAccess::GetEffectiveFrameRate(){const auto& state=Data();if(state.Focused)return state.Target;if(!state.Target)return state.Background;if(!state.Background)return state.Target;return std::min(state.Target,state.Background);}
 void Detail::RequireSubsystemService(SubsystemService service,const char* operation){
     if(Runtime::ApplicationEventsAccess::GetSubsystemLevel()<0)return;
+    if(service==SubsystemService::Assets&&!Runtime::ApplicationEventsAccess::GetAssetAccess())throw std::logic_error(std::string(operation)+": enable Asset Access for this Global Subsystem");
     const bool ready=service==SubsystemService::Scene?Data().SceneReady:service==SubsystemService::Audio?Data().AudioReady:service==SubsystemService::Input?Data().InputReady:service==SubsystemService::Physics?Data().PhysicsReady:Data().ServicesReady;
     if(!ready)throw std::logic_error(std::string(operation)+": service is not initialized; subscribe to a later application event");
 }

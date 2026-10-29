@@ -14,13 +14,14 @@ def Registrations(properties):
     if not isinstance(values,list) or len(values)>128:raise ValueError('At most 128 global subsystems may be registered')
     seen=set();result=[]
     for value in values:
-        if not isinstance(value,dict) or set(value)!={'asset','level'}:raise ValueError('Invalid subsystem registration')
+        if not isinstance(value,dict) or not {'asset','level'}<=set(value) or set(value)-{'asset','level','asset_access'}:raise ValueError('Invalid subsystem registration')
         import uuid
         identity=str(uuid.UUID(str(value['asset'])))
         if identity=='00000000-0000-0000-0000-000000000000' or identity in seen:raise ValueError('Duplicate or empty subsystem UUID')
         level=value['level']
         if isinstance(level,bool) or not isinstance(level,int) or not 0<=level<len(LEVELS):raise ValueError('Invalid subsystem load level')
-        seen.add(identity);result.append(dict(asset=identity,level=level))
+        if 'asset_access' in value and not isinstance(value['asset_access'],bool):raise ValueError('Asset Access must be a boolean')
+        seen.add(identity);result.append(dict(asset=identity,level=level,**({'asset_access':value['asset_access']} if 'asset_access' in value else {})))
     return result
 
 def Sources(project,registrations):

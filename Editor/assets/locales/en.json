@@ -1044,5 +1044,21 @@
   "lod.automatic": "Automatic",
   "lod.culled": "Culled",
   "lod.level": "LOD {index}",
-  "lod.missing_root": "Missing entity"
+  "lod.missing_root": "Missing entity",
+  "events.asset": "Global Event",
+  "events.name": "Event name",
+  "events.arguments": "Arguments",
+  "events.add_argument": "Add argument",
+  "events.remove_argument": "Remove",
+  "events.apply": "Apply",
+  "subsystems.asset_access": "Asset Access",
+  "events.type.Boolean": "Boolean",
+  "events.type.Integer": "Integer",
+  "events.type.Number": "Number",
+  "events.type.String": "String",
+  "events.type.Vec2": "Vec2",
+  "events.type.Vec3": "Vec3",
+  "events.type.Vec4": "Vec4",
+  "events.type.Quaternion": "Quaternion",
+  "events.type.UUID": "UUID"
 }

@@ -1,6 +1,7 @@
 #include "Bazzalt/AssetManager.h"
 #include "Bazzalt/Detail/SubsystemAccess.h"
 #include "Runtime/TextureLibrary.h"
+#include "Runtime/ApplicationEventsAccess.h"
 
 #include <algorithm>
 #include <array>
@@ -135,6 +136,7 @@ std::optional<AssetInfo> AssetManager::GetAsset(UUID id) {
 }
 
 std::optional<AssetInfo> AssetManager::GetAsset(const std::filesystem::path& path) {
+    if(Runtime::ApplicationEventsAccess::GetSubsystemLevel()>=0)throw std::logic_error("Global Subsystems must access assets by UUID, not paths");
     auto* engine = ActiveEngine();
     return engine != nullptr ? engine->FindAsset(path) : std::nullopt;
 }

@@ -1,4 +1,5 @@
 #include <Bazzalt/Subsystem.h>
+#include <Bazzalt/GlobalEvent.h>
 #include <Bazzalt/Components/ScriptComponent.h>
 #include <cstdlib>
 #include <iostream>
@@ -7,6 +8,14 @@ SUBSYSTEM(SubsystemProbe) {
 public:
     void OnRegister() override {
         const char* mode=std::getenv("BAZZALT_SUBSYSTEM_PROBE");
+        if(mode&&std::string(mode)=="event"){
+            Bazzalt::Application::OnPlay([]{
+                Bazzalt::UUID id;Bazzalt::UUID::TryParse("98765432-1234-4234-8234-123456789abc",id);
+                auto event=Bazzalt::GlobalEvent::Load(id);
+                (void)event.Subscribe([](const Bazzalt::EventInvocation& value){std::cout<<"GLOBAL_EVENT:"<<value.Get<double>("Amount")<<'\n';});
+                event.Fire({4.0});
+            });return;
+        }
         if(mode&&std::string(mode)=="lower"){Bazzalt::Application::OnBoot([]{});return;}
         if(mode&&std::string(mode)=="early"){(void)GetScene();return;}
         if(mode&&std::string(mode)=="attach"){

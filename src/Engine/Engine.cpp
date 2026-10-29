@@ -1,3 +1,4 @@
+#include "Runtime/GlobalEventsAccess.h"
 #include "Runtime/Engine.h"
 #include "Bazzalt/Console.h"
 #include "Runtime/GraphicsAccess.h"
@@ -46,6 +47,7 @@ Engine::Engine()
     : m_scene(std::make_unique<Scene>()), m_assetDatabase(std::make_unique<AssetDatabase>()),
       m_renderBackend(std::make_unique<RenderBackend>()),m_scriptRuntime(std::make_unique<NativeScriptRuntime>()),m_luaRuntime(std::make_unique<LuaRuntime>()),m_audioRuntime(std::make_unique<AudioRuntime>())
 {
+    GlobalEventsAccess::BindThread();
     SceneManager::Bind(this);
     AssetManager::Bind(this);
     Detail::BoundMaterialServices = GetMaterialServices();
@@ -472,12 +474,13 @@ bool Engine::PrepareApplication(){
             auto tree=ryml::parse_in_arena(ryml::csubstr(found->second.data(),found->second.size()));auto root=tree.rootref();
             if(!root.is_seq()||root.num_children()>128)throw std::runtime_error("Invalid subsystem registration list");
             for(auto node:root.children()){
-                if(!node.is_map()||node.num_children()!=2||!node.has_child("asset")||!node.has_child("level"))throw std::runtime_error("Invalid subsystem registration");
+                if(!node.is_map()||(node.num_children()!=2&&node.num_children()!=3)||!node.has_child("asset")||!node.has_child("level")||(node.num_children()==3&&!node.has_child("asset_access")))throw std::runtime_error("Invalid subsystem registration");
                 auto idText=node["asset"].val();UUID id;if(!UUID::TryParse({idText.str,idText.len},id)||id.IsRoot()||!m_subsystemAssets.insert(id).second)throw std::runtime_error("Duplicate or invalid subsystem asset UUID");
                 auto levelText=node["level"].val();std::string levelValue(levelText.str,levelText.len);std::size_t used=0;int level=std::stoi(levelValue,&used);if(used!=levelValue.size()||level<0||level>13)throw std::runtime_error("Invalid subsystem load level");
                 auto asset=m_assetDatabase->Find(id);if(!asset||asset->State!=AssetState::Ready)throw std::runtime_error("Subsystem asset is not ready: "+id.ToString());
                 auto module=m_subsystemModules.contains(id)?m_subsystemModules.at(id):asset->CachePath;
-                bindings.push_back({id,module,level});
+                bool access=false;if(node.has_child("asset_access")){auto v=node["asset_access"].val();if(v!="true"&&v!="false")throw std::runtime_error("Invalid subsystem Asset Access value");access=v=="true";}
+                bindings.push_back({id,module,level,access});
             }
         }
         m_subsystems=std::make_unique<SubsystemRuntime>();m_subsystems->Configure(std::move(bindings));
@@ -683,7 +686,7 @@ bool Engine::ExportCookedProject(const std::filesystem::path& destination,const 
                 auto binding=std::find_if(bindings.begin(),bindings.end(),[&](const auto& value){return value.Entity=="@subsystem:"+id;});
                 if(binding==bindings.end())throw std::runtime_error("Missing compiled subsystem module");
                 const auto replacement=modules.at(binding->TypeName).ToString();auto level=node["level"].val();
-                if(!first)json<<',';first=false;json<<"{\"asset\":"<<std::quoted(replacement)<<",\"level\":"<<std::string(level.str,level.len)<<'}';
+                if(!first)json<<',';first=false;json<<"{\"asset\":"<<std::quoted(replacement)<<",\"level\":"<<std::string(level.str,level.len);if(node.has_child("asset_access")){auto access=node["asset_access"].val();if(access!="true"&&access!="false")throw std::runtime_error("Invalid subsystem Asset Access value");json<<",\"asset_access\":"<<std::string(access.str,access.len);}json<<'}';
             }
             json<<']';registrations->second=json.str();
         }

@@ -1,3 +1,5 @@
+#include "Bazzalt/GlobalEvent.h"
+#include "Runtime/GlobalEventsAccess.h"
 #include "Runtime/LuaRuntime.h"
 #include "Runtime/ApplicationEventsAccess.h"
 #include "Bazzalt/Audio.h"
@@ -39,7 +41,7 @@ struct VM {
     Memory MemoryState;
     lua_State* State=lua_newstate(Allocate,&MemoryState);
     VM(){if(!State)throw std::runtime_error("Could not allocate Lua VM");}
-    ~VM(){GraphicsAccess::DisconnectScope(State);ApplicationEventsAccess::DisconnectOwner(State);lua_close(State);}
+    ~VM(){auto closing=GlobalEventsAccess::SetClosingOwner(State);GraphicsAccess::DisconnectScope(State);ApplicationEventsAccess::DisconnectOwner(State);lua_close(State);GlobalEventsAccess::SetClosingOwner(closing);}
 };
 void SetProperty(sol::table object,const std::string& name,const std::string& value){
     // Editor properties are scalars or explicitly declared vector/entity values.
@@ -54,6 +56,7 @@ void SetProperty(sol::table object,const std::string& name,const std::string& va
     else if(current.is<Texture>())object[name]=Texture::Load(assetId());
     else if(current.is<AudioClip>())object[name]=AudioClip::Load(assetId());
     else if(current.is<Font>())object[name]=Font::Load(assetId());
+    else if(current.is<GlobalEvent>())object[name]=GlobalEvent::Load(assetId());
     else if(current.get_type()==sol::type::boolean){if(value!="true"&&value!="false")throw std::invalid_argument("Invalid Lua boolean property");object[name]=(value=="true");}
     else if(current.get_type()==sol::type::number){std::size_t used=0;double number=std::stod(value,&used);if(used!=value.size()||!std::isfinite(number))throw std::invalid_argument("Invalid Lua number property");object[name]=number;}
     else if(current.is<Vec2>()){auto n=numbers(2);object[name]=Vec2{n[0],n[1]};}
@@ -116,7 +119,7 @@ bool LuaRuntime::Start(std::string& error){
         sol::state_view lua(instance->Vm->State);
         lua.open_libraries(sol::lib::base,sol::lib::math,sol::lib::string,sol::lib::table,sol::lib::utf8);
         for(const char* key:{"dofile","loadfile","load","collectgarbage"})lua[key]=sol::nil;
-        auto api=lua.create_named_table("Bazzalt");BindLuaMath(api);BindLuaComponents(api);BindLuaGUI(api);BindLuaServices(api);BindLuaGraphics(api,owner);BindLuaExtensionsForOwner(api,ExtensionAccess::ComponentOwner(binding.TypeName));
+        auto api=lua.create_named_table("Bazzalt");BindLuaMath(api);BindLuaComponents(api);BindLuaGUI(api);BindLuaServices(api);BindLuaGraphics(api,owner);BindLuaGlobalEvents(api,owner);BindLuaExtensionsForOwner(api,ExtensionAccess::ComponentOwner(binding.TypeName));
         auto declared=std::make_shared<sol::table>();
         lua.set_function("COMPONENT",[declared,lua,typeName=binding.TypeName](const std::string& name) mutable {
             if(declared->valid()||name!=typeName)throw std::invalid_argument("COMPONENT must declare the attached type exactly once");
@@ -137,6 +140,7 @@ bool LuaRuntime::Start(std::string& error){
             else if(type=="Quaternion")valid=value.is<Quaternion>();
             else if(type=="AudioClip")valid=value.is<AudioClip>();
             else if(type=="Font")valid=value.is<Font>();
+            else if(type=="GlobalEvent")valid=value.is<GlobalEvent>();
             if(!valid)throw std::invalid_argument("Invalid PROPERTY type/default: "+type);
             return value;
         });
@@ -190,7 +194,7 @@ struct ExtensionScript::Impl {VM Vm;sol::table Object;};
 ExtensionScript::ExtensionScript(const std::filesystem::path& path,const std::string& service,const std::vector<std::string>& methods,Command command,const std::string& owner):m_impl(std::make_unique<Impl>()){
     sol::state_view lua(m_impl->Vm.State);lua.open_libraries(sol::lib::base,sol::lib::math,sol::lib::table,sol::lib::string,sol::lib::utf8);
     for(const char* name:{"dofile","loadfile","load","collectgarbage"})lua[name]=sol::nil;
-    auto api=lua.create_named_table("Bazzalt");BindLuaMath(api);BindLuaComponents(api);BindLuaGUI(api);BindLuaServices(api);BindLuaGraphics(api,Entity{});BindLuaExtensionsForOwner(api,owner);
+    auto api=lua.create_named_table("Bazzalt");BindLuaMath(api);BindLuaComponents(api);BindLuaGUI(api);BindLuaServices(api);BindLuaGraphics(api,Entity{});BindLuaGlobalEvents(api,Entity{});BindLuaExtensionsForOwner(api,owner);
     if(service.empty()||service=="Bazzalt"||methods.size()>256||!command)throw std::invalid_argument("Invalid extension service registration");
     auto host=lua.create_named_table(service);
     for(const auto& method:methods)host.set_function(method,[command,method,lua](sol::variadic_args args)->sol::object{
@@ -209,7 +213,7 @@ void ClearLuaExtensions(){SdkVm.reset();}
 ExtensionValue InvokeLuaExtension(const std::string& module,const std::string& name,const ExtensionArguments& arguments){
     if(SdkCallDepth>=32)throw std::runtime_error("Extension call recursion limit exceeded");
     struct Depth{Depth(){++SdkCallDepth;}~Depth(){--SdkCallDepth;}} depth;
-    if(!SdkVm){auto vm=std::make_unique<VM>();sol::state_view lua(vm->State);lua.open_libraries(sol::lib::base,sol::lib::math,sol::lib::string,sol::lib::table,sol::lib::utf8);for(const char* key:{"dofile","loadfile","load","collectgarbage"})lua[key]=sol::nil;auto api=lua.create_named_table("Bazzalt");BindLuaMath(api);BindLuaComponents(api);BindLuaGUI(api);BindLuaServices(api);BindLuaGraphics(api,Entity{});BindLuaExtensions(api);SdkVm=std::move(vm);}
+    if(!SdkVm){auto vm=std::make_unique<VM>();sol::state_view lua(vm->State);lua.open_libraries(sol::lib::base,sol::lib::math,sol::lib::string,sol::lib::table,sol::lib::utf8);for(const char* key:{"dofile","loadfile","load","collectgarbage"})lua[key]=sol::nil;auto api=lua.create_named_table("Bazzalt");BindLuaMath(api);BindLuaComponents(api);BindLuaGUI(api);BindLuaServices(api);BindLuaGraphics(api,Entity{});BindLuaGlobalEvents(api,Entity{});BindLuaExtensions(api);SdkVm=std::move(vm);}
     sol::state_view lua(SdkVm->State);
     struct Hook{lua_State* State;lua_Hook Previous;int Mask,Count;~Hook(){lua_sethook(State,Previous,Mask,Count);}} hook{lua.lua_state(),lua_gethook(lua.lua_state()),lua_gethookmask(lua.lua_state()),lua_gethookcount(lua.lua_state())};lua_sethook(lua.lua_state(),Budget,LUA_MASKCOUNT,1000000);
     sol::table api=lua["Bazzalt"];sol::table table=RequireLuaExtension(api,module,ExtensionAccess::Owner(module)).as<sol::table>();sol::object member=table[name];if(member.get_type()!=sol::type::function)throw std::runtime_error("Lua extension function is unavailable: "+module+"."+name);
