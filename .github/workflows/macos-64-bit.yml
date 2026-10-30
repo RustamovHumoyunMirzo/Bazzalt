@@ -101,7 +101,19 @@ jobs:
       - name: Cocoa menu, native Metal viewport and packaged game
         env:
           QT_QPA_PLATFORM: cocoa
-        run: python -m unittest Editor.tests.test_macos_native Compiler.tests.test_macos_build -v
+          PYTHONFAULTHANDLER: '1'
+        run: |
+          set +e
+          python -m unittest Editor.tests.test_macos_native Compiler.tests.test_macos_build -v > build/macos-gpu.log 2>&1
+          status=$?
+          cat build/macos-gpu.log
+          if [ "$status" -ne 0 ]; then
+            # Retain the original failure, and collect the native Metal thread
+            # that Python's traceback cannot describe after SIGABRT.
+            lldb --batch -o run -o 'thread backtrace all' -- "$(command -v python)" -m unittest Editor.tests.test_macos_native Compiler.tests.test_macos_build -v > build/macos-gpu-backtrace.log 2>&1
+            cat build/macos-gpu-backtrace.log
+          fi
+          exit "$status"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
@@ -109,3 +121,4 @@ jobs:
           path: |
             build/native-tests.xml
             build/Testing/Temporary/*.log
+            build/macos-gpu*.log
