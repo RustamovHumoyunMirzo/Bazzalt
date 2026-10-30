@@ -206,9 +206,9 @@ class EditorMenuBar(QMenuBar):
         self.FrameAllAction=self.ViewMenu.addAction("");self.FrameAllAction.setShortcut(QKeySequence("A"));self.FrameAllAction.triggered.connect(self.FrameAllRequested)
         self.ViewMenu.addSeparator();self.GizmosAction=self.ViewMenu.addAction("");self.GizmosAction.setCheckable(True);self.GizmosAction.setChecked(True);self.GizmosAction.toggled.connect(self.GizmosToggled)
         self.OverlaysMenu=self.ViewMenu.AddSubMenu("")
-        self.GridAction=self.OverlaysMenu.addAction("");self.IconsAction=self.OverlaysMenu.addAction("");self.StatsAction=self.OverlaysMenu.addAction("");self.NavMeshAction=self.OverlaysMenu.addAction("")
+        self.GridAction=self.OverlaysMenu.addAction("");self.IconsAction=self.OverlaysMenu.addAction("");self.StatsAction=self.OverlaysMenu.addAction("")
         for action in (self.GridAction,self.IconsAction,self.StatsAction):action.setCheckable(True)
-        self.GridAction.setChecked(True);self.IconsAction.setChecked(True);self.NavMeshAction.setCheckable(True);self.NavMeshAction.setEnabled(False)
+        self.GridAction.setChecked(True);self.IconsAction.setChecked(True)
         self.GridAction.toggled.connect(self.GridToggled);self.IconsAction.toggled.connect(self.IconsToggled);self.StatsAction.toggled.connect(self.StatsToggled)
         self.ShadingMenu=self.ViewMenu.AddSubMenu("");self.ShadingActions={};group=QActionGroup(self);group.setExclusive(True)
         for key in ("lit","unlit","wireframe","lighting_only","overdraw"):
@@ -288,7 +288,7 @@ class EditorMenuBar(QMenuBar):
         self.ProjectSettingsAction.setText(tr("action.project_settings"))
         self.MaximizeViewportAction.setText(tr("view.maximize"));self.CameraMenu.setTitle(tr("view.camera_presets"))
         for key,action in self.CameraActions.items():action.setText(tr(f"view.camera.{key}"))
-        self.FocusSelectedAction.setText(tr("view.focus_selected"));self.FrameAllAction.setText(tr("view.frame_all"));self.GizmosAction.setText(tr("view.gizmos"));self.OverlaysMenu.setTitle(tr("view.overlays"));self.GridAction.setText(tr("view.grid"));self.IconsAction.setText(tr("view.icons"));self.StatsAction.setText(tr("view.stats"));self.NavMeshAction.setText(tr("view.navmesh"));self.ShadingMenu.setTitle(tr("view.shading"))
+        self.FocusSelectedAction.setText(tr("view.focus_selected"));self.FrameAllAction.setText(tr("view.frame_all"));self.GizmosAction.setText(tr("view.gizmos"));self.OverlaysMenu.setTitle(tr("view.overlays"));self.GridAction.setText(tr("view.grid"));self.IconsAction.setText(tr("view.icons"));self.StatsAction.setText(tr("view.stats"));self.ShadingMenu.setTitle(tr("view.shading"))
         for key,action in self.ShadingActions.items():action.setText(tr(f"view.shading.{key}"))
         self.AboutAction.setText(tr("action.about"))
 

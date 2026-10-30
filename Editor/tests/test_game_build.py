@@ -26,7 +26,7 @@ class GameBuildTests(unittest.TestCase):
             dialog=BuildSettingsDialog(editor);self.assertTrue(dialog.isModal());self.assertEqual(dialog.Sections.count(),6)
             preset=dialog.Controls[('security','preset')];preset.setCurrentIndex(preset.findData('high'));dialog._Preset();self.assertEqual(dialog.GetValues()['security']['key_storage'],'environment')
             self.assertTrue(dialog.Controls[('security','encrypt_manifests')].isChecked())
-            self.assertGreaterEqual(dialog.Controls[('security','key_storage')].findData('dpapi_user'),0)
+            self.assertGreaterEqual(dialog.PlatformControls[('windows','key_storage')].findData('dpapi_user'),0)
             dialog._Apply();self.assertEqual(Load(project)['security']['preset'],'high');dialog.deleteLater();editor.deleteLater()
     def Controller(self,launch=False):
         from Editor.game_build import GameBuildController
