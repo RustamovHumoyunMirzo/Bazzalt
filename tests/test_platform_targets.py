@@ -1,4 +1,4 @@
-import copy,os,stat,struct,tempfile,unittest,zipfile
+import copy,os,stat,struct,subprocess,sys,tempfile,unittest,zipfile
 from pathlib import Path
 from unittest.mock import patch
 from Compiler.settings import DEFAULTS,Validate
@@ -7,6 +7,16 @@ from scripts.release_artifacts import Architecture,Entry,Audit
 from Launcher.downloads import Extract
 
 class PlatformTargetsTests(unittest.TestCase):
+    def test_staging_cli_resolves_shared_package_outside_repository(self):
+        script=Path(__file__).resolve().parents[1]/'scripts/stage_game_runtime.py'
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            result=subprocess.run([sys.executable,'-E',str(script),'--build',str(root/'missing-build'),'--output',str(root/'runtime'),'--architecture','x64','--platform','windows'],cwd=root,capture_output=True,text=True)
+            # A missing prebuilt player is rejected after resolving shared imports.
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn('BazzaltPlayer.exe',result.stderr)
+            self.assertNotIn('ModuleNotFoundError',result.stderr)
+
     def test_native_target_support_and_explicit_rejection(self):
         with patch('bazzalt.platforms.HostPlatform',return_value='linux'),patch('bazzalt.platforms.platform.machine',return_value='x86_64'):
             self.assertEqual(TargetError({'platform':'linux','architecture':'x64'}),'')

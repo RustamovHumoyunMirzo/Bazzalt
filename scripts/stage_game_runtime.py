@@ -1,6 +1,8 @@
 """Assemble a prebuilt runtime template. Does not compile the engine."""
-import argparse,json,shutil,os,subprocess
+import argparse,json,shutil,os,subprocess,sys
 from pathlib import Path
+# Release scripts invoke this file directly, without an installed Python package.
+if not __package__:sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 try:from .release_artifacts import Architecture
 except ImportError:from release_artifacts import Architecture
 
