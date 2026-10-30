@@ -90,13 +90,19 @@ jobs:
           python scripts/build_public_docs.py --check
       - name: Detect Metal availability on the hosted runner
         run: |
-          printf '#import <Metal/Metal.h>\nint main(){@autoreleasepool{return MTLCreateSystemDefaultDevice()?0:1;}}\n' > build/metal-probe.mm
-          clang++ build/metal-probe.mm -framework Foundation -framework Metal -o build/metal-probe
-          if build/metal-probe; then
+          clang++ tests/MacMetalProbe.mm -framework Foundation -framework Metal -o build/metal-probe
+          set +e
+          build/metal-probe > build/macos-gpu-capability.log 2>&1
+          status=$?
+          set -e
+          cat build/macos-gpu-capability.log
+          if [ "$status" -eq 0 ]; then
             echo "BAZZALT_MAC_GPU_TEST=1" >> "$GITHUB_ENV"
-          else
-            echo "::warning::Hosted runner has no Metal device; GPU presentation needs a Metal-capable Mac. Native bundle verification and Cocoa menu tests still run."
+          elif [ "$status" -eq 1 ] || [ "$status" -eq 2 ] || [ "$status" -eq 134 ]; then
+            echo "::warning::Hosted runner cannot create required Metal argument buffers (probe exit $status). GPU presentation is not validated on this device. Native bundle verification and Cocoa menu tests still run."
             echo "BAZZALT_MAC_GPU_TEST=0" >> "$GITHUB_ENV"
+          else
+            exit "$status"
           fi
       - name: Cocoa menu, native Metal viewport and packaged game
         env:
