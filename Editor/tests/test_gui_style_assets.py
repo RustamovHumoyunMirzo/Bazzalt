@@ -23,7 +23,7 @@ class GuiStyleAssetTests(unittest.TestCase):
     def test_asset_icons_and_stylesheet_creation(self):
         resources=ResourceManager();locale=LocalizationManager(resources)
         with tempfile.TemporaryDirectory() as folder:
-            root=Path(folder);panel=AssetBrowserPanel(locale,resources);panel.SetProjectRoot(root)
+            root=Path(folder).resolve();panel=AssetBrowserPanel(locale,resources);panel.SetProjectRoot(root)
             with patch.object(resources,'Icon',wraps=resources.Icon) as icon:
                 panel._Icon(root/'UI.css');icon.assert_called_with('icons/abrowser/css.svg')
                 panel._Icon(root/'UI.ttf');icon.assert_called_with('icons/abrowser/font.svg')
@@ -41,7 +41,7 @@ class GuiStyleAssetTests(unittest.TestCase):
         with self.assertRaises(DeclarationError):ReadDeclarations('local S=COMPONENT("Fonts")\nS.Face=PROPERTY("Font", "file.ttf")\nreturn S')
     def test_live_reload_uses_targeted_refresh_and_rewatches_atomic_saves(self):
         with tempfile.TemporaryDirectory() as folder:
-            path=Path(folder)/'UI.css';path.write_text('Button{}');runtime=SimpleNamespace(GuiAssetSources=lambda:[str(path)],RefreshAsset=Mock(return_value=True),LastError=lambda:'')
+            path=Path(folder).resolve()/'UI.css';path.write_text('Button{}');runtime=SimpleNamespace(GuiAssetSources=lambda:[str(path)],RefreshAsset=Mock(return_value=True),LastError=lambda:'')
             watcher=GuiAssetWatcher(runtime);watcher.Track();watcher.Timer.stop();watcher._Import();runtime.RefreshAsset.assert_called_once_with(str(path.resolve()))
             runtime.RefreshAsset.reset_mock();watcher._Changed(str(path.resolve()));watcher.Timer.stop();watcher._Import();runtime.RefreshAsset.assert_called_once();watcher.deleteLater()
     def test_native_fonts_preview_and_serialized_gui_metadata(self):
@@ -49,7 +49,7 @@ class GuiStyleAssetTests(unittest.TestCase):
         if not runtime.IsAvailable():runtime.Release();self.skipTest('Native runtime is unavailable')
         try:
             with tempfile.TemporaryDirectory() as folder:
-                root=Path(folder)/'Project_Игра';assets=root/'Assets';assets.mkdir(parents=True)
+                root=Path(folder).resolve()/'Project_Игра';assets=root/'Assets';assets.mkdir(parents=True)
                 (root/'Game.bproject').write_text(f'FormatVersion: 1\nProjectUUID: "{uuid.uuid4()}"\nName: GUI\nAssetDirectory: Assets\nStartupScene: ""\nProperties: {{}}\n',encoding='utf-8')
                 css=assets/'UI.css';css.write_text('Button{background-color:red}\n',encoding='utf-8')
                 font=next((p for p in (Path('C:/Windows/Fonts/arial.ttf'),Path('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf')) if p.is_file()),None)

@@ -24,7 +24,7 @@ class AssetOpeningTests(unittest.TestCase):
         platform = patch("Editor.asset_opening.sys", Mock(platform="linux"))
         platform.start();self.addCleanup(platform.stop)
         self.Temp = TemporaryDirectory()
-        self.Root = Path(self.Temp.name)
+        self.Root = Path(self.Temp.name).resolve()
         self.Files = [self.Root / "Player.cpp", self.Root / "Other.CPP"]
         for path in self.Files:path.write_text("// test", encoding="utf-8")
         self.Settings = {"schema_version": 3, "preferences": {"keep": True}}

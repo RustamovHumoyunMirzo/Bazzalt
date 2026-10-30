@@ -13,7 +13,7 @@ class TextureAssetTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.App=QApplication.instance() or QApplication([])
     def setUp(self):
-        self.Temp=tempfile.TemporaryDirectory();self.Root=Path(self.Temp.name);(self.Root/"Assets").mkdir()
+        self.Temp=tempfile.TemporaryDirectory();self.Root=Path(self.Temp.name).resolve();(self.Root/"Assets").mkdir()
         project=self.Root/"Test.bproject";project.write_text(f'FormatVersion: 1\nProjectUUID: "{uuid.uuid4()}"\nName: Textures\nAssetDirectory: Assets\nStartupScene: ""\nProperties:\n',encoding="utf-8")
         self.Window=Editor();self.Window.Controller.Timer.stop()
         self.assertTrue(self.Window.Runtime.LoadProject(project));self.Window.AssetBrowser.SetProjectRoot(self.Root/"Assets")

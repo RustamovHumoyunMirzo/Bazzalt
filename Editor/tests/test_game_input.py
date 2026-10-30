@@ -47,14 +47,14 @@ class GameInputTests(unittest.TestCase):
         QTest.keyRelease(surface,Qt.Key.Key_W);w.Runtime.Tick();self.assertIn(26,w.Runtime._host.input_snapshot()["up"])
         with patch.object(w.Controller,"FrameAll") as frame:
             QTest.keyClick(surface,Qt.Key.Key_A);frame.assert_not_called()
-        QTest.keyClick(surface,Qt.Key.Key_Space,Qt.KeyboardModifier.ShiftModifier)
+        QTest.keyClick(surface,Qt.Key.Key_Space,Qt.KeyboardModifier.ShiftModifier);self.App.processEvents()
         self.assertEqual(w.Docking.save_layout()["root"]["panels"],["output"])
-        QTest.keyClick(surface,Qt.Key.Key_Space,Qt.KeyboardModifier.ShiftModifier);self.assertTrue(w.Docking.is_panel_open("scene"))
+        QTest.keyClick(surface,Qt.Key.Key_Space,Qt.KeyboardModifier.ShiftModifier);self.App.processEvents();self.assertTrue(w.Docking.is_panel_open("scene"))
         w.Hierarchy.Tree.setFocus();self.assertFalse(w.Controller.GameInput.SyncFocus());self.assertFalse(w.Runtime._host.input_snapshot()["active"])
     def test_folder_tree_rename_with_loaded_scene_keeps_scene_identity(self):
         w=self.Window
         with tempfile.TemporaryDirectory() as folder:
-            root=Path(folder);assets=root/"Assets";directory=assets/"Scenes";directory.mkdir(parents=True)
+            root=Path(folder).resolve();assets=root/"Assets";directory=assets/"Scenes";directory.mkdir(parents=True)
             project=root/"Test.bproject";project.write_text(f'FormatVersion: 1\nProjectUUID: "{uuid.uuid4()}"\nName: "Test"\nAssetDirectory: "Assets"\nStartupScene: ""\nProperties:\n',encoding="utf-8")
             self.assertTrue(w.Runtime.LoadProject(project));scene=directory/"First.bscene";self.assertTrue(w.Runtime.SaveScene(scene));scene_id=w.Runtime.SceneInfo()["uuid"]
             w.AssetBrowser.Refresh();item=w.AssetBrowser._FindDirectoryItem(w.AssetBrowser.Tree.topLevelItem(0),directory)
@@ -64,7 +64,7 @@ class GameInputTests(unittest.TestCase):
     def test_stop_restores_inactive_scene_authoring_values(self):
         w=self.Window
         with tempfile.TemporaryDirectory() as folder:
-            root=Path(folder);assets=root/"Assets";assets.mkdir()
+            root=Path(folder).resolve();assets=root/"Assets";assets.mkdir()
             project=root/"Test.bproject";project.write_text(f'FormatVersion: 1\nProjectUUID: "{uuid.uuid4()}"\nName: "Test"\nAssetDirectory: "Assets"\nStartupScene: ""\nProperties:\n',encoding="utf-8")
             self.assertTrue(w.Runtime.LoadProject(project));scene_id=str(uuid.uuid4());path=assets/"Other.bscene"
             path.write_text(f'FormatVersion: 1\nSceneUUID: "{scene_id}"\nEntities:\n',encoding="utf-8")

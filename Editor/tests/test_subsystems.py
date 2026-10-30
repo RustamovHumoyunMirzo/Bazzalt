@@ -11,7 +11,7 @@ class SubsystemTests(unittest.TestCase):
         from Editor.gui.global_subsystems import GlobalSubsystemsDialog
         app=QApplication.instance() or QApplication([])
         with tempfile.TemporaryDirectory() as folder:
-            root=Path(folder);assets=root/'Assets';assets.mkdir();project=root/'Game.bproject';project.write_text('AssetDirectory: Assets\n')
+            root=Path(folder).resolve();assets=root/'Assets';assets.mkdir();project=root/'Game.bproject';project.write_text('AssetDirectory: Assets\n')
             source=assets/'Service.cpp';source.write_text('SUBSYSTEM(Service) { public: void OnRegister() override {} };')
             identity='12345678-1234-4234-8234-123456789abc';source.with_suffix('.cpp.meta').write_text('UUID: '+identity)
             record=dict(uuid=identity,path=str(source),name=source.name,extension='.cpp')
@@ -33,13 +33,13 @@ class SubsystemTests(unittest.TestCase):
             with self.assertRaises(ValueError):Registrations({KEY:json.dumps(values)})
     def test_subsystem_wrapper_is_not_an_entity_wrapper(self):
         with tempfile.TemporaryDirectory() as folder:
-            root=Path(folder);source=root/'Game.cpp';source.write_text('#include <Bazzalt/Subsystem.h>\nSUBSYSTEM(Game) { public: void OnRegister() override {} };')
+            root=Path(folder).resolve();source=root/'Game.cpp';source.write_text('#include <Bazzalt/Subsystem.h>\nSUBSYSTEM(Game) { public: void OnRegister() override {} };')
             descriptor=ScriptCompiler.Inspect(source);self.assertTrue(descriptor.is_subsystem)
             wrapper=ScriptCompiler._Wrapper(descriptor);self.assertIn('BazzaltGetSubsystemModuleV1',wrapper);self.assertNotIn('BazzaltGetScriptModuleV1',wrapper)
             with self.assertRaises(ScriptValidationError):ScriptAttachments(root).Attach('entity',descriptor)
     def test_registered_component_source_cannot_also_be_attached(self):
         with tempfile.TemporaryDirectory() as folder:
-            root=Path(folder);assets=root/'Assets';assets.mkdir();project=root/'Game.bproject';project.write_text('AssetDirectory: Assets\n')
+            root=Path(folder).resolve();assets=root/'Assets';assets.mkdir();project=root/'Game.bproject';project.write_text('AssetDirectory: Assets\n')
             source=assets/'Game.cpp';source.write_text('COMPONENT(Game) { public: void OnRegister() {} };')
             identity='12345678-1234-4234-8234-123456789abc';source.with_suffix('.cpp.meta').write_text('UUID: '+identity)
             registrations=[dict(asset=identity,level=0)];sources=Sources(project,registrations)
@@ -51,7 +51,7 @@ class SubsystemTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'attached'):Sources(project,registrations)
     def test_private_absolute_and_escaping_includes_are_rejected(self):
         with tempfile.TemporaryDirectory() as folder:
-            root=Path(folder);source=root/'Game.cpp';compiler=ScriptCompiler(root)
+            root=Path(folder).resolve();source=root/'Game.cpp';compiler=ScriptCompiler(root)
             for include in ('<Runtime/Engine.h>','"C:/private/Engine.h"','"../outside.h"'):
                 source.write_text('#include '+include+'\n')
                 with self.assertRaises(ScriptValidationError):compiler._ValidateIncludes(source)

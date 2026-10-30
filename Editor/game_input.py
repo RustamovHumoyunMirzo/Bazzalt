@@ -1,6 +1,6 @@
 """Qt-to-runtime input routing. SDL and gameplay state remain native/private."""
 import sys
-from PySide6.QtCore import QEvent,QObject,Qt
+from PySide6.QtCore import QEvent,QObject,Qt,QTimer
 from PySide6.QtWidgets import QApplication
 from shiboken6 import isValid
 
@@ -46,6 +46,7 @@ class GameInputRouter(QObject):
     def _FocusChanged(self,*_):self.SyncFocus()
     def _StateChanged(self,*_):self.SyncFocus()
     def FocusGame(self):
+        if self._closed or not self.Runtime.IsPlaying():return
         target=self.Window.Output._output_stack.currentWidget();target.setFocus(Qt.FocusReason.OtherFocusReason);self.SyncFocus()
     def SyncFocus(self):
         if self._closed or not self.Runtime.IsPlaying() or self.Runtime.IsPaused():
@@ -74,7 +75,7 @@ class GameInputRouter(QObject):
             if event.isAutoRepeat():event.accept();return True
             if event.key()==Qt.Key.Key_Space and event.modifiers()&Qt.KeyboardModifier.ShiftModifier:
                 if kind==QEvent.Type.KeyPress:
-                    self.Runtime.SetGameInputActive(False);self.Window.ToggleGameMaximized();self.FocusGame()
+                    self.Runtime.SetGameInputActive(False);self.Window.ToggleGameMaximized();self.FocusGame();QTimer.singleShot(0,self.Window,self.FocusGame)
                 event.accept();return True
             self.Runtime.GameKey(KeyScancode(event),kind==QEvent.Type.KeyPress);event.accept();return True
         if kind in (QEvent.Type.MouseButtonPress,QEvent.Type.MouseButtonRelease):
