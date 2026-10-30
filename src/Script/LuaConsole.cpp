@@ -19,7 +19,7 @@ void BindLuaConsole(sol::table api){
     console["GetMessageAt"]=[](std::int64_t index){return index>0?Console::GetMessageAt(static_cast<std::size_t>(index-1)):std::optional<ConsoleMessage>{};};
     console["FindMessage"]=&Console::FindMessage;
     console["GetMessages"]=[](sol::this_state state,sol::optional<ConsoleFilter> f)->sol::object{
-        auto result=Console::GetMessages(f.value_or(ConsoleFilter{}));if(!result)return sol::make_object(state,sol::nil);
+        auto result=Console::GetMessages(f.value_or(ConsoleFilter{}));if(!result)return sol::make_object(state,sol::lua_nil);
         sol::state_view lua(state);auto list=lua.create_table();int index=1;for(const auto& message:*result)list[index++]=message;return sol::make_object(state,list);
     };
 }

@@ -21,13 +21,13 @@ void BindLuaScene(sol::table api){
             sol::object found=operations[type];if(!found.is<sol::table>())throw std::invalid_argument("Unknown component type: "+type);
             sol::protected_function method=found.as<sol::table>()[operation];
             auto result=method(owner,sol::as_args(arguments));if(!result.valid()){sol::error error=result;throw std::runtime_error(error.what());}
-            return result.return_count()?result.get<sol::object>():sol::make_object(state,sol::nil);
+            return result.return_count()?result.get<sol::object>():sol::make_object(state,sol::lua_nil);
         };
     }
     entity[sol::meta_function::equal_to]=[](Entity a,Entity b){return a==b;};
     entity["TryGetComponent"]=[operations](Entity value,const std::string& type,sol::this_state state)->sol::object{
         sol::object found=operations[type];if(!found.is<sol::table>())throw std::invalid_argument("Unknown component type");
-        sol::table entry=found;sol::function has=entry["Has"];if(!has(value).get<bool>())return sol::make_object(state,sol::nil);
+        sol::table entry=found;sol::function has=entry["Has"];if(!has(value).get<bool>())return sol::make_object(state,sol::lua_nil);
         sol::function get=entry["Get"];return get(value).get<sol::object>();
     };
     entity["AddOrReplaceComponent"]=[operations](Entity value,const std::string& type,sol::object component){

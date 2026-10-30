@@ -7,7 +7,7 @@ public:
     std::map<std::string,Entry> Entries;
     bool Updating=false;
     static void Invoke(sol::table object,const char* name,Scene& scene,float dt,bool timed){
-        sol::object value=object[name];if(!value.valid()||value==sol::nil)return;
+        sol::object value=object[name];if(!value.valid()||value==sol::lua_nil)return;
         sol::protected_function function=value;
         lua_sethook(object.lua_state(),[](lua_State* state,lua_Debug*){luaL_error(state,"Lua system instruction budget exceeded");},LUA_MASKCOUNT,1000000);
         auto result=timed?function(object,std::ref(scene),dt):function(object,std::ref(scene));

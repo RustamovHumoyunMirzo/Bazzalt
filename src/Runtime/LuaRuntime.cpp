@@ -84,7 +84,7 @@ struct LuaRuntime::Impl {
                 if(!scripts->IsEnabled())return;
                 for(const auto& script:scripts->Values)if(script.TypeName==Name&&!script.Enabled)return;
             }
-            sol::object member=Object[name];if(!member.valid()||member==sol::nil)return;
+            sol::object member=Object[name];if(!member.valid()||member==sol::lua_nil)return;
             if(member.get_type()!=sol::type::function)throw std::runtime_error(std::string(name)+" must be a function");
             lua_sethook(Vm->State,Budget,LUA_MASKCOUNT,1000000);
             sol::protected_function function=member;
@@ -118,7 +118,7 @@ bool LuaRuntime::Start(std::string& error){
         auto instance=std::make_unique<Impl::Instance>();instance->Vm=std::make_unique<VM>();instance->Owner=owner;instance->Name=binding.TypeName;
         sol::state_view lua(instance->Vm->State);
         lua.open_libraries(sol::lib::base,sol::lib::math,sol::lib::string,sol::lib::table,sol::lib::utf8);
-        for(const char* key:{"dofile","loadfile","load","collectgarbage"})lua[key]=sol::nil;
+        for(const char* key:{"dofile","loadfile","load","collectgarbage"})lua[key]=sol::lua_nil;
         auto api=lua.create_named_table("Bazzalt");BindLuaMath(api);BindLuaComponents(api);BindLuaGUI(api);BindLuaServices(api);BindLuaGraphics(api,owner);BindLuaGlobalEvents(api,owner);BindLuaExtensionsForOwner(api,ExtensionAccess::ComponentOwner(binding.TypeName));
         auto declared=std::make_shared<sol::table>();
         lua.set_function("COMPONENT",[declared,lua,typeName=binding.TypeName](const std::string& name) mutable {
@@ -154,7 +154,7 @@ bool LuaRuntime::Start(std::string& error){
         active.Object=result.get<sol::table>();active.Object["Entity"]=owner;
         if(declared->valid()&&active.Object!=*declared)throw std::invalid_argument("Return the table created by COMPONENT");
         // Declaration functions are source-initialization helpers, not lifecycle APIs.
-        lua["COMPONENT"]=sol::nil;lua["PROPERTY"]=sol::nil;
+        lua["COMPONENT"]=sol::lua_nil;lua["PROPERTY"]=sol::lua_nil;
         for(const auto& [key,value]:binding.Properties)SetProperty(active.Object,key,value);
         active.Call("OnCreate");
         if(m_impl->Instances.size()==1){
@@ -163,7 +163,7 @@ bool LuaRuntime::Start(std::string& error){
                 static constexpr const char* names[]={"OnCollisionEnter","OnCollisionStay","OnCollisionExit","OnTriggerEnter","OnTriggerStay","OnTriggerExit"};
                 for(auto& instance:m_impl->Instances){if(instance->Failed||instance->Destroyed||!instance->Owner)continue;const auto uuid=instance->Owner.GetUUID();if(uuid!=event.BodyAUUID&&uuid!=event.BodyBUUID&&uuid!=event.ColliderAUUID&&uuid!=event.ColliderBUUID)continue;
                     if(auto* scripts=instance->Owner.TryGetComponent<ScriptComponents>()){if(!scripts->Enabled)continue;bool enabled=true;for(const auto& script:scripts->Values)if(script.TypeName==instance->Name)enabled=script.Enabled;if(!enabled)continue;}
-                    sol::object member=instance->Object[names[int(event.Type)]];if(!member.valid()||member==sol::nil)continue;
+                    sol::object member=instance->Object[names[int(event.Type)]];if(!member.valid()||member==sol::lua_nil)continue;
                     auto* state=instance->Vm->State;auto owner=ApplicationEventsAccess::SetOwner(state);auto oldCaller=ExtensionAccess::SetCaller(ExtensionAccess::ComponentOwner(instance->Name));
                     lua_sethook(state,Budget,LUA_MASKCOUNT,1000000);sol::protected_function function=member;auto result=function(instance->Object,event);lua_sethook(state,nullptr,0,0);ApplicationEventsAccess::SetOwner(owner);ExtensionAccess::SetCaller(std::move(oldCaller));
                     if(!result.valid()){instance->Failed=true;sol::error error=result;Console::Error(instance->Name+": "+error.what(),"Lua");}
@@ -193,31 +193,31 @@ bool LuaRuntime::Import(const std::filesystem::path& source,const std::filesyste
 struct ExtensionScript::Impl {VM Vm;sol::table Object;};
 ExtensionScript::ExtensionScript(const std::filesystem::path& path,const std::string& service,const std::vector<std::string>& methods,Command command,const std::string& owner):m_impl(std::make_unique<Impl>()){
     sol::state_view lua(m_impl->Vm.State);lua.open_libraries(sol::lib::base,sol::lib::math,sol::lib::table,sol::lib::string,sol::lib::utf8);
-    for(const char* name:{"dofile","loadfile","load","collectgarbage"})lua[name]=sol::nil;
+    for(const char* name:{"dofile","loadfile","load","collectgarbage"})lua[name]=sol::lua_nil;
     auto api=lua.create_named_table("Bazzalt");BindLuaMath(api);BindLuaComponents(api);BindLuaGUI(api);BindLuaServices(api);BindLuaGraphics(api,Entity{});BindLuaGlobalEvents(api,Entity{});BindLuaExtensionsForOwner(api,owner);
     if(service.empty()||service=="Bazzalt"||methods.size()>256||!command)throw std::invalid_argument("Invalid extension service registration");
     auto host=lua.create_named_table(service);
     for(const auto& method:methods)host.set_function(method,[command,method,lua](sol::variadic_args args)->sol::object{
         std::size_t offset=args.size()&&args[0].get_type()==sol::type::table?1:0;if(args.size()-offset>128)throw std::length_error("Too many extension service arguments");
         ExtensionArguments values;for(std::size_t i=offset;i<args.size();++i)values.push_back(LuaExtensionValue(sol::object(args[i])));
-        auto result=command(method,values);return std::visit([&](const auto& value)->sol::object{using T=std::decay_t<decltype(value)>;if constexpr(std::is_same_v<T,std::monostate>)return sol::make_object(lua,sol::nil);else return sol::make_object(lua,value);},result);
+        auto result=command(method,values);return std::visit([&](const auto& value)->sol::object{using T=std::decay_t<decltype(value)>;if constexpr(std::is_same_v<T,std::monostate>)return sol::make_object(lua,sol::lua_nil);else return sol::make_object(lua,value);},result);
     });
     lua_sethook(lua.lua_state(),Budget,LUA_MASKCOUNT,1000000);auto result=lua.safe_script(Read(path),sol::script_pass_on_error,"@ExtensionService",sol::load_mode::binary);lua_sethook(lua.lua_state(),nullptr,0,0);
     if(!result.valid()){sol::error error=result;throw std::runtime_error(error.what());}if(result.get_type()!=sol::type::table)throw std::runtime_error("Editor extension script must return a table");m_impl->Object=result.get<sol::table>();
 }
 ExtensionScript::~ExtensionScript()=default;
-void ExtensionScript::Call(const std::string& name,const std::string& argument){sol::object member=m_impl->Object[name];if(!member.valid()||member==sol::nil)return;if(member.get_type()!=sol::type::function)throw std::runtime_error("Editor callback is not a function");lua_sethook(m_impl->Vm.State,Budget,LUA_MASKCOUNT,1000000);sol::protected_function function=member;auto result=function(m_impl->Object,argument);lua_sethook(m_impl->Vm.State,nullptr,0,0);if(!result.valid()){sol::error error=result;throw std::runtime_error(error.what());}}
+void ExtensionScript::Call(const std::string& name,const std::string& argument){sol::object member=m_impl->Object[name];if(!member.valid()||member==sol::lua_nil)return;if(member.get_type()!=sol::type::function)throw std::runtime_error("Editor callback is not a function");lua_sethook(m_impl->Vm.State,Budget,LUA_MASKCOUNT,1000000);sol::protected_function function=member;auto result=function(m_impl->Object,argument);lua_sethook(m_impl->Vm.State,nullptr,0,0);if(!result.valid()){sol::error error=result;throw std::runtime_error(error.what());}}
 
 namespace {std::unique_ptr<VM> SdkVm;thread_local unsigned SdkCallDepth=0;}
 void ClearLuaExtensions(){SdkVm.reset();}
 ExtensionValue InvokeLuaExtension(const std::string& module,const std::string& name,const ExtensionArguments& arguments){
     if(SdkCallDepth>=32)throw std::runtime_error("Extension call recursion limit exceeded");
     struct Depth{Depth(){++SdkCallDepth;}~Depth(){--SdkCallDepth;}} depth;
-    if(!SdkVm){auto vm=std::make_unique<VM>();sol::state_view lua(vm->State);lua.open_libraries(sol::lib::base,sol::lib::math,sol::lib::string,sol::lib::table,sol::lib::utf8);for(const char* key:{"dofile","loadfile","load","collectgarbage"})lua[key]=sol::nil;auto api=lua.create_named_table("Bazzalt");BindLuaMath(api);BindLuaComponents(api);BindLuaGUI(api);BindLuaServices(api);BindLuaGraphics(api,Entity{});BindLuaGlobalEvents(api,Entity{});BindLuaExtensions(api);SdkVm=std::move(vm);}
+    if(!SdkVm){auto vm=std::make_unique<VM>();sol::state_view lua(vm->State);lua.open_libraries(sol::lib::base,sol::lib::math,sol::lib::string,sol::lib::table,sol::lib::utf8);for(const char* key:{"dofile","loadfile","load","collectgarbage"})lua[key]=sol::lua_nil;auto api=lua.create_named_table("Bazzalt");BindLuaMath(api);BindLuaComponents(api);BindLuaGUI(api);BindLuaServices(api);BindLuaGraphics(api,Entity{});BindLuaGlobalEvents(api,Entity{});BindLuaExtensions(api);SdkVm=std::move(vm);}
     sol::state_view lua(SdkVm->State);
     struct Hook{lua_State* State;lua_Hook Previous;int Mask,Count;~Hook(){lua_sethook(State,Previous,Mask,Count);}} hook{lua.lua_state(),lua_gethook(lua.lua_state()),lua_gethookmask(lua.lua_state()),lua_gethookcount(lua.lua_state())};lua_sethook(lua.lua_state(),Budget,LUA_MASKCOUNT,1000000);
     sol::table api=lua["Bazzalt"];sol::table table=RequireLuaExtension(api,module,ExtensionAccess::Owner(module)).as<sol::table>();sol::object member=table[name];if(member.get_type()!=sol::type::function)throw std::runtime_error("Lua extension function is unavailable: "+module+"."+name);
-    std::vector<sol::object> args;for(const auto& argument:arguments)args.push_back(std::visit([&](const auto& v)->sol::object{using T=std::decay_t<decltype(v)>;if constexpr(std::is_same_v<T,std::monostate>)return sol::make_object(lua,sol::nil);else return sol::make_object(lua,v);},argument));
+    std::vector<sol::object> args;for(const auto& argument:arguments)args.push_back(std::visit([&](const auto& v)->sol::object{using T=std::decay_t<decltype(v)>;if constexpr(std::is_same_v<T,std::monostate>)return sol::make_object(lua,sol::lua_nil);else return sol::make_object(lua,v);},argument));
     sol::protected_function function=member;auto result=function(sol::as_args(args));if(!result.valid()){sol::error e=result;throw std::runtime_error(e.what());}return result.return_count()?LuaExtensionValue(result.get<sol::object>()):ExtensionValue{};
 }
 

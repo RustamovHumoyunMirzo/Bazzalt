@@ -43,6 +43,11 @@ jobs:
           path: ~/Library/Caches/ccache
           key: macos-${{ matrix.architecture }}-objects-${{ github.run_id }}
           restore-keys: macos-${{ matrix.architecture }}-objects-
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: filament-sdk
+        with:
+          path: deps/filament
+          key: filament-1.77.0-macos-${{ matrix.architecture }}-v1
       - name: Download pinned dependencies
         run: |
           for dependency in entt rapidyaml filament sdl3 stb_image lua sol2 miniaudio jolt freetype text_shaping pybind11; do
@@ -52,6 +57,11 @@ jobs:
         env:
           BAZZALT_MAC_ARCH: ${{ matrix.cmake_arch }}
         run: sh scripts/build_macos_dependencies.sh
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: steps.filament-sdk.outputs.cache-hit != 'true'
+        with:
+          path: deps/filament
+          key: filament-1.77.0-macos-${{ matrix.architecture }}-v1
       - name: Configure and build native products
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DCMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_arch }} -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 -DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DBAZZALT_FILAMENT_METAL=ON -DBAZZALT_FILAMENT_OPENGL=OFF -DBAZZALT_FILAMENT_VULKAN=OFF -DPython_EXECUTABLE="$(command -v python)"
