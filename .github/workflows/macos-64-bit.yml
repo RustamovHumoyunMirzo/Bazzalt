@@ -110,7 +110,7 @@ jobs:
           if [ "$status" -ne 0 ]; then
             # Retain the original failure, and collect the native Metal thread
             # that Python's traceback cannot describe after SIGABRT.
-            lldb --batch -o run -o 'thread backtrace all' -- "$(command -v python)" -m unittest Editor.tests.test_macos_native Compiler.tests.test_macos_build -v > build/macos-gpu-backtrace.log 2>&1
+            lldb --batch -o 'settings set target.process.stop-on-exec false' -o run -o 'thread backtrace all' -- "$(command -v python)" -m unittest Editor.tests.test_macos_native Compiler.tests.test_macos_build -v > build/macos-gpu-backtrace.log 2>&1
             cat build/macos-gpu-backtrace.log
           fi
           exit "$status"
