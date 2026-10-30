@@ -44,6 +44,10 @@ function(bazzalt_configure_filament ROOT)
         set(_filament_prefix "lib")
     endif()
 
+    if(APPLE AND NOT EXISTS "${ROOT}/bazzalt-rtti-${_filament_arch}")
+        message(FATAL_ERROR "macOS requires the RTTI-enabled renderer SDK from the macOS CI artifact (filament-sdk-macos-x64 or filament-sdk-macos-arm64). Stock no-RTTI archives break C++ exception matching across dylibs. See docs/private/cross-and-remote-builds.md.")
+    endif()
+
     set(_filament_libraries
         gltfio gltfio_core filameshio filamat shaders matp uberarchive uberzlib
         dracodec meshoptimizer mikktspace basis_transcoder stb image imageio-lite

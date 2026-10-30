@@ -93,7 +93,11 @@ def Run(client,command,cancel=None,on_event=lambda event:None,timeout=7200):
         if sent:raise ValueError('Remote build cancelled')
         if result is None:raise ValueError('Remote worker returned no valid protocol response')
         return result
-    finally:channel.close()
+    finally:
+        # A server may close the transport immediately after its exit status.
+        # Cleanup must not replace an authenticated result or the original error.
+        try:channel.close()
+        except (EOFError,OSError):pass
 
 def Test(profile,secret='',cancel=None,require_tools=True):
     client=Connect(profile,secret)

@@ -40,7 +40,7 @@ def ValidateCooker(path,platform,host_architecture=None):
     # Cooking is content-only and independent of the target game's word size.
     from bazzalt.platforms import HostArchitecture
     host_architecture=host_architecture or HostArchitecture()
-    supported=('x64','x86') if platform=='linux' and host_architecture=='x64' else (host_architecture,)
+    supported=('arm64','x64','x86') if platform=='windows' and host_architecture=='arm64' else ('x64','x86') if platform in ('windows','linux') and host_architecture=='x64' else (host_architecture,)
     if architecture not in supported:raise ValueError('Content cooker architecture is incompatible with this host')
     if platform!='windows' and not os.access(path,os.X_OK):raise ValueError('The content cooker tool is not executable')
     return path

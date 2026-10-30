@@ -15,7 +15,9 @@ MAX_INPUT=32*1024**3
 
 def ToolsRoot():
     name='BazzaltCooker.exe' if HostPlatform()=='windows' else 'BazzaltCooker'
-    candidates=(Path(sys.executable).parent,Path(__file__).resolve().parents[1]/('build/Editor/Release' if HostPlatform()=='windows' else 'build/Editor'))
+    root=Path(__file__).resolve().parents[1];suffix='Editor/Release' if HostPlatform()=='windows' else 'Editor'
+    candidates=[Path(sys.executable).parent,root/'build'/suffix]
+    if HostArchitecture()=='arm64':candidates.append(root/'build/arm64'/suffix)
     return next((p for p in candidates if (p/name).is_file()),candidates[0])
 
 def Info(runtime=None,architecture=None,compiler_path=""):

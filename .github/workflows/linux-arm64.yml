@@ -18,6 +18,8 @@ jobs:
       PYTHONUTF8: '1'
       CC: clang
       CXX: clang++
+      CCACHE_DIR: ${{ github.workspace }}/build/.ccache
+      CCACHE_MAXSIZE: 1G
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
@@ -28,6 +30,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang libc++-dev libc++abi-dev ccache ninja-build libssl-dev libx11-dev libx11-xcb-dev libxcb1-dev libxext-dev libgl1-mesa-dev libegl1-mesa-dev libvulkan-dev libwayland-dev wayland-protocols libxkbcommon-dev libdecor-0-dev
           python -m pip install -r requirements-build.txt PySide6==6.10.2
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: objects
+        with:
+          path: build/.ccache
+          key: linux-arm64-objects-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: linux-arm64-objects-
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: sdk
         with:
@@ -46,9 +54,14 @@ jobs:
           for dependency in entt rapidyaml sdl3 lua sol2 miniaudio jolt freetype text_shaping; do sh "scripts/get_${dependency}.sh"; done
       - name: Build and verify native runtime
         run: |
-          cmake -S . -B build/arm64 -G Ninja -DCMAKE_BUILD_TYPE=Release -DBAZZALT_BUILD_EDITOR_BRIDGE=OFF -DBUILD_TESTING=ON
+          cmake -S . -B build/arm64 -G Ninja -DCMAKE_BUILD_TYPE=Release -DBAZZALT_BUILD_EDITOR_BRIDGE=OFF -DBUILD_TESTING=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           cmake --build build/arm64 --parallel 2
           ctest --test-dir build/arm64 --output-on-failure
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: always() && !cancelled()
+        with:
+          path: build/.ccache
+          key: ${{ steps.objects.outputs.cache-primary-key }}
       - name: Package Core and runtime template
         run: python scripts/package_arm64.py --platform linux
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
