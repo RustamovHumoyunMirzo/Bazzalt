@@ -27,3 +27,27 @@ class RemoteWorkerTests(unittest.TestCase):
             with BuildLock(base),self.assertRaisesRegex(ValueError,'Another build'):
                 Execute(request)
             self.assertFalse((base/'Project').exists())
+
+    def test_source_only_sync_preserves_asset_identity_and_removes_deleted_code(self):
+        import hashlib,json
+        from unittest.mock import patch
+        from Compiler.remote_worker import Execute
+        from Compiler.settings import Merge,Save
+        from bazzalt.platforms import HostPlatform
+        with tempfile.TemporaryDirectory() as directory:
+            workspace=Path(directory);job=workspace/'job';job.mkdir();archive=job/'project.zip';identity='b'*64
+            settings=Merge({});settings['target']['platform']=HostPlatform()
+            def build(project,*args,**kwargs):
+                output=project.parent/'bin/Game.zip';output.parent.mkdir(exist_ok=True);output.write_bytes(b'output');return output
+            def transfer(files,full):
+                with zipfile.ZipFile(archive,'w') as output:
+                    output.writestr('Game.bproject','AssetDirectory: Assets\n');output.writestr('BuildSettings.json',json.dumps(settings))
+                    for name in files:output.writestr('Assets/'+name,b'asset-or-code')
+                request=job/'request.json';request.write_text(json.dumps(dict(protocol=1,project_id=identity,project='Game.bproject',sha256=hashlib.sha256(archive.read_bytes()).hexdigest(),sync_assets=full)),encoding='utf-8')
+                Execute(request)
+            with patch('Compiler.build.Build',side_effect=build):
+                transfer(['music.bin','music.bin.meta','Old.cpp','Old.cpp.meta'],True)
+                transfer([],False)
+            root=workspace/'projects'/identity/'Project/Assets'
+            self.assertTrue((root/'music.bin').is_file());self.assertTrue((root/'music.bin.meta').is_file())
+            self.assertFalse((root/'Old.cpp').exists());self.assertFalse((root/'Old.cpp.meta').exists())

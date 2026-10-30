@@ -110,7 +110,8 @@ def _ExecuteLocked(request,job,base,identity,cancel):
     for name in old:
         path=root.joinpath(*SafeName(name).parts)
         if name in current:continue
-        if not request.get('sync_assets',True) and path.resolve().is_relative_to(assets) and path.suffix.lower() not in ('.cpp','.h','.hpp','.lua','.meta','.bscene'):
+        kind=path.with_suffix('').suffix.lower() if path.suffix.lower()=='.meta' else path.suffix.lower()
+        if not request.get('sync_assets',True) and path.resolve().is_relative_to(assets) and kind not in ('.cpp','.h','.hpp','.lua','.bscene'):
             retained.add(name);continue
         if not path.resolve().is_relative_to(root.resolve()) or path.is_symlink():raise ValueError('Linked transfer path')
         path.unlink(missing_ok=True)
