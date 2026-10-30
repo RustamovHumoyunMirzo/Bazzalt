@@ -54,6 +54,10 @@ function(bazzalt_configure_filament ROOT)
         # The native macOS SDK uses Metal; a Metal-only source install has no Vulkan loader archive.
         list(REMOVE_ITEM _filament_libraries bluevk)
     endif()
+    if(WIN32 AND _filament_arch STREQUAL "aarch64")
+        # Upstream BlueGL uses x86 MASM on Windows; native ARM64 SDKs are Vulkan-only.
+        list(REMOVE_ITEM _filament_libraries bluegl)
+    endif()
     set(_filament_targets)
     foreach(_library IN LISTS _filament_libraries)
         if(NOT EXISTS "${_filament_release_dir}/${_filament_prefix}${_library}${_filament_suffix}")

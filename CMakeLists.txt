@@ -332,7 +332,7 @@ if(MSVC)
     target_compile_options(Bazzalt PRIVATE /bigobj)
 endif()
 # Match these flags to the linked Filament SDK when using a custom build.
-if(APPLE)
+if(APPLE OR (WIN32 AND (CMAKE_SYSTEM_PROCESSOR MATCHES "^(ARM64|aarch64)$" OR CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")))
     set(_bazzalt_gl_default OFF)
 else()
     set(_bazzalt_gl_default ON)

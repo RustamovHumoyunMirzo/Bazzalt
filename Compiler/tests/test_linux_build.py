@@ -1,5 +1,5 @@
 """Linux-only real native cook -> encrypted package -> player verification/render."""
-import copy,json,os,subprocess,sys,tempfile,unittest
+import copy,json,os,subprocess,sys,tempfile,unittest,shutil
 from pathlib import Path
 from Compiler.build import Build
 from Compiler.settings import DEFAULTS,Save
@@ -27,7 +27,11 @@ class LinuxBuildTests(unittest.TestCase):
             self.assertTrue(os.access(executable,os.X_OK));self.assertLess(sum(p.stat().st_size for p in output.glob('*.bpak')),1000000)
             result=subprocess.run([str(executable),'--verify-package'],capture_output=True,timeout=60);self.assertEqual(result.returncode,0,result.stderr)
             if os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY'):
-                result=subprocess.run([str(executable),'--smoke-test'],capture_output=True,timeout=90);self.assertEqual(result.returncode,0,result.stderr)
+                result=subprocess.run([str(executable),'--smoke-test'],capture_output=True,timeout=90)
+                if result.returncode<0 and shutil.which('gdb'):
+                    trace=subprocess.run(['gdb','--batch','-ex','set pagination off','-ex','set debuginfod enabled off','-ex','run','-ex','bt 32','--args',str(executable),'--smoke-test'],capture_output=True,timeout=90)
+                    print('Native game crash backtrace:\n'+(trace.stdout+trace.stderr).decode('utf-8','replace')[-24000:],flush=True)
+                self.assertEqual(result.returncode,0,result.stdout+result.stderr)
                 text=log.read_text();self.assertIn('create',text);self.assertIn('update',text);self.assertIn('destroy',text)
             manifest=output/'game.json';data=bytearray(manifest.read_bytes());data[-1]^=1;manifest.write_bytes(data)
             result=subprocess.run([str(executable),'--verify-package'],capture_output=True,timeout=60);self.assertNotEqual(result.returncode,0)

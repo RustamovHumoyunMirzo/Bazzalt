@@ -48,6 +48,8 @@ class BuildSettingsDialog(QDialog):
         self.Controls[('target','platform')].currentIndexChanged.connect(self._PlatformChanged)
         for (platform,key),field in self.PlatformControls.items():
             if key in ('architecture','key_storage','build_method'):field.currentIndexChanged.connect(self._TargetWarning)
+            if key=='architecture':field.currentIndexChanged.connect(lambda _,p=platform:self._ArchitectureChanged(p))
+        for platform in self.Values['platforms']:self._ArchitectureChanged(platform)
         self._PlatformChanged()
         buttons=QHBoxLayout();buttons.addStretch();cancel=QPushButton(self.Tr('preferences.cancel'));apply=QPushButton(self.Tr('preferences.apply'));buttons.addWidget(cancel);buttons.addWidget(apply);root.addLayout(buttons);cancel.clicked.connect(self.reject);apply.clicked.connect(self._Apply)
     def _Field(self,key,value,options=None):
@@ -72,6 +74,13 @@ class BuildSettingsDialog(QDialog):
             if found:
                 self.PlatformControls[(platform,'build_method')].setCurrentIndex(self.PlatformControls[(platform,'build_method')].findData(option));self.PlatformControls[(platform,'toolchain')].setText(str(found));return
         self.Error.setText(self.Tr('build.toolchain_not_found'))
+    def _ArchitectureChanged(self,platform):
+        backend=self.PlatformControls[(platform,'backend')];current=backend.currentData()
+        options=('automatic','metal') if platform=='macos' else ('automatic','vulkan') if platform=='windows' and self.PlatformControls[(platform,'architecture')].currentData()=='arm64' else ('automatic','vulkan','opengl')
+        backend.blockSignals(True);backend.clear()
+        for option in options:backend.addItem(self.Tr('build.option.'+option),option)
+        backend.setCurrentIndex(max(0,backend.findData(current)));backend.blockSignals(False)
+
     def _PlatformChanged(self,*_):
         selected=self.Controls[('target','platform')].currentData()
         for platform,(header,_) in self.PlatformGroups.items():

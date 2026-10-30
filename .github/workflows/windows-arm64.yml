@@ -41,7 +41,7 @@ jobs:
       - name: Pinned engine dependencies
         shell: pwsh
         run: |
-          foreach ($dependency in @("entt","rapidyaml","sdl3","stb_image","lua","sol2","miniaudio","jolt","freetype","text_shaping")) { & "scripts/get_$dependency.ps1"; if ($LASTEXITCODE -ne 0) { throw "Dependency failed: $dependency" } }
+          foreach ($dependency in @("entt","rapidyaml","sdl3","lua","sol2","miniaudio","jolt","freetype","text_shaping")) { & "scripts/get_$dependency.ps1"; if ($LASTEXITCODE -ne 0) { throw "Dependency failed: $dependency" } }
       - name: Build and verify native runtime
         run: |
           cmake -S . -B build/arm64 -A ARM64 -DBAZZALT_BUILD_EDITOR_BRIDGE=OFF -DBUILD_TESTING=ON

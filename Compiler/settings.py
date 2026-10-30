@@ -79,6 +79,7 @@ def Validate(value):
         if profile['architecture'] not in (('x64','arm64') if name=='macos' else ('x64','x86','arm64')):raise ValueError('Unsupported '+name+' architecture')
         if profile['backend'] not in (('automatic','metal') if name=='macos' else ('automatic','vulkan','opengl')):raise ValueError('Unsupported '+name+' backend')
         if profile['key_storage'] not in ('embedded','file','environment',*(['dpapi_user'] if name=='windows' else ['keychain'] if name=='macos' else [])):raise ValueError('Unsupported '+name+' key storage')
+    if value['platforms']['windows']['architecture']=='arm64' and value['platforms']['windows']['backend']=='opengl':raise ValueError('Windows ARM64 requires Vulkan or Automatic rendering')
     linux=value['platforms']['linux']
     if linux['display_server'] not in ('automatic','x11','wayland'):raise ValueError('Unknown Linux display server')
     if linux['display_server']=='wayland' and linux['backend']=='opengl':raise ValueError('Native Wayland requires Vulkan or Automatic rendering')

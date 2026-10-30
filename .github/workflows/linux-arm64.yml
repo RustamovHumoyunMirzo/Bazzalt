@@ -43,7 +43,7 @@ jobs:
           key: filament-1.77.0-linux-arm64-v1
       - name: Pinned engine dependencies
         run: |
-          for dependency in entt rapidyaml sdl3 stb_image lua sol2 miniaudio jolt freetype text_shaping; do sh "scripts/get_${dependency}.sh"; done
+          for dependency in entt rapidyaml sdl3 lua sol2 miniaudio jolt freetype text_shaping; do sh "scripts/get_${dependency}.sh"; done
       - name: Build and verify native runtime
         run: |
           cmake -S . -B build/arm64 -G Ninja -DCMAKE_BUILD_TYPE=Release -DBAZZALT_BUILD_EDITOR_BRIDGE=OFF -DBUILD_TESTING=ON
