@@ -118,6 +118,7 @@ def Package(project,archive,profile,cancel=None):
                 Check(cancel)
                 source=Path(folder)/name
                 if source.is_symlink():raise ValueError('Linked project files cannot be transferred')
+                if profile.get('private_key') and source.resolve()==Path(profile['private_key']).expanduser().resolve():continue
                 if not profile['sync_assets'] and source.resolve().is_relative_to(asset_root) and source.suffix.lower() not in ('.cpp','.h','.hpp','.lua','.meta','.bscene'):continue
                 relative=source.relative_to(root).as_posix()
                 if any(fnmatch.fnmatchcase(relative,pattern.strip()) or fnmatch.fnmatchcase(source.name,pattern.strip()) for pattern in profile.get('exclusions','').split(',') if pattern.strip()):continue

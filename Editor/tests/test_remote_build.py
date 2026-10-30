@@ -18,6 +18,14 @@ class RemoteBuildTests(unittest.TestCase):
             (root/'Assets/bin').mkdir();(root/'Assets/bin/data.txt').write_text('asset')
             archive=Path(directory)/'project.zip';Package(project,archive,DEFAULT)
             with zipfile.ZipFile(archive) as source:self.assertEqual(set(source.namelist()),{'Game.bproject','Assets/cube.cpp','Assets/bin/data.txt'})
+    def test_selected_private_key_is_never_in_a_project_upload(self):
+        import zipfile
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)/'project';root.mkdir();project=root/'Game.bproject';project.write_text('AssetDirectory: Assets\n');(root/'Assets').mkdir()
+            private=root/'Assets/private-without-extension';private.write_text('secret-key')
+            archive=Path(directory)/'project.zip';Package(project,archive,DEFAULT|dict(private_key=str(private)))
+            with zipfile.ZipFile(archive) as source:self.assertNotIn('Assets/private-without-extension',source.namelist())
+
     def test_reject_policy_is_used_for_unknown_ssh_hosts(self):
         from Editor.remote_build import Connect
         import sys
