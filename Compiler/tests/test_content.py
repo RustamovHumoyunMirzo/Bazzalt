@@ -6,6 +6,17 @@ from Compiler.settings import DEFAULTS,Validate
 
 
 class ContentFilterTests(unittest.TestCase):
+    def test_graph_texture_dependencies_and_binary_products_are_retained(self):
+        import json
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);self.Fixture(root);source=root/'Assets/Graph.shadg';source.write_text(json.dumps({'nodes':[{'type':'Texture','values':{'texture':'model'}}]}))
+            cache=root/'.bazzalt/Cache/graph/current.shadg';cache.parent.mkdir(parents=True);cache.write_bytes(source.read_bytes())
+            for suffix in ('.filamat','.reflection.json','.translated.mat','.build.json'):Path(str(cache)+suffix).write_text('{}')
+            index=root/'.bazzalt/CookedAssets.yaml';data=yaml.safe_load(index.read_text());data['Assets'].append(dict(UUID='graph',Source='Assets/Graph.shadg',Cache=cache.relative_to(root).as_posix(),Importer='Bazzalt.FilamentMaterial'));index.write_text(yaml.safe_dump(data))
+            (root/'Assets/Main.bscene').write_text('Shader: graph\n');settings=copy.deepcopy(DEFAULTS['packaging']);settings['include_assets']='Assets/Main.bscene';FilterCooked(root,settings)
+            self.assertTrue((root/'Assets/Model.bin').is_file());self.assertTrue(Path(str(cache)+'.filamat').is_file());self.assertTrue(Path(str(cache)+'.reflection.json').is_file())
+            self.assertFalse(Path(str(cache)+'.translated.mat').exists());self.assertFalse(Path(str(cache)+'.build.json').exists())
+
     def test_application_entry_is_retained_and_cannot_be_excluded(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);self.Fixture(root)

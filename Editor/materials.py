@@ -171,15 +171,25 @@ class MaterialCompiler:
         asset=self.runtime.AssetInfo(reference)
         if not asset:raise MaterialError("Shader asset is not registered")
         source=Path(asset["path"]);suffix=source.suffix.lower()
-        if suffix not in {".mat",".shad",".bshader"}:raise MaterialError("Expected a .mat, .shad or .bshader shader asset")
+        if suffix not in {".mat",".shad",".shadg",".bshader"}:raise MaterialError("Expected a .mat, .shad or .bshader shader asset")
         stamp=(str(source),source.stat().st_mtime_ns,source.stat().st_size,str(asset["cache"]),"bshader-1.1-pipeline-v4")
-        if stamp in self._reflections and Path(str(asset["cache"])+".reflection.json").exists() and Path(str(asset["cache"])+".translated.mat").exists():return self._reflections[stamp]
-        text=source.read_text(encoding="utf-8-sig")
-        if suffix in {".shad",".bshader"}:translated,reflection=self._Translate(text)
+        if stamp in self._reflections and (suffix=='.shadg' or Path(str(asset["cache"])+".reflection.json").exists()) and Path(str(asset["cache"])+".translated.mat").exists():return self._reflections[stamp]
+        if suffix==".shadg":
+            from .shader_graph import Load,Generate
+            text=Generate(Load(source))
+        else:text=source.read_text(encoding="utf-8-sig")
+        if suffix in {".shad",".shadg",".bshader"}:translated,reflection=self._Translate(text)
         else:translated=text;reflection=Reflect(text)
+        defaults={}
+        for name,identity in re.findall(r'^// BazzaltTextureDefault ([A-Za-z_][A-Za-z0-9_]*) ([0-9a-fA-F-]{36})$',text,re.M):
+            identity=ValidateValue({'kind':6},identity)
+            if name in defaults and defaults[name]!=identity:raise MaterialError('Conflicting shader texture defaults: '+name)
+            defaults[name]=identity
+        for parameter in reflection['parameters']:
+            if parameter['kind']==6 and parameter['name'] in defaults:parameter['default']=defaults[parameter['name']]
         reflection["shader"]=asset["uuid"]
         cache=Path(asset["cache"])
-        _Write(Path(str(cache)+".reflection.json"),json.dumps(reflection,indent=2))
+        if suffix!='.shadg':_Write(Path(str(cache)+".reflection.json"),json.dumps(reflection,indent=2))
         _Write(Path(str(cache)+".translated.mat"),translated)
         self._reflections={key:value for key,value in self._reflections.items() if key[0]!=str(source)}
         self._reflections[stamp]=reflection
@@ -191,7 +201,8 @@ class MaterialCompiler:
         digest=hashlib.sha256(source.read_bytes()+str(tool.stat().st_mtime_ns).encode()+b"bazzalt-material-v3").hexdigest()
         try:previous=json.loads(state.read_text(encoding="utf-8"))
         except (OSError,ValueError):previous={}
-        if previous.get("hash")==digest and output.is_file():return reflection
+        if previous.get("hash")==digest and output.is_file():
+            _Write(Path(str(cache)+'.reflection.json'),json.dumps(reflection,indent=2));return reflection
         if self._failures.get(asset["uuid"],(None,None))[0]==digest:raise MaterialError(self._failures[asset["uuid"]][1])
         temporary=Path(str(output)+".pending")
         try:
@@ -204,7 +215,7 @@ class MaterialCompiler:
                 if process.returncode or not staged_output.is_file():
                     message=(process.stdout+process.stderr).strip() or "Filament material compilation failed";self._failures[asset["uuid"]]=(digest,message);raise MaterialError(message)
                 shutil.copyfile(staged_output,temporary)
-            os.replace(temporary,output);_Write(state,json.dumps({"hash":digest,"version":1}))
+            os.replace(temporary,output);_Write(Path(str(cache)+'.reflection.json'),json.dumps(reflection,indent=2));_Write(state,json.dumps({"hash":digest,"version":1}))
             self._failures.pop(asset["uuid"],None)
         finally:
             if temporary.exists():temporary.unlink()
@@ -223,10 +234,10 @@ class MaterialCompiler:
             for p in reflection["parameters"]:
                 if p["name"] in data["properties"]:data["properties"][p["name"]]=ValidateValue(p,data["properties"][p["name"]])
         _Write(Path(path),json.dumps(data,indent=2,ensure_ascii=False)+"\n");self.runtime.RefreshAssets()
-    def PrepareMaterial(self,reference):
+    def PrepareMaterial(self,reference,data=None):
         asset=self.runtime.AssetInfo(reference)
         if not asset or Path(asset["path"]).suffix.lower()!=".matinst":raise MaterialError("Expected a material asset")
-        data=self.ReadMaterial(Path(asset["path"]))
+        if data is None:data=self.ReadMaterial(Path(asset["path"]))
         if data["shader"]!=ZERO:
             reflection=self.CompileShader(data["shader"])
             for p in reflection["parameters"]:

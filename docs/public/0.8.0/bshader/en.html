@@ -31,7 +31,7 @@
 <h2 id="asset-types">The asset types</h2>
 <p>The engine imports Bshader sources with <code>.bshader</code> or <code>.shad</code>, and Filament sources with <code>.mat</code>. A <code>.matinst</code> file is a material instance asset, not shader source. A compiled <code>.filamat</code> package is generated renderer data, not editable shader code.</p>
 <p>Assign a shader to a material's Shader field, then edit its declared parameters. Assign the material to a Mesh or Primitive Object's Material Asset field. A shader is not interchangeable with a material in that picker.</p>
-<h2 id="bshader-source">Bshader source</h2>
+<p>For node-based authoring, create a <code>.shadg</code> asset. It remains a shader asset and uses the same material fields and runtime APIs. See <a href="graph/en.html">Shader Graph</a>.</p><h2 id="bshader-source">Bshader source</h2>
 <p>Bshader provides a higher-level language that translates surface declarations into Filament material source. For example:</p>
 <pre><code class="language-bshader">shader SimpleSurface {
     properties {

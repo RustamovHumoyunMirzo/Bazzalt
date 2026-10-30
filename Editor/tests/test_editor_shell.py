@@ -536,9 +536,22 @@ class EditorShellTests(unittest.TestCase):
     def test_default_workspace_registers_all_builtin_panels(self) -> None:
         self.assertEqual(
             {panel.panel_id for panel in self.Window.Docking.panels()},
-            {"console", "output", "scene", "hierarchy", "properties", "asset_browser", "audio_mixer"},
+            {"console", "output", "scene", "hierarchy", "properties", "asset_browser", "audio_mixer", "shader_graph"},
         )
         self.assertTrue(all(not panel.icon.isNull() for panel in self.Window.Docking.panels()))
+
+    def test_graph_edit_commands_use_graph_history_and_not_scene_saving(self):
+        import tempfile
+        from unittest.mock import patch
+        from Editor import shader_graph as G
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'Graph.shadg';G.Save(path,G.NewGraph());graph=self.Window.ShaderGraph;graph.Preview=lambda:None;graph.AssetChanged.disconnect(self.Window.Controller._GraphChanged);graph.Open(path);graph.Add('Float',QPointF(20,20))
+            with patch.object(self.Window,'_EditContext',return_value=('graph',graph)):
+                self.Window.ExecuteEditCommand('copy');self.Window.ExecuteEditCommand('paste');self.assertEqual(len(graph.Graph['nodes']),3)
+                self.Window.ExecuteEditCommand('delete');self.assertEqual(len(graph.Graph['nodes']),2)
+            with patch.object(self.Window.Controller,'_GraphHasFocus',return_value=True),patch.object(self.Window.Controller,'SaveScene',return_value=True) as scene_save:
+                self.Window.Controller.Undo();self.assertEqual(len(graph.Graph['nodes']),3)
+                self.assertTrue(self.Window.Controller.SaveActiveDocument());scene_save.assert_not_called()
 
     def test_console_api_filters_and_clears_messages(self) -> None:
         self.Window.Console.AddMessage("built", ConsoleLevel.Info)

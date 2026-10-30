@@ -74,6 +74,7 @@ jobs:
         run: |
           xvfb-run -a ctest --test-dir build -R BazzaltGuiTests --output-on-failure
           xvfb-run -a python -m unittest Compiler.tests.test_linux_build -v
+            BAZZALT_SHADER_PREVIEW_TEST=1 xvfb-run -a python -m unittest Editor.tests.test_shader_graph.ShaderGraphWidgetTests.test_actual_offscreen_material_sphere -v
       - name: Native Wayland presentation and packaged game
         run: |
           export XDG_RUNTIME_DIR="$(mktemp -d)"

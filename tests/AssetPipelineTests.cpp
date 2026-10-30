@@ -75,6 +75,7 @@ fragment {
     // but are compiled by the SDK's filamesh tool.
     WriteText(assets / "fixture.filamesh", "filamesh-test-fixture");
     WriteText(assets / "surface.bshader", "shader Surface { material { color=vec4(1.0); } }");
+    WriteText(assets / "graph.shadg", R"({"version":1,"name":"GraphShader","nodes":[{"id":"out","type":"Material","inputs":{},"values":{}}]})");
 
     Runtime::Engine engine;
     if (!engine.LoadProject(directory / "Pipeline.bproject", false)) {
@@ -86,6 +87,9 @@ fragment {
     const auto material = AssetManager::GetAsset(assets / "unlit.mat");
     const auto bshader = AssetManager::GetAsset(assets / "surface.bshader");
     assert(bshader && bshader->Importer == "Bazzalt.FilamentMaterial" && bshader->CachePath.extension() == ".bshader");
+    const auto graph = AssetManager::GetAsset(assets / "graph.shadg");
+    assert(graph && graph->Importer == "Bazzalt.FilamentMaterial" && graph->CachePath.extension() == ".shadg");
+    assert(std::filesystem::exists(graph->CachePath));
     const auto mesh = AssetManager::GetAsset(assets / "fixture.filamesh");
     const auto human = AssetManager::GetAsset(assets / "human.gltf");
     assert(gltf && gltf->Importer == "Bazzalt.glTF" && gltf->CachePath.extension() == ".gltf");

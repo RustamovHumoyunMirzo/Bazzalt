@@ -18,7 +18,7 @@ def FilterCooked(cooked, packaging):
         row['Source']=row['Source'].replace('\\','/');row['Cache']=row['Cache'].replace('\\','/')
     # Compilation-state fingerprints and translated intermediate source are
     # not runtime products. Reflection and the binary material package are.
-    shaders={'.mat','.shad','.bshader'}
+    shaders={'.mat','.shad','.shadg','.bshader'}
     for row in records:
         if Path(row['Source']).suffix.lower() not in shaders:continue
         for suffix in ('.build.json','.translated.mat'):
@@ -43,7 +43,7 @@ def FilterCooked(cooked, packaging):
         identity=registration['asset']
         if identity not in by_id or identity in denied:raise ValueError('Subsystem script is missing or excluded from the game build')
         kept.add(identity);queue.append(identity)
-    serialized={'.bscene','.matinst','.bmixer','.btexture','.event'}
+    serialized={'.bscene','.matinst','.bmixer','.btexture','.event','.shadg'}
     def References(value):
         visited=set();steps=0
         def Visit(item,depth=0):

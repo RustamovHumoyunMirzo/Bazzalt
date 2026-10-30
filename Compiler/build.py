@@ -189,7 +189,7 @@ def CookShaders(cooked,cooker,check=lambda:None):
     compiler=ShaderCompiler(Assets(),app_root=cooker.parent)
     for record in records:
         check()
-        if Path(record['Source']).suffix.lower() in {'.mat','.shad','.bshader'}:compiler.CompileShader(record['UUID'])
+        if Path(record['Source']).suffix.lower() in {'.mat','.shad','.shadg','.bshader'}:compiler.CompileShader(record['UUID'])
 def RenameWithRetry(source,target):
     # Windows can briefly retain image/AV handles after a verifier exits.
     # Never bypass a persistent lock from a game that is still running.

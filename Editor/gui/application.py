@@ -29,6 +29,7 @@ from .cursor_policy import EditorCursorPolicy
 from .wheel_policy import EditorWheelPolicy
 from .object_tools import ObjectTools
 from .panels.audio_mixer import AudioMixerPanel
+from .panels.shader_graph import ShaderGraphPanel
 
 
 class Editor(QMainWindow):
@@ -91,6 +92,7 @@ class Editor(QMainWindow):
         self.Properties = PropertiesPanel(self.Localization)
         self.AssetBrowser = AssetBrowserPanel(self.Localization, self.Resources)
         self.AudioMixer=AudioMixerPanel(self.Runtime,self.Localization,self.Resources,self.ThemeManager)
+        self.ShaderGraph=ShaderGraphPanel(self.Runtime,self.Localization,self.Resources,self.ThemeManager)
         from ..asset_opening import ExternalAssetOpener
         self.AssetBrowser.ExternalOpener = ExternalAssetOpener(self._settings, self._settings_saver)
         self._PanelWidgets = {
@@ -100,7 +102,7 @@ class Editor(QMainWindow):
             "hierarchy": self.Hierarchy,
             "properties": self.Properties,
             "asset_browser": self.AssetBrowser,
-            "audio_mixer":self.AudioMixer,
+            "audio_mixer":self.AudioMixer,"shader_graph":self.ShaderGraph,
         }
         self._RegisterPanels()
         self._default_layout=self._LoadDefaultWorkspace()
@@ -220,6 +222,7 @@ class Editor(QMainWindow):
     def _EditContext(self):
         focus=QApplication.focusWidget()
         if isinstance(focus,(QLineEdit,QTextEdit,QPlainTextEdit)):return "text",focus
+        if focus is not None and (focus is self.ShaderGraph or self.ShaderGraph.isAncestorOf(focus)):return "graph",self.ShaderGraph
         if focus is not None and (focus is self.AssetBrowser or self.AssetBrowser.isAncestorOf(focus)):
             return "assets",self.AssetBrowser.Tree if focus is self.AssetBrowser.Tree or self.AssetBrowser.Tree.isAncestorOf(focus) else self.AssetBrowser.Browser
         if focus is not None and (focus is self.Console or self.Console.isAncestorOf(focus)):return "console",self.Console.View
@@ -232,6 +235,10 @@ class Editor(QMainWindow):
             selected=widget.hasSelectedText() if isinstance(widget,QLineEdit) else widget.textCursor().hasSelection()
             writable=not widget.isReadOnly()
             states=dict(copy=selected,paste=writable,delete=selected and writable,rename=False,duplicate=False,select_all=True,deselect_all=selected)
+        elif context=="graph":
+            from .panels.shader_graph import Node
+            items=widget.Canvas.scene().selectedItems();editable=any(isinstance(item,Node) and item.Data['type']!='Material' for item in items)
+            states=dict(copy=editable,paste=bool(widget._clipboard),delete=editable,rename=False,duplicate=editable,select_all=bool(widget.Nodes),deselect_all=bool(items))
         elif context=="assets" and widget is self.AssetBrowser.Tree:
             item=widget.currentItem();states=dict(copy=False,paste=False,delete=False,rename=bool(item and item.parent()),duplicate=False,select_all=widget.topLevelItemCount()>0,deselect_all=bool(widget.selectedItems()))
         elif context in {"assets","console"}:
@@ -252,6 +259,10 @@ class Editor(QMainWindow):
             elif command=="deselect_all":
                 if isinstance(widget,QLineEdit):widget.deselect()
                 else:cursor=widget.textCursor();cursor.clearSelection();widget.setTextCursor(cursor)
+        elif context=="graph":
+            if command in ('copy','paste','delete','duplicate'):getattr(widget,command.capitalize())()
+            elif command=='select_all':widget.SelectNodes(set(widget.Nodes))
+            elif command=='deselect_all':widget.SelectNodes(set())
         elif context in {"assets","console"}:
             if command=="select_all":widget.selectAll()
             elif command=="deselect_all":widget.clearSelection()
@@ -371,6 +382,7 @@ class Editor(QMainWindow):
             panel_id="console",
         )
         self.Docking.add_panel(self.AudioMixer,tr("panel.audio_mixer"),self._PanelIcon("audio_mixer"),relative_to=assets,panel_id="audio_mixer")
+        self.Docking.add_panel(self.ShaderGraph,tr("panel.shader_graph"),self._PanelIcon("shader_graph"),relative_to=assets,panel_id="shader_graph")
 
     def _UpdatePanelPresentation(self) -> None:
         for panel_id in self._PanelWidgets:
@@ -419,6 +431,8 @@ class Editor(QMainWindow):
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         if self.GameBuild.IsRunning():
             QMessageBox.information(self,self.Localization.Translate('menu.build'),self.Localization.Translate('build.close_wait'));event.ignore();return
+        if not self.ShaderGraph.Flush():
+            QMessageBox.warning(self,self.Localization.Translate("panel.shader_graph"),self.ShaderGraph.Error.text());event.ignore();return
         if not self.AudioMixer.Flush():
             QMessageBox.warning(self,self.Localization.Translate("panel.audio_mixer"),self.AudioMixer.Error.text());event.ignore();return
         if self.Controller.IsDirty and self.isVisible() and self.PreferenceValue("general","confirm_unsaved",True):
@@ -436,6 +450,8 @@ class Editor(QMainWindow):
         self.ObjectTools.Close()
         self.Scene.Surface._fly_timer.stop();self.Output.Surface._fly_timer.stop()
         self.Scene.Surface.ClearTransformTrail();self.AudioMixer.SyncTimer.stop()
+        self.ShaderGraph.PreviewTimer.stop()
+        if hasattr(self.ShaderGraph,"PreviewService"):self.ShaderGraph.PreviewService.Close()
         self._camera_save_timer.stop();self._SaveSceneCamera()
         self._layout_save_timer.stop();self._SaveWorkspace()
         self.Scene.Detach(); self.Output.Detach()

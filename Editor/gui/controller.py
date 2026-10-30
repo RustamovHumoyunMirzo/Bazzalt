@@ -8,6 +8,7 @@ from time import monotonic
 
 from PySide6.QtCore import QObject, QSignalBlocker, QTimer, Qt, Signal
 from PySide6.QtWidgets import QApplication, QFileDialog, QLabel, QMenu, QProgressDialog, QLineEdit, QWidgetAction, QDialog, QVBoxLayout, QListWidget, QListWidgetItem, QPushButton
+from shiboken6 import isValid
 
 from ..runtime import RuntimeService
 from ..history import SceneHistory
@@ -61,6 +62,13 @@ class EditorController(QObject):
         self.LuaAssets.Finished.connect(self._LuaImportFinished);self.LuaAssets.Failed.connect(self._LuaImportFailed)
         self.MaterialCompiler=MaterialCompiler(runtime);self._material_check=0.0;self._material_error=""
         window.AudioMixer.AssetProvider=self._ProjectAssets
+        window.ShaderGraph.AssetProvider=self._ProjectAssets
+        window.ShaderGraph.AssetChanged.connect(self._GraphChanged)
+        window.ShaderGraph.History.canUndoChanged.connect(self._HistoryChanged)
+        window.ShaderGraph.History.canRedoChanged.connect(self._HistoryChanged)
+        window.ShaderGraph.Canvas.scene().selectionChanged.connect(window.RefreshEditActions)
+        QApplication.instance().focusChanged.connect(self._HistoryChanged)
+        window.AssetBrowser.UnlockGraphRequested.connect(self.UnlockShaderGraph)
         window.AudioMixer.Saved.connect(self._MixerSaved)
         self._asset_database_dirty=True
         self._asset_picker_records=None
@@ -71,7 +79,7 @@ class EditorController(QObject):
         self.Timer.timeout.connect(self._Tick)
 
         window.MenuBar.OpenSceneRequested.connect(self.OpenSceneDialog)
-        window.MenuBar.SaveSceneRequested.connect(self.SaveScene)
+        window.MenuBar.SaveSceneRequested.connect(self.SaveActiveDocument)
         window.MenuBar.SaveSceneAsRequested.connect(self.SaveSceneAsDialog)
         window.MenuBar.UndoRequested.connect(self.Undo)
         window.MenuBar.RedoRequested.connect(self.Redo)
@@ -158,7 +166,7 @@ class EditorController(QObject):
         self.GameInput.SyncFocus()
         surface=self.Window.Scene.Surface
         if monotonic()-self._material_check>2.0 and not surface._navigating and surface._gizmo_drag is None:
-            self._material_check=monotonic();self._PrepareUsedMaterials()
+            self._material_check=monotonic();self._PrepareUsedMaterials(False)
         tick_start=monotonic()
         if self.Runtime.Tick() is False:
             self.Timer.stop()
@@ -183,6 +191,10 @@ class EditorController(QObject):
         if self.SelectedEntity:self._UpdateGizmo()
         if self.SelectedEntity and self.Runtime.IsPlaying():self._RefreshInspectorValues(preserve_editing=True)
         self.FrameCompleted.emit()
+
+    def SaveActiveDocument(self) -> bool:
+        if self._GraphHasFocus():return self.Window.ShaderGraph.Flush()
+        return self.SaveScene()
 
     def SaveScene(self) -> bool:
         if self.ScriptAttachments and not self._SyncLuaScripts():return False
@@ -379,7 +391,14 @@ class EditorController(QObject):
             blocker=QSignalBlocker(self.Window.Hierarchy.Tree);self.Window.Hierarchy.Tree.clearSelection();self.Window.Hierarchy.Tree.setCurrentItem(None);del blocker
             self.SelectEntity(None)
 
-    def _HistoryChanged(self)->None:
+    def _GraphHasFocus(self):
+        graph=getattr(self.Window,"ShaderGraph",None);focus=QApplication.focusWidget()
+        return bool(graph and isValid(graph) and focus and (graph is focus or graph.isAncestorOf(focus)))
+
+    def _HistoryChanged(self,*_)->None:
+        if not isValid(self.Window) or not isValid(self.Window.MenuBar.UndoAction) or not isValid(self.Window.MenuBar.RedoAction):return
+        if self._GraphHasFocus():
+            history=self.Window.ShaderGraph.History;self.Window.MenuBar.UndoAction.setEnabled(history.canUndo());self.Window.MenuBar.RedoAction.setEnabled(history.canRedo());return
         self.Window.MenuBar.UndoAction.setEnabled(self.History.CanUndo());self.Window.MenuBar.RedoAction.setEnabled(self.History.CanRedo())
         self.Window.MenuBar.UndoAction.setToolTip(self.History.UndoLabel());self.Window.MenuBar.RedoAction.setToolTip(self.History.RedoLabel())
 
@@ -393,6 +412,7 @@ class EditorController(QObject):
         return result
 
     def Undo(self)->None:
+        if self._GraphHasFocus():self.Window.ShaderGraph.History.undo();return
         scene=self.InspectedScene
         if self.History.Undo():
             self.SetDirty(True)
@@ -400,6 +420,7 @@ class EditorController(QObject):
             else:self._RefreshInspectorValues();self._UpdateGizmo()
 
     def Redo(self)->None:
+        if self._GraphHasFocus():self.Window.ShaderGraph.History.redo();return
         scene=self.InspectedScene
         if self.History.Redo():
             self.SetDirty(True)
@@ -433,7 +454,7 @@ class EditorController(QObject):
         elif path.suffix.lower() in AUDIO_EXTENSIONS:self._InspectAudioClip(path)
         elif path.suffix.lower()==".bmixer":self._InspectAudioMixer(path)
         elif path.suffix.lower() in {".hdr",".exr",".ktx"}:self._InspectEnvironment(path)
-        elif path.suffix.lower() in {".mat",".shad",".bshader"}:
+        elif path.suffix.lower() in {".mat",".shad",".shadg",".bshader"}:
             try:
                 reflection=self.MaterialCompiler.InspectShader(path)
                 section.AddField(self.Window.Localization.Translate("materials.parameters"),QLabel(str(len(reflection["parameters"]))))
@@ -604,7 +625,7 @@ class EditorController(QObject):
             section=self.Window.Properties.AddComponentSection("material",tr("materials.title"),removable=False)
             from Editor.materials import CANVAS_SHADER
             if data["shader"]==CANVAS_SHADER:section.AddField(tr("materials.shader"),QLabel(tr("materials.canvas")))
-            else:section.AddField(tr("materials.shader"),self._AssetPicker(data["shader"],{".mat",".shad",".bshader"},lambda v:self._SetMaterialShader(path,data,v)))
+            else:section.AddField(tr("materials.shader"),self._AssetPicker(data["shader"],{".mat",".shad",".shadg",".bshader"},lambda v:self._SetMaterialShader(path,data,v)))
             if data["shader"]==ZERO:return
             reflection=self.MaterialCompiler.InspectShader(data["shader"])
             for parameter in reflection["parameters"]:
@@ -639,7 +660,7 @@ class EditorController(QObject):
             data["properties"][parameter["name"]]=value;self.MaterialCompiler.SaveMaterial(path,data);self._PrepareUsedMaterials()
         except (OSError,ValueError) as error:self._MaterialError(error)
 
-    def _PrepareUsedMaterials(self)->bool:
+    def _PrepareUsedMaterials(self,blocking=True)->bool:
         if not self.Runtime.AssetDirectory():return True
         try:
             if self._asset_database_dirty:
@@ -676,13 +697,23 @@ class EditorController(QObject):
                             kind=p.type.replace("Bazzalt::","").strip();value=script.get("properties",{}).get(p.name,ZERO)
                             if kind=="Material" and value not in (ZERO,"0","",None):used.add(value)
                             elif kind=="Shader" and value not in (ZERO,"0","",None):shaders.add(value)
+            graph=getattr(self.Window,'ShaderGraph',None);defer_graph=bool(not blocking and graph and graph.Path)
+            def Deferred(reference):
+                if not defer_graph:return False
+                info=self.Runtime.AssetInfo(reference)
+                return bool(info and Path(info['path'])==graph.Path)
             for material in used:
                 info=self.Runtime.AssetInfo(material)
                 if not info:continue  # Runtime-only material instances have no source asset.
                 extension=Path(info["path"]).suffix.lower()
-                if extension==".matinst":self.MaterialCompiler.PrepareMaterial(material)
-                elif extension in {".mat",".shad",".bshader"}:self.MaterialCompiler.CompileShader(material)
-            for shader in shaders:self.MaterialCompiler.CompileShader(shader)
+                if extension==".matinst":
+                    if not defer_graph:self.MaterialCompiler.PrepareMaterial(material)
+                    else:
+                        data=self.MaterialCompiler.ReadMaterial(Path(info['path']))
+                        if not Deferred(data['shader']):self.MaterialCompiler.PrepareMaterial(material,data)
+                elif extension in {".mat",".shad",".shadg",".bshader"} and not Deferred(material):self.MaterialCompiler.CompileShader(material)
+            for shader in shaders:
+                if not Deferred(shader):self.MaterialCompiler.CompileShader(shader)
             self._material_error="";return True
         except (OSError,ValueError) as error:self._MaterialError(error);return False
 
@@ -899,7 +930,7 @@ class EditorController(QObject):
             editor.PickRequested.connect(pick)
             return editor
         if prop and prop.type.replace("Bazzalt::","").strip() in ("Material","Shader"):
-            return self._AssetPicker(value,{".matinst"} if "Material" in prop.type else {".mat",".shad",".bshader"},commit)
+            return self._AssetPicker(value,{".matinst"} if "Material" in prop.type else {".mat",".shad",".shadg",".bshader"},commit)
         if prop and prop.type.replace("Bazzalt::","").strip()=="Texture":return self._AssetPicker(value,set(IMAGE_EXTENSIONS)|{".btexture"},commit)
         if prop and prop.type.replace("Bazzalt::","").strip()=="AudioClip":return self._AssetPicker(value,AUDIO_EXTENSIONS,commit)
         if prop and prop.type.replace("Bazzalt::","").strip()=="GlobalEvent":return self._AssetPicker(value,(".event",),commit)
@@ -915,7 +946,7 @@ class EditorController(QObject):
         if "mesh" in name or "model" in name:return set(MODEL_EXTENSIONS)
         if "texture" in name or "image" in name:return set(IMAGE_EXTENSIONS)|set(ENVIRONMENT_EXTENSIONS)|{".btexture"}
         if "material" in name:return {".matinst"}
-        if "shader" in name:return {".mat",".shad",".bshader"}
+        if "shader" in name:return {".mat",".shad",".shadg",".bshader"}
         if "scene" in name:return {".bscene"}
         return set()
 
@@ -1048,9 +1079,23 @@ class EditorController(QObject):
         path=Path(path)
         if path.suffix.lower()==".bscene":self.LoadSceneAdditive(path)
         elif path.suffix.lower()==".bmixer":self.OpenAudioMixer(path)
+        elif path.suffix.lower()==".shadg":self.OpenShaderGraph(path)
         elif path.suffix.lower() in AUDIO_EXTENSIONS:
             self.SelectAsset(path)
             if self._audio_preview is not None:self._audio_preview.Play()
+    def OpenShaderGraph(self,path,force=False):
+        if self.Window.ShaderGraph.Open(path,force):
+            if not self.Window.Docking.is_panel_open("shader_graph"):self.Window.Docking.dock("shader_graph","center",relative_to="asset_browser")
+            self.Window.Docking.activate_panel("shader_graph")
+    def UnlockShaderGraph(self,path):
+        self.OpenShaderGraph(path,True)
+        if self.Window.ShaderGraph.Path==Path(path):self.Window.ShaderGraph.Unlock()
+    def _GraphChanged(self,path):
+        browser=self.Window.AssetBrowser;item=browser.Browser.currentItem();selected=Path(item.data(Qt.ItemDataRole.UserRole)) if item else None
+        self.Runtime.RefreshAssets()
+        converted=bool(selected and not selected.exists() and selected.with_suffix('.shad')==Path(path) or selected and not selected.exists() and selected.with_suffix('.shadg')==Path(path))
+        browser.Refresh(path if converted else None)
+
     def OpenAudioMixer(self,path):
         info=self.Runtime.AssetInfo(str(path))
         if not info:return

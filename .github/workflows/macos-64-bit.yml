@@ -98,6 +98,7 @@ jobs:
           cat build/macos-gpu-capability.log
           if [ "$status" -eq 0 ]; then
             echo "BAZZALT_MAC_GPU_TEST=1" >> "$GITHUB_ENV"
+            echo "BAZZALT_SHADER_PREVIEW_TEST=1" >> "$GITHUB_ENV"
           elif [ "$status" -eq 1 ] || [ "$status" -eq 2 ] || [ "$status" -eq 134 ]; then
             echo "::warning::Hosted runner cannot create required Metal argument buffers (probe exit $status). GPU presentation is not validated on this device. Native bundle verification and Cocoa menu tests still run."
             echo "BAZZALT_MAC_GPU_TEST=0" >> "$GITHUB_ENV"
@@ -110,13 +111,13 @@ jobs:
           PYTHONFAULTHANDLER: '1'
         run: |
           set +e
-          python -m unittest Editor.tests.test_macos_native Compiler.tests.test_macos_build -v > build/macos-gpu.log 2>&1
+          python -m unittest Editor.tests.test_macos_native Compiler.tests.test_macos_build Editor.tests.test_shader_graph.ShaderGraphWidgetTests.test_actual_offscreen_material_sphere -v > build/macos-gpu.log 2>&1
           status=$?
           cat build/macos-gpu.log
           if [ "$status" -ne 0 ]; then
             # Retain the original failure, and collect the native Metal thread
             # that Python's traceback cannot describe after SIGABRT.
-            lldb --batch -o 'settings set target.process.stop-on-exec false' -o run -k 'thread backtrace all' -- "$(command -v python)" -m unittest Editor.tests.test_macos_native Compiler.tests.test_macos_build -v > build/macos-gpu-backtrace.log 2>&1
+            lldb --batch -o 'settings set target.process.stop-on-exec false' -o run -k 'thread backtrace all' -- "$(command -v python)" -m unittest Editor.tests.test_macos_native Compiler.tests.test_macos_build Editor.tests.test_shader_graph.ShaderGraphWidgetTests.test_actual_offscreen_material_sphere -v > build/macos-gpu-backtrace.log 2>&1
             cat build/macos-gpu-backtrace.log
           fi
           exit "$status"

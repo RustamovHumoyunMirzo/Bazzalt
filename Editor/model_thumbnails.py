@@ -37,7 +37,7 @@ def _Matrix(node):
 
 def _Point(m,p):return tuple(sum(m[k*4+r]*p[k] for k in range(3))+m[12+r] for r in range(3))
 
-def _Gltf(path):
+def _Gltf(path,detail=False):
     data=_Read(path);binary=b""
     if path.suffix.lower()==".glb":
         if len(data)<12 or struct.unpack_from("<III",data)!= (0x46546c67,2,len(data)):raise ValueError("invalid GLB")
@@ -51,7 +51,10 @@ def _Gltf(path):
         if document is None:raise ValueError("missing GLB document")
     else:document=json.loads(data)
     buffers=[]
-    for buffer in document.get("buffers",[]):
+    declared=document.get('buffers',[])
+    if len(declared)>64:raise ValueError('model preview exceeds buffer count budget')
+    total=0
+    for buffer in declared:
         uri=buffer.get("uri","")
         if not uri:value=binary
         elif uri.startswith("data:"):value=base64.b64decode(uri.split(",",1)[1],validate=True)
@@ -60,18 +63,23 @@ def _Gltf(path):
             candidate.relative_to(path.parent.resolve()) # Never read arbitrary paths or URLs.
             value=_Read(candidate)
         if len(value)>MAX_BYTES:raise ValueError("buffer exceeds size budget")
+        total+=len(value)
+        if total>MAX_BYTES:raise ValueError('combined model buffers exceed preview budget')
         buffers.append(value)
     def accessor(index):
         item=document["accessors"][index]
         if "sparse" in item:raise ValueError("sparse preview accessor unsupported")
         view=document["bufferViews"][item["bufferView"]];count=item["count"]
         if not 0<=count<=1000000:raise ValueError("accessor exceeds budget")
-        code={5121:"B",5123:"H",5125:"I",5126:"f"}[item["componentType"]]
-        width={"SCALAR":1,"VEC3":3}[item["type"]];fmt=struct.Struct("<"+code*width)
+        code={5120:'b',5121:"B",5122:'h',5123:"H",5125:"I",5126:"f"}[item["componentType"]]
+        width={"SCALAR":1,"VEC2":2,"VEC3":3,"VEC4":4}[item["type"]];fmt=struct.Struct("<"+code*width)
         start=view.get("byteOffset",0)+item.get("byteOffset",0);stride=view.get("byteStride",fmt.size);raw=buffers[view["buffer"]]
         end=view.get("byteOffset",0)+view["byteLength"]
         if stride<fmt.size or start<0 or (count and start+(count-1)*stride+fmt.size>min(end,len(raw))):raise ValueError("invalid accessor bounds")
-        return [fmt.unpack_from(raw,start+i*stride) for i in range(count)]
+        values=[fmt.unpack_from(raw,start+i*stride) for i in range(count)]
+        if item.get('normalized') and item['componentType'] in (5120,5121,5122,5123):
+            divisor={5120:127.,5121:255.,5122:32767.,5123:65535.}[item['componentType']];values=[tuple(max(-1.,v/divisor) for v in row) for row in values]
+        return values
     triangles=[];mesh_cache={};nodes=document.get("nodes",[])
     primitive_count=sum(len(document["meshes"][node["mesh"]].get("primitives",[])) for node in nodes if "mesh" in node)
     primitive_budget=max(1,MAX_TRIANGLES//max(1,primitive_count))
@@ -82,12 +90,15 @@ def _Gltf(path):
             if primitive.get("mode",4)!=4 or "POSITION" not in primitive.get("attributes",{}):continue
             if any(key in primitive.get("extensions",{}) for key in ("KHR_draco_mesh_compression",)):continue
             positions=accessor(primitive["attributes"]["POSITION"])
+            normals=accessor(primitive['attributes']['NORMAL']) if detail and 'NORMAL' in primitive['attributes'] else None
+            uvs=accessor(primitive['attributes']['TEXCOORD_0']) if detail and 'TEXCOORD_0' in primitive['attributes'] else None
+            colors=accessor(primitive['attributes']['COLOR_0']) if detail and 'COLOR_0' in primitive['attributes'] else None
             indices=[value[0] for value in accessor(primitive["indices"])] if "indices" in primitive else list(range(len(positions)))
             material=document.get("materials",[])[primitive["material"]] if "material" in primitive else {}
             color=material.get("pbrMetallicRoughness",{}).get("baseColorFactor",(.65,.7,.8,1))[:3]
             stride=max(1,math.ceil((len(indices)//3)/primitive_budget))*3
             for start in range(0,len(indices)-2,stride):
-                output.append((tuple(positions[i] for i in indices[start:start+3]),color))
+                output.append((tuple((positions[i],normals[i] if normals else None,uvs[i] if uvs else None,colors[i] if colors else (1.,1.,1.,1.)) if detail else positions[i] for i in indices[start:start+3]),color))
                 if len(output)>=MAX_TRIANGLES:break
         mesh_cache[index]=output;return output
     def visit(index,parent,seen):
@@ -96,7 +107,17 @@ def _Gltf(path):
         if "mesh" in node:
             for points,color in mesh(node["mesh"]):
                 if len(triangles)>=MAX_TRIANGLES:return
-                triangles.append((tuple(_Point(world,p) for p in points),color))
+                if detail:
+                    def Normal(n):
+                        if n is None:return None
+                        # Inverse-transpose direction, with common determinant
+                        # omitted because the consumer normalizes the result.
+                        a,b,c=world[0:3],world[4:7],world[8:11]
+                        cross=lambda u,v:(u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0])
+                        columns=(cross(b,c),cross(c,a),cross(a,b));det=sum(a[i]*columns[0][i] for i in range(3));sign=-1 if det<0 else 1
+                        return tuple(sign*sum(columns[k][i]*n[k] for k in range(3)) for i in range(3))
+                    triangles.append((tuple((_Point(world,p),Normal(n),uv,rgba) for p,n,uv,rgba in points),color))
+                else:triangles.append((tuple(_Point(world,p) for p in points),color))
         for child in node.get("children",[]):visit(child,world,seen|{index})
     scenes=document.get("scenes",[])
     children={child for node in nodes for child in node.get("children",[])}
@@ -104,14 +125,26 @@ def _Gltf(path):
     for index in roots:visit(index,IDENTITY,set())
     return triangles
 
-def _Obj(path):
-    points=[];triangles=[]
+def _Obj(path,detail=False):
+    points=[];triangles=[];normals=[];uvs=[];colors=[]
     for line in _Read(path).decode("utf-8",errors="replace").splitlines():
         fields=line.split()
-        if fields and fields[0]=="v":points.append(tuple(float(v) for v in fields[1:4]))
+        if fields and fields[0]=="v":
+            points.append(tuple(float(v) for v in fields[1:4]));colors.append(tuple(float(v) for v in fields[4:7]) if len(fields)>=7 else (1.,1.,1.,1.))
+        elif fields and fields[0]=='vn':normals.append(tuple(float(v) for v in fields[1:4]))
+        elif fields and fields[0]=='vt':uvs.append(tuple(float(v) for v in fields[1:3]))
         elif fields and fields[0]=="f":
             indices=[int(v.split("/")[0]) for v in fields[1:]]
-            vertices=[points[i-1 if i>0 else i] for i in indices]
+            if detail:
+                def Attribute(values,token):
+                    if not token:return None
+                    index=int(token)
+                    if not index:raise ValueError('OBJ indices cannot be zero')
+                    return values[index-1 if index>0 else index]
+                vertices=[]
+                for token in fields[1:]:
+                    parts=token.split('/');vertices.append((Attribute(points,parts[0]),Attribute(normals,parts[2]) if len(parts)>2 else None,Attribute(uvs,parts[1]) if len(parts)>1 else None,Attribute(colors,parts[0])))
+            else:vertices=[points[i-1 if i>0 else i] for i in indices]
             for i in range(1,len(vertices)-1):triangles.append(((vertices[0],vertices[i],vertices[i+1]),(.65,.7,.8)))
         if len(triangles)>=MAX_TRIANGLES:break
     return triangles

@@ -39,7 +39,8 @@
         "scene",
         "game",
         "assets",
-        "console"
+        "console",
+        "shader-graph"
       ]
     },
     "native": {
@@ -80,6 +81,7 @@
       "title": "Shaders",
       "order": [
         "language",
+        "graph",
         "builtins",
         "pipeline",
         "cookbook",

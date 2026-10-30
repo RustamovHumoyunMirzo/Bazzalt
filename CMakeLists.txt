@@ -461,7 +461,7 @@ if(BAZZALT_BUILD_EDITOR_BRIDGE)
             message(FATAL_ERROR "pybind11 is required for BAZZALT_BUILD_EDITOR_BRIDGE")
         endif()
     endif()
-    pybind11_add_module(_bazzalt_runtime MODULE src/EditorBridge/PythonModule.cpp)
+    pybind11_add_module(_bazzalt_runtime MODULE src/EditorBridge/PythonModule.cpp src/EditorBridge/ShaderPreview.cpp)
     set(BSHADER_BUILD_SHARED ON CACHE BOOL "" FORCE)
     set(BSHADER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     add_subdirectory(Bshader EXCLUDE_FROM_ALL)
@@ -470,7 +470,7 @@ if(BAZZALT_BUILD_EDITOR_BRIDGE)
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor")
     add_dependencies(_bazzalt_runtime bshader BazzaltGui BazzaltPhysics)
-    target_link_libraries(_bazzalt_runtime PRIVATE Bazzalt)
+    target_link_libraries(_bazzalt_runtime PRIVATE Bazzalt Filament::Filament)
     target_include_directories(_bazzalt_runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     set_target_properties(_bazzalt_runtime PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"
