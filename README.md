@@ -24,9 +24,9 @@ covered in the [macOS guide](docs/public/0.8.0/manual/macos/en.html).
 
 | Platform | Editor / Hub | Standalone game output |
 | --- | --- | --- |
-| Windows | ✅ Supported: x64 | ✅ Supported: x64, x86 |
-| Linux | ✅ Supported: x64, X11/XWayland | ✅ Supported: x64, x86, X11/XWayland |
-| macOS 12+ | Alpha: Intel x64 and Apple silicon | Alpha: x64 and arm64, Metal |
+| Windows | ✅ x64 | ✅ x64, x86, ARM64 |
+| Linux | ✅ x64; X11, Wayland | ✅ x64, x86, ARM64; X11, Wayland |
+| macOS 12+ | ✅ Intel x64, Apple silicon | ✅ x64, ARM64 |
 | iOS / iPadOS | Not supported | Not supported |
 | Android | Not supported | Not supported |
 | Web / WebAssembly | Not supported | Not supported |
@@ -36,11 +36,16 @@ covered in the [macOS guide](docs/public/0.8.0/manual/macos/en.html).
 | FreeBSD / other BSD systems | Not supported | Not supported |
 
 Hub, Editor and game compiler require a 64-bit machine. x86 is a game-output
-option only. Build on the target OS with its matching prebuilt runtime SDK;
-cross-OS builds are not supported. macOS uses a matching native x64 or arm64 SDK;
-Windows/Linux ARM and 32-bit macOS are not supported. Linux uses X11 or
-XWayland, not native Wayland surfaces. These are alpha support targets, not a
-promise of production readiness.
+option only. ARM64 Core/game runtime artifacts are built on native Windows/Linux CI
+runners. macOS supports Intel and Apple silicon. Modern macOS 32-bit output and
+ARM32 do not have runtime targets. Native Wayland uses Vulkan with bounded
+asynchronous readback into Qt/SDL composition; X11 retains direct swapchain presentation.
+
+Build Settings supports native builds, WSL, user-supplied Zig/MinGW toolchains,
+content/Lua-only foreign packaging, and SSH workers. C++ cross builds require a
+matching toolchain-built SDK; shipped MSVC SDKs are not GNU/Zig ABI-compatible.
+See [cross-build requirements and the host/target table](docs/public/0.8.0/manual/cross-builds/en.html)
+and [remote workers](docs/public/0.8.0/manual/remote-builds/en.html).
 
 ### Rendering backends
 

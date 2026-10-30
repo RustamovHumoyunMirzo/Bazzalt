@@ -7,7 +7,8 @@ from Compiler.build import KeyFor,Publish,BuildLock
 
 class CompilerTests(unittest.TestCase):
     def test_cooker_validates_platform_architecture_and_execute_permission(self):
-        from Compiler.build import ValidateCooker
+        from Compiler.build import ValidateCooker as InspectCooker
+        def ValidateCooker(path,platform):return InspectCooker(path,platform,host_architecture='x64')
         with tempfile.TemporaryDirectory() as folder:
             path=Path(folder)/'Cooker'
             with self.assertRaisesRegex(ValueError,'missing'):ValidateCooker(path,'linux')
@@ -16,7 +17,7 @@ class CompilerTests(unittest.TestCase):
                 with patch('Compiler.build.os.access',return_value=True):self.assertEqual(ValidateCooker(path,'linux'),path.resolve())
                 with patch('Compiler.build.os.access',return_value=False),self.assertRaisesRegex(ValueError,'not executable'):ValidateCooker(path,'linux')
                 with self.assertRaisesRegex(ValueError,'platform mismatch'):ValidateCooker(path,'windows')
-            header[18:20]=(183).to_bytes(2,'little');path.write_bytes(header)
+            header[18:20]=(0xdead).to_bytes(2,'little');path.write_bytes(header)
             with self.assertRaisesRegex(ValueError,'Unsupported ELF architecture'):ValidateCooker(path,'linux')
             path.write_bytes(b'MZ'+bytes(100))
             with self.assertRaisesRegex(ValueError,'platform mismatch'):ValidateCooker(path,'linux')

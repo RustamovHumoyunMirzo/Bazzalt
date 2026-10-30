@@ -26,7 +26,7 @@ class LinuxBuildTests(unittest.TestCase):
             Save(project,settings);output=Build(project,runtime,BUILD/'Editor/BazzaltCooker');executable=output/'Game'
             self.assertTrue(os.access(executable,os.X_OK));self.assertLess(sum(p.stat().st_size for p in output.glob('*.bpak')),1000000)
             result=subprocess.run([str(executable),'--verify-package'],capture_output=True,timeout=60);self.assertEqual(result.returncode,0,result.stderr)
-            if os.environ.get('DISPLAY'):
+            if os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY'):
                 result=subprocess.run([str(executable),'--smoke-test'],capture_output=True,timeout=90);self.assertEqual(result.returncode,0,result.stderr)
                 text=log.read_text();self.assertIn('create',text);self.assertIn('update',text);self.assertIn('destroy',text)
             manifest=output/'game.json';data=bytearray(manifest.read_bytes());data[-1]^=1;manifest.write_bytes(data)

@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Build &gt; Remote Build sends a project snapshot to a worker you control, invokes its standalone BazzaltCompiler, and optionally downloads the completed game archive. The worker builds natively for its own OS. This provides Windows, Linux and macOS output from any supported editor host without embedding a cloud service or engine build in the editor.">
+  <title>SSH build workers | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Editor manual / SSH build workers</nav>
+      <article class="doc"><h1>SSH build workers</h1><p>Build &gt; Remote Build sends a project snapshot to a worker you control, invokes its standalone BazzaltCompiler, and optionally downloads the completed game archive. The worker builds natively for its own OS. This provides Windows, Linux and macOS output from any supported editor host without embedding a cloud service or engine build in the editor.</p>
+<h2 id="prepare">Prepare a worker</h2><ol><li>Create a dedicated non-administrator build account on the target OS and enable SSH/SFTP.</li><li>Install the matching BazzaltCompiler package with its BazzaltCooker and Filament tools. Install the desired target Core runtime SDK. No editor window is required on the worker.</li><li>Install the native C++ toolchain if the project uses C++ behaviors, subsystems or source extensions. Provision any required extension packages in the worker's extension store.</li><li>Verify the worker's SSH host-key fingerprint through a trusted channel. Add that verified key to your normal OpenSSH known_hosts file, or provide a dedicated known-hosts file in the profile.</li><li>Provision publisher signing credentials, macOS notarytool profiles and game-build environment keys on the worker when required. These are not copied from editor preferences.</li></ol><p>Workers compile trusted project code under their account's privileges. This is not a sandbox for untrusted submissions. Prefer a dedicated account or disposable VM, with access limited to the project workspace and required signing credentials.</p>
+<h2 id="profile">Connection profile</h2><p>Give the profile a label, host address, SSH port (22 by default), username and worker OS. The OS chooses a safely quoted POSIX command or encoded PowerShell command. Select SSH key/agent or password authentication. The private-key picker opens the native file chooser; its optional passphrase is separate from the key file. Passwords are masked.</p><p>Unknown host keys are rejected. Test connection never silently trusts a new key. It authenticates and asks the actual compiler for its worker-protocol and host information. The status text uses the editor's success/error colors. If the connection is refused, verify the server address, port, account, host key and compiler executable path.</p>
+<h2 id="secrets">Credential storage</h2><p>Credentials stay in memory for the current dialog unless Save credential in OS vault is enabled. That option uses a native Windows credential store, macOS Keychain, or a Linux Secret Service/KWallet backend. Plaintext keyring backends are rejected. If no usable vault is available, disable saving and enter the credential for the session. Profiles are stored in the editor's per-user app-data settings, without passwords or passphrases; they are not project files.</p>
+<h2 id="workspace">Workspace and tools</h2><p>Remote working directory is an existing directory accessible to the build account. The editor creates a .bazzalt-remote area beneath it. Each transferred request has its own identifier; persistent project inputs are separated by a project identity. The remote compiler executable can be on PATH or specified as an absolute path. Runtime SDK and script-compiler overrides refer to paths on the worker, not the editor machine.</p><p>Use native SDKs on workers. The worker overrides a local cross-build method with native compilation. For macOS distribution, its signing identity and optional notarytool profile come from the project's macOS platform settings, while certificates and credentials remain installed on the Mac.</p>
+<h2 id="sync">Sync and clean options</h2><p>Sync all assets sends the full project inputs. Disable it only after a successful full sync to reuse existing asset data while updating scripts, headers, metadata and scenes. A clean workspace requires a full asset sync. Removed files are tracked through a transfer manifest, so full syncs remove previously transferred inputs that no longer exist. The tool never deletes unrelated worker files.</p><p>Git metadata, local build caches and bin output are excluded. Default credential exclusions include .env, *.pem, *.key and .ssh paths; customize the comma-separated globs when needed. Symlinked inputs, unsafe archive paths, duplicates and oversized transfers are rejected. The current transfer limit is 32 GiB and 500,000 files. Cache files and previous game outputs are not recursively uploaded.</p>
+<h2 id="run">Build, cancel and retrieve</h2><p>Save scenes and stop Play, then choose Build on worker. Work occurs on a background thread while the dialog blocks edits to the main editor. Cancellation is checked during local packaging/transfers and forwarded to the worker compiler, which stops before publication after its current safe build step.</p><p>Download game archive checks the received file's size and SHA-256 before publishing it under bin/Remote with a unique filename. Leave on worker keeps the completed archive there. Open output folder on worker asks that machine's OS to reveal it; a headless server may not have a file manager. The result status includes the output location.</p><p>Delete intermediate files removes the worker's build cache after success, while persistent inputs remain available for incremental sync. Failed builds retain the previous published game. Transient upload/request files are cleaned up when the connection permits it. SSH transport authentication and checksums protect the transfer; the packaged game also retains its own signed inventory and encryption policy.</p>
+<h2 id="keys">Player keys versus worker credentials</h2><p>SSH credentials authenticate the build connection. Game-encryption keys and publisher signing credentials are separate. Mac player Keychain provisioning still occurs only on the player's first real launch; package verification does not save player keys on the build worker. Windows account-scoped DPAPI binds data to the builder account and is rejected for automatically downloaded remote output. Use embedded, file, environment or player-Keychain delivery as appropriate for distribution.</p>
+<h2 id="troubleshoot">Troubleshooting</h2><p>A host-key error means the worker has not been trusted, or its key changed. Verify the fingerprint before updating known_hosts. A missing compiler error means the remote executable is absent from PATH or the override is wrong. Runtime version/architecture errors require a matching SDK, not a different display label. Missing extension errors require installing the referenced package on the worker. Signing/notarization failures must be repaired in the worker account's certificate/Keychain configuration.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../preferences/en.html"><small>Previous</small>Editor preferences</a>
+<a class="next" href="../../native/en.html"><small>Next</small>C++ gameplay API</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#prepare">Prepare a worker</a><a class="toc-link" href="#profile">Connection profile</a><a class="toc-link" href="#secrets">Credential storage</a><a class="toc-link" href="#workspace">Workspace and tools</a><a class="toc-link" href="#sync">Sync and clean options</a><a class="toc-link" href="#run">Build, cancel and retrieve</a><a class="toc-link" href="#keys">Player keys versus worker credentials</a><a class="toc-link" href="#troubleshoot">Troubleshooting</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

@@ -125,3 +125,21 @@ Linux presentation uses the system X11 libraries (MIT/X11 licenses) through SDL3
 These system libraries are installed by the distribution package manager, not
 embedded into the core. Zstandard, already included in the Filament SDK notices,
 also supplies portable Linux BPAK compression.
+
+
+## Cross-build and remote-worker tooling
+
+These are editor/compiler dependencies; they are not copied into native games.
+
+| Dependency | Use | License |
+| --- | --- | --- |
+| [Paramiko](https://github.com/paramiko/paramiko) | Verified SSH/SFTP worker connections | LGPL-2.1-or-later |
+| [bcrypt](https://github.com/pyca/bcrypt), [PyNaCl](https://github.com/pyca/pynacl) | SSH key algorithms | Apache-2.0 |
+| [keyring](https://github.com/jaraco/keyring) | Optional user OS credential-vault storage | MIT |
+| SecretStorage / jeepney | Linux Secret Service integration | BSD licenses; upstream wheel notices retained |
+| pywin32-ctypes | Windows credential-vault calls | BSD-3-Clause |
+| jaraco.classes / jaraco.context / jaraco.functools / more-itertools / backports.tarfile | Credential-vault support | Upstream MIT / PSF notices retained |
+| [LIEF](https://github.com/lief-project/LIEF) | Portable Windows PE resource updates | Apache-2.0 |
+| Invoke | Paramiko packaging support | BSD-2-Clause |
+
+Zig, MinGW-w64, WSL distributions, target sysroots and remote workers are supplied by users. BAZZALT does not bundle or silently download them. Redistributors must also retain their own toolchain/runtime notices. Wayland runtime libraries and compositor services are provided by the Linux distribution.

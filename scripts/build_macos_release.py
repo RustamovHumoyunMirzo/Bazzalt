@@ -33,7 +33,7 @@ def main():
             if product=='compiler':command+=['--nofollow-import-to=PySide6,Editor.gui,Editor.runtime,Compiler.tests','--include-module=Editor.scripting','--include-module=Editor.property_rules','--include-module=Editor.lua_declarations','--include-module=scripts.release_artifacts','--include-module=Compiler.macos','--include-data-files='+str(ROOT/'releases/versions.json')+'=releases/versions.json']
             else:
                 Run(sys.executable,'scripts/compile_resources.py','--build-directory',build/'CompiledResources')
-                if product=='editor':command+=['--include-module=PySide6.QtUiTools']
+                if product=='editor':command+=['--include-module=PySide6.QtUiTools','--include-package=keyring.backends','--include-distribution-metadata=keyring']
                 command+=['--enable-plugin=pyside6','--include-module=bazzalt._branding_resources_rc','--include-module=bazzalt._'+('hub' if product=='hub' else 'editor')+'_resources_rc','--nofollow-import-to=PySide6.QtWebEngineCore,PySide6.QtWebEngineWidgets,PySide6.QtWebChannel']
             if product!='compiler':command+=['--macos-create-app-bundle','--macos-app-name='+executable]
             Run(*command,ROOT/source)

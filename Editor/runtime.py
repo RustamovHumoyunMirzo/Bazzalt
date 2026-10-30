@@ -87,6 +87,8 @@ class RuntimeService(QObject):
         return dict(self._host.project_info()) if self._host and hasattr(self._host, "project_info") else {}
 
     def SupportedRenderingBackends(self) -> list[str]:
+        from PySide6.QtGui import QGuiApplication
+        if sys.platform.startswith("linux") and QGuiApplication.platformName().startswith("wayland"):return ["automatic","vulkan"] if self._host and "vulkan" in self._host.supported_rendering_backends() else ["automatic"]
         return list(self._host.supported_rendering_backends()) if self._host and hasattr(self._host, "supported_rendering_backends") else ["automatic"]
 
     def SetEditorOrientationVisible(self, visible: bool)->None:
@@ -328,6 +330,15 @@ class RuntimeService(QObject):
                        width: int, height: int, pixel_ratio: float = 1.0) -> bool:
         return bool(self._host and hasattr(self._host, "create_viewport") and self._host.create_viewport(
             viewport_id, handle, scene, width, height, pixel_ratio))
+
+    def CreateCapturedViewport(self,viewport_id,scene,width,height,ratio=1.0):
+        if not self._host or not hasattr(self._host,'create_captured_viewport'):return False
+        if not getattr(self,'_wayland_configured',False):
+            if not self.ConfigureRenderingBackend('vulkan'):return False
+            self._wayland_configured=True
+        return bool(self._host.create_captured_viewport(viewport_id,scene,width,height,ratio))
+    def CapturedViewportFrame(self,viewport_id,after=0):
+        return self._host.captured_viewport_frame(viewport_id,after) if self._host and hasattr(self._host,'captured_viewport_frame') else None
 
     def ResizeViewport(self, viewport_id: int, width: int, height: int, pixel_ratio: float = 1.0) -> None:
         if self._host is not None and hasattr(self._host, "resize_viewport"): self._host.resize_viewport(viewport_id, width, height, pixel_ratio)

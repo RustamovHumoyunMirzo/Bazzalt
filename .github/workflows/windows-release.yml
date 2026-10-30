@@ -7,6 +7,8 @@ permissions:
   contents: read
   actions: read
 jobs:
+  windows-arm64:
+    uses: ./.github/workflows/windows-arm64.yml
   macos:
     uses: ./.github/workflows/macos-release.yml
   linux:
@@ -50,7 +52,7 @@ jobs:
           if-no-files-found: error
   publish:
     if: startsWith(github.ref, 'refs/tags/release-v')
-    needs: [editor, core, hub, tools, linux, macos]
+    needs: [editor, core, hub, tools, linux, macos, windows-arm64]
     runs-on: windows-2022
     permissions:
       contents: write

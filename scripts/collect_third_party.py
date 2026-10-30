@@ -25,7 +25,7 @@ SOURCES = {
 }
 PYTHON_PACKAGES = ('PySide6', 'PySide6-Essentials', 'PySide6-Addons', 'shiboken6',
                    'PyYAML', 'cryptography', 'cffi', 'pycparser', 'zstandard',
-                   'Nuitka', 'ordered-set', 'setuptools', 'packaging', 'pybind11')
+                   'Nuitka', 'ordered-set', 'setuptools', 'packaging', 'pybind11', 'paramiko', 'bcrypt', 'PyNaCl', 'keyring', 'SecretStorage', 'jeepney', 'pywin32-ctypes', 'jaraco.classes', 'jaraco.context', 'jaraco.functools', 'backports.tarfile', 'more-itertools', 'lief', 'invoke')
 
 def Collect(destination, root=None, python=False):
     root = Path(root or Path(__file__).resolve().parents[1]).resolve()

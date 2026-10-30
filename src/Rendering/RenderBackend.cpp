@@ -21,6 +21,8 @@
 #include <cmath>
 #include <fstream>
 #include <map>
+#include <mutex>
+#include <backend/PixelBufferDescriptor.h>
 #include <tuple>
 #include <limits>
 
@@ -69,7 +71,10 @@
 
 namespace Bazzalt::Runtime {
 
+struct CaptureState {std::mutex Mutex;bool Pending=false,Consumed=true;ViewportFrame Frame;};
+struct CaptureRequest {std::shared_ptr<CaptureState> State;ViewportFrame Frame;};
 struct RenderBackend::ViewportResource {
+    std::shared_ptr<CaptureState> Capture;
 #ifdef __APPLE__
     void* MacSurface=nullptr;
 #endif
@@ -331,11 +336,11 @@ bool RenderBackend::Initialize(bool headless) {
 
 bool RenderBackend::CreateViewport(std::uint64_t id, std::uintptr_t nativeWindow,
                                    ViewportKind kind, std::uint32_t width,
-                                   std::uint32_t height, float pixelRatio) {
-    if (!m_engine || nativeWindow == 0) return false;
+                                   std::uint32_t height, float pixelRatio, bool captured) {
+    if (!m_engine || (!captured && nativeWindow == 0)) return false;
 #ifdef _WIN32
     // Reject synthetic Qt IDs and stale/destroyed HWNDs before entering Filament.
-    if(!IsWindow(reinterpret_cast<HWND>(nativeWindow)))return false;
+    if(!captured&&!IsWindow(reinterpret_cast<HWND>(nativeWindow)))return false;
 #endif
     DestroyViewport(id);
     auto viewport = std::make_unique<ViewportResource>();
@@ -343,6 +348,7 @@ bool RenderBackend::CreateViewport(std::uint64_t id, std::uintptr_t nativeWindow
     viewport->Width = std::max(1u, width);
     viewport->Height = std::max(1u, height);
     viewport->PixelRatio = std::max(1.0f,pixelRatio);
+    if(captured){viewport->Capture=std::make_shared<CaptureState>();viewport->SwapChain=m_engine->createSwapChain(viewport->Width,viewport->Height);}else{
 #ifdef __APPLE__
     viewport->MacSurface=CreateMacSurface(nativeWindow,width,height,pixelRatio);
     if(!viewport->MacSurface)return false;
@@ -351,6 +357,7 @@ bool RenderBackend::CreateViewport(std::uint64_t id, std::uintptr_t nativeWindow
 #else
     viewport->SwapChain = m_engine->createSwapChain(reinterpret_cast<void*>(nativeWindow));
 #endif
+    }
     if (!viewport->SwapChain) return false;
     viewport->CameraEntity = m_engine->getEntityManager().create();
     viewport->Camera = m_engine->createCamera(viewport->CameraEntity);
@@ -392,6 +399,7 @@ void RenderBackend::ResizeViewport(std::uint64_t id, std::uint32_t width,
     if (found == m_viewports.end()) return;
     auto& viewport = *found->second;
     if(viewport.Width!=std::max(1u,width)||viewport.Height!=std::max(1u,height))m_presentedViewports.erase(id);
+    if(viewport.Capture&&(viewport.Width!=std::max(1u,width)||viewport.Height!=std::max(1u,height))){m_engine->destroy(viewport.SwapChain);m_engine->flushAndWait();viewport.SwapChain=m_engine->createSwapChain(std::max(1u,width),std::max(1u,height));}
     viewport.Width = std::max(1u, width);
     viewport.Height = std::max(1u, height);
     viewport.PixelRatio = std::max(1.0f,pixelRatio);
@@ -829,8 +837,20 @@ void RenderBackend::Render(double materialTime) {
                 if (view&&!view->getRenderTarget()) {view->setRenderTarget(guiInput);try{RenderCameraView(view,id);}catch(...){view->setRenderTarget(nullptr);throw;}view->setRenderTarget(nullptr);}
         }
         if(resource->Kind==ViewportKind::Game&&m_guiScene&&m_guiRenderer){m_guiRenderer->RenderOverlay(*m_guiScene,{float(resource->Width),float(resource->Height)});m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});}
+        if(resource->Capture){
+            auto state=resource->Capture;std::unique_lock lock(state->Mutex);
+            if(!state->Pending&&state->Consumed){
+                state->Pending=true;auto* request=new CaptureRequest{state,{0,resource->Width,resource->Height,std::vector<std::uint8_t>(std::size_t(resource->Width)*resource->Height*4)}};lock.unlock();
+                m_renderer->readPixels(0,0,resource->Width,resource->Height,filament::backend::PixelBufferDescriptor(request->Frame.Pixels.data(),request->Frame.Pixels.size(),filament::backend::PixelDataFormat::RGBA,filament::backend::PixelDataType::UBYTE,1,0,0,0,
+                    [](void*,std::size_t,void* data){std::unique_ptr<CaptureRequest> request(static_cast<CaptureRequest*>(data));std::lock_guard guard(request->State->Mutex);request->Frame.Sequence=request->State->Frame.Sequence+1;request->State->Frame=std::move(request->Frame);request->State->Pending=false;request->State->Consumed=false;},request));
+            }
+        }
         m_renderer->endFrame();m_presentedViewports.insert(id);
     }
+}
+
+std::optional<ViewportFrame> RenderBackend::CapturedFrame(std::uint64_t id,std::uint64_t after){
+    const auto found=m_viewports.find(id);if(found==m_viewports.end()||!found->second->Capture)return std::nullopt;auto state=found->second->Capture;std::lock_guard lock(state->Mutex);if(state->Frame.Sequence<=after)return std::nullopt;state->Consumed=true;return state->Frame;
 }
 
 bool RenderBackend::WaitForViewportFrame(std::uint64_t id){

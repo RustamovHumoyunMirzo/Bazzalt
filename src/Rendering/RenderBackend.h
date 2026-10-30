@@ -1,4 +1,5 @@
 #pragma once
+#include "Runtime/ViewportFrame.h"
 
 #include <memory>
 #include <chrono>
@@ -59,7 +60,8 @@ public:
     void Shutdown();
     bool CreateViewport(std::uint64_t id, std::uintptr_t nativeWindow,
                         ViewportKind kind, std::uint32_t width, std::uint32_t height,
-                        float pixelRatio = 1.0f);
+                        float pixelRatio = 1.0f, bool captured = false);
+    std::optional<ViewportFrame> CapturedFrame(std::uint64_t id,std::uint64_t after);
     void ResizeViewport(std::uint64_t id, std::uint32_t width, std::uint32_t height,
                         float pixelRatio = 1.0f);
     void DestroyViewport(std::uint64_t id);

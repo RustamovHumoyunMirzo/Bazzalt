@@ -1,4 +1,5 @@
 #pragma once
+#include "Runtime/ViewportFrame.h"
 
 #include <chrono>
 #include <array>
@@ -83,6 +84,8 @@ public:
     [[nodiscard]] const std::string& GetLastError() const { return m_lastError; }
     bool CreateEditorViewport(std::uint64_t id, std::uintptr_t nativeWindow, bool scene,
                               std::uint32_t width, std::uint32_t height, float pixelRatio = 1.0f);
+    bool CreateCapturedViewport(std::uint64_t id,bool scene,std::uint32_t width,std::uint32_t height,float pixelRatio=1);
+    std::optional<ViewportFrame> GetCapturedViewportFrame(std::uint64_t id,std::uint64_t after=0);
     void ResizeEditorViewport(std::uint64_t id, std::uint32_t width, std::uint32_t height,
                               float pixelRatio = 1.0f);
     void DestroyEditorViewport(std::uint64_t id);

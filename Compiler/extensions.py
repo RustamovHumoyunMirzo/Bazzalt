@@ -54,13 +54,16 @@ def CompileNative(source,output,runtime,architecture,compiler_path='',include_di
     name='clang++.exe' if os.name=='nt' else 'clang++'
     candidates=[StoreRoot().parent/'Tools/llvm/bin'/name,Path(__file__).resolve().parents[1]/'toolchain/llvm/bin'/name]
     found=shutil.which(name)
-    compiler=Path(compiler_path) if compiler_path else next((p for p in candidates if p.is_file()),Path(found) if found else None)
+    from .cross import Active,Configure
+    if Active.get() and Active.get()['method']=='content_only':raise ExtensionError('Content-only builds require precompiled target extension modules; C++ extension sources need a target toolchain or native worker')
+    compiler=Path(Active.get()['compiler']) if Active.get() else Path(compiler_path) if compiler_path else next((p for p in candidates if p.is_file()),Path(found) if found else None)
     if compiler and compiler.is_dir():compiler=compiler/name if (compiler/name).is_file() else compiler/'bin'/name
     sdk=helper._sdk();library=helper._link_library(sdk) if sdk else None
     if not compiler or not library:raise ExtensionError('A matching compiler and public ScriptSDK are required for native extensions')
     output=Path(output);output.parent.mkdir(parents=True,exist_ok=True)
     command=[str(compiler),'-std=c++20','-shared','-fvisibility=hidden','-I'+str(sdk/'include'),*('-I'+str(p) for p in include_dirs),str(source),str(library),*('-L'+str(p) for p in library_dirs),*map(str,libraries),'-o',str(output)]
-    if os.name=='nt':command+=['--target='+('i686' if architecture=='x86' else 'x86_64')+'-pc-windows-msvc','-fms-runtime-lib=dll','-D_ITERATOR_DEBUG_LEVEL=0']
+    if Active.get():command=Configure(command,Active.get())
+    elif os.name=='nt':command+=['--target='+('aarch64' if architecture=='arm64' else 'i686' if architecture=='x86' else 'x86_64')+'-pc-windows-msvc','-fms-runtime-lib=dll','-D_ITERATOR_DEBUG_LEVEL=0']
     elif sys.platform=='darwin':command+=['-fPIC','-arch','arm64' if architecture=='arm64' else 'x86_64','-mmacosx-version-min=12.0','-Wl,-rpath,@loader_path']
     else:
         command+=['-fPIC','-stdlib='+('libstdc++' if architecture=='x86' else 'libc++'),'-Wl,--no-undefined','-Wl,-rpath,$ORIGIN']

@@ -316,6 +316,13 @@ std::unordered_map<UUID,std::pair<Vec3,Vec3>> Engine::GetEditorMeshBounds() cons
     return result;
 }
 
+bool Engine::CreateCapturedViewport(std::uint64_t id,bool scene,std::uint32_t width,std::uint32_t height,float ratio){
+    if(!width||!height||width>16384||height>16384)return false;
+    if(!m_isInitialized&&!Init(false,false))return false;
+    return m_renderBackend->CreateViewport(id,0,scene?RenderBackend::ViewportKind::Scene:RenderBackend::ViewportKind::Game,width,height,ratio,true);
+}
+std::optional<ViewportFrame> Engine::GetCapturedViewportFrame(std::uint64_t id,std::uint64_t after){return m_renderBackend?m_renderBackend->CapturedFrame(id,after):std::nullopt;}
+
 bool Engine::CreateEditorViewport(std::uint64_t id, std::uintptr_t nativeWindow, bool scene,
                                   std::uint32_t width, std::uint32_t height, float pixelRatio) {
     // Authoring viewports need rendering/input, never gameplay lifecycle callbacks.

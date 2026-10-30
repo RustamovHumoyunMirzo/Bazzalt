@@ -1,6 +1,7 @@
 #include "Rendering/MacSurface.h"
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/CAMetalLayer.h>
+#import <QuartzCore/CATransaction.h>
 #import <Metal/Metal.h>
 namespace Bazzalt::Runtime {
 namespace {struct Surface {NSView* View;CALayer* Previous;CAMetalLayer* Layer;BOOL HadLayer;};}

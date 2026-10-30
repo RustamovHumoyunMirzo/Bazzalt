@@ -630,6 +630,8 @@ public:
         const bool created=m_engine->CreateEditorViewport(id, handle, scene, width, height, pixelRatio);
         if(created&&!scene){m_gameViewports.insert(id);m_gameWidth=width;m_gameHeight=height;}return created;
     }
+    bool CreateCapturedViewport(std::uint64_t id,bool scene,std::uint32_t width,std::uint32_t height,float ratio){const bool created=m_engine->CreateCapturedViewport(id,scene,width,height,ratio);if(created&&!scene){m_gameViewports.insert(id);m_gameWidth=width;m_gameHeight=height;}return created;}
+    py::object CapturedViewportFrame(std::uint64_t id,std::uint64_t after){auto frame=m_engine->GetCapturedViewportFrame(id,after);if(!frame)return py::none();py::dict result;result["sequence"]=frame->Sequence;result["width"]=frame->Width;result["height"]=frame->Height;result["pixels"]=py::bytes(reinterpret_cast<const char*>(frame->Pixels.data()),frame->Pixels.size());return result;}
     void ResizeViewport(std::uint64_t id, std::uint32_t width, std::uint32_t height,
                         float pixelRatio) {
         m_engine->ResizeEditorViewport(id, width, height, pixelRatio);
@@ -890,6 +892,8 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("set_environment_import_settings", &Bazzalt::EditorBridge::EditorHost::SetEnvironmentImportSettings)
         .def("capture_scene", &Bazzalt::EditorBridge::EditorHost::CaptureScene)
         .def("restore_scene", &Bazzalt::EditorBridge::EditorHost::RestoreScene)
+        .def("create_captured_viewport",&Bazzalt::EditorBridge::EditorHost::CreateCapturedViewport)
+        .def("captured_viewport_frame",&Bazzalt::EditorBridge::EditorHost::CapturedViewportFrame)
         .def("create_viewport", &Bazzalt::EditorBridge::EditorHost::CreateViewport)
         .def("resize_viewport", &Bazzalt::EditorBridge::EditorHost::ResizeViewport)
         .def("destroy_viewport", &Bazzalt::EditorBridge::EditorHost::DestroyViewport)

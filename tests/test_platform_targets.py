@@ -10,9 +10,11 @@ class PlatformTargetsTests(unittest.TestCase):
     def test_native_target_support_and_explicit_rejection(self):
         with patch('bazzalt.platforms.HostPlatform',return_value='linux'),patch('bazzalt.platforms.platform.machine',return_value='x86_64'):
             self.assertEqual(TargetError({'platform':'linux','architecture':'x64'}),'')
-            self.assertIn('Windows',TargetError({'platform':'windows','architecture':'x64'}))
+            self.assertIn('Windows',TargetError({'platform':'windows','architecture':'x64','build_method':'native'}))
+            self.assertEqual(TargetError({'platform':'windows','architecture':'x64','build_method':'zig'}),'')
             self.assertEqual(TargetError({'platform':'linux','architecture':'x86'}),'')
-            self.assertIn('Unsupported',TargetError({'platform':'linux','architecture':'arm64'}))
+            self.assertEqual(TargetError({'platform':'linux','architecture':'arm64','build_method':'zig'}),'')
+            self.assertIn('Unsupported',TargetError({'platform':'linux','architecture':'arm32'}))
             self.assertIn('protection',TargetError({'platform':'linux','architecture':'x64','key_storage':'dpapi_user'}))
         value=copy.deepcopy(DEFAULTS);value['target']['platform']='linux';self.assertEqual(Validate(value)['target']['platform'],'linux')
     def test_elf_inspection_and_linux_release_identity(self):

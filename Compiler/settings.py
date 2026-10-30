@@ -6,8 +6,8 @@ import re
 
 DEFAULTS={
     'version':2,'production':{'name':'Game','company':'','version':'1.0.0','copyright':'','license':'','description':''},
-    'target':{'platform':'windows','architecture':'x64','startup_scene':'','runtime_directory':''},
-    'window':{'title':'Game','width':1280,'height':720,'resizable':True,'mode':'windowed','backend':'automatic'},
+    'target':{'platform':'windows','architecture':'x64','startup_scene':'','runtime_directory':'','build_method':'automatic'},
+    'window':{'title':'Game','width':1280,'height':720,'resizable':True,'mode':'windowed','backend':'automatic','display_server':'automatic'},
     'intro':{'enabled':True,'duration_ms':2000,'logo_size':144,'allow_skip':False},
     'packaging':{'format':'pak','archive':False,'chunk_mb':64,'decoy_kb':0,'include_assets':'**','exclude_assets':''},
     'security':{'preset':'low','encryption':'none','key_storage':'embedded','key_environment':'BAZZALT_GAME_KEY','encrypt_manifests':False},
@@ -18,11 +18,14 @@ PLATFORM_DEFAULTS={
     'macos':{'architecture':'arm64','runtime_directory':'','backend':'automatic','key_storage':'embedded','bundle_identifier':'com.example.game','minimum_version':'12.0','signing_identity':'-','notarization_profile':''},
 }
 
+PLATFORM_DEFAULTS['linux']['display_server']='automatic'
+for _profile in PLATFORM_DEFAULTS.values():_profile.update(build_method='automatic',toolchain='',sysroot='',wsl_distribution='',wsl_compiler='',wsl_runtime='')
+
 def Effective(value):
     result=copy.deepcopy(value);selected=result['target']['platform'];profile=result.get('platforms',{}).get(selected)
     if profile:
-        for key in ('architecture','runtime_directory'):result['target'][key]=profile[key]
-        result['window']['backend']=profile['backend'];result['security']['key_storage']=profile['key_storage']
+        for key in ('architecture','runtime_directory','build_method'):result['target'][key]=profile[key]
+        result['window']['backend']=profile['backend'];result['window']['display_server']=profile.get('display_server','automatic');result['security']['key_storage']=profile['key_storage']
     return result
 
 PRESETS={
@@ -45,7 +48,7 @@ def Merge(value):
         selected=result['target']['platform']
         if selected in result['platforms']:
             profile=result['platforms'][selected]
-            for key in ('architecture','runtime_directory'):profile[key]=result['target'][key]
+            for key in ('architecture','runtime_directory','build_method'):profile[key]=result['target'][key]
             profile['backend']=result['window']['backend'];profile['key_storage']=result['security']['key_storage']
     else:
         profiles=value['platforms']
@@ -68,13 +71,17 @@ def Validate(value):
         if not isinstance(field,str) or '\0' in field or len(field)>65535:raise ValueError('Invalid production metadata: '+key)
     version=value['production']['version']
     if not re.fullmatch(r'\d+(?:\.\d+){1,3}',version) or any(int(part)>65535 for part in version.split('.')):raise ValueError('Product version must contain 2 to 4 numeric parts between 0 and 65535')
-    choices={'target':{'platform':('windows','linux','macos'),'architecture':('x64','x86','arm64')},'window':{'mode':('windowed','maximized','borderless','fullscreen'),'backend':('automatic','vulkan','opengl','metal')},'packaging':{'format':('loose','pak')},'security':{'preset':tuple(PRESETS)+('custom',),'encryption':('none','aes-256-gcm'),'key_storage':('embedded','file','environment','dpapi_user','keychain')}}
+    choices={'target':{'platform':('windows','linux','macos'),'architecture':('x64','x86','arm64')},'window':{'mode':('windowed','maximized','borderless','fullscreen'),'backend':('automatic','vulkan','opengl','metal'),'display_server':('automatic','x11','wayland')},'packaging':{'format':('loose','pak')},'security':{'preset':tuple(PRESETS)+('custom',),'encryption':('none','aes-256-gcm'),'key_storage':('embedded','file','environment','dpapi_user','keychain')}}
     for name,profile in value['platforms'].items():
         for key,default in PLATFORM_DEFAULTS[name].items():
             if type(profile[key]) is not type(default) or isinstance(profile[key],str) and ('\0' in profile[key] or len(profile[key])>4096):raise ValueError('Invalid platform field: '+name+'.'+key)
-        if profile['architecture'] not in (('x64','arm64') if name=='macos' else ('x64','x86')):raise ValueError('Unsupported '+name+' architecture')
+        if profile['build_method'] not in ('automatic','native','content_only','zig','mingw','wsl'):raise ValueError('Unknown build method')
+        if profile['architecture'] not in (('x64','arm64') if name=='macos' else ('x64','x86','arm64')):raise ValueError('Unsupported '+name+' architecture')
         if profile['backend'] not in (('automatic','metal') if name=='macos' else ('automatic','vulkan','opengl')):raise ValueError('Unsupported '+name+' backend')
         if profile['key_storage'] not in ('embedded','file','environment',*(['dpapi_user'] if name=='windows' else ['keychain'] if name=='macos' else [])):raise ValueError('Unsupported '+name+' key storage')
+    linux=value['platforms']['linux']
+    if linux['display_server'] not in ('automatic','x11','wayland'):raise ValueError('Unknown Linux display server')
+    if linux['display_server']=='wayland' and linux['backend']=='opengl':raise ValueError('Native Wayland requires Vulkan or Automatic rendering')
     mac=value['platforms']['macos']
     if not re.fullmatch(r'[A-Za-z][A-Za-z0-9-]*(?:\.[A-Za-z0-9-]+)+',mac['bundle_identifier']):raise ValueError('Invalid macOS bundle identifier')
     if not re.fullmatch(r'\d{2}\.\d+(?:\.\d+)?',mac['minimum_version']) or int(mac['minimum_version'].split('.')[0])<12:raise ValueError('macOS deployment target must be 12.0 or later')

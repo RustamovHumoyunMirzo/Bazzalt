@@ -1,7 +1,7 @@
 from __future__ import annotations
 import argparse, os, sys, traceback, subprocess
 from pathlib import Path
-if sys.platform.startswith("linux"):os.environ.setdefault("QT_QPA_PLATFORM","xcb")
+if sys.platform.startswith("linux"):os.environ.setdefault("QT_QPA_PLATFORM","wayland" if os.environ.get("WAYLAND_DISPLAY") and os.environ.get("XDG_SESSION_TYPE")=="wayland" else "xcb")
 from PySide6.QtCore import QObject, QTimer, Qt, QThread, Signal, Slot, QEvent, QEventLoop
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QProgressBar, QVBoxLayout

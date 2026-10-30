@@ -31,7 +31,7 @@ jobs:
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y clang ccache ninja-build pkg-config g++-multilib libssl-dev:i386 libx11-dev:i386 libx11-xcb-dev:i386 libxcb1-dev:i386 libxext-dev:i386 libxrandr-dev:i386 libxcursor-dev:i386 libxi-dev:i386 libxfixes-dev:i386 libxss-dev:i386 libxtst-dev:i386 libgl1-mesa-dev:i386 libvulkan-dev:i386 mesa-vulkan-drivers:i386 libegl1:amd64 libgl1:amd64 libxkbcommon0:amd64 libxkbcommon-x11-0:amd64 libxcb-cursor0:amd64 fonts-dejavu-core xvfb
+          sudo apt-get install -y clang ccache ninja-build pkg-config g++-multilib libssl-dev:i386 libx11-dev:i386 libx11-xcb-dev:i386 libxcb1-dev:i386 libxext-dev:i386 libxrandr-dev:i386 libxcursor-dev:i386 libxi-dev:i386 libxfixes-dev:i386 libxss-dev:i386 libxtst-dev:i386 libgl1-mesa-dev:i386 libvulkan-dev:i386 mesa-vulkan-drivers:i386 libwayland-dev:i386 libegl1-mesa-dev:i386 libxkbcommon-dev:i386 wayland-protocols libdecor-0-dev:i386 libegl1:amd64 libgl1:amd64 libxkbcommon0:amd64 libxkbcommon-x11-0:amd64 libxcb-cursor0:amd64 fonts-dejavu-core xvfb
           python -m pip install -r requirements-build.txt PySide6==6.10.2
           python -c "from PySide6.QtGui import QGuiApplication; from PySide6.QtSvg import QSvgRenderer; app=QGuiApplication([])"
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830

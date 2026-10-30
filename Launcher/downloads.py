@@ -53,7 +53,7 @@ def ValidateEntry(entry: dict) -> None:
     if entry.get("product") not in {"editor", "core", "llvm", "hub", "compiler", "windows-build-tools"}: raise ValueError("Unknown product")
     Version.Parse(entry.get("version", ""))
     if entry.get("platform") not in {"windows","linux","macos"} or entry.get("architecture") not in {"x86", "x64","arm64"}: raise ValueError("Unsupported target")
-    if entry["architecture"]=="arm64" and entry["platform"]!="macos" or entry["platform"]=="macos" and entry["architecture"]=="x86":raise ValueError("Unsupported platform architecture")
+    if entry["platform"]=="macos" and entry["architecture"]=="x86":raise ValueError("Unsupported platform architecture")
     if not re.fullmatch(r"[a-zA-Z0-9_.-]+", entry.get("id", "")): raise ValueError("Unsafe download identifier")
     _Https(entry.get("url", ""))
     if not re.fullmatch(r"[a-fA-F0-9]{64}", entry.get("sha256", "")): raise ValueError("Missing SHA-256")

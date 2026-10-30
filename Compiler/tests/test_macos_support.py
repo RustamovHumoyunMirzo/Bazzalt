@@ -38,7 +38,7 @@ class MacSupportTests(unittest.TestCase):
         with patch('bazzalt.platforms.HostPlatform',return_value='macos'),patch('bazzalt.platforms.HostArchitecture',return_value='arm64'):
             self.assertEqual(TargetError(dict(platform='macos',architecture='arm64',key_storage='keychain')),'')
             self.assertTrue(TargetError(dict(platform='macos',architecture='x86')))
-            self.assertTrue(TargetError(dict(platform='windows',architecture='x64')))
+            self.assertTrue(TargetError(dict(platform='windows',architecture='x64',build_method='native')))
     def test_macho_signing_canonical_hash_and_architecture(self):
         with tempfile.TemporaryDirectory() as folder:
             path=Path(folder)/'player';path.write_bytes(MachO());digest=PlayerHash(path);self.assertEqual(Architectures(path),{'arm64'})

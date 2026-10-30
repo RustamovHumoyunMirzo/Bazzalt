@@ -5,12 +5,14 @@ on:
 permissions:
   contents: read
 jobs:
+  runtime-arm64:
+    uses: ./.github/workflows/linux-arm64.yml
   runtime-x86:
     uses: ./.github/workflows/linux-32-bit.yml
   test:
     uses: ./.github/workflows/linux-64-bit.yml
   package:
-    needs: [test, runtime-x86]
+    needs: [test, runtime-x86, runtime-arm64]
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     steps:
@@ -22,9 +24,13 @@ jobs:
         with:
           name: linux-runtime-x86
           path: dist/linux-x86
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: linux-runtime-arm64
+          path: dist/linux-arm64
       - run: |
           sudo apt-get update
-          sudo apt-get install -y clang libc++-dev libc++abi-dev ninja-build pkg-config libssl-dev libx11-dev libx11-xcb-dev libxcb1-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev libxkbcommon-x11-0 libxcb-cursor0 fonts-dejavu-core libgl1-mesa-dev libvulkan-dev patchelf
+          sudo apt-get install -y clang libc++-dev libc++abi-dev ninja-build pkg-config libssl-dev libx11-dev libx11-xcb-dev libxcb1-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev libxkbcommon-x11-0 libxcb-cursor0 fonts-dejavu-core libgl1-mesa-dev libvulkan-dev patchelf libwayland-dev libegl1-mesa-dev wayland-protocols libdecor-0-dev
           python -m pip install -r requirements-build.txt PySide6==6.10.2 pybind11==3.0.2
           python -c "from pathlib import Path; from Launcher.downloads import Extract; Extract(next(Path('dist/linux-x86').glob('*.zip')),Path('build/LinuxX86Package'))"
           for dependency in entt rapidyaml filament sdl3 lua sol2 miniaudio jolt freetype text_shaping pybind11; do sh "scripts/get_${dependency}.sh"; done
@@ -32,6 +38,7 @@ jobs:
           cmake --build build --parallel 2
           python scripts/build_linux_release.py --base-url "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
           cp dist/linux-x86/* dist/releases/
+          cp dist/linux-arm64/* dist/releases/
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: linux-products-x64

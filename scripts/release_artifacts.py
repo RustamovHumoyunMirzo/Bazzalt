@@ -20,8 +20,8 @@ def Architecture(path: Path) -> str:
         if header[:4]==b"\x7fELF":
             if len(header)<20 or header[5]!=1 or header[4] not in (1,2):raise ValueError("Unsupported ELF format")
             machine=int.from_bytes(header[18:20],"little")
-            if machine not in (3,62) or header[4]!=(2 if machine==62 else 1):raise ValueError("Unsupported ELF architecture")
-            return "x64" if machine==62 else "x86"
+            if machine not in (3,62,183) or header[4]!=(2 if machine in (62,183) else 1):raise ValueError("Unsupported ELF architecture")
+            return "arm64" if machine==183 else "x64" if machine==62 else "x86"
         stream.seek(0)
         if stream.read(2) != b"MZ": raise ValueError(f"Not a Windows executable: {path}")
         stream.seek(0x3c)

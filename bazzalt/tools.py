@@ -19,3 +19,18 @@ def FindCompiler(override: str = "", roots=()) -> Path | None:
     if found is None and os.name!="nt":
         system=shutil.which("clang++");found=Path(system) if system else None
     return found
+
+
+def FindRuntime(platform: str,architecture: str,app_root: Path,core_version: str) -> Path:
+    """Prefer the editor template, then separately installed matching Core SDKs."""
+    import json
+    name=platform+'-'+architecture;app_root=Path(app_root)
+    candidates=[app_root/'RuntimeTemplates'/name,Path(__file__).resolve().parents[1]/'build/RuntimeTemplates'/name]
+    base=DataPaths.Root()/'SDKs'
+    if base.is_dir():candidates.extend(sorted(base.glob('*/RuntimeTemplates/'+name)))
+    for path in candidates:
+        try:
+            record=json.loads((path/'runtime.json').read_text(encoding='utf-8-sig'))
+            if record.get('platform')==platform and record.get('architecture')==architecture and record.get('core_version')==core_version:return path
+        except (OSError,ValueError):continue
+    return candidates[0]

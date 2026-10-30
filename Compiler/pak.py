@@ -14,7 +14,7 @@ def SafeName(name):
     reserved={'CON','PRN','AUX','NUL','CONIN$','CONOUT$',*[f'COM{i}' for i in '0123456789¹²³'],*[f'LPT{i}' for i in '0123456789¹²³']}
     if any(any(c in part for c in '<>"|?*') or part.split('.')[0].upper() in reserved for part in path.parts):raise ValueError('Reserved package path')
     return path
-def Pack(source,destination,chunk_mb=64,key=None,*,hashes=None,check=lambda:None):
+def Pack(source,destination,chunk_mb=64,key=None,*,hashes=None,check=lambda:None,portable=False):
     from .compression import Compressor
     if type(chunk_mb)!=int or not 4<=chunk_mb<=256:raise ValueError('Invalid package chunk size')
     source=Path(source)
@@ -26,7 +26,7 @@ def Pack(source,destination,chunk_mb=64,key=None,*,hashes=None,check=lambda:None
         aes=AESGCM(key)
     destination=Path(destination);destination.mkdir(parents=True,exist_ok=True);outputs=[];stream=None;size=0
     digest_key=hmac.digest(key,b'Bazzalt/v3/segment-digest','sha256') if aes else None
-    codec=Compressor();seen={};identities=set()
+    codec=Compressor(portable=True) if portable else Compressor();seen={};identities=set()
     try:
         for path in sorted(Path(source).rglob('*')):
             check()

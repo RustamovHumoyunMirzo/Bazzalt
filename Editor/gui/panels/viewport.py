@@ -6,7 +6,7 @@ from math import cos, isfinite, radians, sin, tan
 import sys
 
 from PySide6.QtCore import QPoint, QPointF, QRect, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QGuiApplication, QKeyEvent, QMouseEvent, QPainter, QPen, QWheelEvent
+from PySide6.QtGui import QColor, QImage, QGuiApplication, QKeyEvent, QMouseEvent, QPainter, QPen, QWheelEvent
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel,
                                QStackedLayout, QToolButton,QVBoxLayout, QWidget)
 from ..gizmos import GizmoDrag, GizmoDelta, GizmoHandle, GizmoMode, PickAxis, PickRotationAxis, Ray, Vec3
@@ -16,10 +16,10 @@ from ..transform_trails import TransformTrail
 
 class SelectionMarquee(QWidget):
     """Transient screen-space overlay that remains visible above a native swap chain."""
-    def __init__(self) -> None:
+    def __init__(self,parent=None) -> None:
         flags=(Qt.WindowType.ToolTip|Qt.WindowType.FramelessWindowHint|
                Qt.WindowType.WindowDoesNotAcceptFocus|Qt.WindowType.WindowTransparentForInput)
-        super().__init__(None,flags);self.setObjectName("SceneSelectionMarquee")
+        super().__init__(parent,Qt.WindowType.Widget if parent else flags);self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents);self.setObjectName("SceneSelectionMarquee")
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -49,6 +49,7 @@ class NativeRenderSurface(QWidget):
         super().__init__(parent)
         self.Runtime = runtime; self.IsScene = scene
         self.ViewportId = NativeRenderSurface._next_id; NativeRenderSurface._next_id += 1
+        self._captured=False;self._frame_sequence=0;self._frame_image=QImage();self._capture_timer=QTimer(self);self._capture_timer.setInterval(16);self._capture_timer.timeout.connect(self._PollFrame)
         self._attached = False; self._last = QPoint(); self._yaw = 36.0; self._pitch = 20.0
         self._distance = 12.0; self._target = [0.0, 0.0, 0.0]
         self._eye = (6.0,4.0,8.0); self._selection = None; self._mode = GizmoMode.Select
@@ -78,8 +79,17 @@ class NativeRenderSurface(QWidget):
         # text editor unless it owns an explicit cursor. Gizmos never replace it.
         self.setCursor(Qt.CursorShape.ArrowCursor)
 
-    def paintEngine(self):  # Filament owns every pixel on this native child surface.
-        return None
+    def paintEngine(self):
+        return super().paintEngine() if getattr(self,'_captured',False) else None
+    def paintEvent(self,event):
+        if not self._captured:return
+        painter=QPainter(self);painter.fillRect(self.rect(),Qt.GlobalColor.black)
+        if not self._frame_image.isNull():painter.drawImage(self.rect(),self._frame_image)
+    def _PollFrame(self):
+        if not self._attached or not self.isVisible():return
+        frame=self.Runtime.CapturedViewportFrame(self.ViewportId,self._frame_sequence)
+        if frame:
+            self._frame_sequence=frame['sequence'];self._frame_image=QImage(frame['pixels'],frame['width'],frame['height'],frame['width']*4,QImage.Format.Format_RGBA8888).mirrored(False,True);self.update()
 
     def showEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         super().showEvent(event); QTimer.singleShot(50, self, self._Attach)
@@ -94,15 +104,22 @@ class NativeRenderSurface(QWidget):
         # Passing one to a graphics driver can abort the entire process.
         if QGuiApplication.platformName().casefold() in {"offscreen","minimal","minimalegl"}:return
         # Filament's Linux native surface is an X11 Window, never a Wayland WId.
-        if sys.platform.startswith("linux") and QGuiApplication.platformName().casefold() != "xcb":return
+        plugin=QGuiApplication.platformName().casefold()
+        self._captured=sys.platform.startswith("linux") and plugin.startswith("wayland")
+        if sys.platform.startswith("linux") and plugin!="xcb" and not self._captured:return
         # Delay native-window promotion until docking has finished constructing
         # and reparenting its tab hierarchy.
-        self.setAttribute(Qt.WidgetAttribute.WA_NativeWindow)
+        self.setAttribute(Qt.WidgetAttribute.WA_PaintOnScreen,not self._captured)
+        if not self._captured:self.setAttribute(Qt.WidgetAttribute.WA_NativeWindow)
         self.setCursor(Qt.CursorShape.ArrowCursor)
         width, height = self._PixelSize()
         try:
-            self._attached = self.Runtime.CreateViewport(
-                self.ViewportId, int(self.winId()), self.IsScene, width, height,self.devicePixelRatioF())
+            if self._captured:
+                self._attached=self.Runtime.CreateCapturedViewport(self.ViewportId,self.IsScene,width,height,self.devicePixelRatioF())
+                if self._attached:self._capture_timer.start()
+            else:
+                self._attached = self.Runtime.CreateViewport(
+                    self.ViewportId, int(self.winId()), self.IsScene, width, height,self.devicePixelRatioF())
         except Exception as error:
             self.AttachmentFailed.emit(str(error));return
         if not self._attached:self.AttachmentFailed.emit(self.Runtime.LastError());return
@@ -115,6 +132,7 @@ class NativeRenderSurface(QWidget):
             width, height = self._PixelSize(); self.Runtime.ResizeViewport(self.ViewportId, width, height,self.devicePixelRatioF())
 
     def Detach(self) -> None:
+        self._capture_timer.stop();self._frame_sequence=0;self._frame_image=QImage()
         self._EndTransformDrag();self.ClearTransformTrail()
         self._DestroySelectionBand()
         if self._attached: self.Runtime.DestroyViewport(self.ViewportId); self._attached = False
@@ -391,8 +409,8 @@ class NativeRenderSurface(QWidget):
             if distance<=4 and not self._selection_box_dragging:return
             if not self._selection_box_dragging:
                 self._selection_box_dragging=True;self._pending_pick="";self.SelectionBoxStarted.emit(self._selection_box_additive)
-            if self._selection_band is None:self._selection_band=SelectionMarquee()
-            start_global=self.mapToGlobal(self._selection_box_start);current_global=self.mapToGlobal(current);geometry=QRect(start_global,current_global).normalized()
+            if self._selection_band is None:self._selection_band=SelectionMarquee(self if self._captured else None)
+            start_global=self._selection_box_start if self._captured else self.mapToGlobal(self._selection_box_start);current_global=current if self._captured else self.mapToGlobal(current);geometry=QRect(start_global,current_global).normalized()
             if geometry.width()>2 or geometry.height()>2:self._selection_band.setGeometry(geometry);self._selection_band.show();self._selection_band.raise_()
             else:self._selection_band.hide()
             self._PreviewSelectionBox(current)

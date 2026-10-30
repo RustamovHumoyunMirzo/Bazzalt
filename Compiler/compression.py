@@ -4,15 +4,15 @@ import os
 
 
 class Compressor:
-    def __init__(self):
+    def __init__(self,portable=False):
         self.handle = ctypes.c_void_p()
         self.api = None
         self.CodecFlag=0
         self.zstd=None
-        if os.name!="nt":
+        if os.name!="nt" or portable:
             import zstandard
             self.zstd=zstandard.ZstdCompressor(level=6);self.CodecFlag=8
-        if os.name == 'nt':
+        if os.name == 'nt' and not portable:
             self.api = ctypes.WinDLL('cabinet', use_last_error=True)
             self.api.CreateCompressor.argtypes = [ctypes.c_uint, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)]
             self.api.CreateCompressor.restype = ctypes.c_bool

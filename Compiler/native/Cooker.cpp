@@ -11,6 +11,7 @@ int wmain(int argc,wchar_t** argv){
 int main(int argc,char** argv){
 #endif
     try{
+        if(argc==2&&std::filesystem::path(argv[1])=="--version"){std::cout<<"{\"core_version\":\""<<BAZZALT_CORE_VERSION<<"\"}\n";return 0;}
         if(argc!=4)throw std::runtime_error("Usage: BazzaltCooker project.bproject staging bindings.json");
         Bazzalt::Runtime::Engine engine;if(!engine.LoadProject(argv[1],false))throw std::runtime_error(engine.GetLastError());
         std::ifstream f(std::filesystem::path(argv[3]),std::ios::binary);std::string json((std::istreambuf_iterator<char>(f)),{});

@@ -124,6 +124,8 @@ class ScriptCompiler:
             if (root/"include/Bazzalt/Scene.h").is_file() and (root/"include/entt/entity/registry.hpp").is_file():return root
         return None
     def _link_library(self,sdk:Path)->Path|None:
+        from Compiler.cross import Active,LinkLibrary
+        if Active.get():return LinkLibrary(sdk,Active.get())
         names=("Bazzalt.lib",) if os.name=="nt" else ("libBazzalt.dylib",) if os.sys.platform=="darwin" else ("libBazzalt.so",)
         for folder in (sdk/"lib/Release",sdk/"lib"):
             for name in names:
@@ -137,6 +139,8 @@ class ScriptCompiler:
             return BuildResult(False, diagnostics=(Diagnostic("error", str(error)),))
 
     def _Build(self, used: list[str|Path])->BuildResult:
+        from Compiler.cross import Active
+        target_platform=Active.get()["platform"] if Active.get() else HostPlatform()
         used=list(dict.fromkeys(Path(path).resolve() for path in used if Path(path).suffix.lower()!=".lua"));assets=self.project/"Assets"
         project_sources=[path for path in assets.rglob("*") if path.is_file() and path.suffix.lower() in {".cpp",".lua"}] if assets.is_dir() else []
         validated=self._Validate([*project_sources,*used]);by_path={value.path:value for value in validated}
@@ -167,35 +171,38 @@ class ScriptCompiler:
         extension_includes=[];extension_libraries=[];extension_hash=b''
         if (self.project/'Extensions.lock.json').is_file():
             from Compiler.extensions import LockedItems
-            items=LockedItems(self.project,HostPlatform(),self.Architecture or HostArchitecture())
+            items=LockedItems(self.project,target_platform,self.Architecture or HostArchitecture())
             for item in items:
                 native=item['Manifest']['Native'];extension_hash+=item['Digest'].encode()
                 if native.get('Scope','Runtime')!='Runtime':continue
                 extension_includes.extend(item['Root']/p for p in native.get('IncludeDirs',[]))
-                for folder in native.get('LibDirsWin' if os.name=='nt' else 'LibDirsMac' if sys.platform=='darwin' else 'LibDirsLinux',[]):
-                    for pattern in (('*.lib',) if os.name=='nt' else ('*.so','*.so.*','*.dylib','*.a')):extension_libraries.extend((item['Root']/folder).glob(pattern))
-        sdk_digest=hashlib.sha256(headers+library.read_bytes()+compiler_identity+extension_hash).digest()
+                for folder in native.get('LibDirsWin' if target_platform=='windows' else 'LibDirsMac' if target_platform=='macos' else 'LibDirsLinux',[]):
+                    for pattern in (('*.lib','*.dll.a','*.a') if target_platform=='windows' else ('*.so','*.so.*','*.dylib','*.a')):extension_libraries.extend((item['Root']/folder).glob(pattern))
+        sdk_digest=hashlib.sha256(headers+library.read_bytes()+compiler_identity+extension_hash+json.dumps(Active.get(),sort_keys=True).encode()).digest()
         for descriptor in descriptors:
             wrapper_source=self._Wrapper(descriptor)
             project_headers=b''.join(str(path).encode('utf-8')+path.read_bytes() for path in sorted(dependencies[descriptor.path]))
             digest=hashlib.sha256(descriptor.path.read_bytes()+project_headers+wrapper_source.encode('utf-8')+str(descriptor.is_subsystem).encode()+b"\0bazzalt-script-linked-sdk-2"+sdk_digest).hexdigest()
-            suffix=".dll" if os.name=="nt" else ".dylib" if os.sys.platform=="darwin" else ".so"
+            suffix=".dll" if target_platform=="windows" else ".dylib" if target_platform=="macos" else ".so"
             output=self.cache/f"{descriptor.name}-{digest[:12]}{suffix}";outputs.append(output)
             if state.get(str(descriptor.path))==digest and output.exists():continue
             wrapper=self.cache/f"{descriptor.name}-{digest[:12]}.module.cpp"
             wrapper.write_text(wrapper_source,encoding="utf-8")
             command=[str(compiler),"-std=c++20","-shared","-fvisibility=hidden",f"-I{sdk/'include'}",str(wrapper),str(library),"-o",str(output)]
             command.extend('-I'+str(path) for path in extension_includes);command.extend(map(str,extension_libraries))
-            if os.name=="nt":
-                import struct
-                command.append("--target=" + ("x86_64" if self.Architecture=='x64' or self.Architecture is None and struct.calcsize("P")==8 else "i686") + "-pc-windows-msvc")
-            if os.sys.platform=="darwin":command.extend(["-arch","arm64" if (self.Architecture or HostArchitecture())=="arm64" else "x86_64","-mmacosx-version-min=12.0","-Wl,-rpath,@loader_path"])
-            if os.name=="nt":command.extend(["-fms-runtime-lib=dll","-D_ITERATOR_DEBUG_LEVEL=0"])
+            from Compiler.cross import Active,Configure
+            if Active.get():command=Configure(command,Active.get())
             else:
-                command.extend(["-fPIC",f"-Wl,-rpath,{sdk/'lib'}"])
-                if os.sys.platform!="darwin":
-                    command.extend(["-stdlib=libstdc++" if self.Architecture=='x86' else "-stdlib=libc++","-Wl,--no-undefined"])
-                    if self.Architecture=='x86':command.extend(['-m32','-msse2','-mfpmath=sse'])
+                if os.name=="nt":
+                    import struct
+                    command.append("--target=" + ("aarch64" if self.Architecture=="arm64" else "x86_64" if self.Architecture=='x64' or self.Architecture is None and struct.calcsize("P")==8 else "i686") + "-pc-windows-msvc")
+                if os.sys.platform=="darwin":command.extend(["-arch","arm64" if (self.Architecture or HostArchitecture())=="arm64" else "x86_64","-mmacosx-version-min=12.0","-Wl,-rpath,@loader_path"])
+                if os.name=="nt":command.extend(["-fms-runtime-lib=dll","-D_ITERATOR_DEBUG_LEVEL=0"])
+                else:
+                    command.extend(["-fPIC",f"-Wl,-rpath,{sdk/'lib'}"])
+                    if os.sys.platform!="darwin":
+                        command.extend(["-stdlib=libstdc++" if self.Architecture=='x86' else "-stdlib=libc++","-Wl,--no-undefined"])
+                        if self.Architecture=='x86':command.extend(['-m32','-msse2','-mfpmath=sse'])
             process=subprocess.run(command,cwd=self.project,text=True,capture_output=True,encoding="utf-8",errors="replace",creationflags=subprocess.CREATE_NO_WINDOW if os.name=="nt" else 0)
             for line in (process.stdout+"\n"+process.stderr).splitlines():
                 if line.strip():diagnostics.append(Diagnostic("error" if "error:" in line.lower() else "warning" if "warning:" in line.lower() else "info",line.strip()))

@@ -29,7 +29,7 @@ def Architecture(path):
     from scripts.release_artifacts import Architecture as Inspect
     return Inspect(path)
 
-def ValidateCooker(path,platform):
+def ValidateCooker(path,platform,host_architecture=None):
     path=Path(path).resolve()
     if not path.is_file():raise ValueError('The content cooker tool is missing')
     with path.open('rb') as binary:magic=binary.read(4)
@@ -38,7 +38,9 @@ def ValidateCooker(path,platform):
     architecture=Architecture(path)
     # A multilib Linux host can execute the x86 cooker built with its runtime.
     # Cooking is content-only and independent of the target game's word size.
-    supported=(__import__('bazzalt.platforms',fromlist=['HostArchitecture']).HostArchitecture(),) if platform=='macos' else ('x64','x86') if platform=='linux' else ('x64',)
+    from bazzalt.platforms import HostArchitecture
+    host_architecture=host_architecture or HostArchitecture()
+    supported=('x64','x86') if platform=='linux' and host_architecture=='x64' else (host_architecture,)
     if architecture not in supported:raise ValueError('Content cooker architecture is incompatible with this host')
     if platform!='windows' and not os.access(path,os.X_OK):raise ValueError('The content cooker tool is not executable')
     return path
@@ -117,6 +119,10 @@ def CompileScripts(project,runtime,architecture,cache,compiler_path=''):
     class GameScriptCompiler(ScriptCompiler):
         def _Validate(self,paths):return super()._Validate([*paths,*(p for p in assets.rglob('*') if p.is_file() and p.suffix.lower() in {'.cpp','.lua'})])
         def _compiler(self):
+            from .cross import Active
+            if Active.get():
+                if Active.get()['method']=='content_only':raise ValueError('Content-only builds cannot compile C++ scripts or subsystems. Use a matching cross SDK/toolchain or a native remote worker.')
+                return Path(Active.get()['compiler'])
             if os.name!='nt':
                 if compiler_path:
                     value=Path(compiler_path);value=value/'bin/clang++' if value.is_dir() else value
@@ -206,6 +212,44 @@ def Publish(staged,output,owner):
         raise
     if backup.exists():shutil.rmtree(backup)
 def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
+    from .cross import Active,Resolve,WslCommand
+    from bazzalt.platforms import HostPlatform
+    settings=Validate(Load(project));profile=settings['platforms'][settings['target']['platform']]
+    options=Resolve(settings,runtime)
+    if options and options['method']=='wsl':
+        if launch:raise ValueError('Build and Launch is unavailable for cross-platform output')
+        process=subprocess.Popen(WslCommand(project,profile),stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+        output=None;forward_stop=threading.Event()
+        def forward_cancel():
+            while not forward_stop.wait(.05):
+                if cancel and cancel():
+                    try:process.stdin.write(b'cancel\n');process.stdin.flush()
+                    except (OSError,ValueError):pass
+                    return
+        threading.Thread(target=forward_cancel,daemon=True).start()
+        try:
+            for line in process.stdout:
+                try:
+                    event=json.loads(line)
+                    if event.get('stage')=='complete':
+                        output=event.get('output');prefix=WslCommand(project,profile);prefix=prefix[:prefix.index('--')+1]
+                        mapped=subprocess.run([*prefix,'wslpath','-a','-w',output],capture_output=True,encoding='utf-8',timeout=30)
+                        if mapped.returncode:raise ValueError('Could not map WSL output to the host filesystem')
+                        output=mapped.stdout.strip();event['output']=output
+                    print(json.dumps(event,ensure_ascii=True),flush=True)
+                except json.JSONDecodeError:print(line.decode('utf-8','replace').rstrip(),flush=True)
+            if process.wait() or not output:raise ValueError('WSL build failed; inspect the Linux compiler output')
+            return Path(output)
+        finally:
+            forward_stop.set()
+            if process.poll() is None:process.terminate();process.wait(timeout=15)
+    from .cross import CanExecute
+    if launch and not CanExecute(settings['target']['platform'],settings['target']['architecture']):raise ValueError('Build and Launch requires a native target; cross output can be copied to its target machine')
+    token=Active.set(options)
+    try:return _Build(project,runtime,cooker,launch,compiler_path,cancel=cancel)
+    finally:Active.reset(token)
+
+def _Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
     project=Path(project).resolve();settings=Effective(Validate(Load(project)));arch=settings['target']['architecture']
     if not project.is_file() or project.suffix!='.bproject':raise ValueError('Select a valid project file')
     from bazzalt.platforms import TargetError
@@ -213,7 +257,8 @@ def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
     if error:raise ValueError(error)
     suffix='.exe' if platform=='windows' else ''
     runtime,files=ValidateRuntime(runtime,arch,platform)
-    cooker=ValidateCooker(cooker,platform)
+    from bazzalt.platforms import HostPlatform
+    cooker=ValidateCooker(cooker,HostPlatform())
     with BuildLock(project.parent) as cache, BuildWorkspace(cache/(arch if platform=='windows' else platform+'-'+arch)) as work:
         check=lambda:CheckCancelled(cancel)
         check()
@@ -256,7 +301,7 @@ def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
             security=SecurityContext(settings,KeyFor(settings));packages=[];content_hashes={}
             if settings['packaging']['format']=='pak':
                 Emit('package','Packing game content')
-                packages=[p.name for p in Pack(cooked,root,settings['packaging']['chunk_mb'],security.PackageKey,hashes=content_hashes,check=check)]
+                packages=[p.name for p in Pack(cooked,root,settings['packaging']['chunk_mb'],security.PackageKey,hashes=content_hashes,check=check,portable=platform!='windows')]
             else:shutil.copytree(cooked,root/'Data')
             if settings['packaging']['decoy_kb']:(root/'padding.bin').write_bytes(os.urandom(settings['packaging']['decoy_kb']*1024))
             game=dict(format_version=3,format=settings['packaging']['format'],production=settings['production'],window=settings['window'],intro=settings['intro'],packages=packages,**{k:settings['security'][k] for k in ('encryption','key_storage','key_environment')})
@@ -273,7 +318,11 @@ def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
             Emit('verify','Verifying the packaged game')
             verify_environment=dict(os.environ)
             if security.Method=='keychain':verify_environment[settings['security']['key_environment']]=security.Master.hex()
-            Run([root/(name+suffix),'--verify-package'],cwd=root,timeout=120,env=verify_environment)
+            from .cross import CanExecute
+            if not CanExecute(platform,arch):
+                from .verify import Verify
+                Verify(root,root/(name+suffix),security.Master)
+            else:Run([root/(name+suffix),'--verify-package'],cwd=root,timeout=120,env=verify_environment)
             check()
             if settings['packaging']['archive']:
                 archive=destination/f'{name}-{platform}-{arch}.zip';temporary=work/'Game.zip'
@@ -337,13 +386,22 @@ def ReadControls(cancelled,stop):
 def main():
     parser=argparse.ArgumentParser(description='Build game content using a prebuilt Bazzalt runtime')
     parser.add_argument('--project',type=Path);parser.add_argument('--runtime',type=Path);parser.add_argument('--cooker',type=Path);parser.add_argument('--launch',action='store_true');parser.add_argument('--script-compiler',default='');parser.add_argument('--generate-key',action='store_true',help='Print a fresh 256-bit key; treat stdout as secret')
+    parser.add_argument('--remote-info',action='store_true');parser.add_argument('--remote-request',type=Path)
     args=parser.parse_args()
+    if args.remote_info:
+        from .remote_worker import Info
+        print(json.dumps(Info(args.runtime)),flush=True);return 0
     if args.generate_key:
         if args.project or args.runtime or args.cooker or args.launch or args.script_compiler:parser.error('--generate-key cannot be combined with build arguments')
         print(os.urandom(32).hex(),flush=True);return 0
-    if not args.project or not args.runtime or not args.cooker:parser.error('--project, --runtime and --cooker are required for a build')
+    if not args.remote_request and (not args.project or not args.runtime or not args.cooker):parser.error('--project, --runtime and --cooker are required for a build')
     cancelled=threading.Event();stop=threading.Event();controls=threading.Thread(target=ReadControls,args=(cancelled,stop),daemon=True);controls.start()
-    try:Build(args.project,args.runtime,args.cooker,args.launch,args.script_compiler,cancel=cancelled.is_set);return 0
+    try:
+        if args.remote_request:
+            from .remote_worker import Execute
+            Execute(args.remote_request,cancelled.is_set)
+        else:Build(args.project,args.runtime,args.cooker,args.launch,args.script_compiler,cancel=cancelled.is_set)
+        return 0
     except BuildCancelled as error:Emit('cancelled',str(error));return 2
     except Exception as error:Emit('error',str(error));return 1
     finally:stop.set();controls.join(timeout=.5)

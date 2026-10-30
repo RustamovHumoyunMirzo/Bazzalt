@@ -12,10 +12,10 @@ from cryptography.hazmat.primitives.asymmetric import ec, utils
 from .pak import SafeName
 
 
-def PlayerHash(executable):
+def PlayerHash(executable,*,data=None):
     # Match the native reader: PE checksum and certificate-directory entries
     # change during Authenticode signing; executable code/resources do not.
-    data=bytearray(Path(executable).read_bytes())
+    data=bytearray(Path(executable).read_bytes() if data is None else data)
     if data[:4]==bytes.fromhex('cffaedfe'):
         from .macos import PlayerHash as MacHash
         return MacHash(executable)

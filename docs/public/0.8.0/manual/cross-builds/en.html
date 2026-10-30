@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A game build cooks your project content and combines it with a prebuilt runtime for the target machine. It never builds the engine. The target platform and architecture describe the game, while the host is the machine running the editor/compiler. Keep these separate when choosing tools.">
+  <title>Cross-platform game builds | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Editor manual / Cross-platform game builds</nav>
+      <article class="doc"><h1>Cross-platform game builds</h1><p>A game build cooks your project content and combines it with a prebuilt runtime for the target machine. It never builds the engine. The target platform and architecture describe the game, while the host is the machine running the editor/compiler. Keep these separate when choosing tools.</p>
+<h2 id="matrix">Host-to-target support</h2><table><thead><tr><th>Host</th><th>Target</th><th>Build methods</th><th>Requirements</th></tr></thead><tbody><tr><td>Windows</td><td>Linux</td><td>Local WSL, Zig, Content / Lua only</td><td>WSL uses an installed Linux compiler/Core SDK. Zig C++ needs a matching Zig-built Linux SDK.</td></tr><tr><td>Linux</td><td>Windows</td><td>MinGW-w64, Zig, Content / Lua only</td><td>C++ needs an SDK built with that exact cross toolchain. Content-only builds can use the shipped Windows runtime.</td></tr><tr><td>macOS</td><td>Windows</td><td>MinGW-w64, Zig, Content / Lua only</td><td>Matching target SDK; C++ ABI requirements apply.</td></tr><tr><td>macOS</td><td>Linux</td><td>Zig, Content / Lua only</td><td>Matching Linux runtime SDK; Zig-built SDK for C++.</td></tr><tr><td>Any supported editor host</td><td>Windows, Linux or macOS</td><td>SSH remote worker</td><td>A worker on the target OS with the compiler and matching Core SDK. macOS output is signed on a Mac.</td></tr><tr><td>Same OS</td><td>Native game target</td><td>Native / Automatic</td><td>Matching architecture and runtime SDK. Windows supports x64, x86 and ARM64 output; Linux supports x64, x86 and ARM64 output; macOS supports x64 and ARM64.</td></tr></tbody></table>
+<p>These methods do not install Zig, MinGW, WSL, compilers, sysroots or SDKs for you. The editor detects installed executables through PATH; Detect installed toolchain fills the profile when possible. Browse selects a local executable or SDK/sysroot folder using the platform's native file dialog. ARM64 runtime SDKs are built and tested on dedicated native CI runners and distributed separately from the x64 editor.</p>
+<h2 id="choose">Choose a build method</h2><ol><li>Open Build &gt; Build Settings and select the game's target platform.</li><li>Expand that platform's container. Select its architecture and runtime SDK. Separately installed matching Core SDKs are detected automatically.</li><li>Choose Native, Local WSL, Zig, MinGW-w64 or Content / Lua only. Automatic uses native builds for native targets and detects available cross tools for foreign targets.</li><li>Use Detect installed toolchain, or Browse to select an executable. Set a sysroot only when your toolchain requires a target header/library tree.</li><li>Build the project. Cross output is verified offline when it cannot run on the host. Test the result on the target OS before distributing it.</li></ol><p>Windowing, production metadata, packaging and intro settings stay shared. Each platform retains its own architecture, backend, build method, toolchain, sysroot and key-delivery options.</p>
+<h2 id="abi">Why a matching C++ SDK matters</h2><p>An ABI is the binary contract between compiled libraries: symbol names, calling conventions, object layouts and standard-library types. BAZZALT exposes C++ values such as strings across its SDK boundary. A MinGW or Zig compiler cannot safely link to an arbitrary MSVC-built core just because both files target Windows x64. The compiler rejects that combination instead of producing a game that fails later.</p><p>A cross-SDK provider must build and test the engine/runtime with the intended toolchain, stage all its runtime DLLs/shared libraries, and declare the exact compiler contract in runtime.json. Game builds consume that SDK; they do not rebuild it. This is an SDK-provider task, not a requirement for ordinary native game builds. Shipped native SDKs do not automatically become GNU/Zig SDKs.</p><pre><code>"cross_toolchain": {
+  "method": "zig",
+  "version": "0.14.1",
+  "triple": "x86_64-windows-gnu"
+}</code></pre><p>The version above is an example. Use the exact output of zig version, or the MinGW compiler's -dumpfullversion. Supported triple CPUs are x86_64, i686 and aarch64. MinGW uses a -w64-mingw32 suffix; Zig uses -windows-gnu or -linux-gnu. A sysroot does not repair a C++ ABI mismatch.</p>
+<h2 id="content-only">Projects without native C++ compilation</h2><p>Content / Lua only combines cooked assets, Lua bytecode and an existing target runtime without invoking a C++ cross compiler. It can therefore use a shipped native target SDK from another OS. Attached C++ behaviors, C++ global subsystems and extension modules that need source compilation are rejected in this mode. Precompiled compatible target extension modules remain usable. Choose a native remote worker for C++ projects when you have only the standard shipped SDK.</p>
+<h2 id="wsl">Windows to Linux with WSL</h2><p>Install and initialize a Linux distribution in WSL, then install the Linux BazzaltCompiler, matching Core SDK, and Clang development tools there. Leave WSL distribution blank to use the default. The compiler is detected through the distribution's PATH; optional WSL compiler and runtime fields refer to Linux paths inside that distribution.</p><p>The project remains on the Windows filesystem and is mapped with wslpath. Cancellation is forwarded to the Linux compiler; completed output paths are mapped back for the editor. This path uses the normal Linux SDK and supports C++ without mixing a Windows SDK into a Linux link. Worker environment keys must be provisioned in WSL when using environment-based encryption.</p>
+<h2 id="verification">Verification and launch</h2><p>Native builds run the packaged player's verification mode. Foreign binaries receive P-256 signed-inventory verification, executable/seal hashing, encrypted-manifest authentication, signed-file checks and unexpected-file rejection without executing target code on the host. Portable Zstandard packages are readable by all supported players. Windows version resources are updated with LIEF on non-Windows hosts.</p><p>Build and Launch requires an executable target compatible with the host. A foreign game must be copied to its target machine. Offline verification checks package integrity; it cannot replace a target-device rendering/gameplay test. macOS bundles require native code signing on a Mac, so use a Mac worker from Windows/Linux. Account-scoped Windows DPAPI keys are unsuitable for distribution from another machine or worker account; choose portable key delivery.</p>
+<h2 id="architecture">Architecture limits</h2><p>ARM64 is the supported ARM target. ARM32, IA64, PowerPC and other legacy architectures do not have runtime SDKs. Modern macOS cannot run 32-bit applications: Apple removed that runtime in macOS Catalina 10.15. BAZZALT targets macOS 12 or newer and rejects x86 macOS output. It does not advertise a nonfunctional 32-bit option.</p><p>See <a href="../remote-builds/en.html">SSH build workers</a> and <a href="../platforms/en.html">platform/backend support</a>.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../building-games/en.html"><small>Previous</small>Building a game</a>
+<a class="next" href="../global-subsystems/en.html"><small>Next</small>Global subsystems</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#matrix">Host-to-target support</a><a class="toc-link" href="#choose">Choose a build method</a><a class="toc-link" href="#abi">Why a matching C++ SDK matters</a><a class="toc-link" href="#content-only">Projects without native C++ compilation</a><a class="toc-link" href="#wsl">Windows to Linux with WSL</a><a class="toc-link" href="#verification">Verification and launch</a><a class="toc-link" href="#architecture">Architecture limits</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

@@ -11,7 +11,11 @@ from .gui.panels.console import ConsoleLevel
 class GameBuildController(QObject):
     def __init__(self,editor):
         super().__init__(editor);self.Editor=editor;self.Process=None;self.Progress=None;self.Completion=None;self._buffer=''
+        editor.MenuBar.RemoteBuildRequested.connect(self.Remote)
         editor.MenuBar.BuildSettingsRequested.connect(self.Settings);editor.MenuBar.BuildRequested.connect(lambda:self.Build(False));editor.MenuBar.BuildLaunchRequested.connect(lambda:self.Build(True))
+    def Remote(self):
+        from .gui.remote_build import RemoteBuildDialog
+        RemoteBuildDialog(self.Editor).exec()
     def Settings(self):
         try:
             if self.Editor.Runtime.ProjectInfo().get('project_path'):BuildSettingsDialog(self.Editor).exec()
@@ -28,14 +32,15 @@ class GameBuildController(QObject):
             from bazzalt.platforms import TargetError
             error=TargetError({**settings['target'],'key_storage':settings['security']['key_storage']})
             if error:raise ValueError(tr('build.unsupported_target',error=error))
-            platform=settings['target']['platform'];suffix='.exe' if platform=='windows' else '';arch=settings['target']['architecture'];root=Path(__file__).resolve().parents[1];app=Path(sys.executable).parent
-            runtime=Path(settings['target']['runtime_directory']) if settings['target']['runtime_directory'] else app/'RuntimeTemplates'/(platform+'-'+arch)
-            if not runtime.is_dir():runtime=root/'build/RuntimeTemplates'/(platform+'-'+arch) if not settings['target']['runtime_directory'] else runtime
+            platform=settings['target']['platform'];suffix='.exe' if __import__('bazzalt.platforms',fromlist=['HostPlatform']).HostPlatform()=='windows' else ''; arch=settings['target']['architecture'];root=Path(__file__).resolve().parents[1];app=Path(sys.executable).parent
+            from bazzalt.tools import FindRuntime
+            from Compiler.extensions import EngineVersion
+            runtime=Path(settings['target']['runtime_directory']) if settings['target']['runtime_directory'] else FindRuntime(platform,arch,app,EngineVersion())
             tool=app/('tools/compiler/BazzaltCompiler'+suffix);cooker=app/('tools/compiler/BazzaltCooker'+suffix)
             if tool.is_file():program=str(tool);arguments=[]
             else:
                 if getattr(sys,'frozen',False) or '__compiled__' in globals():raise ValueError(tr('build.tools_missing'))
-                program=sys.executable;arguments=['-m','Compiler.build'];cooker=root/('build/Editor/Release/BazzaltCooker.exe' if platform=='windows' else 'build/Editor/BazzaltCooker')
+                program=sys.executable;arguments=['-m','Compiler.build'];cooker=root/('build/Editor/Release/BazzaltCooker.exe' if __import__('bazzalt.platforms',fromlist=['HostPlatform']).HostPlatform()=='windows' else 'build/Editor/BazzaltCooker')
             arguments+=['--project',str(project),'--runtime',str(runtime),'--cooker',str(cooker)]
             compiler=self.Editor.PreferenceValue('tools','compiler_path','')
             if compiler:arguments+=['--script-compiler',compiler]
