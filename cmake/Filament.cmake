@@ -50,10 +50,14 @@ function(bazzalt_configure_filament ROOT)
         ktxreader filament backend bluegl bluevk filabridge filaflat utils smol-v
         geometry ibl-lite zstd
     )
+    if(APPLE)
+        # The native macOS SDK uses Metal; a Metal-only source install has no Vulkan loader archive.
+        list(REMOVE_ITEM _filament_libraries bluevk)
+    endif()
     set(_filament_targets)
     foreach(_library IN LISTS _filament_libraries)
         if(NOT EXISTS "${_filament_release_dir}/${_filament_prefix}${_library}${_filament_suffix}")
-            message(FATAL_ERROR "Filament ${_filament_arch} library missing: ${_library}. Official Windows SDK is x64; x86 requires a custom, matching SDK. Never link x64 libraries into a Win32 build.")
+            message(FATAL_ERROR "Filament ${_filament_arch} library missing: ${_library}. Install a complete SDK matching the target architecture and enabled backends.")
         endif()
         set(_target "BazzaltFilament_${_library}")
         add_library(${_target} STATIC IMPORTED GLOBAL)

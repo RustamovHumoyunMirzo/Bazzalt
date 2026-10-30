@@ -18,7 +18,7 @@ def ToolsRoot():
     candidates=(Path(sys.executable).parent,Path(__file__).resolve().parents[1]/('build/Editor/Release' if HostPlatform()=='windows' else 'build/Editor'))
     return next((p for p in candidates if (p/name).is_file()),candidates[0])
 
-def Info(runtime=None):
+def Info(runtime=None,architecture=None,compiler_path=""):
     cooker=ToolsRoot()/('BazzaltCooker.exe' if HostPlatform()=='windows' else 'BazzaltCooker');ready=False;error=''
     if cooker.is_file():
         try:
@@ -27,11 +27,26 @@ def Info(runtime=None):
             ready=result.returncode==0 and json.loads(result.stdout)['core_version']==EngineVersion()
         except (OSError,ValueError,KeyError,subprocess.TimeoutExpired):pass
     info=dict(protocol=PROTOCOL,platform=HostPlatform(),architecture=HostArchitecture(),python=sys.version.split()[0],cooker_ready=ready)
-    if runtime:
+    architecture=architecture or HostArchitecture()
+    runtime=Path(runtime) if runtime else ToolsRoot()/'RuntimeTemplates'/(HostPlatform()+'-'+architecture)
+    try:
+        from .build import ValidateRuntime
+        ValidateRuntime(runtime,architecture,HostPlatform());info['runtime_architecture']=architecture;info['runtime_ready']=True
+    except (OSError,ValueError,KeyError) as failure:info.update(runtime_ready=False,runtime_error=str(failure))
+    compiler=Path(compiler_path) if compiler_path else None
+    if compiler and compiler.is_dir():compiler=compiler/'bin'/('clang++.exe' if os.name=='nt' else 'clang++')
+    if not compiler:
+        found=shutil.which('clang++');compiler=Path(found) if found else None
+        if not compiler and os.name=='nt':
+            for variable,fallback in (('LOCALAPPDATA','AppData/Local'),('APPDATA','AppData/Roaming')):
+                candidate=Path(os.environ.get(variable,Path.home()/fallback))/'BAZZALT/data/Tools/llvm/bin/clang++.exe'
+                if candidate.is_file():compiler=candidate;break
+    info['cpp_compiler_ready']=False
+    if compiler and compiler.is_file():
         try:
-            from .build import ValidateRuntime
-            manifest=json.loads((Path(runtime)/'runtime.json').read_text(encoding='utf-8-sig'));ValidateRuntime(runtime,manifest['architecture'],HostPlatform());info['runtime_architecture']=manifest['architecture'];info['runtime_ready']=True
-        except (OSError,ValueError,KeyError) as failure:info.update(runtime_ready=False,runtime_error=str(failure))
+            probe=subprocess.run([str(compiler),'--version'],capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=10,creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
+            info['cpp_compiler_ready']=probe.returncode==0;info['cpp_compiler_version']=probe.stdout.splitlines()[0] if probe.stdout else ''
+        except (OSError,subprocess.TimeoutExpired):pass
     return info
 
 def Extract(archive,root,sync_assets=True):

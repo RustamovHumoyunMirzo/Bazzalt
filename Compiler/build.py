@@ -386,11 +386,11 @@ def ReadControls(cancelled,stop):
 def main():
     parser=argparse.ArgumentParser(description='Build game content using a prebuilt Bazzalt runtime')
     parser.add_argument('--project',type=Path);parser.add_argument('--runtime',type=Path);parser.add_argument('--cooker',type=Path);parser.add_argument('--launch',action='store_true');parser.add_argument('--script-compiler',default='');parser.add_argument('--generate-key',action='store_true',help='Print a fresh 256-bit key; treat stdout as secret')
-    parser.add_argument('--remote-info',action='store_true');parser.add_argument('--remote-request',type=Path)
+    parser.add_argument('--remote-architecture',choices=('x64','x86','arm64'));parser.add_argument('--remote-info',action='store_true');parser.add_argument('--remote-request',type=Path)
     args=parser.parse_args()
     if args.remote_info:
         from .remote_worker import Info
-        print(json.dumps(Info(args.runtime)),flush=True);return 0
+        print(json.dumps(Info(args.runtime,args.remote_architecture,args.script_compiler)),flush=True);return 0
     if args.generate_key:
         if args.project or args.runtime or args.cooker or args.launch or args.script_compiler:parser.error('--generate-key cannot be combined with build arguments')
         print(os.urandom(32).hex(),flush=True);return 0

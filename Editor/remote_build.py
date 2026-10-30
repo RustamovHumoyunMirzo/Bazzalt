@@ -98,7 +98,7 @@ def Run(client,command,cancel=None,on_event=lambda event:None,timeout=7200):
 def Test(profile,secret='',cancel=None,require_tools=True):
     client=Connect(profile,secret)
     try:
-        Check(cancel);args=['--remote-info']+(['--runtime',profile['runtime']] if profile['runtime'] else []);info=Run(client,Command(profile,args),cancel,timeout=30)
+        Check(cancel);args=['--remote-info']+(['--runtime',profile['runtime']] if profile['runtime'] else [])+(['--script-compiler',profile['script_compiler']] if profile['script_compiler'] else []);info=Run(client,Command(profile,args),cancel,timeout=30)
         if require_tools and not info.get('cooker_ready',False):raise ValueError('Install the matching BazzaltCooker and runtime libraries beside the worker compiler')
         if require_tools and info.get('runtime_ready') is False:raise ValueError(info.get('runtime_error','Worker runtime SDK is invalid'))
         if info['platform']!=profile['worker_platform']:raise ValueError('The worker platform does not match its profile')
@@ -140,11 +140,11 @@ def Mkdirs(sftp,path):
 def Build(project,profile,secret='',*,cancel=None,on_event=lambda event:None):
     profile=Validate(profile);cancel=cancel or threading.Event();Check(cancel);client=Connect(profile,secret)
     try:
-        args=['--remote-info']+(['--runtime',profile['runtime']] if profile['runtime'] else []);info=Run(client,Command(profile,args),cancel,timeout=30)
-        if not info.get('cooker_ready',False):raise ValueError('Worker cooker is missing or does not match the compiler version')
-        if info.get('runtime_ready') is False:raise ValueError(info.get('runtime_error','Worker runtime SDK is invalid'))
         from Compiler.settings import Load,Effective
         settings=Effective(Load(project))
+        args=['--remote-info','--remote-architecture',settings['target']['architecture']]+(['--runtime',profile['runtime']] if profile['runtime'] else [])+(['--script-compiler',profile['script_compiler']] if profile['script_compiler'] else []);info=Run(client,Command(profile,args),cancel,timeout=40)
+        if not info.get('cooker_ready',False):raise ValueError('Worker cooker is missing or does not match the compiler version')
+        if info.get('runtime_ready') is False:raise ValueError(info.get('runtime_error','Worker runtime SDK is invalid'))
         if settings['security']['key_storage']=='dpapi_user' and profile['post_build']=='download':raise ValueError('Account-scoped DPAPI keys would bind the game to the worker account; select portable key delivery')
         if info['platform']!=settings['target']['platform']:raise ValueError('Select a worker matching the game target platform')
         if profile['clean'] and not profile['sync_assets']:raise ValueError('A clean build requires syncing all assets')

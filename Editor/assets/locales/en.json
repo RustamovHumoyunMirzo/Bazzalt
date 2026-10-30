@@ -1131,5 +1131,6 @@
   "build.field.display_server": "Linux display server",
   "build.option.wayland": "Native Wayland (Vulkan)",
   "build.option.x11": "X11 / XWayland",
-  "build.option.content_only": "Content / Lua only (no C++ compilation)"
+  "build.option.content_only": "Content / Lua only (no C++ compilation)",
+  "remote.cpp_unavailable": "C++ compiler unavailable (content/Lua-only builds)"
 }

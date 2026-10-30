@@ -109,7 +109,11 @@ class RemoteBuildDialog(QDialog):
         self.Busy=False;self.FormPage.setEnabled(True)
         for button in (self.TestButton,self.BuildButton,self.SaveButton,self.ProfilesBox):button.setEnabled(True)
         self.CloseButton.setText(self.Tr('remote.close'))
-    def Done(self,value):self.Finish();self._tone='success';self._Color();self.Status.setText(self.Tr('remote.complete',result=value.get('download') or value.get('output') or (value['platform']+' / '+value['architecture'])))
+    def Done(self,value):
+        self.Finish();self._tone='success';self._Color()
+        result=value.get('download') or value.get('output')
+        if not result:result=value['platform']+' / '+value['architecture']+'; '+(value.get('cpp_compiler_version') or self.Tr('remote.cpp_unavailable'))
+        self.Status.setText(self.Tr('remote.complete',result=result))
     def Failed(self,error):self.Finish();self._tone='error';self._Color();self.Status.setText(self.Tr('remote.failed',error=error))
     def reject(self):
         if self.Busy:self.Cancelled.set();self.Status.setText(self.Tr('remote.cancelling'))
