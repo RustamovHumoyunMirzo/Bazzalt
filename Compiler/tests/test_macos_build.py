@@ -24,7 +24,8 @@ class MacBuildTests(unittest.TestCase):
             runtime=Stage(BUILD,root/'Runtime',ARCH,platform='macos')
             settings=copy.deepcopy(DEFAULTS);settings['target'].update(platform='macos',architecture=ARCH);settings['intro']['duration_ms']=0;settings['security'].update(preset='medium',encryption='aes-256-gcm',encrypt_manifests=True)
             Save(project,settings);output=Build(project,runtime,BUILD/'Editor/BazzaltCooker');executable=output/'Contents/MacOS/Game'
-            self.assertTrue(os.access(executable,os.X_OK));self.assertLess(sum(p.stat().st_size for p in (output/'Contents/MacOS').glob('*.bpak')),1000000)
+            self.assertTrue(os.access(executable,os.X_OK));packages=list((output/'Contents/Resources').glob('*.bpak'));self.assertTrue(packages);self.assertLess(sum(p.stat().st_size for p in packages),1000000)
+            self.assertTrue((output/'Contents/Resources/licenses').is_dir());self.assertFalse((output/'Contents/MacOS/licenses').exists())
             result=subprocess.run([str(executable),'--verify-package'],capture_output=True,timeout=60);self.assertEqual(result.returncode,0,result.stderr)
             if os.environ.get('BAZZALT_MAC_GPU_TEST')=='1':
                 result=subprocess.run([str(executable),'--smoke-test'],capture_output=True,timeout=90);self.assertEqual(result.returncode,0,result.stderr)
@@ -47,5 +48,5 @@ class MacBuildTests(unittest.TestCase):
                     environment.pop('BAZZALT_GAME_KEY',None)
                     result=subprocess.run([str(executable),'--smoke-test'],env=environment,capture_output=True,timeout=90);self.assertEqual(result.returncode,0,result.stderr)
                 finally:subprocess.run(['/usr/bin/security','delete-generic-password','-s',service,'-a',account],capture_output=True)
-            manifest=output/'Contents/MacOS/game.json';data=bytearray(manifest.read_bytes());data[-1]^=1;manifest.write_bytes(data)
+            manifest=output/'Contents/Resources/game.json';data=bytearray(manifest.read_bytes());data[-1]^=1;manifest.write_bytes(data)
             result=subprocess.run([str(executable),'--verify-package'],capture_output=True,timeout=60);self.assertNotEqual(result.returncode,0)

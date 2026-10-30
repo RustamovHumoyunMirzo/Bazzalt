@@ -38,16 +38,21 @@ struct VerifiedGame {
     ~VerifiedGame(){if(!PackageKey.empty())SecureZeroMemory(PackageKey.data(),PackageKey.size());if(!Configuration.empty())SecureZeroMemory(Configuration.data(),Configuration.size());if(!ContentIndex.empty())SecureZeroMemory(ContentIndex.data(),ContentIndex.size());}
 };
 inline VerifiedGame VerifyInventory(const std::filesystem::path& executable){
+    const auto folder=GameDataFolder(executable);VerifiedGame verified;LockTree(folder,verified.OutputLeases);
 #ifdef __APPLE__
+    // Code is in MacOS, content is in Resources. Authenticate the complete
+    // signed bundle before loading any game-owned library, retaining code leases.
+    LockTree(executable.parent_path(),verified.OutputLeases);
+    for(const auto& entry:std::filesystem::recursive_directory_iterator(executable.parent_path()))
+        if(entry.is_regular_file())verified.OutputLeases.push_back(std::make_unique<FileLease>(entry.path()));
     CheckMacSignature(executable);
 #endif
-    VerifiedGame verified;LockTree(executable.parent_path(),verified.OutputLeases);
     verified.OutputLeases.push_back(std::make_unique<FileLease>(executable));
 #ifdef __APPLE__
     verified.OutputLeases.push_back(std::make_unique<FileLease>(SealPath(executable)));
 #endif
-    for(const auto& name:{"game.bootstrap","game.integrity","game.signature"})verified.OutputLeases.push_back(std::make_unique<FileLease>(executable.parent_path()/name));
-    const auto folder=executable.parent_path();std::ifstream player(SealPath(executable),std::ios::binary);player.seekg(std::streamoff(PlayerSealOffset(executable)));
+    for(const auto& name:{"game.bootstrap","game.integrity","game.signature"})verified.OutputLeases.push_back(std::make_unique<FileLease>(folder/name));
+    std::ifstream player(SealPath(executable),std::ios::binary);player.seekg(std::streamoff(PlayerSealOffset(executable)));
     std::array<char,8> magic{};Bytes(player,magic.data(),magic.size());Require(std::string(magic.data(),8)=="BZSIG003","Missing version-3 content signature seal; rebuild the game");
     std::array<unsigned char,64> publicBytes{};Bytes(player,publicBytes.data(),publicBytes.size());
     auto bootstrap=Read(folder/"game.bootstrap",65536);auto payload=Read(folder/"game.integrity",64*1024*1024);auto signature=Read(folder/"game.signature",64);Require(signature.size()==64,"Invalid content signature size");

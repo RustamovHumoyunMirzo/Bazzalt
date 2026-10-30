@@ -299,6 +299,8 @@ def _Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
                 root=macos.CreateBundle(publication,settings);output=output.with_suffix('.app')
             else:root=publication;root.mkdir()
             for filename in files:shutil.copy2(runtime/filename,root/(name+suffix if filename=='BazzaltPlayer'+suffix else filename))
+            code_root=root
+            if platform=='macos':root=publication/'Contents/Resources'
             from .pe_resources import Apply
             if platform=='windows':Apply(root/(name+suffix),settings['production'])
             from .security import SecurityContext
@@ -316,8 +318,8 @@ def _Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
             from .integrity import Seal
             if platform=='macos':
                 owner=hashlib.sha256(str(project).encode('utf-8')).hexdigest();OwnershipMarker(publication).write_text(owner,encoding='utf-8')
-                macos.SignLibraries(root,settings['platforms']['macos']);macos.Sign(publication,settings['platforms']['macos'])
-            Seal(root,root/(name+suffix),security=security,content=content_hashes)
+                macos.SignLibraries(code_root,settings['platforms']['macos']);macos.Sign(publication,settings['platforms']['macos'])
+            Seal(root,code_root/(name+suffix),security=security,content=content_hashes)
             if platform=='macos':macos.Finalize(publication,settings['platforms']['macos'])
             check()
             Emit('verify','Verifying the packaged game')
@@ -326,8 +328,8 @@ def _Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
             from .cross import CanExecute
             if not CanExecute(platform,arch):
                 from .verify import Verify
-                Verify(root,root/(name+suffix),security.Master)
-            else:Run([root/(name+suffix),'--verify-package'],cwd=root,timeout=120,env=verify_environment)
+                Verify(root,code_root/(name+suffix),security.Master)
+            else:Run([code_root/(name+suffix),'--verify-package'],cwd=root,timeout=120,env=verify_environment)
             check()
             if settings['packaging']['archive']:
                 archive=destination/f'{name}-{platform}-{arch}.zip';temporary=work/'Game.zip'

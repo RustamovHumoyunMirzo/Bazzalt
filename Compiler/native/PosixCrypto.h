@@ -53,16 +53,23 @@ inline std::vector<unsigned char> DecryptEnvelope(const std::vector<unsigned cha
 #include "MacPlatform.h"
 #endif
 namespace Bazzalt::Game {
+inline std::filesystem::path GameDataFolder(const std::filesystem::path& executable){
+#ifdef __APPLE__
+    return executable.parent_path().parent_path()/"Resources";
+#else
+    return executable.parent_path();
+#endif
+}
 inline std::uint64_t PlayerSealOffset(const std::filesystem::path& path){
 #ifdef __APPLE__
-    Require(std::filesystem::file_size(path.parent_path()/"game.seal")==112,"Missing player seal");return 0;
+    Require(std::filesystem::file_size(GameDataFolder(path)/"game.seal")==112,"Missing player seal");return 0;
 #else
     std::ifstream file(path,std::ios::binary);const auto size=std::filesystem::file_size(path);Require(size>=132,"Missing player seal");std::array<char,4> elf{};Bytes(file,elf.data(),4);Require(std::string(elf.data(),4)==std::string("\x7f" "ELF",4),"Invalid ELF player");file.seekg(std::streamoff(size-112));std::array<char,8> marker{};Bytes(file,marker.data(),8);Require(std::string(marker.data(),8)=="BZSIG003","Missing player seal");return size-112;
 #endif
 }
 inline std::filesystem::path SealPath(const std::filesystem::path& executable){
 #ifdef __APPLE__
-return executable.parent_path()/"game.seal";
+return GameDataFolder(executable)/"game.seal";
 #else
 return executable;
 #endif
@@ -71,7 +78,7 @@ inline std::vector<unsigned char> LoadRootKey(ryml::ConstNodeRef boot,const std:
     if(Text(boot["content_encrypted"])=="false"){Require(Text(boot["manifests_encrypted"])=="false"&&Text(boot["key_storage"])=="none","Invalid unencrypted bootstrap");return {};}
     Require(Text(boot["content_encrypted"])=="true","Invalid encryption flag");const auto method=Text(boot["key_storage"]);auto id=DecodeHex(Text(boot["build_id"]),16),salt=DecodeHex(Text(boot["salt"]),32);std::vector<unsigned char> master;WipeBytes wipe{master};
     if(method=="embedded"){std::ifstream file(SealPath(executable),std::ios::binary);file.seekg(std::streamoff(PlayerSealOffset(executable)+80));master.resize(32);Bytes(file,master.data(),32);}
-    else if(method=="file"){auto data=Read(executable.parent_path()/"game.key",32);Require(data.size()==32,"Invalid key file");master.assign(data.begin(),data.end());SecureZeroMemory(data.data(),data.size());}
+    else if(method=="file"){auto data=Read(GameDataFolder(executable)/"game.key",32);Require(data.size()==32,"Invalid key file");master.assign(data.begin(),data.end());SecureZeroMemory(data.data(),data.size());}
     else if(method=="environment"){auto name=Text(boot["key_environment"]);Require(!name.empty()&&name.size()<=101&&name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")==std::string::npos,"Invalid key environment name");auto* value=std::getenv(name.c_str());Require(value&&std::strlen(value)==64,"Game key is unavailable");master=DecodeHex(value,32);}
 #ifdef __APPLE__
     else if(method=="keychain")master=KeychainKey(Text(boot["key_service"]),Text(boot["build_id"]),Text(boot["key_environment"]));
