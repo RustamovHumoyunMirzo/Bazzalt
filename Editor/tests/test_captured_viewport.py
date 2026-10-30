@@ -23,3 +23,16 @@ class CapturedViewportTests(unittest.TestCase):
                 self.assertIsNotNone(frame);self.assertEqual(len(frame['pixels']),width*height*4);self.assertTrue(any(frame['pixels'][3::4]))
             runtime.Tick();runtime.DestroyViewport(500)
         finally:runtime.Release()
+
+    def test_game_without_a_camera_presents_opaque_black(self):
+        app=QApplication.instance() or QApplication([]);runtime=RuntimeService()
+        self.assertTrue(runtime.IsAvailable(),runtime.LastError());self.assertTrue(runtime.ConfigureRenderingBackend('vulkan'))
+        try:
+            self.assertTrue(runtime.CreateCapturedViewport(501,False,96,64,1),runtime.LastError());deadline=time.monotonic()+20;frame=None
+            while time.monotonic()<deadline:
+                self.assertTrue(runtime.Tick(),runtime.LastError());app.processEvents();frame=runtime.CapturedViewportFrame(501,0)
+                if frame:break
+                time.sleep(.01)
+            self.assertIsNotNone(frame);pixels=frame['pixels'];self.assertEqual(len(pixels),96*64*4)
+            self.assertTrue(all(pixels[index]<3 for index in range(len(pixels)) if index%4!=3));self.assertTrue(all(value==255 for value in pixels[3::4]))
+        finally:runtime.Release()

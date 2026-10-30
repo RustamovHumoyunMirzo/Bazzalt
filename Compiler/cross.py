@@ -40,7 +40,16 @@ def Resolve(settings,runtime):
     if method=='wsl' and host=='linux':method='native'
     if host==platform and method in ('automatic','native') and not (host=='linux' and target['architecture'] not in (HostArchitecture(),'x86')):return None
     choices=METHODS.get((host,platform),())
-    if method=='automatic':method=next((name for name in choices if Detect(name,platform,target['architecture'])), '')
+    if method=='automatic':
+        override=profile.get('toolchain','')
+        if override:
+            name=Path(override).name.lower();inferred='wsl' if name in ('wsl','wsl.exe') else 'zig' if name in ('zig','zig.exe') else 'mingw' if 'mingw' in name else ''
+            if not inferred:
+                try:inferred=json.loads((Path(runtime)/'runtime.json').read_text(encoding='utf-8-sig')).get('cross_toolchain',{}).get('method','')
+                except (OSError,ValueError):pass
+            if inferred not in choices:raise ValueError('Choose the build method for this custom compiler executable')
+            method=inferred
+        else:method=next((name for name in choices if Detect(name,platform,target['architecture'])), '')
     if method not in choices:raise ValueError('No supported cross-build method for this host and target')
     compiler=Detect(method,platform,target['architecture'],profile.get('toolchain',''))
     if not compiler:raise ValueError('Install the selected cross toolchain or select its executable in Build Settings')

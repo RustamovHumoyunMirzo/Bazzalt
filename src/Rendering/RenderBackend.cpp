@@ -81,6 +81,8 @@ struct RenderBackend::ViewportResource {
     ViewportKind Kind = ViewportKind::Game;
     filament::SwapChain* SwapChain = nullptr;
     filament::View* View = nullptr;
+    filament::Scene* ClearScene = nullptr;
+    filament::Skybox* ClearBackground = nullptr;
     filament::Camera* Camera = nullptr;
     utils::Entity CameraEntity;
     std::uint32_t Width = 1;
@@ -362,12 +364,17 @@ bool RenderBackend::CreateViewport(std::uint64_t id, std::uintptr_t nativeWindow
     viewport->CameraEntity = m_engine->getEntityManager().create();
     viewport->Camera = m_engine->createCamera(viewport->CameraEntity);
     viewport->View = m_engine->createView();
-    // The private viewport camera is only an editor Scene-view camera.  A Game
-    // viewport must never use it as an implicit scene camera: runtime output is
-    // driven exclusively by active Camera components.
-    viewport->View->setScene(kind == ViewportKind::Scene ? m_scene : nullptr);
+    // A Game viewport's private view renders only black when no Camera component
+    // is active. A null scene is skipped by Filament and leaves no color attachment
+    // for Vulkan readPixels, so use an isolated, empty black scene instead.
+    if(kind==ViewportKind::Game){
+        viewport->ClearScene=m_engine->createScene();
+        viewport->ClearBackground=filament::Skybox::Builder().color({0,0,0,1}).showSun(false).build(*m_engine);
+        viewport->ClearScene->setSkybox(viewport->ClearBackground);
+    }
+    viewport->View->setScene(kind == ViewportKind::Scene ? m_scene : viewport->ClearScene);
     viewport->View->setCamera(viewport->Camera);
-    viewport->View->setPostProcessingEnabled(true);
+    viewport->View->setPostProcessingEnabled(kind==ViewportKind::Scene);
     viewport->View->setVisibleLayers(0xff, kind == ViewportKind::Scene ? 0xff : 0x7f);
     if (kind == ViewportKind::Scene) {
         viewport->GizmoView=m_engine->createView();viewport->GizmoView->setScene(m_gizmo->OverlayScene);viewport->GizmoView->setCamera(viewport->Camera);
@@ -458,6 +465,8 @@ void RenderBackend::DestroyViewport(std::uint64_t id) {
     if(viewport.HelperCamera)m_engine->destroyCameraComponent(viewport.HelperCameraEntity);
     if(viewport.HelperCameraEntity)m_engine->getEntityManager().destroy(viewport.HelperCameraEntity);
     if (viewport.View) m_engine->destroy(viewport.View);
+    if (viewport.ClearScene) m_engine->destroy(viewport.ClearScene);
+    if (viewport.ClearBackground) m_engine->destroy(viewport.ClearBackground);
     if (viewport.Camera) m_engine->destroyCameraComponent(viewport.CameraEntity);
     if (viewport.CameraEntity) m_engine->getEntityManager().destroy(viewport.CameraEntity);
     if (viewport.SwapChain) {
@@ -826,9 +835,8 @@ void RenderBackend::Render(double materialTime) {
             auto* guiInput=m_guiRenderer?m_guiRenderer->GetSceneInputTarget():nullptr;
             const bool directCamera=std::any_of(m_activeViews.begin(),m_activeViews.end(),[](filament::View* view){return view&&!view->getRenderTarget();});
             if (!directCamera) {
-                // Render an empty view solely to clear the swap chain.  Its
-                // scene is deliberately null, so a missing game camera can
-                // never expose the editor fallback camera.
+                // Clear through an isolated black scene, never the editor world.
+                // This also guarantees a valid color attachment for captured output.
                 m_renderer->setClearOptions({.clearColor={0,0,0,1},.clear=true});
                 if (resource->View) {resource->View->setRenderTarget(guiInput);m_renderer->render(resource->View);resource->View->setRenderTarget(nullptr);}
                 m_renderer->setClearOptions({.clearColor={0.055,0.065,0.085,1.0},.clear=true});

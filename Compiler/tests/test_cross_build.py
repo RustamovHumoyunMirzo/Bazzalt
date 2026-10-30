@@ -50,3 +50,11 @@ class CrossBuildTests(unittest.TestCase):
             with patch('Compiler.cross.Resolve',return_value=None),patch('Compiler.build._Build',return_value='output') as build:
                 self.assertEqual(Build(project,'runtime','cooker'),'output')
                 self.assertEqual(build.call_args.args[4],'selected-clang')
+
+    def test_automatic_method_honors_a_picked_zig_outside_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);compiler=root/'zig';compiler.touch();settings=Merge({})
+            settings['platforms']['windows'].update(build_method='automatic',toolchain=str(compiler))
+            (root/'runtime.json').write_text(json.dumps(dict(cross_toolchain=dict(method='zig',version='0.14.1',triple='x86_64-windows-gnu'))))
+            with patch('Compiler.cross.HostPlatform',return_value='linux'),patch('Compiler.cross.shutil.which',return_value=None),patch('Compiler.cross.subprocess.run',return_value=SimpleNamespace(returncode=0,stdout='0.14.1')):
+                self.assertEqual(Resolve(settings,root)['compiler'],str(compiler))

@@ -218,7 +218,7 @@ def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
     options=Resolve(settings,runtime)
     if options and options['method']=='wsl':
         if launch:raise ValueError('Build and Launch is unavailable for cross-platform output')
-        process=subprocess.Popen(WslCommand(project,profile),stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+        process=subprocess.Popen(WslCommand(project,profile),stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
         output=None;forward_stop=threading.Event()
         def forward_cancel():
             while not forward_stop.wait(.05):
@@ -233,7 +233,7 @@ def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
                     event=json.loads(line)
                     if event.get('stage')=='complete':
                         output=event.get('output');prefix=WslCommand(project,profile);prefix=prefix[:prefix.index('--')+1]
-                        mapped=subprocess.run([*prefix,'wslpath','-a','-w',output],capture_output=True,encoding='utf-8',timeout=30)
+                        mapped=subprocess.run([*prefix,'wslpath','-a','-w',output],capture_output=True,encoding='utf-8',timeout=30,creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
                         if mapped.returncode:raise ValueError('Could not map WSL output to the host filesystem')
                         output=mapped.stdout.strip();event['output']=output
                     print(json.dumps(event,ensure_ascii=True),flush=True)
