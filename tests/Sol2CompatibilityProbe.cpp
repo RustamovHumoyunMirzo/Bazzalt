@@ -8,3 +8,5 @@ void BindProbe(sol::state& lua) {
     type["Volume"]=&Probe::Volume;
     type["Name"]=&Probe::Name;
 }
+
+void ProbeReferenceOptional(){int first=1,second=2;sol::optional<int&> value(first);int& result=value.emplace(second);if(&result!=&second||&*value!=&second)std::abort();}

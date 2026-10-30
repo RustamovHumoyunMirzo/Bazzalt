@@ -48,6 +48,10 @@ jobs:
           for dependency in entt rapidyaml filament sdl3 stb_image lua sol2 miniaudio jolt freetype text_shaping pybind11; do
             if [ -f "scripts/get_${dependency}.sh" ]; then sh "scripts/get_${dependency}.sh"; fi
           done
+      - name: Build missing native Filament architecture on CI
+        env:
+          BAZZALT_MAC_ARCH: ${{ matrix.cmake_arch }}
+        run: sh scripts/build_macos_dependencies.sh
       - name: Configure and build native products
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DCMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_arch }} -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 -DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DBAZZALT_FILAMENT_METAL=ON -DBAZZALT_FILAMENT_OPENGL=OFF -DBAZZALT_FILAMENT_VULKAN=OFF -DPython_EXECUTABLE="$(command -v python)"
