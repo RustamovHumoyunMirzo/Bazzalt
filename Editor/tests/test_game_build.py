@@ -64,6 +64,7 @@ class GameBuildTests(unittest.TestCase):
             try:
                 self.assertEqual(set(dialog.PlatformGroups),{'windows','linux','macos'})
                 mac=dialog.PlatformControls[('macos','backend')];self.assertEqual([mac.itemData(i) for i in range(mac.count())],['automatic','metal'])
+                architecture=dialog.PlatformControls[('macos','architecture')];architecture.setCurrentIndex(architecture.findData('arm64'))
                 windows=dialog.PlatformControls[('windows','architecture')];windows.setCurrentIndex(windows.findData('x86'))
                 platform=dialog.Controls[('target','platform')];platform.setCurrentIndex(platform.findData('macos'))
                 self.assertTrue(dialog.PlatformGroups['macos'][0].isChecked());self.assertEqual(dialog.GetValues()['target']['architecture'],'arm64');self.assertEqual(dialog.GetValues()['platforms']['windows']['architecture'],'x86')

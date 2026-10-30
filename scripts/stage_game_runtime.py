@@ -4,6 +4,18 @@ from pathlib import Path
 try:from .release_artifacts import Architecture
 except ImportError:from release_artifacts import Architecture
 
+def RuntimeLibraries(folder,architecture):
+    folder=Path(folder);files=[]
+    for file in sorted(folder.glob('*.dll')):
+        actual=Architecture(file)
+        # Microsoft's Arm64 redist also carries this x64-only exception-handler
+        # shim for emulated x64 programs. It is not a native Arm64 dependency.
+        if architecture=='arm64' and actual=='x64' and file.name.lower()=='vcruntime140_1.dll':continue
+        if actual!=architecture:raise ValueError(f'Wrong VC runtime architecture: {file.name} is {actual}, expected {architecture}')
+        files.append(file)
+    if not {'msvcp140.dll','vcruntime140.dll'}.issubset({file.name.lower() for file in files}):raise ValueError('Required native Microsoft C++ runtime libraries are missing')
+    return files
+
 def Stage(build,output,architecture,root=None,platform=None):
     from bazzalt.platforms import HostPlatform
     platform=platform or HostPlatform();linux=platform!="windows"
@@ -32,8 +44,7 @@ def Stage(build,output,architecture,root=None,platform=None):
                 if base.is_dir():roots.extend(sorted(base.iterdir(),reverse=True))
         crt=next((folder for base in roots for folder in (base/architecture).glob('Microsoft.VC*.CRT') if (folder/'msvcp140.dll').is_file()),None)
         if crt is None:raise ValueError('Microsoft VC runtime redistributables are missing; repair the build tools installation')
-        for file in crt.glob('*.dll'):
-            if Architecture(file)!=architecture:raise ValueError('Wrong VC runtime architecture')
+        for file in RuntimeLibraries(crt,architecture):
             shutil.copy2(file,output/file.name)
             if file.name not in names:names.append(file.name)
     sdk=output/'ScriptSDK';shutil.copytree(build/'ScriptSDK/include',sdk/'include',dirs_exist_ok=True);(sdk/'lib').mkdir(parents=True,exist_ok=True)

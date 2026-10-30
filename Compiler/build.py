@@ -199,11 +199,16 @@ def RenameWithRetry(source,target):
             if attempt==11:raise
             time.sleep(.05*(attempt+1))
 
+def OwnershipMarker(path):
+    path=Path(path)
+    return path/('Contents/Resources/.bazzalt-game-build' if path.suffix=='.app' else '.bazzalt-game-build')
+
 def Publish(staged,output,owner):
-    marker='.bazzalt-game-build'
     if output.exists():
-        if not output.is_dir() or not (output/marker).is_file() or (output/marker).read_text()!=owner:raise ValueError('Refusing to replace an output not owned by this project: '+str(output))
-    (staged/marker).write_text(owner,encoding='utf-8')
+        if not output.is_dir() or not OwnershipMarker(output).is_file() or OwnershipMarker(output).read_text()!=owner:raise ValueError('Refusing to replace an output not owned by this project: '+str(output))
+    marker=OwnershipMarker(staged);marker.parent.mkdir(parents=True,exist_ok=True)
+    if not marker.exists():marker.write_text(owner,encoding='utf-8')
+    elif marker.read_text(encoding='utf-8')!=owner:raise ValueError('Staged output belongs to another project')
     backup=output.with_name(output.name+'.previous-'+uuid.uuid4().hex)
     if output.exists():RenameWithRetry(output,backup)
     try:RenameWithRetry(staged,output)
@@ -310,7 +315,7 @@ def _Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
             if (runtime/'licenses').is_dir():shutil.copytree(runtime/'licenses',root/'licenses')
             from .integrity import Seal
             if platform=='macos':
-                owner=hashlib.sha256(str(project).encode('utf-8')).hexdigest();(publication/'.bazzalt-game-build').write_text(owner,encoding='utf-8')
+                owner=hashlib.sha256(str(project).encode('utf-8')).hexdigest();OwnershipMarker(publication).write_text(owner,encoding='utf-8')
                 macos.SignLibraries(root,settings['platforms']['macos']);macos.Sign(publication,settings['platforms']['macos'])
             Seal(root,root/(name+suffix),security=security,content=content_hashes)
             if platform=='macos':macos.Finalize(publication,settings['platforms']['macos'])
@@ -337,7 +342,7 @@ def _Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
                 if archive.exists() and (not marker.is_file() or marker.read_text()!=owner):raise ValueError('Archive is not owned by this project')
                 check();Emit('publish','Publishing verified game output')
                 os.replace(temporary,archive);marker.write_text(owner,encoding='utf-8');result=archive
-                if output.is_dir() and (output/'.bazzalt-game-build').is_file() and (output/'.bazzalt-game-build').read_text()==owner:shutil.rmtree(output)
+                if output.is_dir() and OwnershipMarker(output).is_file() and OwnershipMarker(output).read_text()==owner:shutil.rmtree(output)
                 if launch:
                     # The game outlives the disposable cook workspace. Keep one
                     # compiler-owned launch image rather than one per build.

@@ -49,3 +49,14 @@ class PlatformTargetsTests(unittest.TestCase):
                 item=zipfile.ZipInfo('BazzaltHub');item.create_system=3;item.external_attr=(stat.S_IFREG|0o4755)<<16;output.writestr(item,b'ELF')
             Extract(archive,root/'out')
             self.assertEqual(stat.S_IMODE((root/'out/BazzaltHub').stat().st_mode),0o755)
+
+    def test_arm64_crt_excludes_only_the_x64_emulation_shim(self):
+        from scripts.stage_game_runtime import RuntimeLibraries
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            def binary(name,machine):
+                header=bytearray(256);header[:2]=b'MZ';struct.pack_into('<I',header,60,64);header[64:68]=b'PE\0\0';struct.pack_into('<H',header,68,machine);(root/name).write_bytes(header)
+            binary('msvcp140.dll',0xaa64);binary('vcruntime140.dll',0xaa64);binary('vcruntime140_1.dll',0x8664)
+            self.assertEqual({file.name for file in RuntimeLibraries(root,'arm64')},{'msvcp140.dll','vcruntime140.dll'})
+            binary('unexpected.dll',0x8664)
+            with self.assertRaisesRegex(ValueError,'unexpected.dll'):RuntimeLibraries(root,'arm64')

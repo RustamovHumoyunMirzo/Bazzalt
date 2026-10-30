@@ -53,7 +53,7 @@ def Run(args):
 
 def CreateBundle(bundle,settings):
     profile=settings['platforms']['macos'];production=settings['production']
-    contents=bundle/'Contents';root=contents/'MacOS';root.mkdir(parents=True)
+    contents=bundle/'Contents';root=contents/'MacOS';root.mkdir(parents=True);(contents/'Resources').mkdir()
     metadata=dict(CFBundlePackageType='APPL',CFBundleExecutable=production['name'],CFBundleIdentifier=profile['bundle_identifier'],CFBundleName=production['name'],CFBundleShortVersionString=production['version'],CFBundleVersion=production['version'],LSMinimumSystemVersion=profile['minimum_version'],NSHighResolutionCapable=True,NSPrincipalClass='NSApplication')
     (contents/'Info.plist').write_bytes(plistlib.dumps(metadata));return root
 
