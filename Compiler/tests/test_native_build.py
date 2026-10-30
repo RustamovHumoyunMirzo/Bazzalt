@@ -9,6 +9,26 @@ from scripts.stage_game_runtime import Stage
 ROOT=Path(__file__).resolve().parents[2]
 @unittest.skipUnless(os.name=='nt' and (ROOT/'build/Editor/Release/BazzaltPlayer.exe').is_file() and (ROOT/'build/Editor/Release/BazzaltCooker.exe').is_file(),'Prebuilt native player/cooker are required')
 class NativeBuildTests(unittest.TestCase):
+    def test_remote_worker_cooks_and_returns_verified_archive(self):
+        import hashlib
+        from Compiler.remote_worker import Execute,Info
+        from Editor.remote_build import Package,DEFAULT
+        with tempfile.TemporaryDirectory() as folder:
+            base=Path(folder);source=base/'Source';source.mkdir();assets=source/'Assets';assets.mkdir()
+            project=source/'Game.bproject'
+            project.write_text('FormatVersion: 1\nProjectUUID: "23456789-1234-4234-8234-123456789abc"\nName: WorkerTest\nAssetDirectory: Assets\nStartupScene: Assets/Main.bscene\nProperties: {}\n',encoding='utf-8')
+            (assets/'Main.bscene').write_text('FormatVersion: 1\nSceneUUID: "12345678-1234-4234-8234-123456789abc"\nEntities: []\n',encoding='utf-8')
+            settings=ApplyPreset(DEFAULTS,'low');settings['production']['name']='WorkerTest';Save(project,settings)
+            runtime=Stage(ROOT/'build',base/'Runtime','x64');job=base/'Worker/job';job.mkdir(parents=True)
+            Package(project,job/'project.zip',DEFAULT)
+            with (job/'project.zip').open('rb') as file:digest=hashlib.file_digest(file,'sha256').hexdigest()
+            request=job/'request.json';request.write_text(json.dumps(dict(protocol=1,project_id='a'*64,project='Game.bproject',sha256=digest,runtime=str(runtime),remove_intermediates=True)),encoding='utf-8')
+            self.assertTrue(Info(str(runtime))['cooker_ready']);result=Execute(request)
+            self.assertTrue(result.is_file());self.assertTrue(result.name.endswith('.zip'))
+            with zipfile.ZipFile(result) as archive:
+                self.assertIn('WorkerTest.exe',archive.namelist());self.assertIn('game.integrity',archive.namelist())
+            self.assertFalse((base/'Worker/projects'/('a'*64)/'Project/.bazzalt/Cache/Build').exists())
+
     def test_cli_cancellation_with_open_control_pipe_exits_cleanly(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);runtime=Stage(ROOT/'build',root/'Runtime','x64');project=root/'Game.bproject';assets=root/'Assets';assets.mkdir()

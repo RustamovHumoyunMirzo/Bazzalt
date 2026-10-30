@@ -8,7 +8,7 @@ permissions:
   contents: read
 concurrency:
   group: windows-arm64-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   build-and-test:
     runs-on: windows-11-arm

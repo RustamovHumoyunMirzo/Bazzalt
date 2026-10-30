@@ -26,7 +26,7 @@ def Stage(build,output,architecture,root=None,platform=None):
         if os.environ.get('VCToolsRedistDir'):roots.append(Path(os.environ['VCToolsRedistDir']))
         locator=Path(os.environ.get('ProgramFiles(x86)','C:/Program Files (x86)'))/'Microsoft Visual Studio/Installer/vswhere.exe'
         if locator.is_file():
-            result=subprocess.run([str(locator),'-all','-products','*','-requires','Microsoft.VisualStudio.Component.VC.Tools.x86.x64','-property','installationPath'],capture_output=True,text=True,check=True)
+            result=subprocess.run([str(locator),'-all','-products','*','-property','installationPath'],capture_output=True,text=True,check=True)
             for installation in result.stdout.splitlines():
                 base=Path(installation.strip())/'VC/Redist/MSVC'
                 if base.is_dir():roots.extend(sorted(base.iterdir(),reverse=True))
