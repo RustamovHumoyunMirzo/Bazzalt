@@ -54,4 +54,15 @@ class MacSupportTests(unittest.TestCase):
                 boot=json.loads(context.Bootstrap(Path(folder),'0'*64,'1'*64));self.assertEqual(boot['key_storage'],'keychain');self.assertEqual(boot['key_service'],'com.example.game.game');self.assertEqual(list(Path(folder).iterdir()),[]);self.assertNotIn('ab'*32,json.dumps(boot))
         with patch.dict(os.environ,{},clear=True),self.assertRaises(ValueError):KeyFor(value)
 
+    def test_bundle_publication_preserves_presealed_resource_marker(self):
+        from Compiler.build import OwnershipMarker,Publish
+        from Compiler.macos import CreateBundle
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);staged=root/'Staged.app';CreateBundle(staged,Merge({}))
+            marker=OwnershipMarker(staged);marker.write_text('owner',encoding='utf-8');stamp=marker.stat().st_mtime_ns
+            self.assertEqual({file.name for file in staged.iterdir()},{'Contents'})
+            output=root/'Game.app';Publish(staged,output,'owner')
+            self.assertEqual(OwnershipMarker(output).read_text(),'owner');self.assertEqual(OwnershipMarker(output).stat().st_mtime_ns,stamp)
+            self.assertFalse((output/'.bazzalt-game-build').exists())
+
 if __name__=='__main__':unittest.main()
