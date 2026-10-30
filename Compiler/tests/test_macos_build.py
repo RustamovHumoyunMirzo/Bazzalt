@@ -38,7 +38,7 @@ class MacBuildTests(unittest.TestCase):
                 Save(project,settings)
                 key='a7'*32
                 with patch.dict(os.environ,{'BAZZALT_GAME_KEY':key}):output=Build(project,runtime,BUILD/'Editor/BazzaltCooker')
-                executable=output/'Contents/MacOS/Game';boot=json.loads((executable.parent/'game.bootstrap').read_text());service=boot['key_service'];account=boot['build_id']
+                executable=output/'Contents/MacOS/Game';boot=json.loads((output/'Contents/Resources/game.bootstrap').read_text());service=boot['key_service'];account=boot['build_id']
                 lookup=['/usr/bin/security','find-generic-password','-s',service,'-a',account]
                 self.assertNotEqual(subprocess.run(lookup,capture_output=True).returncode,0,'Verification must not provision builder Keychain')
                 environment=dict(os.environ);environment['BAZZALT_GAME_KEY']=key
