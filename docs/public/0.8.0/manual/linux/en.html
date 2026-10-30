@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Hub, Editor and Compiler target Linux x86-64, built on Ubuntu 24.04. Games can target x64 or x86 with a matching runtime template. Hub is a native Qt application. Editor presentation and standalone games use X11, including XWayland on a Wayland desktop. Native Wayland is supported through Vulkan rendering and asynchronous Qt/SDL composition; X11 keeps direct swapchain presentation.">
+  <meta name="description" content="Hub, Editor and Compiler target Linux x86-64, built on Ubuntu 24.04. Games can target x64, x86 or ARM64 with a matching runtime template. Hub is a native Qt application. Editor presentation and standalone games support X11 and native Wayland. Native Wayland uses Vulkan rendering and asynchronous Qt/SDL composition; X11 keeps direct swapchain presentation. OpenGL on a Wayland desktop requires XWayland.">
   <title>Linux | BAZZALT Docs</title>
   <link rel="stylesheet" href="../../../assets/docs.css">
   <script src="../../../assets/theme.js"></script>
@@ -27,7 +27,7 @@
     <main id="content" tabindex="-1">
       <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Editor manual / Linux</nav>
       <article class="doc"><h1>Linux</h1>
-<p>Hub, Editor and Compiler target Linux x86-64, built on Ubuntu 24.04. Games can target x64 or x86 with a matching runtime template. Hub is a native Qt application. Editor presentation and standalone games use X11, including XWayland on a Wayland desktop. Native Wayland is supported through Vulkan rendering and asynchronous Qt/SDL composition; X11 keeps direct swapchain presentation.</p>
+<p>Hub, Editor and Compiler target Linux x86-64, built on Ubuntu 24.04. Games can target x64, x86 or ARM64 with a matching runtime template. Hub is a native Qt application. Editor presentation and standalone games support X11 and native Wayland. Native Wayland uses Vulkan rendering and asynchronous Qt/SDL composition; X11 keeps direct swapchain presentation. OpenGL on a Wayland desktop requires XWayland.</p>
 <h2 id="install">Install and launch</h2>
 <p>Extract the Linux Hub ZIP while preserving executable permissions, then run BazzaltHub from its extracted directory. The optional scripts/install_linux.sh helper installs this directory for your user and creates a desktop launcher. Install a matching Linux editor from Hub, then open a project. Editors remain managed programs; Hub chooses the version. Project files are portable between Windows and Linux, but generated caches, native script modules and game outputs must be rebuilt on each OS.</p>
 <p>Qt uses XDG app-data and Documents paths for settings and projects. On a typical Linux desktop, settings live under ~/.local/share/BAZZALT/data. Native C++ scripting requires clang++, libc++-dev, libc++abi-dev and C++20 development headers, found through PATH or Preferences &gt; Tools. Unlike Windows, no Microsoft build tools or import libraries are used.</p>

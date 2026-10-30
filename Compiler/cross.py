@@ -20,7 +20,7 @@ def Detect(method,platform,architecture,override=''):
         path=Path(override).expanduser()
         if not path.is_file():raise ValueError('The selected cross compiler does not exist')
         return path
-    names=['zig'] if method=='zig' else [Triple(platform,architecture,'mingw')+'-g++'] if method=='mingw' else ['wsl.exe'] if method=='wsl' else []
+    names=['zig'] if method=='zig' else [Triple(platform,architecture,'mingw')+'-g++'] if method=='mingw' else ['wsl.exe'] if method=='wsl' else ['clang++','clang++-18','clang++-17'] if method=='native' else []
     found=next((Path(value) for name in names if (value:=shutil.which(name))),None)
     if method=='wsl' and found:
         try:

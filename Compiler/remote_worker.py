@@ -103,6 +103,7 @@ def _ExecuteLocked(request,job,base,identity,cancel):
     if target!=HostPlatform():raise ValueError('The worker operating system does not match the selected game target')
     if request.get('runtime'):settings['platforms'][target]['runtime_directory']=request['runtime']
     settings['platforms'][target]['build_method']='native'
+    settings['platforms'][target]['toolchain']='' # Client paths are not valid on the worker; use its explicit override.
     settings['packaging']['archive']=True;Save(project,settings)
     app=ToolsRoot()
     runtime=Path(settings['platforms'][target]['runtime_directory']) if settings['platforms'][target]['runtime_directory'] else app/'RuntimeTemplates'/(target+'-'+settings['platforms'][target]['architecture'])

@@ -66,7 +66,7 @@ class BuildSettingsDialog(QDialog):
         if value:field.setText(value)
     def _Detect(self,platform):
         from Compiler.cross import Detect,METHODS
-        method=self.PlatformControls[(platform,'build_method')].currentData();arch=self.PlatformControls[(platform,'architecture')].currentData();choices=METHODS.get((HostPlatform(),platform),()) if method=='automatic' else (method,)
+        method=self.PlatformControls[(platform,'build_method')].currentData();arch=self.PlatformControls[(platform,'architecture')].currentData();choices=(('native',) if platform==HostPlatform() else METHODS.get((HostPlatform(),platform),())) if method=='automatic' else (method,)
         for option in choices:
             found=Detect(option,platform,arch)
             if found:

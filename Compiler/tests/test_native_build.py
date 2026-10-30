@@ -18,7 +18,7 @@ class NativeBuildTests(unittest.TestCase):
             project=source/'Game.bproject'
             project.write_text('FormatVersion: 1\nProjectUUID: "23456789-1234-4234-8234-123456789abc"\nName: WorkerTest\nAssetDirectory: Assets\nStartupScene: Assets/Main.bscene\nProperties: {}\n',encoding='utf-8')
             (assets/'Main.bscene').write_text('FormatVersion: 1\nSceneUUID: "12345678-1234-4234-8234-123456789abc"\nEntities: []\n',encoding='utf-8')
-            settings=ApplyPreset(DEFAULTS,'low');settings['production']['name']='WorkerTest';Save(project,settings)
+            settings=ApplyPreset(DEFAULTS,'low');settings['production']['name']='WorkerTest';settings['platforms']['windows']['toolchain']='C:/ClientOnly/missing-clang.exe';Save(project,settings)
             runtime=Stage(ROOT/'build',base/'Runtime','x64');job=base/'Worker/job';job.mkdir(parents=True)
             Package(project,job/'project.zip',DEFAULT)
             with (job/'project.zip').open('rb') as file:digest=hashlib.file_digest(file,'sha256').hexdigest()

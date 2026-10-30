@@ -6,6 +6,7 @@
 #include "Runtime/ApplicationAccess.h"
 #include <SDL3/SDL.h>
 #ifndef __APPLE__
+#include "WaylandPresenter.h"
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #else
@@ -36,13 +37,13 @@ struct TemporaryContent {
 #include "MacCover.h"
 #else
 struct Cover {
-    SDL_Window* WaylandWindow=nullptr;
+    SDL_Window* WaylandWindow=nullptr;std::unique_ptr<WaylandPresenter> Presenter;
     Display* DisplayHandle=nullptr;Window Handle=0;int Size=144;bool Brand=true;
     void Create(SDL_Window* window,bool brand,int size){
-        if(std::string(SDL_GetCurrentVideoDriver())=="wayland"){WaylandWindow=window;Size=size;Brand=brand;return;}
+        if(std::string(SDL_GetCurrentVideoDriver())=="wayland"){WaylandWindow=window;Presenter=std::make_unique<WaylandPresenter>(window);Size=size;Brand=brand;return;}
         auto properties=SDL_GetWindowProperties(window);DisplayHandle=static_cast<Display*>(SDL_GetPointerProperty(properties,SDL_PROP_WINDOW_X11_DISPLAY_POINTER,nullptr));auto owner=Window(SDL_GetNumberProperty(properties,SDL_PROP_WINDOW_X11_WINDOW_NUMBER,0));Require(DisplayHandle&&owner,"Linux presentation requires X11/XWayland");Size=size;Brand=brand;int width,height;SDL_GetWindowSizeInPixels(window,&width,&height);Handle=XCreateSimpleWindow(DisplayHandle,owner,0,0,width,height,0,0,0);XMapRaised(DisplayHandle,Handle);Paint(width,height);
     }
-    void Paint(int width,int height){if(WaylandWindow){auto* target=SDL_GetWindowSurface(WaylandWindow);Require(target,SDL_GetError());SDL_FillSurfaceRect(target,nullptr,SDL_MapSurfaceRGB(target,0,0,0));if(Brand){auto* logo=SDL_CreateSurfaceFrom(GameIntroWidth,GameIntroHeight,SDL_PIXELFORMAT_BGRA32,const_cast<unsigned char*>(GameIntroPixels),GameIntroWidth*4);Require(logo,SDL_GetError());const int h=std::min(Size+64,std::max(32,target->h/2)),w=h*GameIntroWidth/GameIntroHeight;SDL_Rect rect{(target->w-w)/2,(target->h-h)/2,w,h};Require(SDL_BlitSurfaceScaled(logo,nullptr,target,&rect,SDL_SCALEMODE_LINEAR),SDL_GetError());SDL_DestroySurface(logo);}Require(SDL_UpdateWindowSurface(WaylandWindow),SDL_GetError());return;}if(!Handle)return;XResizeWindow(DisplayHandle,Handle,width,height);GC gc=XCreateGC(DisplayHandle,Handle,0,nullptr);XSetForeground(DisplayHandle,gc,0);XFillRectangle(DisplayHandle,Handle,gc,0,0,width,height);if(Brand){const int size=std::min(Size,std::max(32,(height-80)/2)),w=size*GameLogoWidth/GameLogoHeight,top=(height-size-48)/2;auto* data=static_cast<char*>(calloc(std::size_t(w)*size,4));Require(data,"Intro image allocation failed");auto* image=XCreateImage(DisplayHandle,DefaultVisual(DisplayHandle,DefaultScreen(DisplayHandle)),DefaultDepth(DisplayHandle,DefaultScreen(DisplayHandle)),ZPixmap,0,data,w,size,32,0);Require(image,"Intro image unavailable");for(int y=0;y<size;++y)for(int x=0;x<w;++x){const auto at=((y*GameLogoHeight/size)*GameLogoWidth+x*GameLogoWidth/w)*4;XPutPixel(image,x,y,(static_cast<unsigned long>(GameLogoPixels[at+2])<<16)|(static_cast<unsigned long>(GameLogoPixels[at+1])<<8)|GameLogoPixels[at]);}XPutImage(DisplayHandle,Handle,gc,image,0,0,(width-w)/2,top,w,size);XDestroyImage(image);XSetForeground(DisplayHandle,gc,0xffffff);const char* text="Powered by Bazzalt";XDrawString(DisplayHandle,Handle,gc,(width-int(std::strlen(text))*6)/2,top+size+32,text,std::strlen(text));}XFreeGC(DisplayHandle,gc);XFlush(DisplayHandle);}
+    void Paint(int width,int height){if(WaylandWindow){SDL_GetWindowSizeInPixels(WaylandWindow,&width,&height);std::vector<unsigned char> pixels(std::size_t(width)*height*4);auto* target=SDL_CreateSurfaceFrom(width,height,SDL_PIXELFORMAT_BGRA32,pixels.data(),width*4);Require(target,SDL_GetError());SDL_FillSurfaceRect(target,nullptr,SDL_MapSurfaceRGB(target,0,0,0));if(Brand){auto* logo=SDL_CreateSurfaceFrom(GameIntroWidth,GameIntroHeight,SDL_PIXELFORMAT_BGRA32,const_cast<unsigned char*>(GameIntroPixels),GameIntroWidth*4);Require(logo,SDL_GetError());const int h=std::min(Size+64,std::max(32,height/2)),w=h*GameIntroWidth/GameIntroHeight;SDL_Rect rect{(width-w)/2,(height-h)/2,w,h};const bool blitted=SDL_BlitSurfaceScaled(logo,nullptr,target,&rect,SDL_SCALEMODE_LINEAR);SDL_DestroySurface(logo);if(!blitted){SDL_DestroySurface(target);throw std::runtime_error(SDL_GetError());}}SDL_DestroySurface(target);Presenter->Present(pixels.data(),width,height,false);return;}if(!Handle)return;XResizeWindow(DisplayHandle,Handle,width,height);GC gc=XCreateGC(DisplayHandle,Handle,0,nullptr);XSetForeground(DisplayHandle,gc,0);XFillRectangle(DisplayHandle,Handle,gc,0,0,width,height);if(Brand){const int size=std::min(Size,std::max(32,(height-80)/2)),w=size*GameLogoWidth/GameLogoHeight,top=(height-size-48)/2;auto* data=static_cast<char*>(calloc(std::size_t(w)*size,4));Require(data,"Intro image allocation failed");auto* image=XCreateImage(DisplayHandle,DefaultVisual(DisplayHandle,DefaultScreen(DisplayHandle)),DefaultDepth(DisplayHandle,DefaultScreen(DisplayHandle)),ZPixmap,0,data,w,size,32,0);Require(image,"Intro image unavailable");for(int y=0;y<size;++y)for(int x=0;x<w;++x){const auto at=((y*GameLogoHeight/size)*GameLogoWidth+x*GameLogoWidth/w)*4;XPutPixel(image,x,y,(static_cast<unsigned long>(GameLogoPixels[at+2])<<16)|(static_cast<unsigned long>(GameLogoPixels[at+1])<<8)|GameLogoPixels[at]);}XPutImage(DisplayHandle,Handle,gc,image,0,0,(width-w)/2,top,w,size);XDestroyImage(image);XSetForeground(DisplayHandle,gc,0xffffff);const char* text="Powered by Bazzalt";XDrawString(DisplayHandle,Handle,gc,(width-int(std::strlen(text))*6)/2,top+size+32,text,std::strlen(text));}XFreeGC(DisplayHandle,gc);XFlush(DisplayHandle);}
     void Finish(){WaylandWindow=nullptr;if(Handle){XDestroyWindow(DisplayHandle,Handle);XFlush(DisplayHandle);Handle=0;}}
     ~Cover(){Finish();}
 };
@@ -89,7 +90,11 @@ extern "C" __attribute__((visibility("default"))) int BazzaltRunLinuxPlayer(int 
 #endif
         Require(wayland?engine.CreateCapturedViewport(1,false,width,height):(native&&engine.CreateEditorViewport(1,std::uintptr_t(native),false,width,height)),"Could not create game surface");
         std::uint64_t captureSequence=0;
-        const auto present=[&](){if(!wayland)return;auto frame=engine.GetCapturedViewportFrame(1,captureSequence);if(!frame)return;captureSequence=frame->Sequence;auto* source=SDL_CreateSurfaceFrom(frame->Width,frame->Height,SDL_PIXELFORMAT_RGBA32,frame->Pixels.data(),frame->Width*4);Require(source,SDL_GetError());Require(SDL_FlipSurface(source,SDL_FLIP_VERTICAL),SDL_GetError());auto* target=SDL_GetWindowSurface(window);Require(target,SDL_GetError());const bool success=SDL_BlitSurfaceScaled(source,nullptr,target,nullptr,SDL_SCALEMODE_NEAREST);SDL_DestroySurface(source);Require(success&&SDL_UpdateWindowSurface(window),SDL_GetError());};
+        const auto present=[&](){if(!wayland)return;auto frame=engine.GetCapturedViewportFrame(1,captureSequence);if(!frame)return;captureSequence=frame->Sequence;
+#ifndef __APPLE__
+            cover.Presenter->Present(frame->Pixels.data(),frame->Width,frame->Height,true);
+#endif
+        };
         using Events=Bazzalt::Runtime::ApplicationEventsAccess;using Input=Bazzalt::Runtime::InputAccess;Events::Emit({Bazzalt::ApplicationEventType::OnPostWindowCreate});Bazzalt::ApplicationEvent resize{Bazzalt::ApplicationEventType::OnWindowResize};resize.Width=width;resize.Height=height;Events::Emit(resize);bool focused=SDL_GetWindowFlags(window)&SDL_WINDOW_INPUT_FOCUS;Bazzalt::ApplicationEvent focus{Bazzalt::ApplicationEventType::OnWindowFocusChanged};focus.IsFocused=focused;Events::Emit(focus);Events::ThrowIfFailed();bool playing=false,skip=false;int frames=0;
         while(!engine.ShouldClose()){
             const auto start=std::chrono::steady_clock::now();SDL_Event event;while(SDL_PollEvent(&event)){
@@ -107,6 +112,10 @@ extern "C" __attribute__((visibility("default"))) int BazzaltRunLinuxPlayer(int 
             else if(playing&&(smoke||focused||Bazzalt::Application::GetRunInBackground())){engine.Update(!minimized);if(!minimized)present();if(smoke&&++frames>=3)break;}else engine.ResetFrameClock();
             int rate=Bazzalt::Runtime::ApplicationAccess::GetEffectiveFrameRate();if(rate>0)std::this_thread::sleep_until(start+std::chrono::duration<double>(1.0/rate));else if(minimized)std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
-        Events::ThrowIfFailed();engine.BeginShutdown();engine.Shutdown(true);cover.Finish();SDL_DestroyWindow(window);window=nullptr;engine.EndApplication();Events::ThrowIfFailed();SDL_Quit();return Bazzalt::Application::GetExitCode();
+        Events::ThrowIfFailed();engine.BeginShutdown();engine.Shutdown(true);cover.Finish();
+#ifndef __APPLE__
+        cover.Presenter.reset();
+#endif
+        SDL_DestroyWindow(window);window=nullptr;engine.EndApplication();Events::ThrowIfFailed();SDL_Quit();return Bazzalt::Application::GetExitCode();
     }catch(const std::exception& error){std::cerr<<error.what()<<'\n';if(!verify&&!smoke)SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Bazzalt game error",error.what(),window);if(window)SDL_DestroyWindow(window);SDL_Quit();return 1;}
 }

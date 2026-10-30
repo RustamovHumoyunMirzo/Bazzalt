@@ -1,6 +1,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
+#if defined(__APPLE__) || defined(__linux__)
+#include <cxxabi.h>
+#include <execinfo.h>
+#include <typeinfo>
+#endif
 
 #ifdef _MSC_VER
 #include <crtdbg.h>
@@ -25,7 +30,14 @@ struct TestDiagnostics {
                 catch (const std::exception& error) {
                     std::fprintf(stderr, "Unhandled test exception: %s\n", error.what());
                 }
-                catch (...) { std::fputs("Unhandled non-standard test exception\n", stderr); }
+                catch (...) {
+#if defined(__APPLE__) || defined(__linux__)
+                    const auto* type=abi::__cxa_current_exception_type();std::fprintf(stderr,"Unhandled exception type: %s\n",type?type->name():"unknown");
+                    void* frames[32];const int count=backtrace(frames,32);backtrace_symbols_fd(frames,count,2);
+#else
+                    std::fputs("Unhandled non-standard test exception\n", stderr);
+#endif
+                }
             } else {
                 std::fputs("Test called std::terminate without an active exception\n", stderr);
             }

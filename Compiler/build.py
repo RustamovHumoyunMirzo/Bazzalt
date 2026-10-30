@@ -246,7 +246,7 @@ def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
     from .cross import CanExecute
     if launch and not CanExecute(settings['target']['platform'],settings['target']['architecture']):raise ValueError('Build and Launch requires a native target; cross output can be copied to its target machine')
     token=Active.set(options)
-    try:return _Build(project,runtime,cooker,launch,compiler_path,cancel=cancel)
+    try:return _Build(project,runtime,cooker,launch,compiler_path or (profile.get('toolchain','') if options is None else ''),cancel=cancel)
     finally:Active.reset(token)
 
 def _Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):

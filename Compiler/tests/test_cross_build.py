@@ -40,3 +40,13 @@ class CrossBuildTests(unittest.TestCase):
         settings=Merge({});settings['platforms']['windows']['build_method']='content_only'
         with patch('Compiler.cross.HostPlatform',return_value='linux'),patch('Compiler.cross.Detect',side_effect=AssertionError):
             self.assertEqual(Resolve(settings,Path('provided-sdk'))['method'],'content_only')
+
+    def test_native_override_is_forwarded_to_script_compiler(self):
+        from Compiler.build import Build
+        from Compiler.settings import Save
+        with tempfile.TemporaryDirectory() as directory:
+            project=Path(directory)/'Game.bproject';project.touch();settings=Merge({})
+            settings['platforms']['windows']['toolchain']='selected-clang';Save(project,settings)
+            with patch('Compiler.cross.Resolve',return_value=None),patch('Compiler.build._Build',return_value='output') as build:
+                self.assertEqual(Build(project,'runtime','cooker'),'output')
+                self.assertEqual(build.call_args.args[4],'selected-clang')
