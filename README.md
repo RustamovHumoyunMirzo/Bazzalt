@@ -15,9 +15,6 @@ See [what is new in 0.8.0](docs/public/0.8.0/whats-new/en.html).
 > **Alpha status:** core workflows are functional, but APIs and file formats may
 > still change. BAZZALT is not yet recommended for production projects.
 
-macOS installation, native menus, signing and player Keychain provisioning are
-covered in the [macOS guide](docs/public/0.8.0/manual/macos/en.html).
-
 ## Supported platforms & backends
 
 ### Platforms
@@ -66,9 +63,7 @@ for another platform does not make it a supported BAZZALT target. See the
 
 ## Documentation
 
-Read the [public guides](docs/public/index.html) for scene editing, C++ and Lua
-gameplay, assets, and materials. The [Shader Graph guide](docs/public/0.8.0/manual/panels/shader-graph/en.html)
-covers node-based shader authoring and previews. Open the downloaded HTML in a browser for
+Read the [public guides](docs/public/index.html). Open the downloaded HTML in a browser for
 offline use. Documentation authoring and version/language setup are described
 in [docs/public/README.md](docs/public/README.md).
 
