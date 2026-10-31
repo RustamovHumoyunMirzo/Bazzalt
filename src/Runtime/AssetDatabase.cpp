@@ -286,7 +286,7 @@ class GuiDataImporter final : public AssetImporter {
 public:
     explicit GuiDataImporter(bool font):m_font(font){}
     std::string GetName()const override{return m_font?"Bazzalt.Font":"Bazzalt.Stylesheet";}
-    std::uint32_t GetVersion()const override{return m_font?21403:1;}
+    std::uint32_t GetVersion()const override{return m_font?21403:2;}
     bool Supports(const std::filesystem::path& source)const override{
         const auto ext=LowerExtension(source);return m_font?(ext==".ttf"||ext==".otf"||ext==".ttc"||ext==".otc"||ext==".pfa"||ext==".pfb"||ext==".bdf"||ext==".pcf"||ext==".woff"):ext==".css";
     }

@@ -35,11 +35,14 @@ std::string ID,Classes,Tags,Attributes;
 UUID MaterialAsset{};
 bool MaterialIncludesChildren=false;
 std::map&lt;std::string,std::string&gt; StyleProperties;
+// Per-instance runtime CSS; asset source is never changed.
+    std::string RuntimeCSS;
+std::map&lt;std::string,std::string&gt; InlineCSS;
 void SetMaterial(Bazzalt::Material material);
 [[nodiscard]] Bazzalt::Material GetMaterial()const;
 };</code></pre>
 <!-- API-SOURCE-END --></article>
-      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../GuiButton/en.html"><small>Previous</small>GuiButton</a>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../GuiCSS/en.html"><small>Previous</small>GuiCSS</a>
 <a class="next" href="../GuiImage/en.html"><small>Next</small>GuiImage</a></nav>
     </main>
     <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#metadata">Selectors and scope</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>

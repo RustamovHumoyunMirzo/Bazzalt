@@ -1,5 +1,6 @@
 #include "GUI/GuiSystem.h"
 #include "Bazzalt/AssetManager.h"
+#include "Bazzalt/Time.h"
 #include "Bazzalt/Components/Name.h"
 #include <fstream>
 #include <sstream>
@@ -164,6 +165,14 @@ void GuiSystem::PrepareStyles(Entity root,GuiBounds surface,float scale){
                 if(!sheet->Requirements.empty()){sheet=std::make_shared<CSS::Stylesheet>(CSS::BindRequirements(*sheet,metadata?metadata->StyleProperties:std::map<std::string,std::string>{}));for(const auto& diagnostic:sheet->Diagnostics)if(StyleDiagnostics.size()<64)StyleDiagnostics.push_back(diagnostic.Message);}
                 scopes.push_back({asset,e.GetUUID(),sheet});}};
         if(e==root&&(!metadata||!metadata->Stylesheet))add(root.GetComponent<Frame>().Stylesheet);if(metadata)add(metadata->Stylesheet);
+        if(metadata&&!metadata->RuntimeCSS.empty()&&metadata->RuntimeCSS.size()<=262144){
+            static thread_local std::map<std::string,std::shared_ptr<CSS::Stylesheet>> cache;
+            auto found=cache.find(metadata->RuntimeCSS);if(found==cache.end()){if(cache.size()>=64)cache.clear();found=cache.emplace(metadata->RuntimeCSS,std::make_shared<CSS::Stylesheet>(CSS::Parse(metadata->RuntimeCSS))).first;}
+            if(!found->second->HasErrors()){
+                auto sheet=found->second;if(!sheet->Requirements.empty())sheet=std::make_shared<CSS::Stylesheet>(CSS::BindRequirements(*sheet,metadata->StyleProperties));
+                scopes.push_back({{},e.GetUUID(),sheet});
+            }
+        }
         auto& node=nodes[e.GetUUID()];node.Type=Type(e);node.Parent=parent;node.PreviousSibling=previous;node.ChildIndex=index;node.ChildCount=siblings;node.TypeIndex=typeIndex;node.TypeCount=typeCount;
         if(metadata){node.ID=metadata->ID;for(const auto& word:Words(metadata->Classes))node.Classes.insert(word);node.Attributes=Attributes(metadata->Attributes);node.Attributes["tags"]=metadata->Tags;if(auto state=node.Attributes.find("state");state!=node.Attributes.end())node.States.insert(state->second);}
         if(node.ID.empty())node.ID=e.GetComponent<Name>().Value;
@@ -178,19 +187,27 @@ void GuiSystem::PrepareStyles(Entity root,GuiBounds surface,float scale){
         for(const auto& scope:scopes)node.States.insert("__scope_"+scope.Owner.ToString());
         std::size_t rules=0;for(const auto& scope:scopes)rules+=scope.Sheet->Rules.size();
         if(rules>10000){if(StyleDiagnostics.size()<64)StyleDiagnostics.push_back("GUI combined stylesheet rule limit exceeded");scopes.clear();}
-        if(!scopes.empty()){
+        if(!scopes.empty()||(metadata&&!metadata->InlineCSS.empty())){
             CSS::Stylesheet combined;std::size_t order=0;
-            for(const auto& scope:scopes){for(const auto& layer:scope.Sheet->Layers)if(std::find(combined.Layers.begin(),combined.Layers.end(),layer)==combined.Layers.end())combined.Layers.push_back(layer);
+            for(const auto& scope:scopes){for(const auto& [name,frames]:scope.Sheet->Keyframes)combined.Keyframes[name]=frames;for(const auto& layer:scope.Sheet->Layers)if(std::find(combined.Layers.begin(),combined.Layers.end(),layer)==combined.Layers.end())combined.Layers.push_back(layer);
                 for(auto rule:scope.Sheet->Rules){for(auto& selector:rule.Selectors){CSS::Test test;test.Type=CSS::Test::Kind::Pseudo;test.Name="state";test.Argument="__scope_"+scope.Owner.ToString();selector.Parts.back().Tests.push_back(std::move(test));}for(auto& declaration:rule.Declarations)declaration.Order=++order;combined.Rules.push_back(std::move(rule));}}
+            if(metadata&&!metadata->InlineCSS.empty()&&metadata->InlineCSS.size()<=128){
+                CSS::Rule inlineRule;std::vector<CSS::Diagnostic> errors;inlineRule.Selectors=CSS::ParseSelectors(":state(__inline_"+e.GetUUID().ToString()+")",errors);node.States.insert("__inline_"+e.GetUUID().ToString());inlineRule.Selectors[0].Weight.IDs=1000000;
+                for(const auto& [name,text]:metadata->InlineCSS){auto parsed=CSS::Parse("X{"+name+":"+text+"}");if(!parsed.HasErrors()&&parsed.Rules.size()==1)for(auto declaration:parsed.Rules[0].Declarations){declaration.Order=++order;inlineRule.Declarations.push_back(std::move(declaration));}}
+                combined.Rules.push_back(std::move(inlineRule));
+            }
             GuiComputed value;if(auto* r=e.TryGetComponent<RectTransform>())value.Rect=*r;value.Style=GUI::ResolveStyle(e);value.Text=GUI::ResolveText(e);value.Image=GUI::ResolveImage(e);if(button)value.Button=*button;if(input)value.Input=*input;
             value.Context.Width=surface.Size.X/scale;value.Context.Height=surface.Size.Y/scale;value.Context.FontSize=value.Text.FontSize;
             CSS::Limits limits;limits.ResolveWork=100000;value.Cascade=CSS::Compute(combined,node,value.Context,limits);
             static const std::set<std::string> supported={"content","interactable","visible","text-align","vertical-align","color","background-color","border-color","border-width","opacity","font-family","font-size","font-kerning","letter-spacing","line-height","white-space","display","visibility","pointer-events","flex-direction","align-items","justify-content","overflow","z-index","width","height","min-width","min-height","max-width","max-height","left","top","gap","flex-grow","flex-shrink","padding","margin","padding-left","padding-top","padding-right","padding-bottom","margin-left","margin-top","margin-right","margin-bottom","background-image"};
-            for(const auto& [name,data]:value.Cascade.Properties)if(!supported.contains(name)&&!IsGuiPaintProperty(name)&&name!="position"&&name!="aspect-ratio"&&name!="right"&&name!="bottom"&&StyleDiagnostics.size()<64)StyleDiagnostics.push_back("Unsupported GUI CSS property: "+name);
+            for(const auto& [name,data]:value.Cascade.Properties)if(!supported.contains(name)&&name!="transition"&&!name.starts_with("transition-")&&name!="animation"&&!name.starts_with("animation-")&&!IsGuiPaintProperty(name)&&name!="position"&&name!="aspect-ratio"&&name!="right"&&name!="bottom"&&StyleDiagnostics.size()<64)StyleDiagnostics.push_back("Unsupported GUI CSS property: "+name);
             for(const auto& diagnostic:value.Cascade.Diagnostics)if(StyleDiagnostics.size()<64)StyleDiagnostics.push_back(diagnostic.Message);
             const GuiComputed* inherited=nullptr;if(parent){auto found=Computed.find(e.GetParent().GetUUID());if(found!=Computed.end())inherited=&found->second;}
             if(inherited)value.Context.FontSize=inherited->Text.FontSize;
             if(auto found=Computed.find(root.GetUUID());found!=Computed.end())value.Context.RootFontSize=found->second.Text.FontSize;
+            // Motion is evaluated before typed layout and paint, once per engine time.
+            const bool motion=std::any_of(value.Cascade.Properties.begin(),value.Cascade.Properties.end(),[](const auto& entry){return entry.first=="animation"||entry.first.starts_with("animation-")||entry.first=="transition"||entry.first.starts_with("transition-");});
+            if(motion)CSS::Animate(value.Cascade,combined,Motion[e.GetUUID()],Time::GetTime(),value.Context);else Motion.erase(e.GetUUID());
             Apply(value,inherited);if(node.Attributes.contains("disabled")){value.Button.Interactable=false;value.Input.Interactable=false;}
             value.Context.FontSize=value.Text.FontSize;if(e==root)value.Context.RootFontSize=value.Text.FontSize;
             ApplyGuiLayout(value,{float(value.Context.Width),float(value.Context.Height)});value.Paint=ResolveGuiPaint(value.Cascade,value.Context,e==root?Vec2{float(value.Context.Width),float(value.Context.Height)}:value.Rect.Size,&StyleDiagnostics,inherited?&inherited->Paint:nullptr);Computed[e.GetUUID()]=std::move(value);
@@ -222,4 +239,44 @@ bool ModuleSetStyleProperty(Entity entity,const std::string& name,const std::str
     for(const auto& r:sheet->Requirements)if(r.Name==name){auto value=CSS::ParseValue(text);if(value.HasErrors()||!ValidPropertyAsset(r,value.Data))return false;if(!element->StyleProperties.contains(name)&&element->StyleProperties.size()>=128)return false;auto normalized=value.Data.ToString();if(normalized.size()>8192)return false;std::size_t bytes=2;auto cost=[&](const std::string& key,const std::string& text){return CSS::Value{{CSS::Token{CSS::TokenKind::String,key}}}.ToString().size()+CSS::Value{{CSS::Token{CSS::TokenKind::String,text}}}.ToString().size()+2;};for(const auto& [key,text]:element->StyleProperties)if(key!=name)bytes+=cost(key,text);if(bytes+cost(name,normalized)>65536)return false;element->StyleProperties[name]=std::move(normalized);return true;}return false;
 }
 
+}
+
+namespace Bazzalt::Runtime {
+std::string ModuleReadStylesheetCSS(Entity entity){
+    if(!entity)return {};auto info=AssetManager::GetAsset(PropertySheet(entity));if(!info||info->State!=AssetState::Ready||info->Importer!="Bazzalt.Stylesheet")return {};
+    std::ifstream in(info->CachePath,std::ios::binary|std::ios::ate);if(!in||in.tellg()<0||in.tellg()>1024*1024)return {};std::string source(static_cast<std::size_t>(in.tellg()),'\0');in.seekg(0);in.read(source.data(),source.size());return in?source:std::string{};
+}
+bool ModuleEditCSS(Entity entity,const std::string& operation,const std::string& key,const std::string& text){
+    auto* element=entity.TryGetComponent<GuiElement>();if(!element||text.size()>262144||key.size()>4096)return false;
+    if(operation=="set"||operation=="remove"){
+        auto property=CSS::ParseValue(key);if(property.HasErrors()||property.Data.Tokens.size()!=1||property.Data.Tokens[0].Kind!=CSS::TokenKind::Ident)return false;
+        if(operation=="remove")return element->InlineCSS.erase(key)!=0;
+        if(text.size()>8192||(!element->InlineCSS.contains(key)&&element->InlineCSS.size()>=128))return false;
+        auto sheet=CSS::Parse("X{"+key+":"+text+"}");if(sheet.HasErrors()||sheet.Rules.size()!=1||sheet.Rules[0].Declarations.size()!=1||sheet.Rules[0].Declarations[0].Property!=key)return false;
+        auto candidate=element->InlineCSS;candidate[key]=text;std::size_t bytes=0;for(const auto& [k,v]:candidate)bytes+=k.size()+v.size();if(bytes>65536)return false;element->InlineCSS=std::move(candidate);return true;
+    }
+    std::string candidate=element->RuntimeCSS;
+    if(operation=="replace")candidate=text;
+    else if(operation=="append")candidate+="\n"+text;
+    else {
+        bool frames=operation=="keyframes"||operation=="remove-keyframes";bool remove=operation=="remove-keyframes"||operation=="remove-rule";
+        if(!frames&&operation!="rule"&&operation!="remove-rule")return false;
+        std::vector<CSS::Diagnostic> diagnostics;
+        if(frames){auto name=CSS::ParseValue(key);if(name.HasErrors()||name.Data.Tokens.size()!=1||name.Data.Tokens[0].Kind!=CSS::TokenKind::Ident||key=="none")return false;}
+        else if(CSS::ParseSelectors(key,diagnostics).empty()||!diagnostics.empty())return false;
+        // Remove matching top-level rules by parser offsets. Nested media rules
+        // are edited by replacing the enclosing stylesheet, never by guessing braces.
+        std::vector<std::pair<std::size_t,std::size_t>> ranges;
+        std::vector<CSS::Diagnostic> tokenErrors;auto tokens=CSS::Tokenize(candidate,tokenErrors);
+        for(std::size_t i=0;i<tokens.size();){std::size_t begin=i,brace=i;while(brace<tokens.size()&&tokens[brace].Text!="{"&&tokens[brace].Text!=";"&&tokens[brace].Kind!=CSS::TokenKind::End)++brace;if(brace==tokens.size()||tokens[brace].Kind==CSS::TokenKind::End)break;
+            std::size_t end=brace+1;if(tokens[brace].Text=="{"){int depth=1;while(end<tokens.size()&&depth){if(tokens[end].Text=="{")++depth;if(tokens[end].Text=="}")--depth;++end;}}
+            CSS::Value header{{tokens.begin()+begin,tokens.begin()+brace}};std::string target=frames?"@keyframes "+key:key;
+            if([&](){auto a=header.Tokens;auto b=CSS::ParseValue(target).Data.Tokens;auto trim=[](auto& t){while(!t.empty()&&(t.front().Kind==CSS::TokenKind::Space||t.front().Kind==CSS::TokenKind::End))t.erase(t.begin());while(!t.empty()&&(t.back().Kind==CSS::TokenKind::Space||t.back().Kind==CSS::TokenKind::End))t.pop_back();};trim(a);trim(b);return CSS::Value{a}.ToString()==CSS::Value{b}.ToString();}()){auto start=tokens[begin].Source.Offset;auto finish=end<tokens.size()?tokens[end].Source.Offset:candidate.size();ranges.push_back({start,finish});}i=end;
+        }
+        for(auto i=ranges.rbegin();i!=ranges.rend();++i)candidate.erase(i->first,i->second-i->first);
+        if(!remove){auto replacement=CSS::Parse((frames?"@keyframes ":"")+key+"{"+text+"}");if(replacement.HasErrors()||(frames?(replacement.AtRules.size()!=1||!replacement.Rules.empty()):(replacement.Rules.size()!=1||!replacement.AtRules.empty())))return false;}
+        if(!remove)candidate+=std::string("\n")+(frames?"@keyframes ":"")+key+"{"+text+"}";
+    }
+    if(candidate.size()>262144)return false;auto parsed=CSS::Parse(candidate);if(parsed.HasErrors())return false;element->RuntimeCSS=std::move(candidate);return true;
+}
 }

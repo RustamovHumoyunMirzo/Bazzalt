@@ -34,6 +34,7 @@ public:
     UUID Hovered{},Focused{},Captured{};
     Vec2 PresentationSize{1280,720};
     std::unordered_map<UUID,GuiComputed> Computed;
+    std::unordered_map<UUID,CSS::MotionState> Motion;
     std::vector<std::string> StyleDiagnostics;
     std::vector<std::string> ReportedStyleDiagnostics;
     void PrepareStyles(Entity root,GuiBounds surface,float scale);

@@ -190,7 +190,7 @@ FontPreviewImage PreviewFontAsset(UUID asset,std::uint32_t index,const std::stri
 }
 std::vector<UUID> StylesheetReferences(const std::filesystem::path& path){
     std::ifstream input(path,std::ios::binary|std::ios::ate);if(!input||input.tellg()<0||input.tellg()>1024*1024)return {};
-    std::string source(static_cast<std::size_t>(input.tellg()),'\0');input.seekg(0);input.read(source.data(),source.size());auto parsed=CSS::Parse(source);auto sheet=CSS::BindRequirements(parsed);CSS::Rule defaults;for(const auto& requirement:parsed.Requirements)defaults.Declarations.push_back({requirement.Name,requirement.Default});sheet.Rules.push_back(std::move(defaults));std::vector<UUID> result;
+    std::string source(static_cast<std::size_t>(input.tellg()),'\0');input.seekg(0);input.read(source.data(),source.size());auto parsed=CSS::Parse(source);auto sheet=CSS::BindRequirements(parsed);CSS::Rule defaults;for(const auto& requirement:parsed.Requirements)defaults.Declarations.push_back({requirement.Name,requirement.Default});for(const auto& [name,frames]:sheet.Keyframes)for(const auto& frame:frames)for(const auto& declaration:frame.Declarations)defaults.Declarations.push_back(declaration);sheet.Rules.push_back(std::move(defaults));std::vector<UUID> result;
     if(sheet.HasErrors())return result;
     for(const auto& rule:sheet.Rules)for(const auto& declaration:rule.Declarations){const auto& tokens=declaration.Data.Tokens;
         for(std::size_t i=0;i+1<tokens.size();++i)if(tokens[i].Kind==CSS::TokenKind::Ident&&(tokens[i].Text=="url"||tokens[i].Text=="asset")&&tokens[i+1].Text=="("){

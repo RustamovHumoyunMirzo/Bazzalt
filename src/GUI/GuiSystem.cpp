@@ -151,10 +151,11 @@ void GuiSystem::ModuleLayout(Scene& scene,Vec2 size){
         }
         if(!std::isfinite(scale)||scale<=0)continue;
         bool styles=bool(frame.Stylesheet);
-        if(!styles)for(auto handle:scene.GetRegistry().view<GuiElement>()){const auto& element=scene.GetRegistry().get<GuiElement>(handle);if(element.Enabled&&element.Stylesheet){styles=true;break;}}
+        if(!styles)for(auto handle:scene.GetRegistry().view<GuiElement>()){const auto& element=scene.GetRegistry().get<GuiElement>(handle);if(element.Enabled&&(element.Stylesheet||!element.RuntimeCSS.empty()||!element.InlineCSS.empty())){styles=true;break;}}
         if(styles){PrepareStyles(root,surface,scale);auto found=Computed.find(root.GetUUID());if(found!=Computed.end()&&found->second.Hidden)continue;}
         Descend(root,root,surface,surface,surface,scale,0);
     }
+    std::erase_if(Motion,[&](const auto& entry){return !scene.GetEntity(entry.first)||!Computed.contains(entry.first);});
     std::unordered_set<UUID> alive;for(const auto& item:Items)alive.insert(item.Owner.GetUUID());
     std::sort(StyleDiagnostics.begin(),StyleDiagnostics.end());StyleDiagnostics.erase(std::unique(StyleDiagnostics.begin(),StyleDiagnostics.end()),StyleDiagnostics.end());
     for(const auto& message:StyleDiagnostics)if(std::find(ReportedStyleDiagnostics.begin(),ReportedStyleDiagnostics.end(),message)==ReportedStyleDiagnostics.end())Console::Warning(message,"GUI");ReportedStyleDiagnostics=StyleDiagnostics;

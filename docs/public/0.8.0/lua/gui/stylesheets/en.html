@@ -53,11 +53,43 @@ local fields = B.GUI.GetStylesheetProperties(stylesheetUUID)
 assert(B.GUI.SetStyleProperty(entity, "accent", "#ff8844"))
 assert(B.GUI.SetStyleProperty(entity, "caption", '\"Start\"'))
 local value = B.GUI.GetStyleProperty(entity, "caption")
-B.GUI.ResetStyleProperty(entity, "accent")</code></pre><p>Values are CSS literals. String literals include their quotes; textures/fonts use asset("uuid") or none. Invalid values return false. These service methods update the actual entity directly; no component copy/write-back is needed. Field descriptors contain Name, Type, DefaultValue, Label, Tooltip, HasMinimum, HasMaximum, Minimum, Maximum and Options.</p></article>
+B.GUI.ResetStyleProperty(entity, "accent")</code></pre><p>Values are CSS literals. String literals include their quotes; textures/fonts use asset("uuid") or none. Invalid values return false. These service methods update the actual entity directly; no component copy/write-back is needed. Field descriptors contain Name, Type, DefaultValue, Label, Tooltip, HasMinimum, HasMaximum, Minimum, Maximum and Options.</p><h2 id="runtime-css">Editing CSS during play</h2>
+<p>Each GuiElement can have a private runtime stylesheet and inline declarations. These are instance data: editing one entity does not modify the shared .css asset or another entity. Runtime edits are temporary and are not written to scene files. They affect the next GUI layout/render in the same ordinary frame pipeline, including Spatial and Camera-Bound Frames.</p>
+<p>GetStylesheetCSS (or GuiCSS.GetBaseText) reads the directly assigned asset source. GetCSS returns the additional runtime stylesheet text; SetCSS replaces that layer and AppendCSS adds rules after it. The assigned asset remains the base layer. An empty replacement removes the additional layer. Inline values override normal stylesheet rules; author !important rules still win over normal inline values. GetCSSProperty reads an inline declaration, not a computed pixel value. Use GetBounds and ResolveStyle for effective layout and appearance.</p>
+<table><thead><tr><th>Operation</th><th>Purpose</th></tr></thead><tbody>
+<tr><td>GetCSSStyle(entity)</td><td>Returns a lightweight GuiCSS handle for object-style editing.</td></tr>
+<tr><td>GetCSS / SetCSS / AppendCSS</td><td>Read, replace or append the private runtime stylesheet.</td></tr>
+<tr><td>GetCSSProperty / SetCSSProperty / RemoveCSSProperty</td><td>Read, set or remove one inline declaration. Removing it restores the cascade.</td></tr>
+<tr><td>SetCSSRule / RemoveCSSRule</td><td>Replace or remove matching top-level selector rules. Pass declarations without outer braces. Replace the enclosing stylesheet to edit rules inside a media/viewport block.</td></tr>
+<tr><td>SetCSSKeyframes / RemoveCSSKeyframes</td><td>Replace or remove a named top-level keyframe definition. Pass the frame blocks as text.</td></tr>
+</tbody></table>
+<p>GuiCSS exposes Get, Set, Remove, GetText, GetBaseText, Replace, Append, SetRule, RemoveRule, SetKeyframes and RemoveKeyframes. Its owner must have an enabled GuiElement to render the styles. It does not own the entity. Invalid/stale owners and malformed edits return false; rejected edits leave the previous valid source intact. Set and rule-edit operations cannot inject additional rules through a property value.</p>
+<h2 id="motion">Transitions and keyframes</h2>
+<pre><code>Button {
+  opacity: 1;
+  width: 120px;
+  transition: width 250ms ease-out, opacity 150ms linear;
+}
+Button:hover { width: 170px; }
+@keyframes pulse {
+  from { opacity: 0.4; }
+  50% { opacity: 1; }
+  to { opacity: 0.4; }
+}
+.busy { animation: pulse 1.2s ease-in-out infinite alternate; }</code></pre>
+<p>Transitions respond to changed cascade values, including inline runtime edits, hover and requirement overrides. A replacement transition starts at the last displayed value rather than snapping back. No entrance transition runs on the initial layout. Define the base value explicitly so removal has a target to transition back to.</p>
+<p>Supported transition longhands are transition-property, transition-duration, transition-delay and transition-timing-function. Comma lists repeat when shorter than the property list; all selects interpolable changed properties and none disables transitions. Timings include s/ms, negative delay, linear, ease, ease-in, ease-out, ease-in-out, cubic-bezier(x1,y1,x2,y2), steps(count,start/end), step-start and step-end. Colors and matching numeric value structures interpolate; incompatible units, textures and discrete keywords change directly.</p>
+<p>Animation supports animation-name, animation-duration, animation-delay, animation-timing-function, animation-iteration-count (fractional or infinite), animation-direction (normal, reverse, alternate, alternate-reverse), animation-fill-mode (none, forwards, backwards, both) and animation-play-state (running, paused), plus the shorthand above and comma-separated animations. Declare keyframes outside conditional viewport/media blocks. Keyframes accept from, to, percentages and grouped offsets. Missing endpoints use the authored base value when available. Later animations override earlier animations on the same property, !important values override animations, and active transitions override both. Changing the definition restarts its timeline; pause/resume retains elapsed time. Time follows the engine game clock, including time scale and pause.</p>
+<p>The GUI implements its own CSS dialect, not a browser DOM. Animate supported GUI layout/paint properties; parsing a web-only property does not add renderer support. Interpolation requires compatible units/structure, so use consistent units across endpoints. CSS transforms, additive animation composition and per-keyframe timing overrides are not provided. Motion shorthands and longhands follow normal declaration order and cascade priority. Motion remains bounded: 64 simultaneous animations per element, 1024 keyframe offsets per definition, 256 KiB runtime stylesheet text, 128 inline properties and 64 KiB total inline data. Existing parser, hierarchy, filter and renderer limits continue to apply.</p>
+<pre><code>local css = Bazzalt.GUI.GetCSSStyle(button)
+css:Set(&quot;width&quot;, &quot;170px&quot;)
+css:SetKeyframes(&quot;pulse&quot;, &quot;from{opacity:0.4}to{opacity:1}&quot;)
+css:Set(&quot;animation&quot;, &quot;pulse 1s linear infinite alternate&quot;)
+css:Set(&quot;animation-play-state&quot;, &quot;paused&quot;)</code></pre></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../layout/en.html"><small>Previous</small>GUI layout and inheritance in Lua</a>
 <a class="next" href="../../extensions/en.html"><small>Next</small>Using extension SDKs in Lua</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Assign metadata and styles</a><a class="toc-link" href="#rules">Rules and scope</a><a class="toc-link" href="#required-properties">Typed stylesheet inputs</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Assign metadata and styles</a><a class="toc-link" href="#rules">Rules and scope</a><a class="toc-link" href="#required-properties">Typed stylesheet inputs</a><a class="toc-link" href="#runtime-css">Editing CSS during play</a><a class="toc-link" href="#motion">Transitions and keyframes</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

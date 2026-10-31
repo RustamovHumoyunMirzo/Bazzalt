@@ -83,6 +83,7 @@ class Parser {
             if(Peek().Kind==TokenKind::AtKeyword){
                 const auto at=Peek().Source;auto name=Lower(Peek().Text);++At;auto prelude=Until("{;");
                 Balanced(prelude,Sheet.Diagnostics,Bounds);
+                if(name=="keyframes"&&!conditions.empty())Error("Keyframes must be declared outside conditional blocks");
                 const bool block=Is("{");AtRule record{name,{prelude},{},block,at};
                 if(Is(";")){
                     ++At;
@@ -90,7 +91,7 @@ class Parser {
                     else if(name=="layer"){
                         std::vector<Token> segment;
                         for(std::size_t i=0;i<=prelude.size();++i){if(i==prelude.size()||Symbol(prelude[i],",")){auto n=LayerName(segment);if(n.empty())Error("Invalid layer name");else AddLayer(layer.empty()?n:layer+"."+n);segment.clear();}else segment.push_back(prelude[i]);}
-                    }else Sheet.Diagnostics.push_back({Severity::Warning,at,"At-rule retained but not executed: @"+name});
+                    }else if(name!="keyframes")Sheet.Diagnostics.push_back({Severity::Warning,at,"At-rule retained but not executed: @"+name});
                 }else if(block){
                     ++At;
                     if(name=="viewport"||name=="media"){
@@ -104,7 +105,7 @@ class Parser {
                         // never accidentally apply their contents as normal style rules.
                         record.Body.Tokens=Until("}",false);if(Is("}"))++At;else Error("Unterminated at-rule");
                         Balanced(record.Body.Tokens,Sheet.Diagnostics,Bounds);
-                        Sheet.Diagnostics.push_back({Severity::Warning,at,"At-rule retained but not executed: @"+name});
+                        if(name!="keyframes")Sheet.Diagnostics.push_back({Severity::Warning,at,"At-rule retained but not executed: @"+name});
                     }
                 }else Error("Expected at-rule block or semicolon");
                 Sheet.AtRules.push_back(std::move(record));continue;
@@ -118,7 +119,7 @@ class Parser {
     }
 public:
     Parser(std::string_view source,const Limits& bounds):Bounds(bounds){Tokens=Tokenize(source,Sheet.Diagnostics,bounds);}
-    Stylesheet Run(){Rules({},"",0,false);ParseRequirements(Sheet,Bounds);return std::move(Sheet);}
+    Stylesheet Run(){Rules({},"",0,false);ParseRequirements(Sheet,Bounds);ParseKeyframes(Sheet,Bounds);return std::move(Sheet);}
 };
 }
 Stylesheet Parse(std::string_view source,const Limits& limits){return Parser(source,limits).Run();}

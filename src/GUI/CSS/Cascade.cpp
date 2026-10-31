@@ -67,6 +67,8 @@ std::vector<Value> Parts(const Value& data,std::string_view separator=" "){
     std::vector<Value> parts(1);int depth=0;for(const auto& token:data.Tokens){if(Symbol(token,"("))++depth;if(Symbol(token,")"))--depth;if(depth==0&&((separator==" "&&token.Kind==TokenKind::Space)||Symbol(token,separator))){if(!parts.back().Tokens.empty())parts.emplace_back();}else parts.back().Tokens.push_back(token);}if(parts.back().Tokens.empty())parts.pop_back();return parts;
 }
 std::vector<std::string> Longhands(const std::string& name){
+    if(name=="transition")return {"transition-property","transition-duration","transition-delay","transition-timing-function"};
+    if(name=="animation")return {"animation-name","animation-duration","animation-delay","animation-timing-function","animation-iteration-count","animation-direction","animation-fill-mode","animation-play-state"};
     if(name=="border-radius")return {"border-top-left-radius","border-top-right-radius","border-bottom-right-radius","border-bottom-left-radius"};
     if(name=="background")return {"background-image","background-color"};
     if(name=="border")return {"border-left-width","border-top-width","border-right-width","border-bottom-width","border-left-color","border-top-color","border-right-color","border-bottom-color","border-style"};
@@ -76,6 +78,7 @@ std::vector<std::string> Longhands(const std::string& name){
 std::optional<Value> Expand(const std::string& source,const std::string& name,Value value){
     if(source==name)return value;
     auto tokens=value.Tokens;Trim(tokens);if(tokens.size()==1&&tokens[0].Kind==TokenKind::Ident){auto key=Lower(tokens[0].Text);if(key=="initial"||key=="inherit"||key=="unset")return value;}
+    if(source=="transition"||source=="animation")return ExpandMotion(source,name,value);
     if(source=="background"){const bool color=ResolveColor(value).has_value();if(name=="background-color")return color?value:ParseValue("transparent").Data;return color?ParseValue("none").Data:value;}
     if(source=="border"){
         const bool width=name.ends_with("width"),color=name.ends_with("color");
@@ -147,7 +150,7 @@ ComputedStyle Compute(const Stylesheet& sheet,const Node& node,const Environment
             for(const auto& [name,winner]:winners)if(!name.starts_with("--")){
                 if(!remaining)return exhausted();
                 --remaining;
-                if(auto expanded=SubstituteVariables(winner.second,result.CustomProperties,result.Diagnostics,limits))if(auto value=Expand(origins.at(name),name,std::move(*expanded)))result.Properties[name]=std::move(*value);
+                if(auto expanded=SubstituteVariables(winner.second,result.CustomProperties,result.Diagnostics,limits))if(auto value=Expand(origins.at(name),name,std::move(*expanded))){result.Properties[name]=std::move(*value);if(winner.first.Important)result.ImportantProperties.insert(name);}
             }
         }
     }

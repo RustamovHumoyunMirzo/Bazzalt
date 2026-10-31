@@ -17,6 +17,7 @@
 #include "Bazzalt/Components/PrimitiveObject.h"
 #include <filament/RenderTarget.h>
 #include "GUI/GuiSystem.h"
+#include "Runtime/TimeAccess.h"
 #include "GUI/GuiSerialization.h"
 #include "GUI/GuiAssetImport.h"
 #include "Bazzalt/AssetManager.h"
@@ -120,6 +121,15 @@ static void TestStylesheetsAndFonts(){
         button.AddComponent<GuiText>();assert(GUI::SetStyleProperty(button,"caption","\"Hello \\\"World\\\"\""));gui.Layout(scene,{500,200});assert(GUI::GetBounds(button).Size.X==240&&GUI::ResolveStyle(button).Color.Y==1);assert(GUI::ResolveText(button).Value=="Hello \"World\"");
         hidden.GetComponent<GuiElement>().Stylesheet=asset->Id;gui.Layout(scene,{500,200});assert(GUI::GetStyleProperty(hidden,"width")=="120px");
         const auto saved=folder/"Inputs.bscene";assert(engine.SaveSceneAsset(scene,saved));auto restored=engine.LoadSceneAsset(saved);assert(restored&&restored->GetEntity(button.GetUUID()).GetComponent<GuiElement>().StyleProperties==element.StyleProperties);
+        assert(GUI::GetStylesheetCSS(button).find("@require")!=std::string::npos);assert(GUI::SetCSS(button,"Button{height:42px}"));assert(GUI::GetCSS(button).find("42px")!=std::string::npos);
+        assert(GUI::SetCSSProperty(button,"width","170px"));gui.Layout(scene,{500,200});assert(GUI::GetBounds(button).Size.X==170&&GUI::GetBounds(button).Size.Y==42);
+        assert(!GUI::SetCSSProperty(button,"width","1px; height:1px"));assert(!GUI::SetCSS(button,"Button{bad}"));assert(GUI::GetCSSProperty(button,"width")=="170px");
+        const auto keyframeRef=UUID::Generate();write(css,"@keyframes swap{from{background-image:asset(\""+keyframeRef.ToString()+"\")}} ");auto keyframeDependencies=Runtime::GetStylesheetReferences(css);assert(keyframeDependencies.size()==1&&keyframeDependencies[0]==keyframeRef);write(css,"@require(width,120px,length);@require(tint,red,color);#play{width:require(width);background-color:require(tint)}");
+        assert(GUI::SetCSSRule(button,"Button","height:55px"));gui.Layout(scene,{500,200});assert(GUI::GetBounds(button).Size.Y==55);
+        assert(GUI::SetCSSKeyframes(button,"pulse","from{opacity:0}to{opacity:1}"));assert(GUI::RemoveCSSKeyframes(button,"pulse"));assert(GUI::GetCSS(button).find("@keyframes")==std::string::npos);
+        assert(GUI::SetCSS(button,"@keyframes pulse{from{opacity:0}to{opacity:1}} Button{animation:pulse 1s linear both}"));gui.Layout(scene,{500,200});assert(GUI::ResolveStyle(button).Opacity==0);
+        Runtime::TimeAccess::GetState()->Elapsed+=.5;gui.Layout(scene,{500,200});assert(std::abs(GUI::ResolveStyle(button).Opacity-.5f)<.01f);assert(GUI::SetCSSProperty(button,"animation-play-state","paused"));gui.Layout(scene,{500,200});Runtime::TimeAccess::GetState()->Elapsed+=.5;gui.Layout(scene,{500,200});assert(std::abs(GUI::ResolveStyle(button).Opacity-.5f)<.01f);assert(GUI::RemoveCSSProperty(button,"animation-play-state"));
+        assert(GUI::RemoveCSSRule(button,"Button"));assert(GUI::RemoveCSSProperty(button,"width"));assert(GUI::SetCSS(button,""));
         assert(GUI::ResetStyleProperty(button,"width"));assert(GUI::GetStyleProperty(button,"width")=="120px");button.RemoveComponent<GuiText>();element.StyleProperties.clear();element.Stylesheet={};hidden.GetComponent<GuiElement>().Stylesheet={};frame.Stylesheet=asset->Id;write(css,original);assert(engine.RefreshAssets());
     }
     auto nested=scene.CreateEntity("Nested frame");nested.SetParent(root,false);nested.AddComponent<Frame>().ScaleMode=GuiScaleMode::ConstantPixels;

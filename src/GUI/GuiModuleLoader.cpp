@@ -38,7 +38,7 @@ const GuiModuleApi* Load(){
 #endif
     const auto* api=get?get(GuiModuleVersion,sizeof(GuiModuleApi)):nullptr;
     if(!api||api->Version!=GuiModuleVersion||api->Size!=sizeof(GuiModuleApi)||!api->Layout||!api->ProcessInput||!api->Focus||!api->RegisterComponents||!api->CreateRenderer||!api->DestroyRenderer||!api->ClearRenderer||!api->BatchCount||!api->PrepareSpatial||!api->PrepareOverlay||!api->RenderOverlay||!api->RenderCameraOverlay)throw std::runtime_error("Incompatible GUI runtime. Core and bazzalt_gui must come from the same build.");
-    if(!api->ValidateAsset||!api->InspectFont||!api->MeasureFont||!api->StylesheetReferences||!api->PreviewFont||!api->SceneInputTarget||!api->RenderSpatialEffects||!api->StylesheetProperties||!api->GetStyleProperty||!api->SetStyleProperty)throw std::runtime_error("Incomplete GUI module");
+    if(!api->ValidateAsset||!api->InspectFont||!api->MeasureFont||!api->StylesheetReferences||!api->PreviewFont||!api->SceneInputTarget||!api->RenderSpatialEffects||!api->StylesheetProperties||!api->GetStyleProperty||!api->SetStyleProperty||!api->EditCSS||!api->ReadStylesheetCSS)throw std::runtime_error("Incomplete GUI module");
     return api;
 }
 }
@@ -143,4 +143,18 @@ std::vector<std::string> GUI::GetStyleDiagnostics(Entity entity){auto* system=Sy
 bool Font::IsValid()const{return GetInfo().Valid;}
 FontInfo Font::GetInfo()const{return Runtime::GuiModule().InspectFont(m_asset,m_face);}
 Vec2 Font::MeasureText(const std::string& text,float size,float wrapWidth)const{return Runtime::GuiModule().MeasureFont(m_asset,m_face,text,size,wrapWidth);}
+}
+
+namespace Bazzalt {
+std::string GUI::GetCSS(Entity e){auto* element=e.TryGetComponent<GuiElement>();return element?element->RuntimeCSS:std::string{};}
+std::string GUI::GetStylesheetCSS(Entity e){return Runtime::GuiModule().ReadStylesheetCSS(e);}
+bool GUI::SetCSS(Entity e,const std::string& css){return Runtime::GuiModule().EditCSS(e,"replace","",css);}
+bool GUI::AppendCSS(Entity e,const std::string& css){return Runtime::GuiModule().EditCSS(e,"append","",css);}
+std::string GUI::GetCSSProperty(Entity e,const std::string& name){auto* element=e.TryGetComponent<GuiElement>();if(!element)return {};auto i=element->InlineCSS.find(name);return i==element->InlineCSS.end()?std::string{}:i->second;}
+bool GUI::SetCSSProperty(Entity e,const std::string& name,const std::string& value){return Runtime::GuiModule().EditCSS(e,"set",name,value);}
+bool GUI::RemoveCSSProperty(Entity e,const std::string& name){return Runtime::GuiModule().EditCSS(e,"remove",name,"");}
+bool GUI::SetCSSRule(Entity e,const std::string& selector,const std::string& declarations){return Runtime::GuiModule().EditCSS(e,"rule",selector,declarations);}
+bool GUI::RemoveCSSRule(Entity e,const std::string& selector){return Runtime::GuiModule().EditCSS(e,"remove-rule",selector,"");}
+bool GUI::SetCSSKeyframes(Entity e,const std::string& name,const std::string& frames){return Runtime::GuiModule().EditCSS(e,"keyframes",name,frames);}
+bool GUI::RemoveCSSKeyframes(Entity e,const std::string& name){return Runtime::GuiModule().EditCSS(e,"remove-keyframes",name,"");}
 }

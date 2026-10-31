@@ -120,13 +120,13 @@ Button { color: var(--accent); padding: var(--missing, var(--padding)); }
 
 </tbody></table>
 
-<p>Balanced unknown functions and units remain available in parsed data, but typed conversion can reject them. This is not full browser CSS: every named color, CSS Color 4/5 color space, animation and web-only unit is not implemented. Parsed colors are encoded sRGB values; renderer conversion is a separate responsibility.</p>
+<p>Balanced unknown functions and units remain available in parsed data, but typed conversion can reject them. This is not full browser CSS: every named color, CSS Color 4/5 color space and web-only unit is not implemented. Parsed colors are encoded sRGB values; renderer conversion is a separate responsibility.</p>
 
 <h2 id="at-rules">At-rules</h2>
 
 <p>@viewport and @media conditionally contain rules. Supported features are min/max/exact width, height and aspect ratio, orientation, prefers-color-scheme and prefers-reduced-motion. Width/height also accept range syntax: (width &gt;= 600px) and (400px &lt; width &lt;= 1200px). Conditions use the current Frame destination size in logical GUI pixels and are reevaluated after resizing. Queries support screen/all, and/or/not, comma alternatives and parentheses. @viewport is an engine conditional, not a way to create or resize the native game window.</p>
 
-<p>@layer statements and blocks define cascade order. Other at-rules, including @import, @font-face, @keyframes and @supports, are retained with warnings and not executed. Their bodies do not leak into the normal cascade. In particular, @import never downloads or reads another file, fonts are assigned directly with font-family: asset(&quot;UUID&quot;) or the Font picker instead of @font-face.</p>
+<p>@layer statements and blocks define cascade order. Other at-rules, including @import, @font-face and @supports, are retained with warnings and not executed. Their bodies do not leak into the normal cascade. In particular, @import never downloads or reads another file, fonts are assigned directly with font-family: asset(&quot;UUID&quot;) or the Font picker instead of @font-face.</p>
 
 <h2 id="borders">Rounded borders</h2>
 
@@ -202,7 +202,7 @@ Button:hover { background-color: #467cb8; }
 
 <p>Used stylesheet/font files are watched in the editor. Saving them triggers targeted import and updates computed values and font atlases. Imported stylesheet dependency manifests retain referenced fonts/images in cooked games. Query GUI::GetStyleDiagnostics(entity) for application diagnostics; changed diagnostics also appear in the editor Console. Syntax-invalid assets are marked failed in the Asset Browser.</p>
 
-<p>Fonts use the same rendering path for Viewport, CameraBound and Spatial Frames. See <a href="../fonts/en.html">font assets and measurement</a>. CSS opacity currently affects each entity's own layers, not an offscreen composited group. This dialect does not implement CSS Grid, flex wrapping, auto content sizing, animation, browser DOM or arbitrary web stylesheets. Resource and traversal limits may use the built-in fallback glyph instead of allocating without bounds.</p><h2 id="required-properties">Typed stylesheet inputs</h2>
+<p>Fonts use the same rendering path for Viewport, CameraBound and Spatial Frames. See <a href="../fonts/en.html">font assets and measurement</a>. CSS opacity currently affects each entity's own layers, not an offscreen composited group. This dialect does not implement CSS Grid, flex wrapping, auto content sizing, browser DOM or arbitrary web stylesheets. Resource and traversal limits may use the built-in fallback glyph instead of allocating without bounds.</p><h2 id="required-properties">Typed stylesheet inputs</h2>
 <p>A stylesheet can declare editable inputs. Select the stylesheet in a GuiElement component: its declarations appear underneath as inspector fields. Values belong to that GuiElement, are saved with its scene and support editor undo/redo. Sharing the stylesheet does not share instance overrides.</p>
 <pre><code>@require(accent, #4da3ff, color, label("Accent color"));
 @require(spacing, 12px, length, min(0), max(64));
@@ -231,11 +231,43 @@ bool accepted = Bazzalt::GUI::SetStyleProperty(button, "accent", "#ff8844");
 Bazzalt::GUI::SetStyleProperty(button, "caption", "\"Start\"");
 auto value = Bazzalt::GUI::GetStyleProperty(button, "caption");
 Bazzalt::GUI::ResetStyleProperty(button, "accent");</code></pre>
-<p>SetStyleProperty validates the selected stylesheet declaration, range and asset type, returning false without modifying data if invalid. Its value is one CSS literal, never a declaration or a file path. GetStyleProperty returns an effective CSS literal or an empty string for an unknown name. GuiStyleProperty describes the name, type, default, label, tooltip, optional bounds and enum choices. GuiElement.StyleProperties is the persisted map; prefer the validated GUI setter when changing values at runtime.</p></article>
+<p>SetStyleProperty validates the selected stylesheet declaration, range and asset type, returning false without modifying data if invalid. Its value is one CSS literal, never a declaration or a file path. GetStyleProperty returns an effective CSS literal or an empty string for an unknown name. GuiStyleProperty describes the name, type, default, label, tooltip, optional bounds and enum choices. GuiElement.StyleProperties is the persisted map; prefer the validated GUI setter when changing values at runtime.</p><h2 id="runtime-css">Editing CSS during play</h2>
+<p>Each GuiElement can have a private runtime stylesheet and inline declarations. These are instance data: editing one entity does not modify the shared .css asset or another entity. Runtime edits are temporary and are not written to scene files. They affect the next GUI layout/render in the same ordinary frame pipeline, including Spatial and Camera-Bound Frames.</p>
+<p>GetStylesheetCSS (or GuiCSS.GetBaseText) reads the directly assigned asset source. GetCSS returns the additional runtime stylesheet text; SetCSS replaces that layer and AppendCSS adds rules after it. The assigned asset remains the base layer. An empty replacement removes the additional layer. Inline values override normal stylesheet rules; author !important rules still win over normal inline values. GetCSSProperty reads an inline declaration, not a computed pixel value. Use GetBounds and ResolveStyle for effective layout and appearance.</p>
+<table><thead><tr><th>Operation</th><th>Purpose</th></tr></thead><tbody>
+<tr><td>GetCSSStyle(entity)</td><td>Returns a lightweight GuiCSS handle for object-style editing.</td></tr>
+<tr><td>GetCSS / SetCSS / AppendCSS</td><td>Read, replace or append the private runtime stylesheet.</td></tr>
+<tr><td>GetCSSProperty / SetCSSProperty / RemoveCSSProperty</td><td>Read, set or remove one inline declaration. Removing it restores the cascade.</td></tr>
+<tr><td>SetCSSRule / RemoveCSSRule</td><td>Replace or remove matching top-level selector rules. Pass declarations without outer braces. Replace the enclosing stylesheet to edit rules inside a media/viewport block.</td></tr>
+<tr><td>SetCSSKeyframes / RemoveCSSKeyframes</td><td>Replace or remove a named top-level keyframe definition. Pass the frame blocks as text.</td></tr>
+</tbody></table>
+<p>GuiCSS exposes Get, Set, Remove, GetText, GetBaseText, Replace, Append, SetRule, RemoveRule, SetKeyframes and RemoveKeyframes. Its owner must have an enabled GuiElement to render the styles. It does not own the entity. Invalid/stale owners and malformed edits return false; rejected edits leave the previous valid source intact. Set and rule-edit operations cannot inject additional rules through a property value.</p>
+<h2 id="motion">Transitions and keyframes</h2>
+<pre><code>Button {
+  opacity: 1;
+  width: 120px;
+  transition: width 250ms ease-out, opacity 150ms linear;
+}
+Button:hover { width: 170px; }
+@keyframes pulse {
+  from { opacity: 0.4; }
+  50% { opacity: 1; }
+  to { opacity: 0.4; }
+}
+.busy { animation: pulse 1.2s ease-in-out infinite alternate; }</code></pre>
+<p>Transitions respond to changed cascade values, including inline runtime edits, hover and requirement overrides. A replacement transition starts at the last displayed value rather than snapping back. No entrance transition runs on the initial layout. Define the base value explicitly so removal has a target to transition back to.</p>
+<p>Supported transition longhands are transition-property, transition-duration, transition-delay and transition-timing-function. Comma lists repeat when shorter than the property list; all selects interpolable changed properties and none disables transitions. Timings include s/ms, negative delay, linear, ease, ease-in, ease-out, ease-in-out, cubic-bezier(x1,y1,x2,y2), steps(count,start/end), step-start and step-end. Colors and matching numeric value structures interpolate; incompatible units, textures and discrete keywords change directly.</p>
+<p>Animation supports animation-name, animation-duration, animation-delay, animation-timing-function, animation-iteration-count (fractional or infinite), animation-direction (normal, reverse, alternate, alternate-reverse), animation-fill-mode (none, forwards, backwards, both) and animation-play-state (running, paused), plus the shorthand above and comma-separated animations. Declare keyframes outside conditional viewport/media blocks. Keyframes accept from, to, percentages and grouped offsets. Missing endpoints use the authored base value when available. Later animations override earlier animations on the same property, !important values override animations, and active transitions override both. Changing the definition restarts its timeline; pause/resume retains elapsed time. Time follows the engine game clock, including time scale and pause.</p>
+<p>The GUI implements its own CSS dialect, not a browser DOM. Animate supported GUI layout/paint properties; parsing a web-only property does not add renderer support. Interpolation requires compatible units/structure, so use consistent units across endpoints. CSS transforms, additive animation composition and per-keyframe timing overrides are not provided. Motion shorthands and longhands follow normal declaration order and cascade priority. Motion remains bounded: 64 simultaneous animations per element, 1024 keyframe offsets per definition, 256 KiB runtime stylesheet text, 128 inline properties and 64 KiB total inline data. Existing parser, hierarchy, filter and renderer limits continue to apply.</p>
+<pre><code>auto css = Bazzalt::GUI::GetCSSStyle(button);
+css.Set(&quot;width&quot;, &quot;170px&quot;);
+css.SetKeyframes(&quot;pulse&quot;, &quot;from{opacity:0.4}to{opacity:1}&quot;);
+css.Set(&quot;animation&quot;, &quot;pulse 1s linear infinite alternate&quot;);
+css.Set(&quot;animation-play-state&quot;, &quot;paused&quot;);</code></pre></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../layout/en.html"><small>Previous</small>GUI layout and style inheritance</a>
 <a class="next" href="../../extensions/en.html"><small>Next</small>Using extension SDKs in C++</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#engine-model">Engine terms, familiar syntax</a><a class="toc-link" href="#selectors">Selectors</a><a class="toc-link" href="#cascade">Cascading and variables</a><a class="toc-link" href="#values">Values and conversion</a><a class="toc-link" href="#at-rules">At-rules</a><a class="toc-link" href="#borders">Rounded borders</a><a class="toc-link" href="#gradients">Gradient backgrounds</a><a class="toc-link" href="#filters">Element and backdrop filters</a><a class="toc-link" href="#placement">Additional placement controls</a><a class="toc-link" href="#diagnostics">Errors and safety</a><a class="toc-link" href="#assets">Assets, fonts and live editing</a><a class="toc-link" href="#required-properties">Typed stylesheet inputs</a><a class="toc-link sub" href="#required-properties-api">Programmatic values</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#engine-model">Engine terms, familiar syntax</a><a class="toc-link" href="#selectors">Selectors</a><a class="toc-link" href="#cascade">Cascading and variables</a><a class="toc-link" href="#values">Values and conversion</a><a class="toc-link" href="#at-rules">At-rules</a><a class="toc-link" href="#borders">Rounded borders</a><a class="toc-link" href="#gradients">Gradient backgrounds</a><a class="toc-link" href="#filters">Element and backdrop filters</a><a class="toc-link" href="#placement">Additional placement controls</a><a class="toc-link" href="#diagnostics">Errors and safety</a><a class="toc-link" href="#assets">Assets, fonts and live editing</a><a class="toc-link" href="#required-properties">Typed stylesheet inputs</a><a class="toc-link sub" href="#required-properties-api">Programmatic values</a><a class="toc-link" href="#runtime-css">Editing CSS during play</a><a class="toc-link" href="#motion">Transitions and keyframes</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

@@ -6,6 +6,8 @@ void ModuleRegisterGuiComponents(ComponentSerializationRegistry&);
 std::vector<GuiStyleProperty> ModuleStylesheetProperties(UUID);
 std::string ModuleGetStyleProperty(Entity,const std::string&);
 bool ModuleSetStyleProperty(Entity,const std::string&,const std::string&);
+std::string ModuleReadStylesheetCSS(Entity);
+bool ModuleEditCSS(Entity,const std::string&,const std::string&,const std::string&);
 static const GuiModuleApi Api{
     GuiModuleVersion,sizeof(GuiModuleApi),
     [](GuiSystem& system,Scene& scene,Vec2 size){system.ModuleLayout(scene,size);},
@@ -23,7 +25,7 @@ static const GuiModuleApi Api{
     ValidateGuiAsset,InspectFontAsset,MeasureFontAsset,StylesheetReferences,PreviewFontAsset,
     [](const void* state){return static_cast<const GuiRendererModule*>(state)->GetSceneInputTarget();},
     [](void* state){static_cast<GuiRendererModule*>(state)->RenderSpatialEffects();},
-    ModuleStylesheetProperties,ModuleGetStyleProperty,ModuleSetStyleProperty
+    ModuleStylesheetProperties,ModuleGetStyleProperty,ModuleSetStyleProperty,ModuleReadStylesheetCSS,ModuleEditCSS
 };
 }
 #if defined(_WIN32)

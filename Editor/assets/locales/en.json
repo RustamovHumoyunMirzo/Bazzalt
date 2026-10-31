@@ -56,7 +56,7 @@
   "action.about": "About BAZZALT",
   "action.reset_workspace": "Reset Workspace",
   "action.no_panels": "No registered panels",
-  "view.maximize": "Maximize Viewport",
+  "view.maximize": "Maximize Panel",
   "view.camera_presets": "Camera Presets",
   "view.camera.perspective": "Perspective / Isometric",
   "view.camera.top": "Top",

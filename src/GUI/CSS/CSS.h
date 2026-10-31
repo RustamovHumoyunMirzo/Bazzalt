@@ -50,7 +50,9 @@ struct Requirement {
     std::vector<std::string> Options;
     Location Source;
 };
+struct Keyframe {double Offset=0;std::vector<Declaration> Declarations;};
 struct Stylesheet {
+    std::map<std::string,std::vector<Keyframe>> Keyframes;
     std::vector<Rule> Rules;
     std::vector<AtRule> AtRules;
     std::vector<std::string> Layers;
@@ -61,6 +63,7 @@ struct Stylesheet {
 struct ParseResult {Value Data;std::vector<Diagnostic> Diagnostics;[[nodiscard]] bool HasErrors() const;};
 [[nodiscard]] std::vector<Token> Tokenize(std::string_view source,std::vector<Diagnostic>& diagnostics,const Limits& limits={});
 [[nodiscard]] Stylesheet Parse(std::string_view source,const Limits& limits={});
+void ParseKeyframes(Stylesheet& sheet,const Limits& limits={});
 void ParseRequirements(Stylesheet& sheet,const Limits& limits={});
 [[nodiscard]] bool ValidateRequirement(const Requirement& requirement,const Value& value);
 [[nodiscard]] Stylesheet BindRequirements(const Stylesheet& sheet,const std::map<std::string,std::string>& values={},const Limits& limits={});
@@ -86,6 +89,7 @@ struct Color {double R=0,G=0,B=0,A=1;};
 [[nodiscard]] bool EvaluateCondition(const Condition& condition,const Environment& environment);
 struct ComputedStyle {
     std::map<std::string,Value> Properties,CustomProperties;
+    std::set<std::string> ImportantProperties;
     std::vector<Diagnostic> Diagnostics;
 };
 // Cascade only: typed application to GUI components is a separate integration layer.
@@ -98,4 +102,18 @@ struct ComputedStyle {
 [[nodiscard]] std::optional<bool> ResolveBoolean(const Value& value);
 // Asset URL/reference syntax is parsed as data, never fetched or opened.
 [[nodiscard]] std::optional<std::string> ResolveReference(const Value& value);
+}
+
+namespace Bazzalt::Runtime::CSS {
+struct MotionTrack {Value From,To;double Start=0,Duration=0,Delay=0;std::string Easing="ease";};
+struct AnimationClock {std::string Signature;double Started=0,PausedAt=0,PausedDuration=0;bool Paused=false;};
+struct MotionState {
+    bool Initialized=false;
+    std::map<std::string,Value> Targets,Display;
+    std::map<std::string,MotionTrack> Transitions;
+    std::vector<AnimationClock> Animations;
+};
+[[nodiscard]] Value ExpandMotion(const std::string& shorthand,const std::string& longhand,const Value& value);
+[[nodiscard]] Value Interpolate(const Value& from,const Value& to,double fraction);
+void Animate(ComputedStyle& style,const Stylesheet& sheet,MotionState& state,double seconds,const Environment& environment={});
 }

@@ -72,6 +72,7 @@ Stylesheet BindRequirements(const Stylesheet& sheet,const std::map<std::string,s
     Stylesheet result=sheet;std::map<std::string,Value> values;
     for(const auto& r:sheet.Requirements){values[r.Name]=r.Default;auto found=overrides.find(r.Name);if(found==overrides.end())continue;auto parsed=ParseValue(found->second,limits);if(parsed.HasErrors()||!ValidateRequirement(r,parsed.Data)){result.Diagnostics.push_back({Severity::Warning,r.Source,"Invalid stylesheet override; using default: "+r.Name});continue;}values[r.Name]=std::move(parsed.Data);}
     for(auto& rule:result.Rules){for(auto& d:rule.Declarations){auto value=Expand(d.Data,values,result.Diagnostics,limits);d.Data=value.value_or(Value{});}for(auto& c:rule.Conditions){auto value=Expand(c.Expression,values,result.Diagnostics,limits);c.Expression=value.value_or(Value{});}}
+    for(auto& [name,frames]:result.Keyframes)for(auto& frame:frames)for(auto& d:frame.Declarations){auto value=Expand(d.Data,values,result.Diagnostics,limits);d.Data=value.value_or(Value{});}
     result.Requirements.clear();return result;
 }
 }

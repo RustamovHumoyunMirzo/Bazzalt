@@ -44,6 +44,9 @@ struct GuiElement : Component {
     UUID MaterialAsset{};
     bool MaterialIncludesChildren=false;
     std::map<std::string,std::string> StyleProperties;
+    // Per-instance runtime CSS; asset source is never changed.
+    std::string RuntimeCSS;
+    std::map<std::string,std::string> InlineCSS;
     void SetMaterial(Bazzalt::Material material){if(material.GetAssetUUID()&&!material.IsCanvasCompatible())throw std::invalid_argument("GUI requires a canvas-compatible material");MaterialAsset=material.GetAssetUUID();}
     [[nodiscard]] Bazzalt::Material GetMaterial()const{return Bazzalt::Material::Load(MaterialAsset);}
 };
@@ -120,6 +123,7 @@ struct GuiInteraction {
     bool ValueChanged=false,Submitted=false;
 };
 // Read interaction pulses during gameplay Update. Runtime owns event dispatch.
+class GuiCSS;
 class BAZZALT_API GUI final {
 public:
     GUI()=delete;
@@ -134,10 +138,41 @@ public:
     [[nodiscard]] static std::vector<GuiStyleProperty> GetStylesheetProperties(UUID stylesheet);
     [[nodiscard]] static std::string GetStyleProperty(Entity entity,const std::string& name);
     static bool SetStyleProperty(Entity entity,const std::string& name,const std::string& cssValue);
+    [[nodiscard]] static GuiCSS GetCSSStyle(Entity entity);
+    [[nodiscard]] static std::string GetCSS(Entity entity);
+    [[nodiscard]] static std::string GetStylesheetCSS(Entity entity);
+    static bool SetCSS(Entity entity,const std::string& stylesheet);
+    static bool AppendCSS(Entity entity,const std::string& stylesheet);
+    [[nodiscard]] static std::string GetCSSProperty(Entity entity,const std::string& property);
+    static bool SetCSSProperty(Entity entity,const std::string& property,const std::string& value);
+    static bool RemoveCSSProperty(Entity entity,const std::string& property);
+    static bool SetCSSRule(Entity entity,const std::string& selector,const std::string& declarations);
+    static bool RemoveCSSRule(Entity entity,const std::string& selector);
+    static bool SetCSSKeyframes(Entity entity,const std::string& name,const std::string& frames);
+    static bool RemoveCSSKeyframes(Entity entity,const std::string& name);
     static bool ResetStyleProperty(Entity entity,const std::string& name);
     static bool Focus(Entity entity);
     static bool SetParent(Entity entity,Entity parent,bool preservePosition=true);
     static void ClearFocus(Scene& scene);
     [[nodiscard]] static bool IsPointerOverUI(Scene& scene);
 };
+// A non-owning entity handle; writes are validated and return false on rejection.
+class GuiCSS final {
+public:
+    explicit GuiCSS(Entity entity):Owner(entity){}
+    [[nodiscard]] std::string Get(const std::string& name)const{return GUI::GetCSSProperty(Owner,name);}
+    bool Set(const std::string& name,const std::string& value){return GUI::SetCSSProperty(Owner,name,value);}
+    bool Remove(const std::string& name){return GUI::RemoveCSSProperty(Owner,name);}
+    [[nodiscard]] std::string GetText()const{return GUI::GetCSS(Owner);}
+    [[nodiscard]] std::string GetBaseText()const{return GUI::GetStylesheetCSS(Owner);}
+    bool Replace(const std::string& text){return GUI::SetCSS(Owner,text);}
+    bool Append(const std::string& text){return GUI::AppendCSS(Owner,text);}
+    bool SetRule(const std::string& selector,const std::string& declarations){return GUI::SetCSSRule(Owner,selector,declarations);}
+    bool RemoveRule(const std::string& selector){return GUI::RemoveCSSRule(Owner,selector);}
+    bool SetKeyframes(const std::string& name,const std::string& frames){return GUI::SetCSSKeyframes(Owner,name,frames);}
+    bool RemoveKeyframes(const std::string& name){return GUI::RemoveCSSKeyframes(Owner,name);}
+private:
+    Entity Owner;
+};
+inline GuiCSS GUI::GetCSSStyle(Entity entity){return GuiCSS(entity);}
 }
