@@ -176,6 +176,15 @@ class EditorShellTests(unittest.TestCase):
         menu.CameraPresetRequested.emit("top");self.assertEqual(self.Window.Scene.Surface._pitch,89.0)
         menu.GridAction.setChecked(False);self.assertFalse(self.Window.Scene.GridToggle.isChecked())
 
+    def test_any_panel_can_maximize_and_group_header_has_shared_actions(self):
+        window=self.Window;window.show();self.Application.processEvents();before=window.Docking.save_layout()
+        panel=window.Docking.panel("hierarchy");window.Docking.activate_panel("hierarchy");window.Hierarchy.Tree.setFocus();self.Application.processEvents()
+        self.assertEqual(window.FocusedPanel(),"hierarchy");window.SetViewportMaximized(True)
+        self.assertEqual(window._maximized_panel,"hierarchy");self.assertFalse(window.Docking.is_panel_open("scene"))
+        window.TogglePanelMaximized("hierarchy");self.Application.processEvents();self.assertEqual(window.Docking.save_layout()["root"],before["root"])
+        group=next(g for g in window.Docking._groups if "hierarchy" in g.node.panels);menu=group.GroupMenu();labels=[a.text() for a in menu.actions()]
+        self.assertIn(window.Localization.Translate("dock.maximize"),labels);self.assertIn(window.Localization.Translate("dock.pin_group"),labels)
+        menu.deleteLater()
     def test_viewport_maximize_restores_workspace(self) -> None:
         before=self.Window.Docking.save_layout();self.Window.SetViewportMaximized(True)
         self.assertIsNotNone(self.Window._pre_maximize_layout);self.Window.SetViewportMaximized(False)

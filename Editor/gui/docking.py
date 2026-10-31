@@ -393,10 +393,12 @@ class _DockTabBar(QTabBar):
     def _menu(self, pos: QPoint) -> None:
         index = self.tabAt(pos)
         if index < 0:
-            return
+            self.group.ShowGroupMenu(self.mapToGlobal(pos));return
         panel_id = self.group.node.panels[index]
         system = self.group.system
         menu = QMenu(self)
+        menu.addAction(system.localization.Translate("dock.maximize"),lambda:system.maximize_requested.emit(panel_id))
+        menu.addSeparator()
         panel = system.panel(panel_id)
         tr = system.localization.Translate
         close = menu.addAction(tr("dock.close"))
@@ -450,6 +452,8 @@ class _DockGroup(QTabWidget):
         self.setDocumentMode(True)
         self.setTabsClosable(True)
         self.setTabBar(_DockTabBar(self))
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(lambda pos:self.ShowGroupMenu(self.mapToGlobal(pos)) if pos.y()<=self.tabBar().height()+4 else None)
         self.tabCloseRequested.connect(self._close)
         self.currentChanged.connect(self._activated)
         self.tabBar().tabMoved.connect(self._moved)
@@ -472,6 +476,26 @@ class _DockGroup(QTabWidget):
             )
         self.setCurrentIndex(max(0, min(node.current, self.count() - 1)))
         system._groups.append(self)
+
+    def GroupMenu(self):
+        menu=QMenu(self);system=self.system;tr=system.localization.Translate;ids=list(self.node.panels)
+        if not ids:return menu
+        current=ids[max(0,min(self.currentIndex(),len(ids)-1))]
+        menu.addAction(tr("dock.maximize"),lambda:system.maximize_requested.emit(current))
+        menu.addAction(tr("dock.close_all"),lambda:system._close_group(current,others=False))
+        menu.addAction(tr("dock.close_others"),lambda:system._close_group(current,others=True))
+        menu.addSeparator()
+        menu.addAction(tr("dock.pin_group"),lambda:self.GroupPin(ids,True))
+        menu.addAction(tr("dock.unpin_group"),lambda:self.GroupPin(ids,False))
+        tabs=menu.addMenu(tr("dock.activate_tab"))
+        for panel_id in ids:
+            action=tabs.addAction(system.panel(panel_id).icon,system.panel(panel_id).title);action.setCheckable(True);action.setChecked(panel_id==current);action.triggered.connect(lambda checked=False,p=panel_id:system.activate_panel(p))
+        return menu
+    def GroupPin(self,ids,value):
+        system=self.system
+        for panel_id in ids:system.panel(panel_id).pinned=value
+        system._rebuild_views();system.layout_changed.emit()
+    def ShowGroupMenu(self,global_pos):self.GroupMenu().exec(global_pos)
 
     def _close(self, index: int) -> None:
         if 0 <= index < len(self.node.panels):
@@ -679,6 +703,7 @@ class DockingSystem(QWidget):
     panel_floated = Signal(object)
     layout_changed = Signal()
     panel_activated = Signal(object)
+    maximize_requested = Signal(str)
 
     def __init__(
         self,

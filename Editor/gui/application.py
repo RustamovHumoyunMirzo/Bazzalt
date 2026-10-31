@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Callable
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QSignalBlocker,Qt, QTimer
 from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox, QLineEdit, QTextEdit, QPlainTextEdit
 
 from ..localization import LocalizationManager
@@ -114,6 +114,7 @@ class Editor(QMainWindow):
         self.MenuBar.ProjectSettingsRequested.connect(self.OpenProjectSettings)
         self.MenuBar.GlobalSubsystemsRequested.connect(self.OpenGlobalSubsystems)
         self.MenuBar.MaximizeViewportRequested.connect(self.SetViewportMaximized)
+        self.Docking.maximize_requested.connect(self.TogglePanelMaximized)
         self.Scene.GridToggle.toggled.connect(self.MenuBar.GridAction.setChecked)
         self.ThemeManager.ThemeChanged.connect(
             lambda _: self._UpdatePanelPresentation()
@@ -312,13 +313,27 @@ class Editor(QMainWindow):
             elif save:self._SceneCameraChanged()
         if save and self._settings_saver is not None:self._settings_saver(self._settings)
 
-    def SetViewportMaximized(self,maximized:bool,panel_id:str="scene")->None:
+    def FocusedPanel(self)->str:
+        focus=QApplication.focusWidget()
+        if focus:
+            for panel in self.Docking.panels():
+                if panel is focus or panel.isAncestorOf(focus):return panel.panel_id
+        return getattr(self,"_maximized_panel","scene")
+
+    def TogglePanelMaximized(self,panel_id:str)->None:
+        restore=self._pre_maximize_layout is not None and getattr(self,"_maximized_panel","")==panel_id
+        self.SetViewportMaximized(not restore,panel_id)
+
+    def SetViewportMaximized(self,maximized:bool,panel_id:str|None=None)->None:
+        panel_id=panel_id or self.FocusedPanel()
         if maximized:
             if self._pre_maximize_layout is None:self._pre_maximize_layout=self.Docking.save_layout()
             self._maximized_panel=panel_id
             self.Docking.restore_layout({"version":1,"root":{"type":"tabs","panels":[panel_id],"current":0},"pinned":[],"floating":[]})
         elif self._pre_maximize_layout is not None:
             layout=self._pre_maximize_layout;self._pre_maximize_layout=None;self.Docking.restore_layout(layout)
+        action=self.MenuBar.MaximizeViewportAction
+        blocker=QSignalBlocker(action);action.setChecked(self._pre_maximize_layout is not None);del blocker
 
     def ToggleGameMaximized(self)->None:
         restore=self._pre_maximize_layout is not None and getattr(self,"_maximized_panel","")=="output"

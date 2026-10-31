@@ -1330,5 +1330,9 @@
   "graph.blending.add": "Additive",
   "graph.external_change": "Graph changed externally. Refresh to reload it and discard pending local graph edits.",
   "graph.node.Integer": "Integer",
-  "graph.loading": "Updating preview…"
+  "graph.loading": "Updating preview…",
+  "dock.maximize": "Maximize / Restore Panel",
+  "dock.pin_group": "Pin All Tabs",
+  "dock.unpin_group": "Unpin All Tabs",
+  "dock.activate_tab": "Activate Tab"
 }
