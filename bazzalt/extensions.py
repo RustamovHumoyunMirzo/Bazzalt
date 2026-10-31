@@ -116,14 +116,17 @@ def _Validate(value,root):
         if key not in assets or Path(assets[key]).suffix!='.ui' or not isinstance(panel,dict) or not isinstance(panel.get('Title'),str) or not panel['Title'].strip():raise ExtensionError('EditorRegistry entries require .ui assets and Title')
         if panel.get('Icon') and (panel['Icon'] not in assets or Path(assets[panel['Icon']]).suffix.lower() not in {'.svg','.png','.ico','.jpg','.jpeg','.bmp','.webp'}):raise ExtensionError('Panel Icon must reference a registered image')
         if panel.get('Script') and panel['Script'] not in scripts:raise ExtensionError('Missing panel script')
+    if not isinstance(value.get('Extends',{}),dict) or not isinstance(value.get('Extends',{}).get('Scene',[]),list) or any(not isinstance(item,dict) for item in value.get('Extends',{}).get('Scene',[])):raise ExtensionError('Invalid Extends.Scene list')
     editor_scripts={p.get('Script') for p in panels.values() if p.get('Script')}
     editor_scripts.update(a.get('Script') for a in value.get('Extends',{}).get('Menubar',[]))
+    editor_scripts.update(a.get('Script') for a in value.get('Extends',{}).get('Scene',[]))
     for name,script in scripts.items():
         scope=script.setdefault('Scope','Editor' if script.get('Entry') or name in editor_scripts else 'Runtime')
         if scope not in ('Editor','Runtime'):raise ExtensionError('Script Scope must be Editor or Runtime')
         if scope=='Editor' and script.get('Public'):raise ExtensionError('Editor scripts cannot be public gameplay modules')
         if script.get('Entry') and scope!='Editor':raise ExtensionError('Entry scripts are editor-only')
     editor_assets={k for k in panels}
+    editor_assets.update(s['Id'] for s in scripts.values() if s['Scope']=='Editor')
     editor_assets.update(p.get('Icon') for p in panels.values() if p.get('Icon'))
     for asset in value['AssetRegistry']:
         asset.setdefault('Scope','Editor' if asset['Id'] in editor_assets or Path(asset['Path']).suffix=='.ui' else 'Runtime')
@@ -135,7 +138,15 @@ def _Validate(value,root):
     for key in NATIVE_DIRS:
         for item in native.get(key,[]):Local(root,item,directory=True)
     extends=value.setdefault('Extends',{})
-    if set(extends)-{'Menubar','Component','SceneSettings'}:raise ExtensionError('Unknown Extends category')
+    if set(extends)-{'Menubar','Component','SceneSettings','Scene'}:raise ExtensionError('Unknown Extends category')
+    scene_tools=extends.get('Scene',[])
+    if not isinstance(scene_tools,list) or len(scene_tools)>64:raise ExtensionError('Extends.Scene must contain at most 64 tools')
+    tool_names=set()
+    for item in scene_tools:
+        if not isinstance(item,dict) or not NAME.fullmatch(str(item.get('Id',''))) or item['Id'] in tool_names or not isinstance(item.get('Title'),str) or not item['Title'].strip() or item.get('Script') not in scripts or not NAME.fullmatch(str(item.get('Function','OnRun'))):raise ExtensionError('Invalid scene tool')
+        tool_names.add(item['Id'])
+        if scripts[item['Script']].get('Entry') or scripts[item['Script']]['Scope']!='Editor' or Path(assets[scripts[item['Script']]['Id']]).suffix!='.lua':raise ExtensionError('Scene tools require editor Lua scripts')
+        if type(item.get('Checked',False)) is not bool or type(item.get('Checkable',True)) is not bool or not isinstance(item.get('Shortcut',''),str) or len(item.get('Shortcut',''))>128 or len(item['Title'])>128 or (item.get('Checkable',True) is False and item.get('Checked',False)):raise ExtensionError('Invalid scene tool options')
     for item in extends.get('Menubar',[]):
         if not isinstance(item,dict) or not isinstance(item.get('Menu'),str) or not item['Menu'].strip() or not isinstance(item.get('Title'),str) or not item['Title'].strip() or item.get('Script') not in scripts or not NAME.fullmatch(str(item.get('Function',''))):raise ExtensionError('Invalid menu action')
     for name,component in extends.get('Component',{}).items():

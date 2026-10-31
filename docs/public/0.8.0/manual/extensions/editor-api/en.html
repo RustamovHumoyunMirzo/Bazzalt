@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="This API belongs to macros and Extends.Scene scripts. Call Editor.Method(...), using a dot. Arrays use Lua&#x27;s one-based indexing unless a method explicitly asks for mesh indices. Services return ordinary tables, strings, booleans or nil. Gameplay&#x27;s Bazzalt namespace is deliberately absent.">
+  <title>Editor Lua API | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Editor manual / Using extensions / Editor Lua API</nav>
+      <article class="doc"><h1>Editor Lua API</h1><p>This API belongs to macros and Extends.Scene scripts. Call Editor.Method(...), using a dot. Arrays use Lua's one-based indexing unless a method explicitly asks for mesh indices. Services return ordinary tables, strings, booleans or nil. Gameplay's Bazzalt namespace is deliberately absent.</p><h2 id="scene">Scene and selection</h2><table><tr><th>Method</th><th>Contract</th></tr>
+<tr><td>GetVersion()</td><td>Returns editor API version (api=1) and engine version.</td></tr><tr><td>GetScene(), GetScenes()</td><td>Active scene information or the loaded-scene list. UUIDs identify scenes across names.</td></tr>
+<tr><td>GetEntities(offset=0, count=1024), GetEntity(id)</td><td>Page scene entity summaries (count at most 4096), or read entity details/components by UUID. Unknown entities return nil.</td></tr>
+<tr><td>GetSelection(), SetSelection(ids)</td><td>Read or replace editor entity selection and synchronize hierarchy/inspector. Locked objects cannot be selected.</td></tr>
+<tr><td>InstantiateModel(assetOrPath,parent="")</td><td>Instantiate a project model with its authored node hierarchy; returns the new root UUID.</td></tr><tr><td>CreateEntity(name, parent=""), DeleteEntity(id), RenameEntity(id,name), SetParent(id,parent="")</td><td>Create, remove, rename or reparent authoring entities. Creation returns a UUID. Reparenting preserves world placement.</td></tr>
+<tr><td>SetTransform(id, position, rotation, scale), Translate(id, delta)</td><td>World-space vectors; rotation is a normalized quaternion {x,y,z,w}. Numbers must be finite. Writes honor entity locks.</td></tr>
+<tr><td>AddComponent(id,type), RemoveComponent(id,type), SetComponentProperty(id,type,property,value)</td><td>Use inspector component/property names. The ordinary component validation and default-component removal rules apply. Writes return success.</td></tr></table><h2 id="assets">Assets and panels</h2><table><tr><th>Method</th><th>Contract</th></tr>
+<tr><td>GetAssets(offset=0,count=1024), GetAssetFolder(), SelectAsset(uuidOrPath), RefreshAssets()</td><td>Page project asset records, read the current browser folder, select a project asset, or refresh imports/browser. Asset selection preserves its containing folder.</td></tr>
+<tr><td>ReadAssetText(relativePath), WriteAssetText(relativePath,text)</td><td>Read/write UTF-8 .obj, .css, .shad or .matinst files under the project's Assets root, through symlink-aware path validation. Writes are atomic and undoable. Text is limited to 1 MiB.</td></tr>
+<tr><td>CreateMeshAsset(relativeObjPath, vertices, triangleIndices)</td><td>Write an OBJ and import it, returning its asset UUID. Vertices are {x,y,z}; indices are zero-based integers grouped into triangles. At most 4096 vertices and 4096 indices per call. Chunk larger geometry.</td></tr>
+<tr><td>GetPanels(), OpenPanel(id), ClosePanel(id)</td><td>Panel records contain id/title/open. Built-in and extension dock IDs are supported; pinned close protection still applies.</td></tr></table><h2 id="viewport">Viewport and history</h2><table><tr><th>Method</th><th>Contract</th></tr>
+<tr><td>GetSceneCamera(), SetSceneCamera(state)</td><td>Read/restore editor navigation state: version=1, target, distance, yaw, pitch. This does not alter a game Camera component.</td></tr>
+<tr><td>ScreenRay(x,y), Raycast(origin,direction)</td><td>Generate a world ray from logical Scene coordinates, or query editor geometry and return a hit position/nil. This is scene geometry picking, not a physics query.</td></tr>
+<tr><td>DrawLines(lines), ClearLines()</td><td>Set this session's editor-only world guides. Each line is {ax,ay,az,bx,by,bz,r,g,b,a}; the combined visible guide budget is 2048. Guides never enter the Game viewport or saved scene.</td></tr>
+<tr><td>SetSceneInput(enabled)</td><td>Opt a running macro into scene callbacks, or stop listening. Extension tools use their Controls checkbox for this state.</td></tr>
+<tr><td>BeginUndo(label), EndUndo(), CancelUndo()</td><td>Group a gesture across callbacks, commit it, or restore it. Finish every gesture. Without an explicit group, each mutating callback is one command. Errors cancel pending changes.</td></tr>
+<tr><td>Log(text)</td><td>Add an item to the editor Console under this macro/tool's name.</td></tr></table><h2 id="ui">Owned UI</h2><p>CreateDialog(id,title,options) creates an owned, nonmodal child dialog, initially hidden. Pass {modal=true} as options for a window-modal dialog. AddWidget(dialogId,spec) adds an element and returns its dialog/widget handle. IDs are unique identifiers of at most 64 characters. ShowDialog(id) shows it; CloseDialog(id) hides it. GetValue(handle)/SetValue(handle,value) read/write fields without recursively firing callbacks.</p><p>Widget spec fields: id, type, text, callback. Types: label/button/text/number/checkbox/choice. Number supports min/max/value; checkbox supports value; choice supports options. callback defaults to OnUI. The callback argument contains widget and value. See the <a href="../../macros/en.html#dialogs">macro dialog example</a>.</p><h2 id="limits">Execution boundaries</h2><p>Editor scripts run on the editor UI thread with an instruction budget of one million instructions per callback and a 32 MiB Lua allocator limit. Keep work incremental; they are tools, not background render loops. At most 16 sessions, eight dialogs per session and 32 dialogs total may be active. Each dialog is bounded to 512 Qt child objects. API tables have at most 4096 entries and 16 nesting levels; text results are limited to 1 MiB.</p><p>There is no io, os, package, debug, arbitrary load, native-module loader or gameplay API. require resolves only the snapshotted/registered modules. Protected-call and finalizer facilities are unavailable so errors and limits cannot be hidden from the editor transaction boundary. Invalid code, modules or values report Console errors; invalid edits do not bypass component/asset validation. This is a bounded capability interface, not permission to execute shell commands. Personal macro stores are not a game scripting format.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../en.html"><small>Previous</small>Using extensions</a>
+<a class="next" href="../scene-tools/en.html"><small>Next</small>Scene extension tools</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#scene">Scene and selection</a><a class="toc-link" href="#assets">Assets and panels</a><a class="toc-link" href="#viewport">Viewport and history</a><a class="toc-link" href="#ui">Owned UI</a><a class="toc-link" href="#limits">Execution boundaries</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

@@ -8,7 +8,7 @@ import sys
 from PySide6.QtCore import QPoint, QPointF, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QImage, QGuiApplication, QKeyEvent, QMouseEvent, QPainter, QPen, QWheelEvent
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel,
-                               QStackedLayout, QToolButton,QVBoxLayout, QWidget)
+                               QStackedLayout, QToolButton,QVBoxLayout, QWidget,QMenu,QSpinBox)
 from ..gizmos import GizmoDrag, GizmoDelta, GizmoHandle, GizmoMode, PickAxis, PickRotationAxis, Ray, Vec3
 from ..transform_units import TransformUnits
 from ..transform_trails import TransformTrail
@@ -95,6 +95,7 @@ class NativeRenderSurface(QWidget):
         super().showEvent(event); QTimer.singleShot(50, self, self._Attach)
 
     def _PixelSize(self) -> tuple[int, int]:
+        if getattr(self,"SimulatedSize",None):return self.SimulatedSize
         ratio = self.devicePixelRatioF()
         return max(1, round(self.width() * ratio)), max(1, round(self.height() * ratio))
 
@@ -105,7 +106,7 @@ class NativeRenderSurface(QWidget):
         if QGuiApplication.platformName().casefold() in {"offscreen","minimal","minimalegl"}:return
         # Filament's Linux native surface is an X11 Window, never a Wayland WId.
         plugin=QGuiApplication.platformName().casefold()
-        self._captured=sys.platform.startswith("linux") and plugin.startswith("wayland")
+        self._captured=bool(getattr(self,"SimulatedSize",None)) or (sys.platform.startswith("linux") and plugin.startswith("wayland"))
         if sys.platform.startswith("linux") and plugin!="xcb" and not self._captured:return
         # Delay native-window promotion until docking has finished constructing
         # and reparenting its tab hierarchy.
@@ -533,6 +534,28 @@ class StatisticsText:
     def _Publish(self):
         if hasattr(self.Runtime,"SetEditorStatisticsText"):self.Runtime.SetEditorStatisticsText(self._text,self._visible)
 
+from ..widgets.menu_bar import EditorMenu
+
+class SceneControlsMenu(EditorMenu):
+    def mouseReleaseEvent(self,event):
+        action=self.actionAt(event.position().toPoint())
+        if event.button()==Qt.MouseButton.LeftButton and action and action.isEnabled() and action.isCheckable():action.trigger();self.update();event.accept();return
+        super().mouseReleaseEvent(event)
+    def keyPressEvent(self,event):
+        action=self.activeAction()
+        if event.key()==Qt.Key.Key_Space and action and action.isEnabled() and action.isCheckable():action.trigger();self.update();event.accept();return
+        super().keyPressEvent(event)
+
+class GameSizeContainer(QWidget):
+    def __init__(self,surface):super().__init__();self.setObjectName("GameSizeContainer");self.setStyleSheet("QWidget#GameSizeContainer { background: #000; }");self.Surface=surface;surface.setParent(self)
+    def resizeEvent(self,event):super().resizeEvent(event);self.Fit()
+    def Fit(self):
+        target=getattr(self.Surface,"SimulatedSize",None);w,h=self.width(),self.height()
+        if target:
+            ratio=min(w/target[0],h/target[1]);width=max(1,int(target[0]*ratio));height=max(1,int(target[1]*ratio))
+        else:width,height=w,h
+        self.Surface.setGeometry((w-width)//2,(h-height)//2,width,height)
+
 class ViewportPanel(QFrame):
     def __init__(self, runtime, scene: bool, localization, resources=None, themes=None, parent=None) -> None:
         super().__init__(parent); self.setObjectName("ViewportPanel")
@@ -557,7 +580,7 @@ class ViewportPanel(QFrame):
                 button.setObjectName("SceneToolChip");button.setCheckable(True);button.setChecked(checked);button.setToolTip(tooltip)
             self.StatsLabel=StatisticsText(runtime)
             for widget in (self.LocalToggle,self.PivotMode,self.HighLevelToggle,self.ShadingMode,plane,grid,self.GizmoToggle,self.StatsToggle):row.addWidget(widget)
-            row.addStretch();layout.addWidget(controls)
+            row.addStretch();self.Controls=QToolButton();self.Controls.setText(localization.Translate("viewport.controls"));self.Controls.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup);self.ControlsMenu=SceneControlsMenu("",themes,self.Controls) if themes else QMenu(self.Controls);self.Controls.setMenu(self.ControlsMenu);row.addWidget(self.Controls);localization.LocaleChanged.connect(lambda *_:self.Controls.setText(localization.Translate("viewport.controls")));layout.addWidget(controls)
             update_selection_text()
             def update_icons(_theme=None):
                 theme="light" if themes and themes.GetTheme().background=="#d4d4d4" else "dark"
@@ -565,6 +588,11 @@ class ViewportPanel(QFrame):
                     self.HighLevelToggle.setIcon(resources.Icon(f"icons/{theme}/toplvlsel.svg"));self.HighLevelToggle.setIconSize(QSize(16,16))
                     for button,name in ((self.LocalToggle,"localpos.svg"),(grid,"grid.svg"),(self.GizmoToggle,"gizmos.svg"),(self.StatsToggle,"stats.svg")):button.setIcon(resources.Icon(f"icons/stoolbar/{theme}/{name}"));button.setIconSize(QSize(16,16))
             update_icons();themes.ThemeChanged.connect(update_icons) if themes else None
+        if not scene:
+            bar=QHBoxLayout();bar.setContentsMargins(4,2,4,2);self.Device=QComboBox();self.Camera=QComboBox();self.Device.setMinimumContentsLength(10);self.Camera.setMinimumContentsLength(12)
+            for label,value in (("viewport.free_size",None),("1280 x 720",(1280,720)),("1920 x 1080",(1920,1080)),("390 x 844",(390,844)),("1024 x 768",(1024,768))):self.Device.addItem(localization.Translate(label) if value is None else label,value)
+            self.Camera.addItem(localization.Translate("viewport.camera_auto"),"");self.Camera.addItem(localization.Translate("viewport.camera_none"),"none")
+            bar.addWidget(self.Device);bar.addWidget(self.Camera,1);layout.addLayout(bar)
         self.Surface = NativeRenderSurface(runtime, scene)
         if scene:self.HighLevelToggle.toggled.connect(self.Surface.SetHighLevelSelection)
         if scene:
@@ -573,7 +601,9 @@ class ViewportPanel(QFrame):
             self._output_stack = QStackedLayout()
             self._output_stack.setContentsMargins(0, 0, 0, 0)
             self._output_stack.setStackingMode(QStackedLayout.StackingMode.StackOne)
-            self._output_stack.addWidget(self.Surface)
+            self._game_container=GameSizeContainer(self.Surface);self._output_stack.addWidget(self._game_container)
+            self.Device.currentIndexChanged.connect(self._DeviceChanged);self.Camera.currentIndexChanged.connect(self._CameraChanged)
+            self._camera_signature=None;runtime.SceneChanged.connect(self.RefreshCameras);runtime.ProjectChanged.connect(lambda *_:self.ResetPreview())
             self._no_camera = QLabel()
             self._no_camera.setObjectName("NoGameCameraWarning")
             self._no_camera.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -586,23 +616,45 @@ class ViewportPanel(QFrame):
             layout.addLayout(self._output_stack, 1)
             self._localization = localization
             self._UpdateNoCameraText()
-            localization.LocaleChanged.connect(lambda _locale: self._UpdateNoCameraText())
-            self.SetGameCameraAvailable(False)
+            localization.LocaleChanged.connect(lambda _locale: self._OutputLocaleChanged())
+            self.SetGameCameraAvailable(False);self.RefreshCameras()
+            self.CameraRefresh=QTimer(self);self.CameraRefresh.setInterval(1000);self.CameraRefresh.timeout.connect(self.RefreshCameras);self.CameraRefresh.start()
         if scene:
             grid.toggled.connect(lambda checked:runtime.SetGrid(checked,plane.currentIndex()))
             plane.currentIndexChanged.connect(lambda index:runtime.SetGrid(grid.isChecked(),index))
             self.StatsToggle.toggled.connect(self.StatsLabel.setVisible)
             self.Surface.SetMoveSpeed(5);runtime.SetGrid(True,1)
 
+    def _OutputLocaleChanged(self):
+        self.Device.setItemText(0,self._localization.Translate("viewport.free_size"));self.Camera.setItemText(0,self._localization.Translate("viewport.camera_auto"));self.Camera.setItemText(1,self._localization.Translate("viewport.camera_none"));self._UpdateNoCameraText()
+    def _DeviceChanged(self,*_):
+        self.Surface.Detach();self.Surface.SimulatedSize=self.Device.currentData();self._game_container.Fit();QTimer.singleShot(0,self.Surface,self.Surface._Attach)
+    def _CameraChanged(self,*_):
+        self.Surface.Runtime.SetGamePreview(self.Camera.currentData() or "");self._UpdateNoCameraText()
+        self.SetGameCameraAvailable(self.Surface.Runtime.HasGameOutput())
+    def ResetPreview(self):
+        self.Camera.setCurrentIndex(0);self.RefreshCameras()
+    def RefreshCameras(self,*_):
+        if not hasattr(self,"Camera"):return
+        runtime=self.Surface.Runtime;records=[]
+        for row in runtime.PreviewCameras():records.append((str(row.get("uuid")),str(row.get("name","Camera"))))
+        scene_id=str(runtime.SceneInfo().get("uuid",""));signature=(scene_id,tuple(records))
+        if signature==self._camera_signature:return
+        selected=self.Camera.currentData()
+        if self._camera_signature is not None and self._camera_signature[0]!=scene_id and selected not in ("","none"):selected=""
+        self._camera_signature=signature;blocked=self.Camera.blockSignals(True)
+        while self.Camera.count()>2:self.Camera.removeItem(2)
+        for identity,name in records:self.Camera.addItem(name,identity)
+        index=self.Camera.findData(selected);self.Camera.setCurrentIndex(max(0,index));self.Camera.blockSignals(blocked);self._CameraChanged()
     def _UpdateNoCameraText(self) -> None:
         if hasattr(self, "_no_camera"):
-            self._no_camera.setText(self._localization.Translate("viewport.no_game_camera"))
+            self._no_camera.setText("" if hasattr(self,"Camera") and self.Camera.currentData()=="none" else self._localization.Translate("viewport.no_game_camera"))
 
     def SetGameCameraAvailable(self, available: bool) -> None:
         if not hasattr(self, "_output_stack"): return
-        previous=self._output_stack.currentWidget();focused=previous.hasFocus()
-        self._output_stack.setCurrentWidget(self.Surface if available else self._no_camera)
-        if focused and previous is not self._output_stack.currentWidget():self._output_stack.currentWidget().setFocus()
+        previous=self._output_stack.currentWidget();focused=previous.hasFocus() or self.Surface.hasFocus()
+        self._output_stack.setCurrentWidget(self._game_container if available else self._no_camera)
+        if focused and previous is not self._output_stack.currentWidget():(self.Surface if available else self._no_camera).setFocus()
         if available: QTimer.singleShot(0, self.Surface, self.Surface._Attach)
 
     def resizeEvent(self,event)->None:

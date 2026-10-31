@@ -66,6 +66,7 @@ public:
                         float pixelRatio = 1.0f);
     void DestroyViewport(std::uint64_t id);
     bool WaitForViewportFrame(std::uint64_t id);
+    void SetGamePreview(int mode,UUID camera){m_gamePreviewMode=mode;m_gamePreviewCamera=camera;}
     void SetSceneCamera(std::uint64_t id, float eyeX, float eyeY, float eyeZ,
                         float targetX, float targetY, float targetZ);
     void SetEditorGizmo(bool visible, float x, float y, float z, int mode);
@@ -154,6 +155,7 @@ private:
     std::unordered_map<UUID,filament::Texture*> m_captureReads;
     std::unordered_map<std::uint64_t, std::unique_ptr<ViewportResource>> m_viewports;
     std::unordered_set<std::uint64_t> m_presentedViewports;
+    int m_gamePreviewMode=0;UUID m_gamePreviewCamera{};
     double m_materialTime=0;
     std::uint64_t m_guideUploads=0,m_lightUploads=0;
     std::vector<EditorGuide> m_editorGuideCache;

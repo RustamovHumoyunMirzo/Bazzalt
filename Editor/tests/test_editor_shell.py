@@ -390,13 +390,13 @@ class EditorShellTests(unittest.TestCase):
         self.assertFalse(self.Window.Runtime.HasActiveCamera())
         self.assertTrue(self.Window.Runtime.AddComponent(entity_id,"Camera"))
         output.SetGameCameraAvailable(self.Window.Runtime.HasActiveCamera())
-        self.assertIs(output._output_stack.currentWidget(),output.Surface)
+        self.assertIs(output._output_stack.currentWidget(),output._game_container)
         self.assertTrue(self.Window.Runtime.SetComponentEnabled(entity_id,"Camera",False))
         output.SetGameCameraAvailable(self.Window.Runtime.HasActiveCamera())
         self.assertIs(output._output_stack.currentWidget(),output._no_camera)
         self.assertTrue(self.Window.Runtime.SetComponentEnabled(entity_id,"Camera",True))
         output.SetGameCameraAvailable(self.Window.Runtime.HasActiveCamera())
-        self.assertIs(output._output_stack.currentWidget(),output.Surface)
+        self.assertIs(output._output_stack.currentWidget(),output._game_container)
         self.assertTrue(self.Window.Runtime.RemoveComponent(entity_id,"Camera"))
         output.SetGameCameraAvailable(self.Window.Runtime.HasActiveCamera())
         self.assertIs(output._output_stack.currentWidget(),output._no_camera)
@@ -545,7 +545,7 @@ class EditorShellTests(unittest.TestCase):
     def test_default_workspace_registers_all_builtin_panels(self) -> None:
         self.assertEqual(
             {panel.panel_id for panel in self.Window.Docking.panels()},
-            {"console", "output", "scene", "hierarchy", "properties", "asset_browser", "audio_mixer", "shader_graph"},
+            {"console", "output", "scene", "hierarchy", "properties", "asset_browser", "audio_mixer", "shader_graph", "macros"},
         )
         self.assertTrue(all(not panel.icon.isNull() for panel in self.Window.Docking.panels()))
 

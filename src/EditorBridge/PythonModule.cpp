@@ -394,6 +394,9 @@ public:
     }
     std::size_t EntityCount() const {return m_engine->GetScene().GetEntityCount();}
     auto Statistics() const {return m_engine->GetEditorStatistics();}
+    py::list PreviewCameras()const{py::list result;for(auto handle:m_engine->GetScene().GetRegistry().view<Camera>()){auto e=m_engine->GetScene().GetEntity(static_cast<Entity::Id>(handle));py::dict item;item["uuid"]=e.GetUUID().ToString();item["name"]=e.GetComponent<Name>().Value;result.append(item);}return result;}
+    void SetGamePreview(const std::string& camera){const auto id=camera.empty()||camera=="none"?UUID{}:ParseUuid(camera);m_engine->SetGamePreview(camera=="none"?-1:camera.empty()?0:1,id);m_previewCamera=camera;}
+    void SetToolGuides(std::vector<std::array<float,10>> lines){m_engine->SetEditorToolGuides(std::move(lines));}
     void SetStatisticsText(std::string text,bool visible){m_engine->SetEditorStatisticsText(std::move(text),visible);}
     bool HasActiveCamera() const {
         const auto cameras = m_engine->GetScene().GetRegistry().view<Camera>();
@@ -403,6 +406,9 @@ public:
         return false;
     }
     bool HasGameOutput() const {
+        if(m_previewCamera=="none")return false;
+        if(!m_previewCamera.empty()){const auto e=m_engine->GetScene().GetEntity(ParseUuid(m_previewCamera));const auto* c=e.TryGetComponent<Camera>();return c&&c->Enabled;}
+
         const auto& registry=m_engine->GetScene().GetRegistry();
         for(auto handle:registry.view<Frame>()){const auto& frame=registry.get<Frame>(handle);if(frame.Enabled&&frame.Visible&&frame.Mode==FrameMode::Viewport)return true;}
         for(auto handle:registry.view<Camera>()){const auto& camera=registry.get<Camera>(handle);const auto* target=registry.try_get<CameraRenderTarget>(handle);if(camera.Enabled&&camera.Active&&!camera.RenderTarget&&(!target||!target->Enabled))return true;}
@@ -798,6 +804,7 @@ private:
     std::vector<LoadedScene> m_loadedScenes;
     std::size_t m_activeScene = 0;
     bool m_playing = false;
+    std::string m_previewCamera;
     bool m_gameFocused=false;
     std::uint32_t m_gameWidth=0,m_gameHeight=0;
     std::unordered_set<std::uint64_t> m_gameViewports;
@@ -807,9 +814,11 @@ private:
 } // namespace
 } // namespace Bazzalt::EditorBridge
 
-namespace Bazzalt::EditorBridge { void BindShaderPreview(py::module_&); }
+namespace Bazzalt::EditorBridge { void BindEditorLua(py::module_&);
+void BindShaderPreview(py::module_&); }
 PYBIND11_MODULE(_bazzalt_runtime, module) {
     Bazzalt::EditorBridge::BindShaderPreview(module);
+    Bazzalt::EditorBridge::BindEditorLua(module);
     module.def("compile_extension_lua",[](const std::string& source,const std::string& output){std::string error;if(!Bazzalt::Runtime::LuaRuntime::Import(std::filesystem::u8path(source),std::filesystem::u8path(output),error))throw std::runtime_error(error);});
     module.def("extension_root",[](){auto text=Bazzalt::Runtime::ExtensionAccess::Root().generic_u8string();return std::string(text.begin(),text.end());});
     module.def("extension_modules",&Bazzalt::Extensions::GetModules);
@@ -864,6 +873,9 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("statistics", &Bazzalt::EditorBridge::EditorHost::Statistics)
         .def("set_statistics_text", &Bazzalt::EditorBridge::EditorHost::SetStatisticsText)
         .def("has_active_camera", &Bazzalt::EditorBridge::EditorHost::HasActiveCamera)
+        .def("preview_cameras",&Bazzalt::EditorBridge::EditorHost::PreviewCameras)
+        .def("set_game_preview",&Bazzalt::EditorBridge::EditorHost::SetGamePreview)
+        .def("set_tool_guides",&Bazzalt::EditorBridge::EditorHost::SetToolGuides)
         .def("has_game_output", &Bazzalt::EditorBridge::EditorHost::HasGameOutput)
         .def("create_entity", &Bazzalt::EditorBridge::EditorHost::CreateEntity,
              py::arg("name"), py::arg("parent") = "")

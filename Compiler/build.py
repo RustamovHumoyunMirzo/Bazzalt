@@ -283,7 +283,13 @@ def _Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
         if tools.is_dir():environment['BAZZALT_FILAMENT_TOOLS']=str(tools)
         Run([cooker,project,cooked,manifest],cwd=cooker.parent,env=environment)
         from .content import FilterCooked
-        check();CookShaders(cooked,cooker,check);check();FilterCooked(cooked,settings['packaging']);check()
+        check();CookShaders(cooked,cooker,check);check()
+        macro_registry=project.parent/'.bazzalt/Editor/MacroSources.json';macro_sources=[]
+        if macro_registry.exists():
+            if macro_registry.stat().st_size>1024*1024:raise ValueError('Editor macro source registry exceeds limits')
+            macro_sources=json.loads(macro_registry.read_text(encoding='utf-8')).get('Assets',[])
+            if not isinstance(macro_sources,list) or any(not isinstance(v,str) for v in macro_sources):raise ValueError('Invalid editor macro source registry')
+        FilterCooked(cooked,settings['packaging'],macro_sources);check()
         from .extensions import StageGame
         StageGame(project,cooked,platform,arch,runtime,compiler_path);check()
         # No source code, import tools, or editor settings can enter the final game.

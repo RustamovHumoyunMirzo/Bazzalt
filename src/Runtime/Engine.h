@@ -94,6 +94,8 @@ public:
                          float targetX, float targetY, float targetZ);
     void SetEditorGizmo(bool visible, float x, float y, float z, int mode);
     void SetEditorGizmoHover(int axis);
+    void SetGamePreview(int mode,UUID camera);
+    void SetEditorToolGuides(std::vector<std::array<float,10>> lines);
     void SetEditorTransformTrail(std::vector<std::array<float,10>> lines);
     UUID PickEditorPrimitive(Vec3 origin, Vec3 direction,Vec3* hitPosition=nullptr,const std::unordered_set<UUID>& excluded={});
     bool IsEditorLODHidden(UUID id) const;
@@ -158,7 +160,7 @@ private:
     std::unordered_set<UUID> m_editorHidden,m_editorUnselectable;
     std::vector<UUID> m_selectedObjects;
     Vec3 m_hoverEye{};
-    std::vector<std::array<float,10>> m_editorTransformTrail;
+    std::vector<std::array<float,10>> m_editorTransformTrail,m_editorToolGuides;
 };
 
 } // namespace Bazzalt::Runtime

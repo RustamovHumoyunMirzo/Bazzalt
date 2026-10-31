@@ -6,6 +6,13 @@ from Compiler.settings import DEFAULTS,Validate
 
 
 class ContentFilterTests(unittest.TestCase):
+    def test_editor_macro_sources_are_excluded_even_with_keep_all(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);self.Fixture(root);settings=copy.deepcopy(DEFAULTS['packaging']);FilterCooked(root,settings,['unused'])
+            self.assertFalse((root/'Assets/Unused.bin').exists());self.assertTrue((root/'Assets/Main.bscene').exists())
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);self.Fixture(root);settings=copy.deepcopy(DEFAULTS['packaging'])
+            with self.assertRaisesRegex(ValueError,'Excluded asset is required'):FilterCooked(root,settings,['model'])
     def test_graph_texture_dependencies_and_binary_products_are_retained(self):
         import json
         with tempfile.TemporaryDirectory() as folder:

@@ -75,6 +75,16 @@ class ExtensionController:
                             elif isinstance(child,(QLineEdit,QComboBox,QSpinBox,QDoubleSpinBox)):
                                 signal=child.textEdited if isinstance(child,QLineEdit) else child.currentTextChanged if isinstance(child,QComboBox) else child.valueChanged
                                 signal.connect(lambda value,n=child.objectName(),i=identity,s=panel['Script']:self.Call(i,s,'OnChanged',n))
+                if manifest['Extends'].get('Scene'):
+                    sources={}
+                    for name,script in manifest['Scripts'].items():
+                        if script['Scope']=='Editor' and Path(assets[script['Id']]).suffix=='.lua':
+                            path=Local(item['Root'],assets[script['Id']])
+                            if path.stat().st_size>4*1024*1024:raise ExtensionError('Scene tool source exceeds limits')
+                            sources[name]=path.read_text(encoding='utf-8-sig')
+                    for action in manifest['Extends']['Scene']:
+                        try:self.Editor.EditorTools.AddControl('extension.'+identity+'.'+action['Id'],action['Title'],sources[action['Script']],{k:v for k,v in sources.items() if k!=action['Script']},action.get('Function','OnRun'),action.get('Shortcut',''),action.get('Checked',False),action.get('Checkable',True))
+                        except (ValueError,OSError) as error:self.Error(str(action['Title'])+': '+str(error))
                 for action in manifest['Extends'].get('Menubar',[]):
                     menus={'File':self.Editor.MenuBar.FileMenu,'Edit':self.Editor.MenuBar.EditMenu,'Object':self.Editor.MenuBar.ObjectMenu,'Build':self.Editor.MenuBar.BuildMenu,'View':self.Editor.MenuBar.ViewMenu,'Window':self.Editor.MenuBar.WindowMenu,'Help':self.Editor.MenuBar.HelpMenu}
                     menu=menus.get(action['Menu'])

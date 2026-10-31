@@ -55,6 +55,8 @@ def _LoadNativeModule():
 class RuntimeService(QObject):
     SceneChanged = Signal()
     ProjectChanged = Signal(str)
+    ProjectChanging = Signal()
+    ProjectChangeAborted = Signal()
     ErrorOccurred = Signal(str)
 
     def __init__(self, parent: QObject | None = None) -> None:
@@ -74,8 +76,12 @@ class RuntimeService(QObject):
         return f"Native editor runtime could not be loaded: {_NATIVE_LOAD_ERROR or 'module not found'}"
 
     def LoadProject(self, path: str | Path) -> bool:
-        if self._host is None or not self._host.load_project(str(path)):
-            self.ErrorOccurred.emit(self.LastError()); return False
+        self.ProjectChanging.emit()
+        try:loaded=self._host is not None and self._host.load_project(str(path))
+        except Exception:
+            self.ProjectChangeAborted.emit();raise
+        if not loaded:
+            self.ProjectChangeAborted.emit();self.ErrorOccurred.emit(self.LastError());return False
         self.ProjectChanged.emit(str(path)); self.SceneChanged.emit(); return True
 
     def LoadScene(self, path: str | Path) -> bool:
@@ -98,7 +104,7 @@ class RuntimeService(QObject):
         return bool(self._host and hasattr(self._host, "configure_rendering_backend") and self._host.configure_rendering_backend(backend))
 
     def Release(self) -> None:
-        self._host = None
+        self.ProjectChanging.emit();self._host = None
 
     def UpdateProjectInfo(self, name: str, properties: dict) -> bool:
         return bool(self._host and hasattr(self._host, "update_project_info") and self._host.update_project_info(name, properties))
@@ -192,6 +198,12 @@ class RuntimeService(QObject):
     def HasActiveCamera(self) -> bool:
         return bool(self._host and hasattr(self._host, "has_active_camera") and
                     self._host.has_active_camera())
+    def PreviewCameras(self):
+        return list(self._host.preview_cameras()) if self._host and hasattr(self._host,"preview_cameras") else []
+    def SetGamePreview(self,camera=""):
+        if self._host and hasattr(self._host,"set_game_preview"):self._host.set_game_preview(str(camera))
+    def SetToolGuides(self,lines):
+        if self._host and hasattr(self._host,"set_tool_guides"):self._host.set_tool_guides(lines)
     def HasGameOutput(self) -> bool:
         return bool(self._host.has_game_output()) if self._host and hasattr(self._host,"has_game_output") else self.HasActiveCamera()
 

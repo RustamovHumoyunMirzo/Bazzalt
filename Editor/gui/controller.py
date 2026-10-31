@@ -1002,7 +1002,10 @@ class EditorController(QObject):
         if not self._updating_inspector and entity_id==self.SelectedEntity and name.strip() and self._Mutate("Rename entity",lambda:self.Runtime.Rename(entity_id,name.strip())):self.SetDirty(True);self.RefreshHierarchy()
 
     def SetDirty(self, dirty: bool = True, scene_ids=None) -> None:
-        if dirty:self._material_scenes=None
+        if dirty:
+            self._material_scenes=None
+            tools=getattr(self.Window,'EditorTools',None)
+            if tools:tools.QueueSceneChanged()
         if not dirty:self._dirty_scenes.clear()
         else:
             ids={str(value) for value in (scene_ids or ()) if value}
@@ -1380,6 +1383,8 @@ class EditorController(QObject):
             bindings=[binding for binding in bindings if binding["entity"] in active_entities or binding["entity"].startswith('@subsystem:')]
             if not self.Runtime.ConfigureScripts(bindings):
                 self.Window.Console.AddMessage(self.Runtime.LastError(),ConsoleLevel.Error,True,tr("scripting.runtime_source"));self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
+        tools=getattr(self.Window,'EditorTools',None)
+        if tools and tools.Owner is not None:tools.End(tools.Owner)
         authoring=(set(self._dirty_scenes),self.History.Checkpoint())
         if not self.Runtime.Play():self.Window.Toolbar.SetPlayState(PlayState.Stopped)
         else:

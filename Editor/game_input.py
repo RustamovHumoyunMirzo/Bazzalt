@@ -4,6 +4,10 @@ from PySide6.QtCore import QEvent,QObject,Qt,QTimer
 from PySide6.QtWidgets import QApplication
 from shiboken6 import isValid
 
+def InputScale(widget):
+    size=getattr(widget,"SimulatedSize",None)
+    return (size[0]/max(1,widget.width()),size[1]/max(1,widget.height())) if size else (widget.devicePixelRatioF(),widget.devicePixelRatioF())
+
 def KeyScancode(event)->int:
     # Windows native make codes preserve physical WASD on non-Latin layouts.
     if sys.platform=="win32" and event.nativeScanCode():
@@ -80,11 +84,11 @@ class GameInputRouter(QObject):
             self.Runtime.GameKey(KeyScancode(event),kind==QEvent.Type.KeyPress);event.accept();return True
         if kind in (QEvent.Type.MouseButtonPress,QEvent.Type.MouseButtonRelease):
             buttons={Qt.MouseButton.LeftButton:1,Qt.MouseButton.MiddleButton:2,Qt.MouseButton.RightButton:3,Qt.MouseButton.BackButton:4,Qt.MouseButton.ForwardButton:5}
-            position=event.position();ratio=watched.devicePixelRatioF();self.Runtime.GameMotion(position.x()*ratio,position.y()*ratio,0,0);self._last=position
+            position=event.position();sx,sy=InputScale(watched);self.Runtime.GameMotion(position.x()*sx,position.y()*sy,0,0);self._last=position
             self.Runtime.GameButton(buttons.get(event.button(),0),kind==QEvent.Type.MouseButtonPress);event.accept();return True
         if kind==QEvent.Type.MouseMove:
             position=event.position();delta=position-self._last if self._last is not None else position-position;self._last=position
-            ratio=watched.devicePixelRatioF();self.Runtime.GameMotion(position.x()*ratio,position.y()*ratio,delta.x()*ratio,delta.y()*ratio);event.accept();return True
+            sx,sy=InputScale(watched);self.Runtime.GameMotion(position.x()*sx,position.y()*sy,delta.x()*sx,delta.y()*sy);event.accept();return True
         if kind==QEvent.Type.Wheel:
             delta=event.angleDelta();self.Runtime.GameScroll(delta.x()/120,delta.y()/120);event.accept();return True
         return False

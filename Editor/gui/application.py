@@ -30,6 +30,7 @@ from .wheel_policy import EditorWheelPolicy
 from .object_tools import ObjectTools
 from .panels.audio_mixer import AudioMixerPanel
 from .panels.shader_graph import ShaderGraphPanel
+from .panels.macros import MacrosPanel
 
 
 class Editor(QMainWindow):
@@ -92,6 +93,7 @@ class Editor(QMainWindow):
         self.Properties = PropertiesPanel(self.Localization)
         self.AssetBrowser = AssetBrowserPanel(self.Localization, self.Resources)
         self.AudioMixer=AudioMixerPanel(self.Runtime,self.Localization,self.Resources,self.ThemeManager)
+        self.Macros=MacrosPanel(self)
         self.ShaderGraph=ShaderGraphPanel(self.Runtime,self.Localization,self.Resources,self.ThemeManager)
         from ..asset_opening import ExternalAssetOpener
         self.AssetBrowser.ExternalOpener = ExternalAssetOpener(self._settings, self._settings_saver)
@@ -102,7 +104,7 @@ class Editor(QMainWindow):
             "hierarchy": self.Hierarchy,
             "properties": self.Properties,
             "asset_browser": self.AssetBrowser,
-            "audio_mixer":self.AudioMixer,"shader_graph":self.ShaderGraph,
+            "audio_mixer":self.AudioMixer,"shader_graph":self.ShaderGraph,"macros":self.Macros,
         }
         self._RegisterPanels()
         self._default_layout=self._LoadDefaultWorkspace()
@@ -127,6 +129,8 @@ class Editor(QMainWindow):
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.Toolbar)
         self.setCentralWidget(self.Docking)
         self.Controller = EditorController(self, self.Runtime)
+        from ..editor_tools import EditorTools
+        self.EditorTools=EditorTools(self)
         from ..game_build import GameBuildController
         self.GameBuild=GameBuildController(self)
         self.ObjectTools=ObjectTools(self)
@@ -397,6 +401,7 @@ class Editor(QMainWindow):
             panel_id="console",
         )
         self.Docking.add_panel(self.AudioMixer,tr("panel.audio_mixer"),self._PanelIcon("audio_mixer"),relative_to=assets,panel_id="audio_mixer")
+        self.Docking.add_panel(self.Macros,tr("panel.macros"),self._PanelIcon("macros"),relative_to=assets,panel_id="macros")
         self.Docking.add_panel(self.ShaderGraph,tr("panel.shader_graph"),self._PanelIcon("shader_graph"),relative_to=assets,panel_id="shader_graph")
 
     def _UpdatePanelPresentation(self) -> None:
@@ -473,6 +478,7 @@ class Editor(QMainWindow):
         self.Controller.Stop()
         # close() hides a Qt widget; it does not destroy it. Release native GPU
         # ownership now, before another editor can initialize its own runtime.
+        self.EditorTools.Shutdown()
         self.Extensions.Shutdown()
         self.Runtime.Release()
         application=QApplication.instance()

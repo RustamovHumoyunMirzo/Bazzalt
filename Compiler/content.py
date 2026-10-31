@@ -9,7 +9,8 @@ import yaml
 from .pak import SafeName
 
 
-def FilterCooked(cooked, packaging):
+def FilterCooked(cooked, packaging,editor_sources=()):
+    editor_sources={v.casefold() for v in editor_sources}
     include=[p.strip() for p in packaging['include_assets'].splitlines() if p.strip()]
     exclude=[p.strip() for p in packaging['exclude_assets'].splitlines() if p.strip()]
     cooked=Path(cooked).resolve();index=cooked/'.bazzalt/CookedAssets.yaml'
@@ -25,14 +26,14 @@ def FilterCooked(cooked, packaging):
             path=cooked/(row['Cache']+suffix)
             if not path.resolve().is_relative_to(cooked):raise ValueError('Shader product escapes its workspace')
             if path.is_file():path.unlink()
-    if include==['**'] and not exclude:return
+    if include==['**'] and not exclude and not editor_sources:return
     by_id={str(row['UUID']).casefold():row for row in records};by_path={row['Source'].casefold():str(row['UUID']).casefold() for row in records}
     def Matches(path,patterns):return any(fnmatch.fnmatchcase(path.casefold(),pattern.casefold()) for pattern in patterns)
     def Local(name):
         SafeName(name);path=cooked/name
         if not path.resolve().is_relative_to(cooked):raise ValueError('Cooked content escapes its workspace')
         return path
-    denied={identity for identity,row in by_id.items() if Matches(row['Source'],exclude)}
+    denied={identity for identity,row in by_id.items() if Matches(row['Source'],exclude) or identity in editor_sources}
     kept={identity for identity,row in by_id.items() if identity not in denied and Matches(row['Source'],include)}
     project=yaml.safe_load((cooked/'Game.bproject').read_text(encoding='utf-8'))
     startup=by_path.get(str(project['StartupScene']).replace('\\','/').casefold())

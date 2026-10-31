@@ -11,6 +11,13 @@ class ExtensionTests(unittest.TestCase):
         value={'General':{'Id':identity,'Name':identity,'ShortDescription':'A test extension','Version':'1.0.0'},'Compatibility':{'MinEngineVersion':'0.7.0'},'Dependencies':{'Requires':list(requires)},'AssetRegistry':[{'Id':'sdk','Path':'sdk.lua'}],'Scripts':{'sdk':{'Id':'sdk','Public':True,'ModuleName':module}}}
         path=root/'extension.yaml';path.write_text(yaml.safe_dump(value),encoding='utf-8');return path,value
     def store(self,root):return ExtensionStore(root,'0.7.0','Windows')
+    def test_scene_tools_are_validated_as_editor_only(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source,value=self.fixture(Path(folder)/'extension');value['Scripts']['sdk']['Public']=False
+            value['Extends']={'Scene':[{'Id':'paint','Title':'Paint','Script':'sdk','Shortcut':'Ctrl+Alt+P'}]}
+            checked=Validate(value,source.parent);self.assertEqual(checked['Scripts']['sdk']['Scope'],'Editor');self.assertEqual(checked['AssetRegistry'][0]['Scope'],'Editor')
+            value['Scripts']['sdk']['Scope']='Runtime'
+            with self.assertRaises(ExtensionError):Validate(value,source.parent)
     def test_build_import_disabled_enable_dependency_and_collision(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);source,value=self.fixture(root/'source');package=BuildPackage(source,root/'sample.bpack');store=self.store(root/'store');self.assertEqual(store.Import(package),'sample');self.assertFalse(store.Installed()[0]['Enabled']);store.SetEnabled('sample',True);self.assertEqual([v['Id'] for v in store.Resolve()],['sample'])

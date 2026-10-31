@@ -785,7 +785,7 @@ void RenderBackend::Render(double materialTime) {
             SetPresentationSize(resource->Width,resource->Height);m_guiScene->GetSystem<CameraSystem>().Synchronize(*m_guiScene);
             m_guiScene->GetSystem<GuiSystem>().Layout(*m_guiScene,{float(resource->Width),float(resource->Height)});m_guiRenderer->PrepareSpatial(*m_guiScene);
         }
-        if(resource->Kind==ViewportKind::Game&&m_guiScene&&m_guiRenderer){
+        if(resource->Kind==ViewportKind::Game&&m_gamePreviewMode>=0&&m_guiScene&&m_guiRenderer){
             m_guiRenderer->PrepareOverlay(*m_guiScene,{float(resource->Width),float(resource->Height)});
         }
         if(resource->Kind==ViewportKind::Scene&&m_statisticsVisible&&!m_statisticsText.empty()){
@@ -832,19 +832,23 @@ void RenderBackend::Render(double materialTime) {
             m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});
             if(m_statisticsVisible&&!m_statisticsText.empty()&&m_statisticsRenderer){m_statisticsRenderer->RenderOverlay(*m_statisticsScene,{float(resource->Width),float(resource->Height)});m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});}
         } else {
-            auto* guiInput=m_guiRenderer?m_guiRenderer->GetSceneInputTarget():nullptr;
-            const bool directCamera=std::any_of(m_activeViews.begin(),m_activeViews.end(),[](filament::View* view){return view&&!view->getRenderTarget();});
-            if (!directCamera) {
-                // Clear through an isolated black scene, never the editor world.
-                // This also guarantees a valid color attachment for captured output.
-                m_renderer->setClearOptions({.clearColor={0,0,0,1},.clear=true});
-                if (resource->View) {resource->View->setRenderTarget(guiInput);m_renderer->render(resource->View);resource->View->setRenderTarget(nullptr);}
-                m_renderer->setClearOptions({.clearColor={0.055,0.065,0.085,1.0},.clear=true});
+            auto* guiInput=m_gamePreviewMode<0?nullptr:m_guiRenderer?m_guiRenderer->GetSceneInputTarget():nullptr;
+            std::vector<filament::View*> previewViews;
+            if(m_gamePreviewMode==0)for(auto* view:m_activeViews){if(view&&!view->getRenderTarget())previewViews.push_back(view);}
+            else if(m_gamePreviewMode>0){auto found=m_cameraViews.find(m_gamePreviewCamera);if(found!=m_cameraViews.end())previewViews.push_back(found->second);}
+            // Always clear presentation. None also suppresses overlay GUI.
+            if(resource->View){resource->View->setRenderTarget(guiInput);m_renderer->setClearOptions({.clearColor={0,0,0,1},.clear=true});m_renderer->render(resource->View);resource->View->setRenderTarget(nullptr);}
+            m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});
+            for(auto* view:previewViews){
+                auto* target=const_cast<filament::RenderTarget*>(view->getRenderTarget());const auto viewport=view->getViewport();auto* camera=const_cast<filament::Camera*>(&view->getCamera());
+                const auto projection=camera->getProjectionMatrix(),culling=camera->getCullingProjectionMatrix();const double near=camera->getNear(),far=camera->getCullingFar();
+                if(m_gamePreviewMode>0){auto adjusted=projection;adjusted[0][0]*=(double(std::max(1u,viewport.width))/std::max(1u,viewport.height))/(double(resource->Width)/std::max(1u,resource->Height));camera->setCustomProjection(adjusted,near,far);view->setViewport({0,0,resource->Width,resource->Height});}
+                view->setRenderTarget(guiInput);
+                try{RenderCameraView(view,id);}catch(...){view->setRenderTarget(target);view->setViewport(viewport);camera->setCustomProjection(projection,culling,near,far);throw;}
+                view->setRenderTarget(target);view->setViewport(viewport);if(m_gamePreviewMode>0)camera->setCustomProjection(projection,culling,near,far);
             }
-            for (filament::View* view : m_activeViews)
-                if (view&&!view->getRenderTarget()) {view->setRenderTarget(guiInput);try{RenderCameraView(view,id);}catch(...){view->setRenderTarget(nullptr);throw;}view->setRenderTarget(nullptr);}
         }
-        if(resource->Kind==ViewportKind::Game&&m_guiScene&&m_guiRenderer){m_guiRenderer->RenderOverlay(*m_guiScene,{float(resource->Width),float(resource->Height)});m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});}
+        if(resource->Kind==ViewportKind::Game&&m_gamePreviewMode>=0&&m_guiScene&&m_guiRenderer){m_guiRenderer->RenderOverlay(*m_guiScene,{float(resource->Width),float(resource->Height)});m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});}
         if(resource->Capture){
             auto state=resource->Capture;std::unique_lock lock(state->Mutex);
             if(!state->Pending&&state->Consumed){

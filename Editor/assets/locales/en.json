@@ -1334,5 +1334,21 @@
   "dock.maximize": "Maximize / Restore Panel",
   "dock.pin_group": "Pin All Tabs",
   "dock.unpin_group": "Unpin All Tabs",
-  "dock.activate_tab": "Activate Tab"
+  "dock.activate_tab": "Activate Tab",
+  "viewport.controls": "Controls",
+  "viewport.free_size": "Free Aspect",
+  "viewport.camera_auto": "Not specified",
+  "viewport.camera_none": "None",
+  "panel.macros": "Macros",
+  "macros.new": "New...",
+  "macros.run": "Run",
+  "macros.edit": "Edit...",
+  "macros.delete": "Delete",
+  "macros.entry": "Entry Lua script",
+  "macros.title": "Name",
+  "macros.modules": "Additional scripts",
+  "macros.shortcut": "Shortcut",
+  "macros.shortcut_conflict": "This shortcut is invalid or already assigned.",
+  "macros.choose_entry": "Choose an entry Lua script from the project.",
+  "macros.confirm_delete": "Delete this stored macro and its source snapshot?"
 }
