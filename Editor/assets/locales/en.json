@@ -1329,5 +1329,6 @@
   "graph.blending.masked": "Alpha Masked",
   "graph.blending.add": "Additive",
   "graph.external_change": "Graph changed externally. Refresh to reload it and discard pending local graph edits.",
-  "graph.node.Integer": "Integer"
+  "graph.node.Integer": "Integer",
+  "graph.loading": "Updating preview…"
 }

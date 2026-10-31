@@ -8,6 +8,28 @@ from PySide6.QtWidgets import QWidget,QVBoxLayout,QHBoxLayout,QSplitter,QLineEdi
 from ..widgets.fields import AssetPickerInput,FloatInput,IntInput,Vec2Input,Vec3Input,Vec4Input,BoolInput,EnumInput
 from ... import shader_graph as Graph
 
+class PreviewImage(QLabel):
+    """Keep the previous result visible while the replacement is compiling."""
+    def __init__(self,panel):
+        super().__init__(panel.Tr('graph.preview'));self.Panel=panel;self.Busy=False;self.Angle=0
+        self.setMinimumSize(120,120);self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.Spinner=QTimer(self);self.Spinner.setInterval(40);self.Spinner.timeout.connect(self.Advance)
+    def Advance(self):self.Angle=(self.Angle+12)%360;self.update()
+    def SetBusy(self,value):
+        self.Busy=value
+        if value:self.Spinner.start()
+        else:self.Spinner.stop()
+        self.update()
+    def paintEvent(self,event):
+        super().paintEvent(event)
+        if not self.Busy:return
+        theme=self.Panel.Themes.GetTheme();p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        shade=QColor(theme.background);shade.setAlpha(185);p.fillRect(self.rect(),shade)
+        center=self.rect().center();ring=QRectF(center.x()-14,center.y()-24,28,28)
+        p.setPen(QPen(QColor(theme.border),3));p.drawEllipse(ring)
+        p.setPen(QPen(QColor(theme.accent),3,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap));p.drawArc(ring,-self.Angle*16,100*16)
+        p.setPen(QColor(theme.text_muted));p.drawText(QRectF(0,center.y()+13,self.width(),30),Qt.AlignmentFlag.AlignCenter,self.Panel.Tr('graph.loading'))
+
 class Palette(QTreeWidget):
     def startDrag(self,actions):
         item=self.currentItem();kind=item.data(0,Qt.ItemDataRole.UserRole) if item else None
@@ -174,7 +196,7 @@ class ShaderGraphPanel(QWidget):
         self.DoubleSided=QToolButton();self.DoubleSided.setText(self.Tr('graph.double_sided'));self.DoubleSided.setCheckable(True);self.DoubleSided.toggled.connect(lambda value:self.Option('doubleSided',value));layout.addWidget(self.DoubleSided)
         self.Mesh=AssetPickerInput(self.Tr('graph.sphere'),accepted_extensions={'.obj','.glb','.gltf'});self.Mesh.AssetResolver=getattr(runtime,'ResolveAssetRecord',None)
         self.Mesh.PickRequested.connect(self.PickMesh);self.Mesh.ValueChanged.connect(lambda _:self.Preview());layout.addWidget(self.Mesh)
-        self.Image=QLabel(self.Tr('graph.preview'));self.Image.setMinimumSize(120,120);self.Image.setAlignment(Qt.AlignmentFlag.AlignCenter);layout.addWidget(self.Image)
+        self.Image=PreviewImage(self);layout.addWidget(self.Image)
         scroll=QScrollArea();scroll.setWidgetResizable(True);self.Fields=QWidget();self.Form=QFormLayout(self.Fields);scroll.setWidget(self.Fields);layout.addWidget(scroll,1);split.addWidget(right);split.setSizes([170,650,250])
         self.Error=QLabel();self.Error.setTextFormat(Qt.TextFormat.PlainText);self.Error.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse);self.Error.setMaximumHeight(120);self.Error.setWordWrap(True);root.addWidget(self.Error);themes.ThemeChanged.connect(lambda _:self.Repaint());self.Rebuild()
         self.PreviewTimer=QTimer(self);self.PreviewTimer.setSingleShot(True);self.PreviewTimer.setInterval(350);self.PreviewTimer.timeout.connect(self.Preview)
@@ -290,6 +312,7 @@ class ShaderGraphPanel(QWidget):
         self.Title.setToolTip(str(self.Path) if self.Path else '')
         if not self.Path:
             self.Image.clear();self.Image.setText(self.Tr('graph.preview'))
+            self.Image.SetBusy(False)
             if hasattr(self,'PreviewService'):self.PreviewService.Generation+=1;self.PreviewService.Pending=None
         self.SyncOptions();self.Inspect()
     def SyncOptions(self):
@@ -345,10 +368,10 @@ class ShaderGraphPanel(QWidget):
         if self.Nodes:self.Canvas.fitInView(self.Canvas.scene().itemsBoundingRect().adjusted(-60,-60,60,60),Qt.AspectRatioMode.KeepAspectRatio)
     def Repaint(self):
         self.Canvas.viewport().update()
-        standards=[QStyle.StandardPixmap.SP_DialogApplyButton,QStyle.StandardPixmap.SP_ArrowBack,QStyle.StandardPixmap.SP_ArrowForward,QStyle.StandardPixmap.SP_TitleBarMaxButton,QStyle.StandardPixmap.SP_MediaPlay,QStyle.StandardPixmap.SP_BrowserReload,QStyle.StandardPixmap.SP_DialogOpenButton]
-        for button,standard in zip(self.Buttons,standards):
+        icons=['pin','undo','redo','frame','preview','refresh','unlock']
+        for button,name in zip(self.Buttons,icons):
             theme='dark' if QColor(self.Themes.GetTheme().background).lightness()<128 else 'light'
-            source=(self.Resources.Icon('icons/'+theme+'/lock.svg') if button is self.Pin else self.style().standardIcon(standard)).pixmap(16,16);icon=QIcon()
+            source=self.Resources.Icon('icons/shader_graph/'+name+'.svg').pixmap(16,16);icon=QIcon()
             for mode,color in ((QIcon.Mode.Normal,self.Themes.GetTheme().text),(QIcon.Mode.Disabled,self.Themes.GetTheme().text_disabled)):
                 pixmap=QPixmap(source.size());pixmap.fill(Qt.GlobalColor.transparent);painter=QPainter(pixmap);painter.drawPixmap(0,0,source);painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn);painter.fillRect(pixmap.rect(),QColor(color));painter.end();icon.addPixmap(pixmap,mode)
             button.setIcon(icon)
@@ -370,9 +393,10 @@ class ShaderGraphPanel(QWidget):
         try:
             if not hasattr(self,'PreviewService'):
                 from ...shader_graph_preview import ShaderGraphPreview
-                self.PreviewService=ShaderGraphPreview(self.Runtime,self);self.PreviewService.Ready.connect(self.ShowPreview);self.PreviewService.Failed.connect(self.Error.setText)
-            self.PreviewService.Request(self.Path,self.Mesh.GetValue())
-        except (OSError,ValueError) as e:self.Error.setText(str(e))
+                self.PreviewService=ShaderGraphPreview(self.Runtime,self);self.PreviewService.Ready.connect(self.ShowPreview);self.PreviewService.Failed.connect(self.PreviewFailed)
+            self.Image.SetBusy(True);self.PreviewService.Request(self.Path,self.Mesh.GetValue())
+        except (OSError,ValueError) as e:self.PreviewFailed(str(e))
+    def PreviewFailed(self,message):self.Image.SetBusy(False);self.Error.setText(message)
     def ShowPreview(self,image):
         from PySide6.QtGui import QPixmap
-        self.Image.setPixmap(QPixmap.fromImage(image).scaled(240,240,Qt.AspectRatioMode.KeepAspectRatio,Qt.TransformationMode.SmoothTransformation));self.Error.clear()
+        self.Image.SetBusy(False);self.Image.setPixmap(QPixmap.fromImage(image).scaled(240,240,Qt.AspectRatioMode.KeepAspectRatio,Qt.TransformationMode.SmoothTransformation));self.Error.clear()

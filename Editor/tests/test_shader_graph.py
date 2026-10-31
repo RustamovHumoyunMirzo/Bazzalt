@@ -87,6 +87,12 @@ class ShaderGraphTests(unittest.TestCase):
 class ShaderGraphWidgetTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.App=QApplication.instance() or QApplication([])
+    def test_preview_loading_overlay_and_custom_toolbar_icons(self):
+        resources=ResourceManager();panel=ShaderGraphPanel(None,LocalizationManager(resources),resources,ThemeManager(self.App))
+        panel.Image.SetBusy(True);self.assertTrue(panel.Image.Busy);self.assertTrue(panel.Image.Spinner.isActive())
+        panel.PreviewFailed('compile failed');self.assertFalse(panel.Image.Busy);self.assertFalse(panel.Image.Spinner.isActive());self.assertEqual(panel.Error.text(),'compile failed')
+        for name in ('pin','undo','redo','frame','preview','refresh','unlock'):self.assertFalse(resources.Icon('icons/shader_graph/'+name+'.svg').isNull())
+        panel.deleteLater();self.App.processEvents()
     def test_history_connection_deletion_and_unlock_restore_uuid(self):
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/'Graph.shadg';G.Save(path,G.NewGraph());Path(str(path)+'.meta').write_text('UUID: retained')
