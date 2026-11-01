@@ -1,3 +1,5 @@
+#include "Runtime/PreparedScene.h"
+#include "Bazzalt/Profiler.h"
 #include "Bazzalt/Serialization.h"
 #include "Utils/NumberParsing.h"
 #include "Audio/AudioRuntime.h"
@@ -31,13 +33,6 @@ namespace Bazzalt
 {
     namespace
     {
-        struct EntityRecord
-        {
-            UUID Id;
-            UUID Parent;
-            std::string Name;
-            std::vector<SerializedComponent> Components;
-        };
         std::string Text(ryml::ConstNodeRef n)
         {
             auto v = n.val();
@@ -357,26 +352,32 @@ o["Post.Material"]=v.PostProcessing.MaterialAsset.ToString();o["Post.Materials.C
         return true;
     }
 
-    bool SceneSerializer::Load(Scene &scene, const std::filesystem::path &path)
+    bool Runtime::PrepareScene(const std::filesystem::path& path, PreparedScene& output, std::string& error)
     {
-        m_lastError.clear();
+        ProfileScope scope("Streaming.ParseScene");
+        output={};
+        error.clear();
         std::error_code sizeError;
         constexpr std::uintmax_t MaxSceneBytes = 64u * 1024u * 1024u;
         if (std::filesystem::file_size(path, sizeError) > MaxSceneBytes || sizeError)
         {
-            m_lastError = sizeError ? "Could not inspect scene: " + PathUtf8(path) : "Scene exceeds the 64 MiB limit: " + PathUtf8(path);
+            error = sizeError ? "Could not inspect scene: " + PathUtf8(path) : "Scene exceeds the 64 MiB limit: " + PathUtf8(path);
             return false;
         }
         std::ifstream f(path, std::ios::binary);
-        std::string y((std::istreambuf_iterator<char>(f)), {});
+        const auto length=std::filesystem::file_size(path,sizeError);
+        if(sizeError||length>MaxSceneBytes){error="Invalid scene size";return false;}
+        std::string y(static_cast<std::size_t>(length), '\0');
+        f.read(y.data(), static_cast<std::streamsize>(y.size()));
+        if(!f || f.peek()!=std::char_traits<char>::eof()){error="Scene changed while reading";return false;}
         if (y.empty())
         {
-            m_lastError = "Could not read scene: " + PathUtf8(path);
+            error = "Could not read scene: " + PathUtf8(path);
             return false;
         }
         SceneEnvironment environment;
         PhysicsSettings physicsSettings;
-        std::vector<EntityRecord> rs;
+        std::vector<Runtime::PreparedEntity> rs;
         UUID sid;
         std::unordered_set<UUID> ids;
         try
@@ -385,7 +386,7 @@ o["Post.Material"]=v.PostProcessing.MaterialAsset.ToString();o["Post.Materials.C
             auto root = tree.rootref();
             if (!ReadEnvironment(root, environment))
             {
-                m_lastError = "Invalid scene Environment settings";
+                error = "Invalid scene Environment settings";
                 return false;
             }
             if(root.has_child("Physics")){
@@ -394,38 +395,49 @@ o["Post.Material"]=v.PostProcessing.MaterialAsset.ToString();o["Post.Materials.C
                 if(!Runtime::ReadPhysicsSettings(physicsSettings,properties))throw std::runtime_error("Invalid scene Physics settings");
             }
             std::uint32_t ver = 0;
-            if (!root.has_child("FormatVersion") || !UInt(root["FormatVersion"], ver) || ver == 0 || ver > CurrentFormatVersion || !root.has_child("SceneUUID") || !UUID::TryParse(Text(root["SceneUUID"]), sid) || sid.IsRoot() || !root.has_child("Entities"))
+            if (!root.has_child("FormatVersion") || !UInt(root["FormatVersion"], ver) || ver == 0 || ver > SceneSerializer::CurrentFormatVersion || !root.has_child("SceneUUID") || !UUID::TryParse(Text(root["SceneUUID"]), sid) || sid.IsRoot() || !root.has_child("Entities"))
             {
-                m_lastError = "Invalid or unsupported scene YAML";
+                error = "Invalid or unsupported scene YAML";
                 return false;
+            }
+            if(!root["Entities"].is_seq())throw std::runtime_error("Entities must be a sequence");
+            if(root.has_child("ExtensionProperties")) {
+                auto values=root["ExtensionProperties"];
+                if(!values.is_map()||values.num_children()>1024)throw std::runtime_error("Invalid extension scene properties");
+                for(auto p:values.children()) {
+                    auto key=Key(p);auto split=key.find(':');auto value=Text(p);
+                    if(split==std::string::npos||split==0||split>128||key.size()-split-1==0||key.size()-split-1>128||key.find(':',split+1)!=std::string::npos||value.size()>4096||!output.ExtensionProperties.emplace(key,value).second)
+                        throw std::runtime_error("Invalid extension scene property");
+                }
             }
             for (auto en : root["Entities"].children())
             {
-                EntityRecord r;
+                Runtime::PreparedEntity r;
                 if (!en.has_child("UUID") || !UUID::TryParse(Text(en["UUID"]), r.Id) || r.Id.IsRoot() || !ids.insert(r.Id).second || !en.has_child("Parent") || !UUID::TryParse(Text(en["Parent"]), r.Parent) || !en.has_child("Name"))
                 {
-                    m_lastError = "Invalid entity in scene YAML";
+                    error = "Invalid entity in scene YAML";
                     return false;
                 }
                 r.Name = Text(en["Name"]);
+                std::unordered_set<std::string> types;
                 if (en.has_child("Components"))
                     for (auto cn : en["Components"].children())
                     {
                         SerializedComponent c;
                         if (!cn.has_child("Type") || !cn.has_child("Version") || !UInt(cn["Version"], c.Version))
                         {
-                            m_lastError = "Invalid component in scene YAML";
+                            error = "Invalid component in scene YAML";
                             return false;
                         }
                         c.Type = Text(cn["Type"]);
-                        if (c.Type.empty() || c.Version == 0)
+                        if (c.Type.empty() || c.Version == 0 || !types.insert(c.Type).second)
                         {
-                            m_lastError = "Invalid component descriptor";
+                            error = "Invalid component descriptor";
                             return false;
                         }
                         if (cn.has_child("Properties"))
                             for (auto p : cn["Properties"].children())
-                                c.Properties[Key(p)] = Text(p);
+                                if(!c.Properties.emplace(Key(p),Text(p)).second)throw std::runtime_error("Duplicate component property");
                         r.Components.push_back(std::move(c));
                     }
                 rs.push_back(std::move(r));
@@ -433,80 +445,57 @@ o["Post.Material"]=v.PostProcessing.MaterialAsset.ToString();o["Post.Materials.C
         }
         catch (const std::exception &e)
         {
-            m_lastError = "Could not parse scene YAML: " + std::string(e.what());
+            error = "Could not parse scene YAML: " + std::string(e.what());
             return false;
         }
         for (const auto &r : rs)
             if (!r.Parent.IsRoot() && !ids.count(r.Parent))
             {
-                m_lastError = "Entity references missing parent";
+                error = "Entity references missing parent";
                 return false;
             }
-        scene.Clear();
-        scene.m_uuid = sid;
-        try
-        {
-            for (const auto &r : rs)
-                scene.CreateEntity(r.Id, r.Name);
-            for (const auto &r : rs)
-            {
-                Entity e = scene.GetEntity(r.Id);
-                if (!r.Parent.IsRoot() && !scene.SetParent(e, scene.GetEntity(r.Parent)))
-                {
-                    m_lastError = "Invalid hierarchy cycle";
-                    return false;
-                }
-                for (const auto &c : r.Components)
-                {
-                    if (auto *d = m_components.Find(c.Type))
-                    {
-                        if (!d->Deserialize(e, c.Properties, c.Version))
-                        {
-                            m_lastError = "Could not deserialize component: " + c.Type;
-                            return false;
-                        }
-                    }
-                    else
-                    {
-                        auto *u = e.TryGetComponent<UnresolvedComponents>();
-                        if (!u)
-                            u = &e.AddComponent<UnresolvedComponents>();
-                        u->Values.push_back(c);
-                    }
-                }
-            }
+        std::unordered_map<UUID,UUID> parents;
+        std::unordered_map<UUID,unsigned> colors;
+        for(auto& record:rs)parents.emplace(record.Id,record.Parent);
+        for(auto& record:rs){
+            std::vector<UUID> chain;auto id=record.Id;
+            while(id && colors[id]==0){colors[id]=1;chain.push_back(id);id=parents.at(id);}
+            if(id&&colors[id]==1){error="Invalid hierarchy cycle";return false;}
+            for(auto node:chain)colors[node]=2;
         }
-        catch (const std::exception &e)
-        {
-            m_lastError = "Component deserialization failed: " + std::string(e.what());
-            return false;
-        }
-        scene.SetEnvironment(environment);
-        scene.SetPhysicsSettings(physicsSettings);
-        scene.m_extensionProperties.clear();
-        try
-        {
-            auto tree = ryml::parse_in_arena(ryml::csubstr(y.data(), y.size()));
-            auto root = tree.rootref();
-            if (root.has_child("ExtensionProperties"))
-            {
-                auto values = root["ExtensionProperties"];
-                if (!values.is_map() || values.num_children() > 1024)
-                    throw std::runtime_error("Invalid extension scene properties");
-                for (auto p : values.children())
-                {
-                    auto key = Key(p);
-                    auto split = key.find(':');
-                    if (split == std::string::npos || !scene.SetExtensionProperty(key.substr(0, split), key.substr(split + 1), Text(p)))
-                        throw std::runtime_error("Invalid extension scene property");
-                }
-            }
-        }
-        catch (const std::exception &e)
-        {
-            m_lastError = e.what();
-            return false;
-        }
+        // Parent transforms/components must exist before descendants become live.
+        std::unordered_map<UUID,std::vector<std::size_t>> children;
+        std::vector<std::size_t> order;order.reserve(rs.size());
+        for(std::size_t i=0;i<rs.size();++i){if(!rs[i].Parent)order.push_back(i);else children[rs[i].Parent].push_back(i);}
+        for(std::size_t cursor=0;cursor<order.size();++cursor)if(auto found=children.find(rs[order[cursor]].Id);found!=children.end())order.insert(order.end(),found->second.begin(),found->second.end());
+        std::vector<Runtime::PreparedEntity> sorted;sorted.reserve(rs.size());for(auto index:order)sorted.push_back(std::move(rs[index]));
+        output.Id=sid;output.Environment=environment;output.Physics=physicsSettings;output.Entities=std::move(sorted);
         return true;
+    }
+
+    bool SceneSerializer::Load(Scene& scene,const std::filesystem::path& path)
+    {
+        Runtime::PreparedScene document;
+        if(!Runtime::PrepareScene(path,document,m_lastError))return false;
+        scene.Clear();scene.m_uuid=document.Id;
+        try {
+            for(const auto& record:document.Entities)scene.CreateEntity(record.Id,record.Name);
+            for(const auto& record:document.Entities){
+                auto entity=scene.GetEntity(record.Id);
+                if(!record.Parent.IsRoot()&&!scene.SetParent(entity,scene.GetEntity(record.Parent),false))throw std::runtime_error("Invalid hierarchy");
+                for(const auto& component:record.Components){
+                    if(auto* descriptor=m_components.Find(component.Type)){
+                        if(!descriptor->Deserialize(entity,component.Properties,component.Version))throw std::runtime_error("Could not deserialize component: "+component.Type);
+                    }else{
+                        auto* unresolved=entity.TryGetComponent<UnresolvedComponents>();
+                        if(!unresolved)unresolved=&entity.AddComponent<UnresolvedComponents>();
+                        unresolved->Values.push_back(component);
+                    }
+                }
+            }
+            scene.SetEnvironment(document.Environment);scene.SetPhysicsSettings(document.Physics);
+            scene.m_extensionProperties=document.ExtensionProperties;
+            return true;
+        }catch(const std::exception& error){m_lastError=error.what();return false;}
     }
 } // namespace Bazzalt

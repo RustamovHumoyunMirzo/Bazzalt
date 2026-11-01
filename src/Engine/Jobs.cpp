@@ -1,3 +1,5 @@
+#include "Runtime/JobAccess.h"
+#include <unordered_map>
 #include "Bazzalt/Jobs.h"
 #include "Bazzalt/Profiler.h"
 #include "Bazzalt/Detail/ModuleLifetime.h"
@@ -36,6 +38,7 @@ public:
     std::vector<std::thread> Threads;
     bool Stopping = false;
     std::size_t Pending = 0;
+    std::unordered_map<const void*,std::size_t> ModulePending;
     std::condition_variable Idle;
     Pool() {
         (void)Profiler::IsCapturing(); // Capture storage outlives worker shutdown.
@@ -78,19 +81,21 @@ void JobHandle::Wait() const {
 }
 JobHandle Jobs::Schedule(std::function<void()> work) {
     if(!work) throw std::invalid_argument("Job callback is empty");
-    auto task=std::make_shared<std::packaged_task<void()>>(OwnedWork{Detail::GetCurrentGameplayModule(),std::move(work)});
+    auto module=Detail::GetCurrentGameplayModule();
+    auto task=std::make_shared<std::packaged_task<void()>>(OwnedWork{module,std::move(work)});
     JobHandle handle(task->get_future().share());
     auto& pool=GetPool();
     {std::lock_guard lock(pool.Mutex);
      if(pool.Stopping) throw std::runtime_error("Job scheduler is shutting down");
-     pool.Queue.emplace_back([task,&pool]() mutable {
+     if(module)pool.ModulePending.try_emplace(module.get(),0);
+     try{pool.Queue.emplace_back([task,&pool,module]() mutable {
          (*task)();
          // Destroy the queued closure before signaling the teardown barrier.
          task.reset();
-         {std::lock_guard lock(pool.Mutex);--pool.Pending;}
+         {std::lock_guard lock(pool.Mutex);--pool.Pending;if(module){auto found=pool.ModulePending.find(module.get());if(--found->second==0)pool.ModulePending.erase(found);}}
          pool.Idle.notify_all();
-     });
-     ++pool.Pending;}
+     });}catch(...){if(module&&pool.ModulePending.at(module.get())==0)pool.ModulePending.erase(module.get());throw;}
+     ++pool.Pending;if(module)++pool.ModulePending.at(module.get());}
     pool.Ready.notify_one(); return handle;
 }
 JobHandle Jobs::ParallelFor(std::size_t count,std::size_t batchSize,std::function<void(std::size_t,std::size_t)> work) {
@@ -124,6 +129,12 @@ void Jobs::WaitAll() {
     if(!pool) return;
     std::unique_lock lock(pool->Mutex);
     pool->Idle.wait(lock,[pool]{return pool->Pending==0;});
+}
+void Runtime::JobAccess::WaitForModule(const std::shared_ptr<void>& module) {
+    if(!module)return;
+    if(Worker)throw std::logic_error("Module teardown cannot run on a job worker");
+    auto* pool=Existing.load();if(!pool)return;
+    std::unique_lock lock(pool->Mutex);pool->Idle.wait(lock,[&]{return !pool->ModulePending.contains(module.get());});
 }
 unsigned Jobs::GetWorkerCount() {return static_cast<unsigned>(GetPool().Threads.size());}
 }

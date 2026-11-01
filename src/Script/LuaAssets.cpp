@@ -137,6 +137,7 @@ void BindLuaAssets(sol::table api){
     material["GetParameters"]=[](Material value){return sol::as_table(value.GetParameters());};
     auto assets=api.create_named("AssetManager");
     assets["GetAsset"]=sol::overload([](UUID id){return AssetManager::GetAsset(id);},[](const std::string& path){return AssetManager::GetAsset(std::filesystem::u8path(path));});
+    assets["LoadAsync"]=&AssetManager::LoadAsync;
     assets["IsAssetReady"]=&AssetManager::IsAssetReady;assets["LoadModel"]=&AssetManager::LoadModel;
     auto stack=api.new_usertype<PostProcessingStack>("PostProcessingStack",sol::constructors<PostProcessingStack()>());
     stack["AddEffect"]=[](PostProcessingStack& value,UUID asset,sol::optional<std::string> name){return CustomPostProcessEffect(value.AddEffect(asset,name.value_or("")));};

@@ -21,6 +21,7 @@
 namespace Bazzalt::Runtime {
 
 class AssetDatabase;
+class StreamingRuntime;
 class RenderBackend;
 class NativeScriptRuntime;
 class LuaRuntime;
@@ -118,6 +119,7 @@ public:
 private:
     void UpdateEditorOverlays();
     friend class Bazzalt::SceneManager;
+    friend class StreamingRuntime;
     friend class Bazzalt::AssetManager;
     friend struct EditorOutlineTestAccess;
     friend struct GuiTestAccess;
@@ -126,7 +128,7 @@ private:
     bool RequestSceneLoad(UUID assetId);
     [[nodiscard]] std::optional<AssetInfo> FindAsset(UUID id) const;
     [[nodiscard]] std::optional<AssetInfo> FindAsset(const std::filesystem::path& path) const;
-    [[nodiscard]] bool IsSceneLoadPending() const { return m_pendingScenePath.has_value(); }
+    [[nodiscard]] bool IsSceneLoadPending() const;
     void ProcessPendingSceneLoad();
     void AttachRenderSystems();
     void DetachRenderSystems();
@@ -144,6 +146,7 @@ private:
     std::string m_lastError;
     std::optional<std::filesystem::path> m_pendingScenePath;
     std::unique_ptr<AssetDatabase> m_assetDatabase;
+    std::unique_ptr<StreamingRuntime> m_streaming;
     std::unique_ptr<RenderBackend> m_renderBackend;
     std::unique_ptr<NativeScriptRuntime> m_scriptRuntime;
     std::unique_ptr<LuaRuntime> m_luaRuntime;

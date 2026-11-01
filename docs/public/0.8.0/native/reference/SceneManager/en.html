@@ -66,15 +66,24 @@ static bool LoadScene(UUID assetId)</code></pre>
 SceneManager() = delete;
 static bool LoadScene(const std::filesystem::path&amp; path);
 static bool LoadScene(UUID assetId);
+static SceneLoadHandle LoadSceneAsync(UUID assetId, bool activateOnLoad = true);
+static SceneLoadHandle LoadSceneAsync(const std::filesystem::path&amp; path, bool activateOnLoad = true);
+static SceneLoadHandle LoadWorldCellAsync(UUID assetId, const Transform&amp; offset = {});
+static bool UnloadWorldCell(UUID assetId);
+static bool RegisterStreamingCell(const StreamingCell&amp; cell);
+static bool UnregisterStreamingCell(UUID assetId);
+static void SetStreamingPosition(Vec3 position);
+static StreamingSettings GetStreamingSettings();
+static void SetStreamingSettings(const StreamingSettings&amp; settings);
 [[nodiscard]] static Scene* GetActiveScene();
 [[nodiscard]] static bool IsLoadPending();
 [[nodiscard]] static std::string GetLastError();
 };</code></pre>
-<!-- API-SOURCE-END --></article>
-      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../SceneEnvironmentMode/en.html"><small>Previous</small>SceneEnvironmentMode</a>
+<!-- API-SOURCE-END --><h2 id="streaming-instancing">Asynchronous resources and world cells</h2><p>LoadSceneAsync prepares a detached replacement; LoadWorldCellAsync adds a cell beneath a parent. UnloadWorldCell queues removal. RegisterStreamingCell, UnregisterStreamingCell and SetStreamingPosition provide distance-driven streaming with hysteresis. GetStreamingSettings and SetStreamingSettings control queue, memory and per-tick activation budgets.</p><p>See the <a href="../../streaming/en.html">streaming guide</a> for examples and the complete ownership contract.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../SceneLoadHandle/en.html"><small>Previous</small>SceneLoadHandle</a>
 <a class="next" href="../SceneQueryBounds/en.html"><small>Next</small>SceneQueryBounds</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#SceneManager">SceneManager</a><a class="toc-link" href="#LoadScene">LoadScene</a><a class="toc-link" href="#GetActiveScene">GetActiveScene</a><a class="toc-link" href="#IsLoadPending">IsLoadPending</a><a class="toc-link" href="#GetLastError">GetLastError</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#SceneManager">SceneManager</a><a class="toc-link" href="#LoadScene">LoadScene</a><a class="toc-link" href="#GetActiveScene">GetActiveScene</a><a class="toc-link" href="#IsLoadPending">IsLoadPending</a><a class="toc-link" href="#GetLastError">GetLastError</a><a class="toc-link" href="#source-contract">Public declarations</a><a class="toc-link" href="#streaming-instancing">Asynchronous resources and world cells</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

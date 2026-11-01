@@ -33,16 +33,17 @@ Mat4 Matrix(const auto& v){Mat4 out;for(int c=0;c<4;++c)for(int r=0;r<4;++r)out(
 struct GraphicsRenderer::Impl {
     RenderBackend& Backend;filament::Engine& Engine;
     struct Geometry {filament::VertexBuffer* Vertices=nullptr;filament::IndexBuffer* Indices=nullptr;filament::Box Bounds;GraphicsTopology Topology{};std::size_t VertexCount=0,IndexCount=0;};
-    struct Draw {utils::Entity Entity;filament::MaterialInstance* Material=nullptr;UUID Asset,Source;Key GeometryKey{};filament::VertexBuffer* Vertices=nullptr;filament::IndexBuffer* Indices=nullptr;bool Added=false,Valid=false,StateOverride=false,Borrowed=false;};
+    struct Draw {utils::Entity Entity;filament::MaterialInstance* Material=nullptr;UUID Asset,Source;Key GeometryKey{};filament::VertexBuffer* Vertices=nullptr;filament::IndexBuffer* Indices=nullptr;bool Added=false,Valid=false,StateOverride=false,Borrowed=false;std::shared_ptr<filament::MaterialInstance> Shared;};
     struct Camera {filament::View* View;GraphicsEvent Event;};
     std::map<Key,Geometry> Geometries;
+    std::map<std::pair<UUID,bool>,std::weak_ptr<filament::MaterialInstance>> SharedMaterials;
     std::uint64_t Allocations=0,Builds=0;
     filament::Scene* MaskScene=nullptr;std::vector<std::pair<utils::Entity,filament::MaterialInstance*>> MaskMaterials;
     std::vector<Draw> Draws;std::vector<Camera> Cameras;std::set<UUID> InvalidMaterials;
     explicit Impl(RenderBackend& b):Backend(b),Engine(b.GetEngine()){
 
     }
-    void Destroy(Draw& draw){if(draw.Added)Backend.GetScene().remove(draw.Entity);Engine.destroy(draw.Entity);if(draw.Material&&!draw.Borrowed)Engine.destroy(draw.Material);Engine.getEntityManager().destroy(draw.Entity);}
+    void Destroy(Draw& draw){if(draw.Added)Backend.GetScene().remove(draw.Entity);Engine.destroy(draw.Entity);draw.Shared.reset();Engine.getEntityManager().destroy(draw.Entity);}
     void Destroy(Geometry& g){Engine.destroy(g.Vertices);Engine.destroy(g.Indices);}
     ~Impl(){for(auto& draw:Draws)Destroy(draw);for(auto& [key,g]:Geometries)Destroy(g);}
     Geometry Upload(const GraphicsGeometry& data){Geometry result;return Upload(data,result);}
@@ -99,15 +100,19 @@ void GraphicsRenderer::Prepare(){
         const bool stateOverride=c.Material&&Material::Load(c.Material).IsValid()&&Material::Load(c.Material).GetRenderState().Override;
         auto* inherited=!c.Material&&c.Source?impl.Backend.GetAssets().GetDeformedMaterial(c.Source,c.SourceNode,c.SourceSlot):nullptr;
         if(inherited){
-            if(draw.Material!=inherited){if(!rebuild)manager.setMaterialInstanceAt(manager.getInstance(draw.Entity),0,inherited);if(draw.Material&&!draw.Borrowed)impl.Engine.destroy(draw.Material);draw.Material=inherited;}
+            if(draw.Material!=inherited){if(!rebuild)manager.setMaterialInstanceAt(manager.getInstance(draw.Entity),0,inherited);draw.Shared.reset();draw.Material=inherited;}
             draw.Borrowed=true;draw.Asset={};draw.StateOverride=false;
         }else if(draw.Borrowed||draw.Asset!=c.Material||draw.StateOverride!=stateOverride||!draw.Material||(c.Material&&!impl.Backend.GetAssets().UpdateSurfaceMaterial(draw.Material,c.Material))){
-            auto* replacement=c.Material?impl.Backend.GetAssets().CreateSurfaceMaterial(c.Material):impl.Backend.GetAssets().CreateGraphicsMaterial();
+            const auto key=std::make_pair(c.Material,stateOverride);
+            auto shared=impl.SharedMaterials[key].lock();
+            if(shared&&c.Material&&!impl.Backend.GetAssets().UpdateSurfaceMaterial(shared.get(),c.Material))shared.reset();
+            if(!shared){auto* created=c.Material?impl.Backend.GetAssets().CreateSurfaceMaterial(c.Material):impl.Backend.GetAssets().CreateGraphicsMaterial();if(created){shared={created,[&impl](auto* value){impl.Engine.destroy(value);}};impl.SharedMaterials[key]=shared;}}
+            auto* replacement=shared.get();
             if(!replacement){draw.Valid=false;if(draw.Added){impl.Backend.GetScene().remove(draw.Entity);draw.Added=false;}if(impl.InvalidMaterials.size()>128)impl.InvalidMaterials.clear();if(impl.InvalidMaterials.insert(c.Material).second)Console::Warning("Skipping a Graphics draw with an unavailable or incompatible surface material: "+c.Material.ToString(),"Graphics");continue;}
             impl.InvalidMaterials.erase(c.Material);draw.StateOverride=stateOverride;
             if(c.Material)impl.Backend.GetAssets().UpdateSurfaceMaterial(replacement,c.Material);
             if(!rebuild)manager.setMaterialInstanceAt(manager.getInstance(draw.Entity),0,replacement);
-            if(draw.Material&&!draw.Borrowed)impl.Engine.destroy(draw.Material);draw.Material=replacement;draw.Asset=c.Material;draw.Borrowed=false;
+            draw.Shared=std::move(shared);draw.Material=replacement;draw.Asset=c.Material;draw.Borrowed=false;
         }
         draw.Valid=true;draw.Source=c.Source;
         using P=filament::RenderableManager::PrimitiveType;static constexpr P types[]{P::POINTS,P::LINES,P::LINE_STRIP,P::TRIANGLES,P::TRIANGLE_STRIP};
@@ -120,6 +125,7 @@ void GraphicsRenderer::Prepare(){
         impl.Engine.getTransformManager().setTransform(impl.Engine.getTransformManager().getInstance(draw.Entity),Matrix(c.Transform));
         if(draw.Added){impl.Backend.GetScene().remove(draw.Entity);draw.Added=false;}
     }
+    std::erase_if(impl.SharedMaterials,[](auto& pair){return pair.second.expired();});
     std::unordered_set<UUID> replaced;for(std::size_t i=0;i<commands.size();++i)if(impl.Draws[i].Valid&&commands[i].Source)replaced.insert(commands[i].Source);impl.Backend.GetAssets().BeginDeformedView(replaced);
     for(auto it=impl.Geometries.begin();it!=impl.Geometries.end();)if(!used.contains(it->first)){impl.Destroy(it->second);it=impl.Geometries.erase(it);}else ++it;
 }

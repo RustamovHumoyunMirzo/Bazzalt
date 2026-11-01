@@ -1,8 +1,15 @@
+#include "Bazzalt/Jobs.h"
+#include "Bazzalt/Profiler.h"
+#include "Bazzalt/Console.h"
+#include <atomic>
 #include "Rendering/RenderAssets.h"
 #include "Runtime/TextureLibrary.h"
 
 #include <algorithm>
 #include <array>
+#include <bit>
+#include <map>
+#include <tuple>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -66,7 +73,7 @@ std::vector<std::uint8_t> ReadBytes(const std::filesystem::path& path) {
     std::ifstream stream(path, std::ios::binary | std::ios::ate);
     if (!stream) return {};
     const auto size = stream.tellg();
-    if (size <= 0) return {};
+    if (size <= 0 || size > std::streamoff(256u*1024u*1024u)) return {};
     std::vector<std::uint8_t> bytes(static_cast<std::size_t>(size));
     stream.seekg(0); stream.read(reinterpret_cast<char*>(bytes.data()), size);
     return stream ? std::move(bytes) : std::vector<std::uint8_t>{};
@@ -165,8 +172,52 @@ filament::math::mat4f ToFilamentMatrix(const Mat4& value) {
 
 } // namespace
 
+namespace {
+struct PreparedModel {
+    std::filesystem::path Path;
+    std::atomic<int> Status{0}; // 0 preparing, 1 ready, 2 failed
+    std::vector<std::uint8_t> Bytes;
+    std::unordered_map<std::string,std::vector<std::uint8_t>> External;
+    std::shared_ptr<ModelGeometryAsset> Geometry;
+    std::string Error;
+    std::size_t Size=0;
+    bool Reported=false;
+};
+void PrepareModel(const std::shared_ptr<PreparedModel>& model) {
+    ProfileScope profile("Streaming.PrepareModel");
+    try {
+        model->Bytes=ReadBytes(model->Path);
+        if(model->Bytes.empty()||!EmbedGltfBuffers(model->Bytes,model->Path))throw std::runtime_error("Invalid glTF model or external buffer");
+        auto& bytes=model->Bytes;
+        std::size_t start=0,length=bytes.size();
+        if(LowerExtension(model->Path)==".glb") {start=20;std::uint32_t size=0;std::memcpy(&size,bytes.data()+12,4);length=size;}
+        auto tree=ryml::parse_in_arena(ryml::csubstr(reinterpret_cast<const char*>(bytes.data()+start),length));
+        auto root=tree.rootref();model->Size=bytes.size();
+        if(model->Size>256u*1024u*1024u)throw std::runtime_error("glTF staging data exceeds 256 MiB");
+        for(const auto* section:{"images","buffers"})if(root.has_child(section))for(auto resource:root[section].children())if(resource.has_child("uri")){
+            auto value=resource["uri"].val();std::string uri(value.str,value.len);
+            if(std::string_view(uri).starts_with("data:")||model->External.contains(uri))continue;
+            auto data=ReadGltfResource(model->Path,uri);if(data.empty())throw std::runtime_error("Missing glTF external resource");
+            if(data.size()>256u*1024u*1024u-model->Size)throw std::runtime_error("glTF staging data exceeds 256 MiB");
+            model->Size+=data.size();model->External.emplace(std::move(uri),std::move(data));
+        }
+        if(model->Size>256u*1024u*1024u)throw std::runtime_error("glTF staging data exceeds 256 MiB");
+        model->Geometry=ReadModelGeometry(model->Bytes);
+        model->Status=1;
+    }catch(const std::exception& error){model->Error=error.what();model->Bytes.clear();model->External.clear();model->Status=2;}
+    catch(...){model->Error="Model preparation failed";model->Status=2;}
+}
+}
 struct RenderAssets::Impl {
     enum class Kind { Gltf, Filamesh, Primitive };
+    struct PrimitiveBuffers {
+        filament::Engine& Engine;
+        filament::VertexBuffer* Vertices=nullptr;
+        filament::IndexBuffer* Indices=nullptr;
+        std::shared_ptr<const PrimitiveGeometry> Geometry;
+        explicit PrimitiveBuffers(filament::Engine& engine):Engine(engine){}
+        ~PrimitiveBuffers(){if(Vertices)Engine.destroy(Vertices);if(Indices)Engine.destroy(Indices);}
+    };
     struct Instance {
         struct Original { utils::Entity Entity;std::size_t Primitive;filament::MaterialInstance* Material; };
         Kind Type = Kind::Gltf;
@@ -181,13 +232,15 @@ struct RenderAssets::Impl {
         filament::VertexBuffer* PrimitiveVertices=nullptr;
         filament::IndexBuffer* PrimitiveIndices=nullptr;
         filament::MaterialInstance* PrimitiveMaterial=nullptr;
+        std::shared_ptr<PrimitiveBuffers> SharedBuffers;
+        std::shared_ptr<filament::MaterialInstance> SharedColor;
         std::vector<filament::MaterialInstance*> MaterialInstances;
         Mat4 LastTransform;bool TransformReady=false,FlagsReady=false,ColorReady=false;
         std::uint8_t LastLayer=0;bool LastCast=false,LastReceive=false;Vec4 LastColor{};
         bool AddedToScene = false;
         bool DebugWireframeAdded = false;
         std::vector<Original> Originals;
-        struct Override { utils::Entity Entity;std::size_t Primitive;UUID Asset;filament::MaterialInstance* Base;filament::MaterialInstance* Value=nullptr;bool StateOverride=false;bool CameraFeed=false; };
+        struct Override { utils::Entity Entity;std::size_t Primitive;UUID Asset;filament::MaterialInstance* Base;filament::MaterialInstance* Value=nullptr;bool StateOverride=false;bool CameraFeed=false;std::shared_ptr<filament::MaterialInstance> Shared; };
         std::vector<Override> Overrides;
         std::shared_ptr<ModelGeometryAsset> Geometry;
         std::uint32_t SourceIndex=Mesh::EntireAsset;
@@ -207,6 +260,32 @@ struct RenderAssets::Impl {
     std::unordered_map<UUID, CachedModel> Models;
     struct CachedGeometry { std::filesystem::path Path;std::weak_ptr<ModelGeometryAsset> Geometry; };
     std::unordered_map<UUID,CachedGeometry> GeometryCache;
+    std::map<PrimitiveGeometryKey,std::weak_ptr<PrimitiveBuffers>> PrimitiveBufferCache;
+    std::map<std::array<std::uint32_t,4>,std::weak_ptr<filament::MaterialInstance>> PrimitiveColorCache;
+    std::map<std::tuple<UUID,filament::Material*,bool>,std::weak_ptr<filament::MaterialInstance>> SharedMaterials;
+    std::shared_ptr<filament::MaterialInstance> ColorMaterial(Vec4 color) {
+        const auto bits=[](float value){if(value==0)value=0;return std::bit_cast<std::uint32_t>(value);};
+        const std::array<std::uint32_t,4> key{bits(color.X),bits(color.Y),bits(color.Z),bits(color.W)};
+        if(auto old=PrimitiveColorCache[key].lock())return old;
+        auto result=std::shared_ptr<filament::MaterialInstance>(PrimitiveMaterial->createInstance(),[this](auto* material){Engine.destroy(material);});
+        result->setParameter("baseColor",filament::math::float4{color.X,color.Y,color.Z,color.W});
+        PrimitiveColorCache[key]=result;return result;
+    }
+    bool Asynchronous=false;
+    std::uint64_t Tick=0;
+    struct Preparation {std::shared_ptr<PreparedModel> Data;std::uint64_t LastRequest=0;};
+    std::unordered_map<UUID,Preparation> Preparations;
+    struct Upload {
+        std::string Source;
+        std::shared_ptr<PreparedModel> Prepared;
+        std::shared_ptr<filament::gltfio::FilamentAsset> Owner;
+        std::unique_ptr<filament::gltfio::TextureProvider> Textures;
+        std::unique_ptr<filament::gltfio::ResourceLoader> Loader;
+        std::uint64_t LastRequest=0;
+        bool Complete=false;
+        ~Upload(){if(Loader)Loader->asyncCancelLoad();}
+    };
+    std::map<std::pair<UUID,UUID>,std::shared_ptr<Upload>> Uploads;
     Handle NextHandle = 1;
     std::unordered_map<Handle, Instance> Instances;
     std::vector<utils::Entity> EditorSuspended,DeformedSuspended,LODSuspended;
@@ -221,6 +300,19 @@ struct RenderAssets::Impl {
     std::unordered_map<UUID, std::filesystem::file_time_type> MaterialModified;
     std::vector<filament::Material*> RetiredMaterials;
     std::unordered_map<UUID, filament::Texture*> Textures;
+    std::unordered_map<UUID,ResourceLoadHandle> TextureReads;
+    struct PendingTexture {UUID Asset;std::shared_ptr<const std::vector<std::uint8_t>> Data;};
+    std::unordered_map<filament::Texture*,PendingTexture> PendingTextures;
+    std::unordered_set<UUID> DecodingTextures,FailedTextures;
+    void CollectTextures(){
+        while(auto* texture=StandaloneTextures->popTexture()){
+            auto found=PendingTextures.find(texture);if(found==PendingTextures.end())continue;
+            const auto id=found->second.Asset;DecodingTextures.erase(id);
+            if(StandaloneTextures->getPopMessage()==nullptr)Textures.emplace(id,texture);
+            else {Engine.destroy(texture);FailedTextures.insert(id);}
+            PendingTextures.erase(found);
+        }
+    }
     std::unordered_map<UUID, filament::Texture*> CameraTextures;
     struct TextureSurface {TextureDescriptor Descriptor;TextureTargets Targets;filament::Texture* Front=nullptr;};
     std::unordered_map<UUID,TextureSurface> TextureSurfaces;
@@ -336,6 +428,7 @@ struct RenderAssets::Impl {
         }
         if (!id || !StandaloneTextures) return nullptr;
         if (const auto found = Textures.find(id); found != Textures.end()) return found->second;
+        if(DecodingTextures.contains(id)||FailedTextures.contains(id))return nullptr;
         const auto asset = AssetManager::GetAsset(id);
         if (!asset || asset->State != AssetState::Ready) return nullptr;
         const std::string extension = LowerExtension(asset->SourcePath);
@@ -354,18 +447,20 @@ struct RenderAssets::Impl {
         }
         const char* mime = extension == ".png" ? "image/png" :
             (extension == ".jpg" || extension == ".jpeg" ? "image/jpeg" : nullptr);
-        const auto bytes = ReadBytes(asset->CachePath);
-        if (!mime || bytes.empty()) return nullptr;
-        auto* texture = StandaloneTextures->pushTexture(bytes.data(), bytes.size(), mime,
+        if(!mime)return nullptr;
+        std::shared_ptr<const std::vector<std::uint8_t>> bytes;
+        if(Asynchronous){
+            auto found=TextureReads.find(id);if(found==TextureReads.end())found=TextureReads.emplace(id,AssetManager::LoadAsync(id)).first;
+            if(!found->second.IsDone())return nullptr;
+            bytes=found->second.GetData();TextureReads.erase(found);
+        }else bytes=std::make_shared<const std::vector<std::uint8_t>>(ReadBytes(asset->CachePath));
+        if(!bytes||bytes->empty()){FailedTextures.insert(id);return nullptr;}
+        auto* texture = StandaloneTextures->pushTexture(bytes->data(), bytes->size(), mime,
             srgb ? filament::gltfio::TextureProvider::TextureFlags::sRGB
                  : filament::gltfio::TextureProvider::TextureFlags::NONE);
-        if (!texture) return nullptr;
-        StandaloneTextures->waitForCompletion(); StandaloneTextures->updateQueue();
-        while (auto* completed = StandaloneTextures->popTexture()) {
-            if (completed == texture && StandaloneTextures->getPopMessage() == nullptr)
-                Textures.emplace(id, texture);
-            else if (completed == texture) Engine.destroy(texture);
-        }
+        if (!texture){FailedTextures.insert(id);return nullptr;}
+        DecodingTextures.insert(id);PendingTextures.emplace(texture,PendingTexture{id,std::move(bytes)});
+        if(!Asynchronous){StandaloneTextures->waitForCompletion();StandaloneTextures->updateQueue();CollectTextures();}
         return Textures.contains(id) ? texture : nullptr;
     }
 
@@ -437,12 +532,16 @@ struct RenderAssets::Impl {
             if(shader&&shader->getMaterialDomain()!=filament::MaterialDomain::SURFACE)shader=nullptr;
             if(shader){auto& manager=Engine.getRenderableManager();auto enabled=manager.getEnabledAttributesAt(manager.getInstance(override.Entity),override.Primitive);auto required=shader->getRequiredAttributes();if((enabled & required)!=required)shader=nullptr;}
             const bool stateOverride=material.IsValid()&&material.GetRenderState().Override;
-            if(shader && (!override.Value || override.Value->getMaterial()!=shader || (override.StateOverride&&!stateOverride))){
-                Restore(value);auto* old=override.Value;override.Value=shader->createInstance();
+            if(shader && (!override.Value || override.Value->getMaterial()!=shader || (override.StateOverride!=stateOverride))){
+                Restore(value);auto previous=std::move(override.Shared);auto* old=override.Value;
+                const auto key=std::make_tuple(override.Asset,shader,stateOverride);
+                override.Shared=SharedMaterials[key].lock();
+                if(!override.Shared){override.Shared={shader->createInstance(),[this](auto* material){Engine.destroy(material);}};SharedMaterials[key]=override.Shared;}
+                override.Value=override.Shared.get();
                 const auto ri=Engine.getRenderableManager().getInstance(override.Entity);
                 Engine.getRenderableManager().setMaterialInstanceAt(ri,override.Primitive,override.Value);
-                if(old){if(DeformationRelease)DeformationRelease(value.EditorOwner);Engine.destroy(old);}ApplyDebug(value);
-            }else if(!shader&&override.Value){Restore(value);const auto ri=Engine.getRenderableManager().getInstance(override.Entity);Engine.getRenderableManager().setMaterialInstanceAt(ri,override.Primitive,override.Base);if(DeformationRelease)DeformationRelease(value.EditorOwner);Engine.destroy(override.Value);override.Value=nullptr;ApplyDebug(value);}
+                if(old&&DeformationRelease)DeformationRelease(value.EditorOwner);ApplyDebug(value);
+            }else if(!shader&&override.Value){Restore(value);const auto ri=Engine.getRenderableManager().getInstance(override.Entity);Engine.getRenderableManager().setMaterialInstanceAt(ri,override.Primitive,override.Base);if(DeformationRelease)DeformationRelease(value.EditorOwner);override.Shared.reset();override.Value=nullptr;ApplyDebug(value);}
             override.CameraFeed=override.Value&&material.IsValid()&&ApplyMaterialValues(override.Value,override.Asset);
             override.StateOverride=stateOverride;
         }
@@ -487,7 +586,7 @@ RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component) {
     return CreateMesh(component, {});
 }
 
-RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component, UUID modelInstance) {
+RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component, UUID modelInstance, UUID requester) {
     if (!m_impl || !component.MeshAsset) return InvalidHandle;
     const auto asset = AssetManager::GetAsset(component.MeshAsset);
     if (!asset || asset->State != AssetState::Ready) return InvalidHandle;
@@ -522,6 +621,45 @@ RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component, UUID modelI
             // Convert before allocation, and own every created asset immediately:
             // exceptions, invalid node indices and failed resource loads cannot
             // leave material instances alive until engine destruction.
+            if(m_impl->Asynchronous){
+                auto prepare=m_impl->Preparations.find(component.MeshAsset);
+                if(prepare==m_impl->Preparations.end()||prepare->second.Data->Path!=asset->CachePath){
+                    unsigned running=0;for(auto& [id,value]:m_impl->Preparations)if(value.Data->Status==0)++running;
+                    if(running>=2)return PendingHandle;
+                    auto data=std::make_shared<PreparedModel>();data->Path=asset->CachePath;
+                    prepare=m_impl->Preparations.insert_or_assign(component.MeshAsset,Impl::Preparation{data,m_impl->Tick}).first;
+                    Jobs::Schedule([data]{PrepareModel(data);});
+                }
+                prepare->second.LastRequest=m_impl->Tick;auto data=prepare->second.Data;
+                const auto status=data->Status.load();if(!status)return PendingHandle;
+                if(status==2){if(!data->Reported){Console::Error(data->Error,"Model Streaming");data->Reported=true;}return InvalidHandle;}
+                instance.Geometry=data->Geometry;
+                m_impl->GeometryCache.insert_or_assign(component.MeshAsset,Impl::CachedGeometry{asset->CachePath,instance.Geometry});
+                const auto group=shared?modelInstance:requester?requester:UUID{0,m_impl->NextHandle};
+                const auto key=std::make_pair(component.MeshAsset,group);
+                auto found=m_impl->Uploads.find(key);
+                if(found==m_impl->Uploads.end()){
+                    auto upload=std::make_shared<Impl::Upload>();upload->Prepared=data;upload->Source=PathUtf8(asset->CachePath);upload->LastRequest=m_impl->Tick;
+                    auto* loaded=m_impl->GltfLoader->createAsset(data->Bytes.data(),static_cast<std::uint32_t>(data->Bytes.size()));
+                    if(!loaded)return InvalidHandle;
+                    upload->Owner={loaded,[impl=m_impl.get()](auto* value){impl->Scene.removeEntities(value->getEntities(),value->getEntityCount());impl->GltfLoader->destroyAsset(value);}};
+                    upload->Loader=std::make_unique<filament::gltfio::ResourceLoader>(filament::gltfio::ResourceConfiguration{&m_impl->Engine,upload->Source.c_str(),true});
+                    upload->Textures.reset(filament::gltfio::createStbProvider(&m_impl->Engine));
+                    if(!upload->Textures)return InvalidHandle;
+                    upload->Loader->addTextureProvider("image/png",upload->Textures.get());upload->Loader->addTextureProvider("image/jpeg",upload->Textures.get());
+                    for(std::size_t i=0;i<loaded->getResourceUriCount();++i){
+                        const auto* uri=loaded->getResourceUris()[i];if(!uri||std::string_view(uri).starts_with("data:"))continue;
+                        auto bytes=data->External.find(uri);if(bytes==data->External.end())return InvalidHandle;
+                        auto* retained=new std::shared_ptr<PreparedModel>(data);
+                        upload->Loader->addResourceData(uri,{bytes->second.data(),bytes->second.size(),[](void*,std::size_t,void* user){delete static_cast<std::shared_ptr<PreparedModel>*>(user);},retained});
+                    }
+                    if(!upload->Loader->asyncBeginLoad(loaded))return InvalidHandle;
+                    found=m_impl->Uploads.emplace(key,std::move(upload)).first;
+                }
+                found->second->LastRequest=m_impl->Tick;
+                if(!found->second->Complete)return PendingHandle;
+                instance.GltfOwner=found->second->Owner;
+            }else{
             const std::string cachedSource = PathUtf8(asset->CachePath);
             auto bytes = ReadBytes(asset->CachePath);
             if (bytes.empty() || !EmbedGltfBuffers(bytes,asset->CachePath)) return InvalidHandle;
@@ -550,6 +688,7 @@ RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component, UUID modelI
             }
             if (!resources.loadResources(loaded)) return InvalidHandle;
             loaded->releaseSourceData();
+            }
             if (shared) m_impl->Models.insert_or_assign(modelInstance, Impl::CachedModel{component.MeshAsset,asset->CachePath,instance.GltfOwner});
         }
         instance.Gltf = instance.GltfOwner.get();
@@ -629,7 +768,7 @@ void RenderAssets::DestroyMesh(Handle handle) {
     const auto found = m_impl->Instances.find(handle); if (found == m_impl->Instances.end()) return;
     auto& instance = found->second;if(m_impl->DeformationRelease)m_impl->DeformationRelease(instance.EditorOwner);
     m_impl->Restore(instance);
-    for(auto& override:instance.Overrides)if(override.Value){const auto ri=m_impl->Engine.getRenderableManager().getInstance(override.Entity);if(ri)m_impl->Engine.getRenderableManager().setMaterialInstanceAt(ri,override.Primitive,override.Base);m_impl->Engine.destroy(override.Value);}
+    for(auto& override:instance.Overrides)if(override.Value){const auto ri=m_impl->Engine.getRenderableManager().getInstance(override.Entity);if(ri)m_impl->Engine.getRenderableManager().setMaterialInstanceAt(ri,override.Primitive,override.Base);override.Shared.reset();override.Value=nullptr;}
     if (instance.Type == Impl::Kind::Gltf) {
         if (instance.AddedToScene) {
             if (instance.SelectedGltfEntity) m_impl->Scene.remove(instance.SelectedGltfEntity);
@@ -645,17 +784,27 @@ void RenderAssets::DestroyMesh(Handle handle) {
         for (auto* material : instance.MaterialInstances) m_impl->Engine.destroy(material);
     } else {
         if(instance.AddedToScene)m_impl->Scene.remove(instance.PrimitiveEntity);
-        m_impl->Engine.destroy(instance.PrimitiveEntity);m_impl->Engine.destroy(instance.PrimitiveVertices);m_impl->Engine.destroy(instance.PrimitiveIndices);m_impl->Engine.destroy(instance.PrimitiveMaterial);m_impl->Engine.getEntityManager().destroy(instance.PrimitiveEntity);
+        m_impl->Engine.destroy(instance.PrimitiveEntity);instance.SharedBuffers.reset();instance.SharedColor.reset();m_impl->Engine.getEntityManager().destroy(instance.PrimitiveEntity);
     }
     m_impl->Instances.erase(found);
 }
 
 RenderAssets::Handle RenderAssets::CreatePrimitive(const PrimitiveObject& component){
     if(!m_impl||!m_impl->PrimitiveMaterial)return InvalidHandle;const auto prototype=GetCachedPrimitiveGeometry(component);const auto& geometry=*prototype;if(geometry.Vertices.empty()||geometry.Indices.empty())return InvalidHandle;
-    Impl::Instance instance;instance.Type=Impl::Kind::Primitive;instance.PrimitiveMaterial=m_impl->PrimitiveMaterial->createInstance();instance.PrimitiveMaterial->setParameter("baseColor",filament::math::float4{component.Color.X,component.Color.Y,component.Color.Z,component.Color.W});
-    instance.PrimitiveVertices=filament::VertexBuffer::Builder().vertexCount(static_cast<std::uint32_t>(geometry.Vertices.size())).bufferCount(1).attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3,0,sizeof(PrimitiveVertex)).attribute(filament::VertexAttribute::TANGENTS,0,filament::VertexBuffer::AttributeType::FLOAT4,12,sizeof(PrimitiveVertex)).attribute(filament::VertexAttribute::UV0,0,filament::VertexBuffer::AttributeType::FLOAT2,28,sizeof(PrimitiveVertex)).build(m_impl->Engine);
-    auto* vertices=new std::shared_ptr<const PrimitiveGeometry>(prototype);instance.PrimitiveVertices->setBufferAt(m_impl->Engine,0,{const_cast<PrimitiveVertex*>(geometry.Vertices.data()),geometry.Vertices.size()*sizeof(PrimitiveVertex),[](void*,size_t,void* user){delete static_cast<std::shared_ptr<const PrimitiveGeometry>*>(user);},vertices});
-    instance.PrimitiveIndices=filament::IndexBuffer::Builder().indexCount(static_cast<std::uint32_t>(geometry.Indices.size())).bufferType(filament::IndexBuffer::IndexType::UINT).build(m_impl->Engine);auto* indices=new std::shared_ptr<const PrimitiveGeometry>(prototype);instance.PrimitiveIndices->setBuffer(m_impl->Engine,{const_cast<std::uint32_t*>(geometry.Indices.data()),geometry.Indices.size()*sizeof(std::uint32_t),[](void*,size_t,void* user){delete static_cast<std::shared_ptr<const PrimitiveGeometry>*>(user);},indices});
+    Impl::Instance instance;instance.Type=Impl::Kind::Primitive;
+    instance.SharedColor=m_impl->ColorMaterial(component.Color);instance.PrimitiveMaterial=instance.SharedColor.get();
+    const auto key=GetPrimitiveGeometryKey(component);
+    instance.SharedBuffers=m_impl->PrimitiveBufferCache[key].lock();
+    if(!instance.SharedBuffers){
+        instance.SharedBuffers=std::make_shared<Impl::PrimitiveBuffers>(m_impl->Engine);
+        auto& buffers=*instance.SharedBuffers;buffers.Geometry=prototype;
+        buffers.Vertices=filament::VertexBuffer::Builder().vertexCount(static_cast<std::uint32_t>(geometry.Vertices.size())).bufferCount(1).attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3,0,sizeof(PrimitiveVertex)).attribute(filament::VertexAttribute::TANGENTS,0,filament::VertexBuffer::AttributeType::FLOAT4,12,sizeof(PrimitiveVertex)).attribute(filament::VertexAttribute::UV0,0,filament::VertexBuffer::AttributeType::FLOAT2,28,sizeof(PrimitiveVertex)).build(m_impl->Engine);
+        auto* vertices=new std::shared_ptr<const PrimitiveGeometry>(prototype);buffers.Vertices->setBufferAt(m_impl->Engine,0,{const_cast<PrimitiveVertex*>(geometry.Vertices.data()),geometry.Vertices.size()*sizeof(PrimitiveVertex),[](void*,size_t,void* user){delete static_cast<std::shared_ptr<const PrimitiveGeometry>*>(user);},vertices});
+        buffers.Indices=filament::IndexBuffer::Builder().indexCount(static_cast<std::uint32_t>(geometry.Indices.size())).bufferType(filament::IndexBuffer::IndexType::UINT).build(m_impl->Engine);
+        auto* indices=new std::shared_ptr<const PrimitiveGeometry>(prototype);buffers.Indices->setBuffer(m_impl->Engine,{const_cast<std::uint32_t*>(geometry.Indices.data()),geometry.Indices.size()*sizeof(std::uint32_t),[](void*,size_t,void* user){delete static_cast<std::shared_ptr<const PrimitiveGeometry>*>(user);},indices});
+        m_impl->PrimitiveBufferCache[key]=instance.SharedBuffers;
+    }
+    instance.PrimitiveVertices=instance.SharedBuffers->Vertices;instance.PrimitiveIndices=instance.SharedBuffers->Indices;
     instance.PrimitiveEntity=m_impl->Engine.getEntityManager().create();m_impl->Engine.getTransformManager().create(instance.PrimitiveEntity);filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{geometry.Extents.X,geometry.Extents.Y,geometry.Extents.Z}}).material(0,instance.PrimitiveMaterial).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,instance.PrimitiveVertices,instance.PrimitiveIndices).castShadows(component.CastShadows).receiveShadows(component.ReceiveShadows).build(m_impl->Engine,instance.PrimitiveEntity);m_impl->Scene.addEntity(instance.PrimitiveEntity);instance.AddedToScene=true;m_impl->ApplyRenderable(instance.PrimitiveEntity,component);
     auto handle=m_impl->NextHandle++;auto [stored,_]=m_impl->Instances.emplace(handle,std::move(instance));Mesh material;material.MaterialAsset=component.MaterialAsset;m_impl->RegisterOverrides(stored->second,material);m_impl->UpdateMaterials(stored->second);m_impl->ApplyDebug(stored->second);return handle;
 }
@@ -664,16 +813,43 @@ void RenderAssets::UpdatePrimitive(Handle handle,const Mat4& transform,const Pri
     if(!m_impl)return;auto found=m_impl->Instances.find(handle);if(found==m_impl->Instances.end()||found->second.Type!=Impl::Kind::Primitive)return;auto& value=found->second;
     m_impl->UpdateTransform(value,value.PrimitiveEntity,transform);
     const auto c=component.Color;const auto old=value.LastColor;
-    if(!value.ColorReady||c.X!=old.X||c.Y!=old.Y||c.Z!=old.Z||c.W!=old.W){value.PrimitiveMaterial->setParameter("baseColor",filament::math::float4{c.X,c.Y,c.Z,c.W});value.LastColor=c;value.ColorReady=true;++m_impl->ColorUploads;}
+    if(!value.ColorReady||c.X!=old.X||c.Y!=old.Y||c.Z!=old.Z||c.W!=old.W){
+        m_impl->Restore(value);auto shared=m_impl->ColorMaterial(c);auto* before=value.PrimitiveMaterial;
+        if(before!=shared.get()&&m_impl->DeformationRelease)m_impl->DeformationRelease(value.EditorOwner);
+        auto& manager=m_impl->Engine.getRenderableManager();auto ri=manager.getInstance(value.PrimitiveEntity);
+        if(manager.getMaterialInstanceAt(ri,0)==before)manager.setMaterialInstanceAt(ri,0,shared.get());
+        for(auto& override:value.Overrides)if(override.Base==before)override.Base=shared.get();
+        value.PrimitiveMaterial=shared.get();value.SharedColor=std::move(shared);value.LastColor=c;value.ColorReady=true;++m_impl->ColorUploads;m_impl->ApplyDebug(value);
+    }
     if(component.Visible!=value.AddedToScene){if(component.Visible)m_impl->Scene.addEntity(value.PrimitiveEntity);else m_impl->Scene.remove(value.PrimitiveEntity);value.AddedToScene=component.Visible;}
     if(m_impl->FlagsChanged(value,component))m_impl->ApplyRenderable(value.PrimitiveEntity,component);
     m_impl->UpdateMaterials(value);
 }
 
+void RenderAssets::SetAsynchronousLoading(bool enabled){if(m_impl)m_impl->Asynchronous=enabled;}
 void RenderAssets::Update() {
+    if(m_impl){
+        ++m_impl->Tick;
+        for(auto it=m_impl->Uploads.begin();it!=m_impl->Uploads.end();){
+            auto& upload=*it->second;
+            if(upload.Owner.use_count()==1&&upload.LastRequest+2<m_impl->Tick){it=m_impl->Uploads.erase(it);continue;}
+            if(upload.Loader){upload.Loader->asyncUpdateLoad();if(upload.Loader->asyncGetLoadProgress()>=1){upload.Owner->releaseSourceData();upload.Loader.reset();upload.Textures.reset();upload.Complete=true;upload.Prepared.reset();}}
+            ++it;
+        }
+        std::size_t cached=0;for(auto& [id,p]:m_impl->Preparations)if(p.Data->Status==1)cached+=p.Data->Size;
+        for(auto it=m_impl->Preparations.begin();it!=m_impl->Preparations.end();){
+            auto& p=it->second;
+            if(p.Data->Status!=0&&p.Data.use_count()==1&&p.LastRequest+2<m_impl->Tick&&(cached>128u*1024u*1024u||p.LastRequest+120<m_impl->Tick)){
+                if(p.Data->Status==1)cached-=p.Data->Size;it=m_impl->Preparations.erase(it);
+            }else ++it;
+        }
+    }
     if (m_impl && m_impl->GltfTextures) m_impl->GltfTextures->updateQueue();
-    if (m_impl && m_impl->StandaloneTextures) m_impl->StandaloneTextures->updateQueue();
+    if (m_impl && m_impl->StandaloneTextures){m_impl->StandaloneTextures->updateQueue();m_impl->CollectTextures();}
     if (m_impl) {
+        std::erase_if(m_impl->PrimitiveBufferCache,[](auto& pair){return pair.second.expired();});
+        std::erase_if(m_impl->PrimitiveColorCache,[](auto& pair){return pair.second.expired();});
+        std::erase_if(m_impl->SharedMaterials,[](auto& pair){return pair.second.expired();});
         for (auto it=m_impl->Models.begin(); it!=m_impl->Models.end();) {
             if (it->second.Resource.expired()) it=m_impl->Models.erase(it); else ++it;
         }
@@ -725,6 +901,12 @@ std::vector<RenderAssets::EditorMeshGeometry> RenderAssets::GetEditorMeshes() co
         if(value.SourceIndex!=Mesh::EntireAsset)append(value.SourceIndex);
         else for(std::uint32_t index=0;index<value.Geometry->SourceNodes.size();++index)append(index);
     }return result;
+}
+std::array<std::uint64_t,3> RenderAssets::GetInstancingResourceCounts() const {
+    if(!m_impl)return {};std::array<std::uint64_t,3> counts{};
+    for(auto& [key,value]:m_impl->PrimitiveBufferCache)if(!value.expired())++counts[0];
+    for(auto& [key,value]:m_impl->PrimitiveColorCache)if(!value.expired())++counts[1];
+    for(auto& [key,value]:m_impl->SharedMaterials)if(!value.expired())++counts[2];return counts;
 }
 std::array<std::uint64_t,3> RenderAssets::GetUploadCounts()const{return m_impl?std::array<std::uint64_t,3>{m_impl->TransformUploads,m_impl->StateUploads,m_impl->ColorUploads}:std::array<std::uint64_t,3>{};}
 void RenderAssets::BeginLODView(const std::unordered_set<UUID>& hidden){
@@ -826,6 +1008,10 @@ filament::TextureSampler RenderAssets::GetTextureSampler(filament::Texture* text
 
 void RenderAssets::Shutdown() {
     if (!m_impl) return;
+    m_impl->Uploads.clear();m_impl->Preparations.clear();
+    if(m_impl->StandaloneTextures){m_impl->StandaloneTextures->cancelDecoding();m_impl->StandaloneTextures->waitForCompletion();m_impl->StandaloneTextures->updateQueue();m_impl->CollectTextures();}
+    for(auto& [texture,pending]:m_impl->PendingTextures)m_impl->Engine.destroy(texture);
+    m_impl->PendingTextures.clear();m_impl->TextureReads.clear();
     while (!m_impl->Instances.empty()) DestroyMesh(m_impl->Instances.begin()->first);
     while(!m_impl->TextureSurfaces.empty())m_impl->RetireSurface(m_impl->TextureSurfaces.begin()->first);
     m_impl->Engine.destroy(m_impl->WhiteTexture);m_impl->Engine.destroy(m_impl->BlackTexture);

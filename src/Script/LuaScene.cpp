@@ -84,6 +84,9 @@ void BindLuaScene(sol::table api){
     query["Filter"]=&SceneQueryOptions::Filter;
     auto hit=api.new_usertype<SceneQueryHit>("SceneQueryHit",sol::constructors<SceneQueryHit()>());hit["Target"]=&SceneQueryHit::Target;hit["Point"]=&SceneQueryHit::Point;hit["Normal"]=&SceneQueryHit::Normal;hit["Distance"]=&SceneQueryHit::Distance;hit["StartedInside"]=&SceneQueryHit::StartedInside;
     auto manager=api.create_named("SceneManager");manager["GetActiveScene"]=&SceneManager::GetActiveScene;manager["IsLoadPending"]=&SceneManager::IsLoadPending;manager["GetLastError"]=&SceneManager::GetLastError;
+    manager["LoadSceneAsync"]=sol::overload([](UUID id,sol::optional<bool> activation){return SceneManager::LoadSceneAsync(id,activation.value_or(true));},[](const std::string& path,sol::optional<bool> activation){return SceneManager::LoadSceneAsync(std::filesystem::u8path(path),activation.value_or(true));});
+    manager["LoadWorldCellAsync"]=[](UUID id,sol::optional<Transform> offset){return SceneManager::LoadWorldCellAsync(id,offset.value_or(Transform{}));};
+    manager["UnloadWorldCell"]=&SceneManager::UnloadWorldCell;manager["RegisterStreamingCell"]=&SceneManager::RegisterStreamingCell;manager["UnregisterStreamingCell"]=&SceneManager::UnregisterStreamingCell;manager["SetStreamingPosition"]=&SceneManager::SetStreamingPosition;manager["GetStreamingSettings"]=&SceneManager::GetStreamingSettings;manager["SetStreamingSettings"]=&SceneManager::SetStreamingSettings;
     manager["LoadScene"]=sol::overload([](const std::string& path){return SceneManager::LoadScene(std::filesystem::u8path(path));},[](UUID id){return SceneManager::LoadScene(id);});
 }
 }

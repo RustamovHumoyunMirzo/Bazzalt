@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="The global Bazzalt.SceneManager exposes asynchronous loading without exposing engine initialization or authoring saves. A UUID such as sceneAsset below is an imported .bscene asset reference provided by your game.">
+  <title>Streaming from Lua | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Lua / Streaming from Lua</nav>
+      <article class="doc"><h1>Streaming from Lua</h1><p>The global Bazzalt.SceneManager exposes asynchronous loading without exposing engine initialization or authoring saves. A UUID such as sceneAsset below is an imported .bscene asset reference provided by your game.</p>
+<h2 id="example">Replace a scene</h2><pre><code>self.SceneRequest = Bazzalt.SceneManager.LoadSceneAsync(sceneAsset, false)
+-- In a later update:
+if self.SceneRequest:GetStatus() == Bazzalt.AsyncLoadStatus.Ready then
+    self.SceneRequest:SetActivationAllowed(true)
+end</code></pre><p>Poll GetStatus, GetProgress and GetError. IsDone is true for Complete, Failed, Cancelled and Unloaded; it does not mean success. Cancel requests cancellation and rollback before completion. Ready means file data is prepared; Activate may span several frames. Keep a handle as a member to inspect it later. Dropping it does not cancel the operation.</p>
+<h2 id="cells">World cells</h2><pre><code>local cell = Bazzalt.StreamingCell.new()
+cell.SceneAsset = cellAsset
+cell.Offset.Position = Bazzalt.Vec3.new(500, 0, 0)
+cell.LoadDistance = 150
+cell.UnloadDistance = 220
+Bazzalt.SceneManager.RegisterStreamingCell(cell)
+-- Update from your player/controller:
+Bazzalt.SceneManager.SetStreamingPosition(player:GetWorldTransform().Position)</code></pre><p>LoadWorldCellAsync(sceneAsset, optionalTransform) manually loads a cell. UnloadWorldCell(sceneAsset) queues removal. RegisterStreamingCell(cell), UnregisterStreamingCell(sceneAsset) and SetStreamingPosition(position) manage distance-driven loading. GetRootUUID identifies a loaded cell's parent in the active scene; GetSceneUUID identifies its source scene. Each cell preserves entity UUIDs and must not conflict with the active scene. Repeated loads of a resident asset do not duplicate entities. Cell scripts start after assembly and stop before removal; referenced scripts must already be imported/compiled.</p>
+<h2 id="resources">Resources and settings</h2><p>Bazzalt.AssetManager.LoadAsync(assetUUID) returns ResourceLoadHandle. GetData returns nil until successful completion, then a binary Lua string containing cache bytes; it copies data into Lua, so avoid copying large textures/models into gameplay tables. Native rendering consumes its own prepared resources. Bazzalt.SceneManager.GetStreamingSettings returns a settings value: change fields and pass it to SetStreamingSettings. Defaults are 2 ms, 128 entity operations per tick, 64 pending requests, 4 concurrent preparations and 256 MiB for raw/staged source reservations. Settings do not make Lua, ECS, Qt or GPU APIs thread-safe.</p>
+<h2 id="instancing">Instancing</h2><p>Bazzalt.Graphics.SetInstancingEnabled(enabled) and IsInstancingEnabled control automatic GPU batching. Compatible geometry/materials are required; different resources or render state split batches. These methods belong to Graphics, not to a Filament backend API. See the C++ streaming guide for activation, failure, budget and renderer-path details.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../reference/WheelTire/en.html"><small>Previous</small>WheelTire</a>
+<a class="next" href="../../bshader/en.html"><small>Next</small>Shaders and material assets</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Replace a scene</a><a class="toc-link" href="#cells">World cells</a><a class="toc-link" href="#resources">Resources and settings</a><a class="toc-link" href="#instancing">Instancing</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

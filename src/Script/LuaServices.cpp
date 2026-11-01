@@ -3,6 +3,7 @@
 #include "Script/LuaBindings.h"
 namespace Bazzalt::Runtime {
 void BindLuaScene(sol::table api);
+void BindLuaStreaming(sol::table api);
 void BindLuaAssets(sol::table api);
 void BindLuaConsole(sol::table api);
 void BindLuaAudio(sol::table api);
@@ -21,7 +22,7 @@ void BindLuaServices(sol::table api){
     }
     api.create_named("Jobs")["GetWorkerCount"]=&Jobs::GetWorkerCount;
 
-    BindLuaScene(api);BindLuaAssets(api);BindLuaConsole(api);
+    BindLuaStreaming(api);BindLuaScene(api);BindLuaAssets(api);BindLuaConsole(api);
     BindLuaAudio(api);BindLuaPhysics(api);BindLuaVehicles(api);BindLuaLOD(api);
     BindLuaApplicationEvents(api);
     {auto type=api.create_named("Time");

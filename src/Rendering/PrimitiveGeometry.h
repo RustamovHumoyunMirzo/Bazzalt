@@ -10,6 +10,8 @@ namespace Bazzalt::Runtime {
 struct PrimitiveVertex { float Position[3]; float TangentFrame[4]; float UV[2]; };
 struct ModelGeometry;
 struct PrimitiveGeometry { std::vector<PrimitiveVertex> Vertices; std::vector<std::uint32_t> Indices; Vec3 Extents{};std::shared_ptr<const ModelGeometry> Picking; };
+using PrimitiveGeometryKey = std::array<std::uint32_t,12>;
+PrimitiveGeometryKey GetPrimitiveGeometryKey(const PrimitiveObject& primitive);
 std::shared_ptr<const PrimitiveGeometry> GetCachedPrimitiveGeometry(const PrimitiveObject& primitive);
 std::array<std::uint64_t,3> GetPrimitiveCacheStatistics();
 PrimitiveGeometry BuildPrimitiveGeometry(const PrimitiveObject& primitive);

@@ -1,3 +1,4 @@
+#include "Runtime/StreamingRuntime.h"
 #include "Bazzalt/Profiler.h"
 #include "Runtime/GlobalEventsAccess.h"
 #include "Runtime/Engine.h"
@@ -45,7 +46,7 @@
 namespace Bazzalt::Runtime {
 
 Engine::Engine()
-    : m_scene(std::make_unique<Scene>()), m_assetDatabase(std::make_unique<AssetDatabase>()),
+    : m_scene(std::make_unique<Scene>()), m_assetDatabase(std::make_unique<AssetDatabase>()),m_streaming(std::make_unique<StreamingRuntime>(*this)),
       m_renderBackend(std::make_unique<RenderBackend>()),m_scriptRuntime(std::make_unique<NativeScriptRuntime>()),m_luaRuntime(std::make_unique<LuaRuntime>()),m_audioRuntime(std::make_unique<AudioRuntime>())
 {
     GlobalEventsAccess::BindThread();
@@ -56,6 +57,7 @@ Engine::Engine()
 
 Engine::~Engine()
 {
+    m_streaming->Reset();
     if (m_isInitialized)
     {
         Shutdown(true);
@@ -119,6 +121,7 @@ void Engine::Update(bool renderFrame)
 
     ApplicationEventsAccess::ThrowIfFailed();
     ProcessPendingSceneLoad();
+    m_streaming->Pump();
     if(!m_subsystemAssets.empty())for(auto handle:m_scene->GetRegistry().view<ScriptComponents>())for(const auto& script:m_scene->GetRegistry().get<ScriptComponents>(handle).Values){
         UUID id;const bool reference=UUID::TryParse(script.Source,id);
         const auto source=std::filesystem::u8path(script.Source);
@@ -149,17 +152,20 @@ void Engine::Update(bool renderFrame)
         m_scene->FixedUpdate(step);
         m_scriptRuntime->FixedUpdate(step);
         m_luaRuntime->FixedUpdate(step);
+        m_streaming->FixedUpdate(step);
         if(m_scriptsRunning){ProfileScope scope("Physics.Step");PhysicsModule().Step(*m_scene,step,false);}
     }
     if(fixedSteps > 64)m_fixedAccumulator = std::fmod(m_fixedAccumulator, double(Time::GetFixedDeltaTime()));
     if(m_scriptsRunning)PhysicsModule().SetInterpolationAlpha(*m_scene,float(m_fixedAccumulator/Time::GetFixedDeltaTime()));
     {ProfileScope scope("Scene.Update");m_scene->Update(m_deltaTime);}
     {ProfileScope scope("Scripts.Update");m_scriptRuntime->Update(m_deltaTime);m_luaRuntime->Update(m_deltaTime);}
+    m_streaming->Update(m_deltaTime);
     ApplicationEventsAccess::Emit({ApplicationEventType::OnUpdate,m_deltaTime});
     ApplicationEventsAccess::ThrowIfFailed();
     m_scene->LateUpdate(m_deltaTime);
     m_scriptRuntime->LateUpdate(m_deltaTime);
     m_luaRuntime->LateUpdate(m_deltaTime);
+    m_streaming->LateUpdate(m_deltaTime);
     ApplicationEventsAccess::Emit({ApplicationEventType::OnLateUpdate,m_deltaTime});
     ApplicationEventsAccess::ThrowIfFailed();
     {ProfileScope scope("CameraSystem");m_scene->UpdateSystem<CameraSystem>();}
@@ -190,6 +196,7 @@ void Engine::RenderEditorFrame()
     // Editor and paused frames must not accumulate a giant gameplay delta.
     m_lastFrameTime = std::chrono::steady_clock::now();
     ProcessPendingSceneLoad();
+    m_streaming->Pump();
     const bool profile=std::getenv("BAZZALT_PROFILE_FRAME")!=nullptr;
     const auto start=std::chrono::steady_clock::now();
     {ProfileScope scope("CameraSystem");m_scene->UpdateSystem<CameraSystem>();}
@@ -381,6 +388,7 @@ void Engine::Shutdown(bool unloadScene)
         return;
     }
 
+    m_streaming->Reset();
     std::cout << "[Engine] Shutting down core subsystems...\n";
     BeginShutdown();
 
@@ -476,7 +484,7 @@ bool Engine::StartScripts(bool resetTime){
     if(!m_luaRuntime->Start(m_lastError)){m_scriptRuntime->Stop();m_audioRuntime->Stop();PhysicsModule().Stop(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationAccess::SetAudioReady(false);ApplicationAccess::SetServicesReady(false);return false;}
     m_scriptsRunning=true;ApplicationEventsAccess::Emit({ApplicationEventType::OnPlay});return true;
 }
-void Engine::StopScripts(){if(m_scriptsRunning){ApplicationEventsAccess::Emit({ApplicationEventType::OnStop});m_scriptsRunning=false;}m_luaRuntime->Stop();m_scriptRuntime->Stop();ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforePhysicsShutdown});ReleasePhysicsScene(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterPhysicsShutdown});m_audioRuntime->Stop();ApplicationAccess::SetAudioReady(false);GraphicsAccess::CancelFrame();ResetRuntimeMaterials();ResetRuntimeTextures();}
+void Engine::StopScripts(){m_streaming->StopScripts();if(m_scriptsRunning){ApplicationEventsAccess::Emit({ApplicationEventType::OnStop});m_scriptsRunning=false;}m_luaRuntime->Stop();m_scriptRuntime->Stop();ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforePhysicsShutdown});ReleasePhysicsScene(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterPhysicsShutdown});m_audioRuntime->Stop();ApplicationAccess::SetAudioReady(false);GraphicsAccess::CancelFrame();ResetRuntimeMaterials();ResetRuntimeTextures();}
 
 bool Engine::PrepareApplication(){
     if(m_applicationPrepared)return true;
@@ -523,6 +531,7 @@ Scene& Engine::CreateScene()
 
 void Engine::SetScene(std::unique_ptr<Scene> scene)
 {
+    if(!m_streaming->IsReplacingScene())m_streaming->Reset();
     m_editorTransformTrail.clear();
     if (!scene) throw std::invalid_argument("Engine scene cannot be null");
     ApplicationEvent event{ApplicationEventType::OnSceneUnload};if(m_scene)event.SceneUUID=m_scene->GetUUID().ToString();
@@ -538,6 +547,7 @@ void Engine::SetScene(std::unique_ptr<Scene> scene)
 
 std::unique_ptr<Scene> Engine::TakeScene()
 {
+    m_streaming->Reset();
     m_editorTransformTrail.clear();
     StopScripts();m_luaConfigured=false;
     DetachRenderSystems();
@@ -747,6 +757,7 @@ bool Engine::LoadProject(const std::filesystem::path& path, bool loadStartupScen
         m_lastError = serializer.GetLastError();
         return false;
     }
+    m_streaming->Reset();m_pendingScenePath.reset();
     if (!m_assetDatabase->Open(path.parent_path(), project.AssetDirectory))
     {
         m_lastError = m_assetDatabase->GetLastError();
@@ -795,3 +806,5 @@ bool Engine::LoadProject(const std::filesystem::path& path, bool loadStartupScen
 }
 
 } // namespace Bazzalt::Runtime
+
+namespace Bazzalt::Runtime { bool Engine::IsSceneLoadPending() const {return m_pendingScenePath.has_value()||m_streaming->HasPendingScene();} }

@@ -430,10 +430,11 @@ void MeshSystem::OnUpdate(Scene& scene, float) {
              found->second.ModelOwner != modelOwner || found->second.ModelNodeIndex != mesh.ModelNodeIndex || found->second.CachePath != cachePath)) {
             Destroy(id); found = m_resources.end();
         }
+        if(found!=m_resources.end()&&found->second.Handle==RenderAssets::PendingHandle){m_resources.erase(found);found=m_resources.end();}
         if (found == m_resources.end()) {
             // Failed loads remain recorded until an asset/component changes,
             // rather than repeatedly reparsing a bad model every editor tick.
-            const auto resource = assets.CreateMesh(mesh,modelOwner);
+            const auto resource = assets.CreateMesh(mesh,modelOwner,id);
             found = m_resources.emplace(id, Resource{resource, mesh.MeshAsset, mesh.MaterialAsset, mesh.Materials,modelOwner,mesh.ModelNodeIndex,cachePath}).first;
             const auto slots=assets.GetMaterialSlotCount(resource);
             if(slots&&mesh.Materials.empty()){mesh.Materials.resize(slots);found->second.Materials=mesh.Materials;}

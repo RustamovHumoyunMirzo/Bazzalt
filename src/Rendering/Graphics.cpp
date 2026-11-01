@@ -21,7 +21,7 @@ struct State {
     std::map<std::uint64_t,std::shared_ptr<Listener>> Listeners;
     std::map<std::pair<UUID,std::uint64_t>,std::pair<std::uint32_t,std::uint32_t>> Sizes;
     std::vector<GraphicsEvent> Cameras;
-    std::uint64_t Next=1,Frame=0;bool InCallback=false,CanDraw=true;
+    std::uint64_t Next=1,Frame=0;bool InCallback=false,CanDraw=true,Instancing=true;
     GraphicsEvent Context;
     std::set<UUID> Deformed;
 };
@@ -75,6 +75,8 @@ void Graphics::DrawVertices(std::vector<GraphicsVertex> v,std::vector<std::uint3
 void Graphics::DrawLine(Vec3 a,Vec3 b,Vec4 color,GraphicsDrawOptions o){DrawVertices({{a,{0,0,1},{},color},{b,{0,0,1},{},color}},{},GraphicsTopology::Lines,{},Mat4{},o);}
 void Graphics::DrawTriangle(Vec3 a,Vec3 b,Vec3 c,Vec4 color,GraphicsDrawOptions o){auto normal=Vec3::Cross(b-a,c-a).Normalized();DrawVertices({{a,normal,{},color},{b,normal,{},color},{c,normal,{},color}},{},GraphicsTopology::Triangles,{},Mat4{},o);}
 void Graphics::ClearDraws(){ThreadCheck();if(!Get().CanDraw)throw std::logic_error("Cannot clear draws from notification callbacks");Get().Commands.clear();}
+void Graphics::SetInstancingEnabled(bool enabled){ThreadCheck();Get().Instancing=enabled;}
+bool Graphics::IsInstancingEnabled(){ThreadCheck();return Get().Instancing;}
 bool Graphics::IsAvailable(){return Get().ScenePtr!=nullptr;}
 Graphics::Subscription Graphics::Subscribe(GraphicsEventType type,Callback callback,Entity owner){return Runtime::GraphicsAccess::SubscribeScoped(type,std::move(callback),owner,CurrentScope);}
 bool Graphics::Unsubscribe(Subscription id){ThreadCheck();return Get().Listeners.erase(id)!=0;}

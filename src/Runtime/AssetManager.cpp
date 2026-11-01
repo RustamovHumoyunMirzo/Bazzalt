@@ -1,3 +1,4 @@
+#include "Runtime/StreamingRuntime.h"
 #include "Bazzalt/AssetManager.h"
 #include "Bazzalt/Detail/SubsystemAccess.h"
 #include "Runtime/TextureLibrary.h"
@@ -145,6 +146,8 @@ bool AssetManager::IsAssetReady(UUID id) {
     const auto asset = GetAsset(id);
     return asset && asset->State == AssetState::Ready;
 }
+
+ResourceLoadHandle AssetManager::LoadAsync(UUID id) {auto* engine=ActiveEngine();return engine?engine->m_streaming->RequestAsset(id):ResourceLoadHandle{};}
 
 std::optional<ModelAsset> AssetManager::LoadModel(UUID id) {
     const auto asset = GetAsset(id);

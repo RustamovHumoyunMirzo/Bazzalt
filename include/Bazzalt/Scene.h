@@ -27,6 +27,7 @@
 #include "Bazzalt/Physics.h"
 
 namespace Bazzalt {
+namespace Runtime { class StreamingRuntime; }
 
 namespace Runtime { class Engine; }
 
@@ -189,6 +190,7 @@ private:
     std::map<std::string,std::string> m_extensionProperties;
     friend class SceneSerializer;
     friend class Runtime::Engine;
+    friend class Runtime::StreamingRuntime;
 
     template<typename SystemType>
     static const std::string& SystemKey() {

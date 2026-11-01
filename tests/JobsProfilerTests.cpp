@@ -1,3 +1,4 @@
+#include "Runtime/JobAccess.h"
 #include "Bazzalt/Detail/ModuleLifetime.h"
 #include "Bazzalt/Jobs.h"
 #include "Bazzalt/Profiler.h"
@@ -24,6 +25,14 @@ int main() {
     });
     Detail::SetCurrentGameplayModule({});lease.reset();
     retained.Wait();retained={};Jobs::WaitAll();assert(weak.expired());
+    // A single-worker pool cannot run a module task while another task deliberately blocks it.
+    if(Jobs::GetWorkerCount()>1){
+    std::promise<void> releaseIO;
+    auto ioReady=releaseIO.get_future().share();auto io=Jobs::Schedule([ioReady]{ioReady.wait();});
+    lease=std::make_shared<int>(9);Detail::SetCurrentGameplayModule(lease);
+    auto moduleWork=Jobs::Schedule([]{});Detail::SetCurrentGameplayModule({});
+    Runtime::JobAccess::WaitForModule(lease);assert(moduleWork.IsComplete());releaseIO.set_value();io.Wait();
+    }
     Profiler::BeginCapture(1000);
     auto loop=Jobs::ParallelFor(visits.size(),127,[&](auto begin,auto end) {
         for(auto i=begin;i<end;++i) ++visits[i];

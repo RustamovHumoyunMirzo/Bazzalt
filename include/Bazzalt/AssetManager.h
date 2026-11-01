@@ -1,5 +1,6 @@
 #pragma once
 #include "Bazzalt/Export.h"
+#include "Bazzalt/Streaming.h"
 
 #include <filesystem>
 #include <optional>
@@ -20,6 +21,7 @@ public:
     [[nodiscard]] static std::optional<AssetInfo> GetAsset(const std::filesystem::path& sourcePath);
     [[nodiscard]] static bool IsAssetReady(UUID id);
     [[nodiscard]] static std::optional<ModelAsset> LoadModel(UUID id);
+    [[nodiscard]] static ResourceLoadHandle LoadAsync(UUID id);
 
 private:
     friend class Runtime::Engine;

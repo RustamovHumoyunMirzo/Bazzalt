@@ -35,9 +35,12 @@ struct PrototypeCache {
 };
 PrototypeCache& Prototypes(){static PrototypeCache cache;return cache;}
 }
-std::shared_ptr<const PrimitiveGeometry> GetCachedPrimitiveGeometry(const PrimitiveObject& p){
+PrimitiveGeometryKey GetPrimitiveGeometryKey(const PrimitiveObject& p){
     const auto bits=[](float v){if(v==0)v=0;return std::bit_cast<std::uint32_t>(v);};
-    const PrototypeCache::Key key{unsigned(p.Shape),bits(p.Size.X),bits(p.Size.Y),bits(p.Size.Z),bits(p.Radius),bits(p.Height),bits(p.Width),bits(p.Depth),bits(p.MajorRadius),bits(p.MinorRadius),p.Segments,p.Rings};
+    return {unsigned(p.Shape),bits(p.Size.X),bits(p.Size.Y),bits(p.Size.Z),bits(p.Radius),bits(p.Height),bits(p.Width),bits(p.Depth),bits(p.MajorRadius),bits(p.MinorRadius),p.Segments,p.Rings};
+}
+std::shared_ptr<const PrimitiveGeometry> GetCachedPrimitiveGeometry(const PrimitiveObject& p){
+    const auto key=GetPrimitiveGeometryKey(p);
     auto& cache=Prototypes();std::lock_guard lock(cache.Mutex);if(auto it=cache.Values.find(key);it!=cache.Values.end()){++cache.Hits;it->second.Age=++cache.Clock;return it->second.Geometry;}
     auto result=std::make_shared<PrimitiveGeometry>(BuildPrimitiveGeometry(p));auto picking=std::make_shared<ModelGeometry>();picking->Triangles.reserve(result->Indices.size()/3);
     for(std::size_t i=0;i+2<result->Indices.size();i+=3){Vec3 points[3];bool finite=true;for(int j=0;j<3;++j){const auto& v=result->Vertices[result->Indices[i+j]].Position;points[j]={v[0],v[1],v[2]};finite&=std::isfinite(v[0])&&std::isfinite(v[1])&&std::isfinite(v[2]);}if(finite)picking->Triangles.push_back({points[0],points[1],points[2]});}

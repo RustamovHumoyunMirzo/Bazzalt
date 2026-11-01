@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Asynchronous loading separates file preparation from changes to the live world. Workers read files and parse scene data. The engine creates components on its owning thread at frame boundaries, so user deserializers, Lua, physics and renderer objects are never constructed on arbitrary workers.">
+  <title>Asynchronous loading and world streaming | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / C++ / Asynchronous loading and world streaming</nav>
+      <article class="doc"><h1>Asynchronous loading and world streaming</h1><p>Asynchronous loading separates file preparation from changes to the live world. Workers read files and parse scene data. The engine creates components on its owning thread at frame boundaries, so user deserializers, Lua, physics and renderer objects are never constructed on arbitrary workers.</p>
+<h2 id="scene">Replace the active scene</h2><pre><code>#include &lt;Bazzalt/SceneManager.h&gt;
+// Store this handle in your behavior; targetScene is an imported Scene asset UUID.
+auto request = Bazzalt::SceneManager::LoadSceneAsync(targetScene, false);
+// Poll in a later update. Ready means file preparation has finished.
+if (request.GetStatus() == Bazzalt::AsyncLoadStatus::Ready)
+    request.SetActivationAllowed(true);</code></pre><p>The current scene remains active while the replacement is prepared and incrementally instantiated in a detached scene. On successful activation the existing scene unload/loaded events run and scripts restart for the replacement if gameplay was running. A read, parse or component-construction failure leaves the current scene intact. A failure after the actual scene swap, such as a failing script OnCreate, is reported on the handle; the new scene has already become active. Use the UUID overload in packaged games. The path overload supports UTF-8 filesystem paths through std::filesystem.</p>
+<h2 id="cells">Add world cells</h2><pre><code>Bazzalt::Transform offset;
+offset.Position = {500, 0, 0};
+auto cell = Bazzalt::SceneManager::LoadWorldCellAsync(cellSceneAsset, offset);
+// Later, after Complete:
+auto root = Bazzalt::SceneManager::GetActiveScene()-&gt;GetEntity(cell.GetRootUUID());
+// Unload is queued to the next safe frame boundary.
+Bazzalt::SceneManager::UnloadWorldCell(cellSceneAsset);</code></pre><p>A cell is an ordinary imported .bscene inserted beneath a new parent in the active scene. Its local coordinates compose with the supplied offset. Entity UUIDs are preserved: a conflicting UUID fails the request instead of replacing an existing object. A repeated resident request for the same asset returns its existing operation. Author each distinct cell with distinct entity UUIDs; loading multiple copies of the same cell at different offsets is not supported.</p><p>Cell creation is incremental. Geometry and physics components can become visible during Activating; scripts start only once the complete cell is assembled. Treat the cell as unavailable until Complete. Failures/cancellation roll back cell-owned entities. Unrelated objects parented beneath a cell are detached with world transforms preserved during unload. Cell environment, scene extension properties and scene physics settings do not replace the active scene's settings. Native and Lua cell behaviors have their own runtime instances and receive normal update/fixed/late phases. Script assets must already be compiled/imported, including native modules in the game build; loading never invokes a compiler. Missing modules fail explicitly.</p>
+<h2 id="distance">Distance-driven streaming</h2><pre><code>Bazzalt::StreamingCell cell;
+cell.SceneAsset = cellSceneAsset;
+cell.Offset.Position = {500, 0, 0};
+cell.LoadDistance = 150;
+cell.UnloadDistance = 220;
+Bazzalt::SceneManager::RegisterStreamingCell(cell);
+// Update this from your player/controller, on the engine thread:
+Bazzalt::SceneManager::SetStreamingPosition(player.GetWorldTransform().Position);</code></pre><p>Distance is measured from the supplied streaming position to the cell offset's position. Nearby requests are prioritized. The larger unload distance provides hysteresis, preventing repeated loads at a boundary. At most 1024 cells may be registered; duplicate registration returns false. Unregistering also queues an unload. Update the position as the player moves. Registrations are runtime data and reset when the active scene changes. A failed automatic request remains failed until leaving its unload radius or unregistering/re-registering it; this prevents endless retry loops for broken content.</p>
+<h2 id="budgets">Budgets and ownership</h2><p>GetStreamingSettings/SetStreamingSettings control a soft main-thread budget (default 2 ms), entity operations per tick (128), pending requests (64), concurrent file preparations (4), and CPU resource-buffer budget (256 MiB). Invalid settings throw. Work is checked between entity records; a single custom deserializer or GPU upload can exceed the soft time budget. ResourceBudgetBytes accounts for retained raw resource buffers and serialized scene staging reservations, not total ECS/GPU memory or all decoded allocations. Drop unused resource handles/data and unload distant cells to release ownership. Scene YAML has a 64 MiB safety limit.</p>
+<h2 id="resources">Read resources asynchronously</h2><pre><code>#include &lt;Bazzalt/AssetManager.h&gt;
+auto resource = Bazzalt::AssetManager::LoadAsync(assetId);
+// In a subsequent update:
+if (resource.GetStatus() == Bazzalt::AsyncLoadStatus::Complete) {
+    auto bytes = resource.GetData(); // shared immutable cooked/cache bytes
+}</code></pre><p>LoadAsync reads an imported asset's cache file, not its authoring source. It does not compile, decode every file format, or promise GPU residency. Buffers are immutable and remain alive while either the handle or a returned data pointer owns them. Dropping a handle does not cancel its operation. Cancel is cooperative; completed data is never revoked. Scene cancellation is accepted during incremental construction, but returns false once the final scene swap or cell lifecycle commit starts. Check GetError on Failed. Synchronous AssetManager.LoadModel remains available for its existing metadata contract.</p>
+<h2 id="renderer">Renderer loading and instancing</h2><p>Interactive editor/game glTF loading prepares files, external resources and picking geometry on the shared job pool, then uses asynchronous texture decoding with main-thread GPU publication. Standalone PNG/JPEG material textures likewise load/decode asynchronously and use a placeholder until ready. Headless/offline renderer construction defaults to deterministic synchronous loading; native tests can explicitly enable its async path. Filamesh/OBJ/FBX runtime mesh loading and environment/HDR construction retain their existing synchronous GPU-facing paths. GPU object creation is not moved to worker threads.</p><p>Automatic GPU instancing is enabled by default. Identical procedural primitives share vertex/index buffers, and compatible objects share immutable fallback colors and asset-backed material instances. Repeated GraphicsMesh submissions share geometry/material resources too. Different colors, materials, geometry, render state, skinning or incompatible backend constraints can split batches. Imported model instances are not universally merged: their loader/material ownership still determines eligibility. Picking, selection, entity transforms, LOD and per-view visibility remain per entity. Graphics.SetInstancingEnabled(false) disables automatic batching for diagnostics without changing the scene.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../application/en.html"><small>Previous</small>Application controls</a>
+<a class="next" href="../subsystems/en.html"><small>Next</small>Global subsystems</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#scene">Replace the active scene</a><a class="toc-link" href="#cells">Add world cells</a><a class="toc-link" href="#distance">Distance-driven streaming</a><a class="toc-link" href="#budgets">Budgets and ownership</a><a class="toc-link" href="#resources">Read resources asynchronously</a><a class="toc-link" href="#renderer">Renderer loading and instancing</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

@@ -236,6 +236,7 @@ bool RenderBackend::Initialize(bool headless) {
     }
     m_engine = filament::Engine::create(backend,nullptr,nullptr,&config);
     if (m_engine == nullptr) return false;
+    m_engine->setAutomaticInstancingEnabled(Graphics::IsInstancingEnabled());
     m_renderer = m_engine->createRenderer();
     m_scene = m_engine->createScene();
     m_targetClearSky=filament::Skybox::Builder().color({0,0,0,1}).showSun(false).build(*m_engine);
@@ -330,6 +331,7 @@ bool RenderBackend::Initialize(bool headless) {
     static constexpr float iconVertices[]={-.5f,-.5f,0, 0,0, .5f,-.5f,0, 1,0, .5f,.5f,0, 1,1, -.5f,.5f,0, 0,1};static constexpr std::uint16_t iconIndices[]={0,1,2,0,2,3};
     m_gizmo->IconVertices=filament::VertexBuffer::Builder().vertexCount(4).bufferCount(1).attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3,0,20).attribute(filament::VertexAttribute::UV0,0,filament::VertexBuffer::AttributeType::FLOAT2,12,20).build(*m_engine);m_gizmo->IconVertices->setBufferAt(*m_engine,0,{iconVertices,sizeof(iconVertices)});m_gizmo->IconIndices=filament::IndexBuffer::Builder().indexCount(6).bufferType(filament::IndexBuffer::IndexType::USHORT).build(*m_engine);m_gizmo->IconIndices->setBuffer(*m_engine,{iconIndices,sizeof(iconIndices)});
     m_assets = std::make_unique<RenderAssets>(*m_engine, *m_scene);
+    m_assets->SetAsynchronousLoading(!headless);
     m_assets->SetTextureCallbacks([this]{ClearGuiResources();},[this](UUID camera){return GetCameraTexture(camera);});
     m_guiRenderer=std::make_unique<GuiRenderer>(*this);
     SetEditorGrid(m_gridVisible,m_gridPlane);SetEditorGizmo(m_gizmoVisible,m_gizmoX,m_gizmoY,m_gizmoZ,m_gizmoMode);
@@ -648,7 +650,7 @@ bool RenderBackend::HasEnvironmentSkybox() const{return m_scene&&m_scene->getSky
 std::unordered_map<std::string,double> RenderBackend::GetStatistics() const{
     std::unordered_map<std::string,double> result{{"material_time",m_materialTime},{"guide_uploads",double(m_guideUploads)},{"light_uploads",double(m_lightUploads)},{"renderables",0},{"render_primitives",0},{"viewports",double(m_viewports.size())},{"captures",double(m_cameraOutputs.size())},{"gui_batches",m_guiRenderer?double(m_guiRenderer->GetBatchCount()):0}};
     if(m_scene&&m_engine)m_scene->forEach([&](utils::Entity entity){auto& manager=m_engine->getRenderableManager();auto instance=manager.getInstance(entity);if(instance&&(manager.getLayerMask(instance)&0x7f)){++result["renderables"];result["render_primitives"]+=manager.getPrimitiveCount(instance);}});
-    if(m_assets){auto counts=m_assets->GetUploadCounts();result["transform_uploads"]=double(counts[0]);result["render_state_uploads"]=double(counts[1]);result["primitive_color_uploads"]=double(counts[2]);auto geometry=GetPrimitiveCacheStatistics();result["primitive_cache_hits"]=double(geometry[0]);result["primitive_cache_builds"]=double(geometry[1]);result["primitive_cache_bytes"]=double(geometry[2]);}
+    if(m_assets){auto instancing=m_assets->GetInstancingResourceCounts();result["instancing_enabled"]=m_engine->isAutomaticInstancingEnabled()?1:0;result["primitive_gpu_geometries"]=double(instancing[0]);result["primitive_gpu_materials"]=double(instancing[1]);result["shared_surface_materials"]=double(instancing[2]);auto counts=m_assets->GetUploadCounts();result["transform_uploads"]=double(counts[0]);result["render_state_uploads"]=double(counts[1]);result["primitive_color_uploads"]=double(counts[2]);auto geometry=GetPrimitiveCacheStatistics();result["primitive_cache_hits"]=double(geometry[0]);result["primitive_cache_builds"]=double(geometry[1]);result["primitive_cache_bytes"]=double(geometry[2]);}
     return result;
 }
 void RenderBackend::SetGuiScene(Bazzalt::Scene* scene){GraphicsAccess::BindScene(scene);if(m_guiScene!=scene){ClearGuiResources();m_lodViews.clear();}m_guiScene=scene;}
@@ -699,6 +701,7 @@ void RenderBackend::RegisterCameraOutput(UUID id,filament::Texture* color,filame
 
 void RenderBackend::Render(double materialTime) {
     if (!m_renderer) return;
+    m_engine->setAutomaticInstancingEnabled(Graphics::IsInstancingEnabled());
     ++m_lodFrame;
     const auto frameTime=std::chrono::steady_clock::now();
     const auto frameNanoseconds=std::chrono::duration_cast<std::chrono::nanoseconds>(frameTime.time_since_epoch()).count();

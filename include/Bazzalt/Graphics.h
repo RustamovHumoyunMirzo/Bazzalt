@@ -74,6 +74,8 @@ public:
     static void DrawTriangle(Vec3 a,Vec3 b,Vec3 c,Vec4 color={1,1,1,1},GraphicsDrawOptions options={});
     static void ClearDraws();
     static bool IsAvailable();
+    static void SetInstancingEnabled(bool enabled);
+    static bool IsInstancingEnabled();
     // Pass the attached entity as owner to expire callbacks when it is destroyed.
     // Scene transitions and Lua VM teardown also remove subscriptions safely.
     static Subscription Subscribe(GraphicsEventType type,Callback callback,Entity owner={});
