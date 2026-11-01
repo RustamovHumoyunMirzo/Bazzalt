@@ -312,7 +312,7 @@ o["Post.Material"]=v.PostProcessing.MaterialAsset.ToString();o["Post.Materials.C
                 for (const auto &[key, value] : scene.GetExtensionProperties())
                     s << "  " << Quote(key) << ": " << Quote(value) << "\n";
             }
-            s << "Entities:\n";
+            s << (scene.GetEntityCount() <= 1 ? "Entities: []\n" : "Entities:\n");
             auto view = scene.GetRegistry().view<Identity, Name, Hierarchy>();
             for (auto h : view)
             {
@@ -400,7 +400,11 @@ o["Post.Material"]=v.PostProcessing.MaterialAsset.ToString();o["Post.Materials.C
                 error = "Invalid or unsupported scene YAML";
                 return false;
             }
-            if(!root["Entities"].is_seq())throw std::runtime_error("Entities must be a sequence");
+            // Older serializers emitted a bare `Entities:` for an empty scene.
+            // Accept YAML null as the legacy empty list, but reject other scalars/maps.
+            const auto entities=root["Entities"];
+            if(!entities.is_seq()&&!(!entities.is_container()&&(!entities.has_val()||entities.val_is_null())))
+                throw std::runtime_error("Entities must be a sequence or legacy empty value");
             if(root.has_child("ExtensionProperties")) {
                 auto values=root["ExtensionProperties"];
                 if(!values.is_map()||values.num_children()>1024)throw std::runtime_error("Invalid extension scene properties");

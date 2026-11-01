@@ -1,5 +1,8 @@
 #include <cassert>
+#include <cstdio>
 #include <filesystem>
+#include <fstream>
+#include "Runtime/PreparedScene.h"
 
 #include "Runtime/Engine.h"
 #include "Bazzalt/Components/Camera.h"
@@ -178,6 +181,30 @@ int main() {
     assert(secondScan.LoadProject(projectPath, false));
     const auto rescannedAsset = AssetManager::GetAsset(assetScenePath);
     assert(rescannedAsset && rescannedAsset->Id == sceneAsset->Id);
+
+    // Empty scenes round-trip in canonical and legacy forms without accepting invalid shapes.
+    {
+        Runtime::Engine empty;
+        assert(empty.GetScene().SetExtensionProperty("fixture","Speed","3.5"));
+        const auto emptyPath=directory/"empty.bscene";
+        assert(empty.SaveScene(emptyPath));
+        std::ifstream input(emptyPath,std::ios::binary);
+        const std::string yaml((std::istreambuf_iterator<char>(input)),{});input.close();
+        const auto position=yaml.find("Entities: []");assert(position!=std::string::npos);
+        const auto prefix=yaml.substr(0,position);
+        for(const auto* value:{"[]", "", "null", "~"}){
+            {std::ofstream output(emptyPath,std::ios::binary);output<<prefix<<"Entities: "<<value<<"\n";}
+            Runtime::PreparedScene prepared;std::string error;
+            const bool preparedOk=Runtime::PrepareScene(emptyPath,prepared,error);if(!preparedOk)std::fprintf(stderr,"Empty scene form [%s]: %s\n",value,error.c_str());assert(preparedOk);assert(prepared.Entities.empty());
+            assert(prepared.Id==empty.GetScene().GetUUID());
+            auto loaded=empty.LoadSceneAsset(emptyPath);assert(loaded&&loaded->GetEntityCount()==1);
+            assert(loaded->GetExtensionProperty("fixture","Speed")=="3.5");
+        }
+        for(const auto* value:{"{}", "wrong", "''"}){
+            {std::ofstream output(emptyPath,std::ios::binary);output<<prefix<<"Entities: "<<value<<"\n";}
+            assert(!empty.LoadSceneAsset(emptyPath));
+        }
+    }
 
     std::filesystem::remove_all(directory);
     return 0;
