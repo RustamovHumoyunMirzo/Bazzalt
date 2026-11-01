@@ -1,3 +1,4 @@
+#include "Bazzalt/Profiler.h"
 #include "Runtime/GlobalEventsAccess.h"
 #include "Runtime/Engine.h"
 #include "Bazzalt/Console.h"
@@ -109,6 +110,7 @@ bool Engine::Init(bool headless, bool startScripts)
 
 void Engine::Update(bool renderFrame)
 {
+    ProfileScope profileScope("Engine.Update");
     if (!m_isInitialized)
     {
         std::cerr << "[Engine] Error: Update called before Init().\n";
@@ -147,13 +149,12 @@ void Engine::Update(bool renderFrame)
         m_scene->FixedUpdate(step);
         m_scriptRuntime->FixedUpdate(step);
         m_luaRuntime->FixedUpdate(step);
-        if(m_scriptsRunning)PhysicsModule().Step(*m_scene,step,false);
+        if(m_scriptsRunning){ProfileScope scope("Physics.Step");PhysicsModule().Step(*m_scene,step,false);}
     }
     if(fixedSteps > 64)m_fixedAccumulator = std::fmod(m_fixedAccumulator, double(Time::GetFixedDeltaTime()));
     if(m_scriptsRunning)PhysicsModule().SetInterpolationAlpha(*m_scene,float(m_fixedAccumulator/Time::GetFixedDeltaTime()));
-    m_scene->Update(m_deltaTime);
-    m_scriptRuntime->Update(m_deltaTime);
-    m_luaRuntime->Update(m_deltaTime);
+    {ProfileScope scope("Scene.Update");m_scene->Update(m_deltaTime);}
+    {ProfileScope scope("Scripts.Update");m_scriptRuntime->Update(m_deltaTime);m_luaRuntime->Update(m_deltaTime);}
     ApplicationEventsAccess::Emit({ApplicationEventType::OnUpdate,m_deltaTime});
     ApplicationEventsAccess::ThrowIfFailed();
     m_scene->LateUpdate(m_deltaTime);
@@ -161,7 +162,7 @@ void Engine::Update(bool renderFrame)
     m_luaRuntime->LateUpdate(m_deltaTime);
     ApplicationEventsAccess::Emit({ApplicationEventType::OnLateUpdate,m_deltaTime});
     ApplicationEventsAccess::ThrowIfFailed();
-    m_scene->UpdateSystem<CameraSystem>();
+    {ProfileScope scope("CameraSystem");m_scene->UpdateSystem<CameraSystem>();}
     m_audioRuntime->SetHostPaused(false);
     m_audioRuntime->Update(Time::GetUnscaledDeltaTime());
     UpdateEditorOverlays();
@@ -170,7 +171,7 @@ void Engine::Update(bool renderFrame)
     ApplicationEventsAccess::ThrowIfFailed();
     ApplicationEventsAccess::Emit({ApplicationEventType::OnRender,m_deltaTime});
     ApplicationEventsAccess::ThrowIfFailed();
-    if(renderFrame){m_renderBackend->Render(Time::GetTime());ApplicationEventsAccess::Emit({ApplicationEventType::OnPostRender,m_deltaTime});}
+    if(renderFrame){{ProfileScope scope("Render.Present");m_renderBackend->Render(Time::GetTime());}ApplicationEventsAccess::Emit({ApplicationEventType::OnPostRender,m_deltaTime});}
     ApplicationEventsAccess::ThrowIfFailed();
 }
 
@@ -182,6 +183,7 @@ bool Engine::ConfigureRenderingBackend(const std::string& backend){
 
 void Engine::RenderEditorFrame()
 {
+    ProfileScope profileScope("Editor.Frame");
     if (!m_isInitialized) return;
     m_audioRuntime->SetHostPaused(true);
     m_audioRuntime->Update(0);
@@ -190,15 +192,15 @@ void Engine::RenderEditorFrame()
     ProcessPendingSceneLoad();
     const bool profile=std::getenv("BAZZALT_PROFILE_FRAME")!=nullptr;
     const auto start=std::chrono::steady_clock::now();
-    m_scene->UpdateSystem<CameraSystem>();
-    m_scene->UpdateSystem<LightSystem>();
-    m_scene->UpdateSystem<MeshSystem>();
-    m_scene->UpdateSystem<PrimitiveSystem>();
+    {ProfileScope scope("CameraSystem");m_scene->UpdateSystem<CameraSystem>();}
+    {ProfileScope scope("LightSystem");m_scene->UpdateSystem<LightSystem>();}
+    {ProfileScope scope("MeshSystem");m_scene->UpdateSystem<MeshSystem>();}
+    {ProfileScope scope("PrimitiveSystem");m_scene->UpdateSystem<PrimitiveSystem>();}
     const auto systems=std::chrono::steady_clock::now();
     UpdateEditorOverlays();
     const auto overlays=std::chrono::steady_clock::now();
     m_renderBackend->SetEnvironment(m_scene->GetEnvironment());
-    m_renderBackend->Render(m_scriptsRunning?Time::GetTime():-1);
+    {ProfileScope scope("Render.Present");m_renderBackend->Render(m_scriptsRunning?Time::GetTime():-1);}
     if(profile){const auto end=std::chrono::steady_clock::now();const auto ms=[](auto a,auto b){return std::chrono::duration<double,std::milli>(b-a).count();};std::cout<<"FRAME systems="<<ms(start,systems)<<" overlays="<<ms(systems,overlays)<<" render="<<ms(overlays,end)<<" ms\n";}
 }
 
@@ -215,6 +217,7 @@ void Engine::SetEditorStatisticsText(std::string text,bool visible){m_renderBack
 
 void Engine::UpdateEditorOverlays()
 {
+    ProfileScope profileScope("Editor.Overlays");
     std::vector<RenderBackend::EditorIcon> icons;
     std::vector<RenderBackend::EditorGuide> guides;
     const auto line=[&](Vec3 a,Vec3 b,Vec4 color){guides.push_back({a.X,a.Y,a.Z,b.X,b.Y,b.Z,color.X,color.Y,color.Z,color.W});};

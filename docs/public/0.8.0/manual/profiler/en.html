@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A profiler records where time is spent. Open Window → CPU Profiler, click Start Capture, reproduce a slow interaction or play sequence, then click Stop Capture. The window is modeless, so the editor remains interactive.">
+  <title>CPU Profiler | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Editor manual / CPU Profiler</nav>
+      <article class="doc"><h1>CPU Profiler</h1><p>A profiler records where time is spent. Open <strong>Window → CPU Profiler</strong>, click <strong>Start Capture</strong>, reproduce a slow interaction or play sequence, then click <strong>Stop Capture</strong>. The window is modeless, so the editor remains interactive.</p><h2 id="results">Read results</h2><p>Each row groups a named scope: Calls, Total milliseconds, and Maximum milliseconds. A large maximum can reveal a hitch; a large total can reveal repeated work. Nested scopes overlap and totals are not additive frame costs. Capture uses a bounded buffer of 100000 completed scopes, so keep recordings short. Normal editing does not copy or display profiler samples.</p><h2 id="export">Export a timeline</h2><p>Export Trace saves JSON that a Chrome trace or Perfetto viewer can inspect. Worker lanes show concurrency and waits. These are CPU measurements; GPU execution requires a GPU profiler. Closing the window stops an active capture. Starting another capture replaces the previous one. An unavailable native profiler reports an error rather than pretending to record.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../preferences/en.html"><small>Previous</small>Editor preferences</a>
+<a class="next" href="../remote-builds/en.html"><small>Next</small>SSH build workers</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#results">Read results</a><a class="toc-link" href="#export">Export a timeline</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

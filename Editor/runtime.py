@@ -64,8 +64,15 @@ class RuntimeService(QObject):
         self.EditorEntityState={};self.EditorParents={}
         self._tick_error = ""
         module = _LoadNativeModule()
+        self._profiler_module = module
         self.WaveformBuilder=getattr(module,'audio_waveform',None)
         self._host = module.EditorHost() if module is not None else None
+
+    def ProfileCommand(self, command, *args):
+        callback = getattr(getattr(self, '_profiler_module', None), command, None)
+        if callback is None:
+            raise RuntimeError('Native profiler is unavailable; rebuild the editor runtime.')
+        return callback(*args)
 
     def IsAvailable(self) -> bool:
         return self._host is not None

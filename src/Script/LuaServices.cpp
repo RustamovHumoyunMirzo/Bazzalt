@@ -1,3 +1,5 @@
+#include "Bazzalt/Profiler.h"
+#include "Bazzalt/Jobs.h"
 #include "Script/LuaBindings.h"
 namespace Bazzalt::Runtime {
 void BindLuaScene(sol::table api);
@@ -9,6 +11,16 @@ void BindLuaVehicles(sol::table api);
 void BindLuaLOD(sol::table api);
 void BindLuaApplicationEvents(sol::table api);
 void BindLuaServices(sol::table api){
+    {auto type=api.create_named("Profiler");
+     type["BeginCapture"]=sol::overload([]{Profiler::BeginCapture();},[](std::size_t capacity){Profiler::BeginCapture(capacity);});
+     type["EndCapture"]=&Profiler::EndCapture;
+     type["IsCapturing"]=&Profiler::IsCapturing;
+     type["ExportTrace"]=[](const std::string& path){Profiler::ExportTrace(std::filesystem::u8path(path));};
+     type["GetDroppedSampleCount"]=&Profiler::GetDroppedSampleCount;
+     type["GetSamples"]=[](sol::this_state state){sol::state_view lua(state);auto result=lua.create_table();for(const auto& sample:Profiler::GetSamples()){auto row=lua.create_table();row["Name"]=sample.Name;row["StartMicroseconds"]=sample.StartMicroseconds;row["DurationMicroseconds"]=sample.DurationMicroseconds;row["Thread"]=std::to_string(sample.Thread);result.add(row);}return result;};
+    }
+    api.create_named("Jobs")["GetWorkerCount"]=&Jobs::GetWorkerCount;
+
     BindLuaScene(api);BindLuaAssets(api);BindLuaConsole(api);
     BindLuaAudio(api);BindLuaPhysics(api);BindLuaVehicles(api);BindLuaLOD(api);
     BindLuaApplicationEvents(api);

@@ -1,3 +1,4 @@
+#include "Bazzalt/Jobs.h"
 #include "Runtime/NativeScriptRuntime.h"
 #include "Runtime/GraphicsAccess.h"
 #include "Runtime/ExtensionAccess.h"
@@ -169,5 +170,5 @@ void NativeScriptRuntime::Update(float deltaTime){for(auto& instance:m_instances
 void NativeScriptRuntime::FixedUpdate(float deltaTime){for(auto& instance:m_instances)if(instance.OnFixedUpdate){ModuleScope scope(instance.Lease,instance.Object,instance.Api->TypeName);instance.OnFixedUpdate(instance.Object,deltaTime);}}
 void NativeScriptRuntime::LateUpdate(float deltaTime){for(auto& instance:m_instances)if(instance.OnLateUpdate){ModuleScope scope(instance.Lease,instance.Object,instance.Api->TypeName);instance.OnLateUpdate(instance.Object,deltaTime);}}
 void NativeScriptRuntime::ApplicationEvent(const Bazzalt::ApplicationEvent& event){for(auto& instance:m_instances)if(instance.OnApplicationEvent){ModuleScope scope(instance.Lease,instance.Object,instance.Api->TypeName);instance.OnApplicationEvent(instance.Object,&event);}}
-void NativeScriptRuntime::Stop() noexcept{ApplicationEventsAccess::DisconnectOwner(this);for(auto it=m_instances.rbegin();it!=m_instances.rend();++it)if(it->Object&&it->Api){ModuleScope scope(it->Lease,it->Object,it->Api->TypeName);BehaviorAccess::Remove(it->BehaviorObject);try{if(!it->Application)it->Api->OnDestroy(it->Object);}catch(...){}GraphicsAccess::DisconnectScope(it->Object);ApplicationEventsAccess::DisconnectOwner(it->Object);try{it->Api->Destroy(it->Object);}catch(...){}}m_instances.clear();}
+void NativeScriptRuntime::Stop() noexcept{Jobs::WaitAll();ApplicationEventsAccess::DisconnectOwner(this);for(auto it=m_instances.rbegin();it!=m_instances.rend();++it)if(it->Object&&it->Api){ModuleScope scope(it->Lease,it->Object,it->Api->TypeName);BehaviorAccess::Remove(it->BehaviorObject);try{if(!it->Application)it->Api->OnDestroy(it->Object);}catch(...){}Jobs::WaitAll();GraphicsAccess::DisconnectScope(it->Object);ApplicationEventsAccess::DisconnectOwner(it->Object);try{it->Api->Destroy(it->Object);}catch(...){}}m_instances.clear();}
 }

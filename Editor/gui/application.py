@@ -114,6 +114,7 @@ class Editor(QMainWindow):
         self.MenuBar.ResetWorkspaceRequested.connect(self._ResetWorkspace)
         self.MenuBar.PreferencesRequested.connect(self.OpenPreferences)
         self.MenuBar.ProjectSettingsRequested.connect(self.OpenProjectSettings)
+        self.MenuBar.ProfilerRequested.connect(self.OpenProfiler)
         self.MenuBar.GlobalSubsystemsRequested.connect(self.OpenGlobalSubsystems)
         self.MenuBar.MaximizeViewportRequested.connect(self.SetViewportMaximized)
         self.Docking.maximize_requested.connect(self.TogglePanelMaximized)
@@ -209,6 +210,13 @@ class Editor(QMainWindow):
         previous=self.Runtime.ProjectInfo().get("name")
         if ProjectSettingsDialog(self).exec() and previous!=self.Runtime.ProjectInfo().get("name"):
             self.RequestRestart()
+
+    def OpenProfiler(self)->None:
+        from .profiler import ProfilerDialog
+        if getattr(self, '_profiler_dialog', None) is None:
+            self._profiler_dialog = ProfilerDialog(self)
+        self._profiler_dialog.show()
+        self._profiler_dialog.raise_()
 
     def OpenGlobalSubsystems(self)->None:
         from .global_subsystems import GlobalSubsystemsDialog

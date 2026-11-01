@@ -77,6 +77,7 @@ class EditorMenuBar(QMenuBar):
     ProjectSettingsRequested = Signal()
     ExtensionsRequested = Signal()
     BuildPackageRequested = Signal()
+    ProfilerRequested = Signal()
     GlobalSubsystemsRequested = Signal()
     RemoteBuildRequested = Signal()
     BuildSettingsRequested = Signal()
@@ -244,6 +245,7 @@ class EditorMenuBar(QMenuBar):
         reset = self.WindowMenu.addAction(self._localization.Translate("action.reset_workspace"))
         reset.triggered.connect(self.ResetWorkspaceRequested)
         extensions=self.WindowMenu.addAction(self._localization.Translate('extensions.title'));extensions.triggered.connect(self.ExtensionsRequested)
+        profiler=self.WindowMenu.addAction(self._localization.Translate('profiler.title'));profiler.triggered.connect(self.ProfilerRequested)
         subsystems=self.WindowMenu.addAction(self._localization.Translate('subsystems.title'));subsystems.triggered.connect(self.GlobalSubsystemsRequested)
         for action in self._extension_window_actions:self.WindowMenu.addAction(action)
 

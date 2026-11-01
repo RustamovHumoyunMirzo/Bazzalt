@@ -1,3 +1,5 @@
+#include "Bazzalt/Profiler.h"
+#include <typeinfo>
 #include "Bazzalt/Scene.h"
 #include "Bazzalt/GUI.h"
 #include "Physics/PhysicsModuleApi.h"
@@ -276,29 +278,32 @@ Entity Scene::InstantiateModel(UUID modelAsset, Entity parent, std::string name)
 }
 
 void Scene::Update(float deltaTime) {
+    ProfileScope phase("Scene.Systems");
     struct UpdateGuard {
         bool& Flag;
         explicit UpdateGuard(bool& flag) : Flag(flag) { Flag = true; }
         ~UpdateGuard() { Flag = false; }
     } guard(m_isUpdating);
     for (const auto& system : m_systems) {
-        if (system->IsEnabled()) system->OnUpdate(*this, deltaTime);
+        if (system->IsEnabled()) {ProfileScope scope(typeid(*system).name());system->OnUpdate(*this, deltaTime);}
     }
 }
 
 void Scene::FixedUpdate(float deltaTime) {
+    ProfileScope phase("Scene.FixedUpdate");
     struct UpdateGuard {
         bool& Flag;
         explicit UpdateGuard(bool& flag) : Flag(flag) { Flag = true; }
         ~UpdateGuard() { Flag = false; }
     } guard(m_isUpdating);
     for (const auto& system : m_systems) {
-        if (system->IsEnabled()) system->OnFixedUpdate(*this, deltaTime);
+        if (system->IsEnabled()) {ProfileScope scope(typeid(*system).name());system->OnFixedUpdate(*this, deltaTime);}
     }
 }
 void Scene::LateUpdate(float deltaTime) {
     struct Guard { bool& Flag;explicit Guard(bool& flag):Flag(flag){Flag=true;}~Guard(){Flag=false;} } guard(m_isUpdating);
-    for(auto& system:m_systems)if(system->IsEnabled())system->OnLateUpdate(*this,deltaTime);
+    ProfileScope phase("Scene.LateUpdate");
+    for(auto& system:m_systems)if(system->IsEnabled()){ProfileScope scope(typeid(*system).name());system->OnLateUpdate(*this,deltaTime);}
 }
 
 void Scene::DestroySystems() {

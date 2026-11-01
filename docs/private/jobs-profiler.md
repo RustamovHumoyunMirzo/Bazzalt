@@ -1,0 +1,11 @@
+# CPU jobs and profiling
+
+Jobs.cpp owns one lazy, process-wide pool in the core DLL. Exported non-template functions ensure gameplay modules use the same queue. Workers are capped at eight to avoid blindly competing with Jolt/Filament/audio. Jolt remains independent. Jobs must operate on detached data; neither ECS nor Lua becomes thread-safe. Packaged tasks retain exceptions in shared-future handles. Worker Wait helps queued tasks; cyclic dependencies remain a programmer error. ParallelFor bounds child tasks to the worker count.
+
+Native jobs capture the current module lease and restore module context around callback execution, preserving nested job lifetime. NativeScriptRuntime::Stop drains before script instance destruction and after OnDestroy. Producers must be stopped before general WaitAll barriers. Do not block a job on the main thread. No arbitrary asynchronous scripts, cancellation, or parallel mutation of engine state is introduced.
+
+Profiler.cpp owns bounded process-wide CPU capture storage. Generation checks exclude scopes crossing capture sessions. Disabled scopes have no copied names or sample writes. Completed samples serialize under one mutex; opt-in profiling itself has overhead. Export is snapshot-based trace-event JSON, locale-independent and escaped. GetSamples copies potentially large data: never poll it on editor ticks. CPU Render.Present includes driver waits but cannot describe GPU stage duration.
+
+Window > CPU Profiler is modeless and updates its table only on Stop. Lua reads copies on its VM thread. Private pybind functions are editor tooling, not public engine-loop controls. Closing the dialog stops a capture. New engine hotspots should receive stable named scopes, with per-system scopes retained for comparing user systems. Do not automatically parallelize systems without defining their data dependencies.
+
+Validation: JobsProfilerTests covers nested fork/join, exceptions, exact parallel coverage, range overflow, host barriers, bounded samples, capture generation and trace escaping. Editor tests cover capture UI aggregation and unavailable modules. All changes are dependency-free beyond standard C++ threads; no dependency build is needed.

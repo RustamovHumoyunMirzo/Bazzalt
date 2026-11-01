@@ -225,6 +225,7 @@ file(GLOB_RECURSE LIB_HEADERS CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h"
 )
 
+find_package(Threads REQUIRED)
 add_library(Bazzalt SHARED
     ${LIB_SOURCES}
     ${LIB_HEADERS}
@@ -273,7 +274,7 @@ target_include_directories(Bazzalt
     "${BAZZALT_MINIAUDIO_DIR}"
 )
 
-target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE BazzaltMiniaudio BazzaltLuaBindings BazzaltLua SDL3::SDL3-static ryml::ryml Filament::Filament ${CMAKE_DL_LIBS})
+target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE Threads::Threads BazzaltMiniaudio BazzaltLuaBindings BazzaltLua SDL3::SDL3-static ryml::ryml Filament::Filament ${CMAKE_DL_LIBS})
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SIZEOF_VOID_P EQUAL 4)
     target_link_libraries(Bazzalt PRIVATE atomic)
 endif()
@@ -696,6 +697,11 @@ endif()
 
 
 if(BUILD_TESTING)
+    add_executable(BazzaltJobsProfilerTests tests/JobsProfilerTests.cpp)
+    target_link_libraries(BazzaltJobsProfilerTests PRIVATE Bazzalt)
+    bazzalt_enable_test_assertions(BazzaltJobsProfilerTests)
+    add_test(NAME BazzaltJobsProfilerTests COMMAND BazzaltJobsProfilerTests)
+    set_tests_properties(BazzaltJobsProfilerTests PROPERTIES TIMEOUT 30)
     add_executable(BazzaltLODTests tests/LODTests.cpp)
     target_link_libraries(BazzaltLODTests PRIVATE Bazzalt Filament::Filament)
     target_include_directories(BazzaltLODTests PRIVATE src)

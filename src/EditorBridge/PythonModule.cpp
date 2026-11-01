@@ -1,3 +1,4 @@
+#include "Bazzalt/Profiler.h"
 #include "EditorBridge/LODBridge.h"
 #include <algorithm>
 #include <filesystem>
@@ -819,6 +820,10 @@ void BindShaderPreview(py::module_&); }
 PYBIND11_MODULE(_bazzalt_runtime, module) {
     Bazzalt::EditorBridge::BindShaderPreview(module);
     Bazzalt::EditorBridge::BindEditorLua(module);
+    module.def("begin_profile_capture", []{Bazzalt::Profiler::BeginCapture();});
+    module.def("end_profile_capture", &Bazzalt::Profiler::EndCapture);
+    module.def("export_profile_trace", [](const std::string& path){Bazzalt::Profiler::ExportTrace(std::filesystem::u8path(path));});
+    module.def("profile_samples", []{py::list result;for(auto& sample:Bazzalt::Profiler::GetSamples()){py::dict row;row["name"]=sample.Name;row["duration_us"]=sample.DurationMicroseconds;row["thread"]=sample.Thread;result.append(row);}return result;});
     module.def("compile_extension_lua",[](const std::string& source,const std::string& output){std::string error;if(!Bazzalt::Runtime::LuaRuntime::Import(std::filesystem::u8path(source),std::filesystem::u8path(output),error))throw std::runtime_error(error);});
     module.def("extension_root",[](){auto text=Bazzalt::Runtime::ExtensionAccess::Root().generic_u8string();return std::string(text.begin(),text.end());});
     module.def("extension_modules",&Bazzalt::Extensions::GetModules);

@@ -1350,5 +1350,15 @@
   "macros.shortcut": "Shortcut",
   "macros.shortcut_conflict": "This shortcut is invalid or already assigned.",
   "macros.choose_entry": "Choose an entry Lua script from the project.",
-  "macros.confirm_delete": "Delete this stored macro and its source snapshot?"
+  "macros.confirm_delete": "Delete this stored macro and its source snapshot?",
+  "profiler.title": "CPU Profiler",
+  "profiler.start": "Start Capture",
+  "profiler.stop": "Stop Capture",
+  "profiler.export": "Export Trace…",
+  "profiler.scope": "Scope",
+  "profiler.calls": "Calls",
+  "profiler.total": "Total (ms)",
+  "profiler.maximum": "Maximum (ms)",
+  "profiler.capturing": "Recording CPU scopes. Continue working in the editor, then stop the capture.",
+  "profiler.finished": "Capture stopped. Nested scope totals overlap; this is CPU timing, not GPU timing."
 }
