@@ -1,3 +1,5 @@
+#include "Network/NetworkModuleApi.h"
+#include "Persistence/SaveAccess.h"
 #include "Runtime/ApplicationAccess.h"
 #include "Runtime/ApplicationEventsAccess.h"
 #include "Bazzalt/Subsystem.h"
@@ -54,6 +56,7 @@ std::string Application::GetPlatform(){
 Scene& Subsystem::GetScene(){auto* scene=SceneManager::GetActiveScene();if(!scene)throw std::logic_error("No active scene");return *scene;}
 bool Runtime::ApplicationAccess::AreRuntimeServicesReady(){return Data().InputReady&&Data().AudioReady&&Data().PhysicsReady;}
 void Runtime::ApplicationAccess::Reset(bool editor,const ProjectMetadata& project){
+    Runtime::NetworkAccess::Configure(project.ProjectUUID);Runtime::SaveAccess::Configure(project.ProjectUUID,editor);
     Data()={};Data().Editor=editor;Data().Name=project.Name;
     if(auto found=project.Properties.find("project.company");found!=project.Properties.end())Data().Company=found->second;
     if(auto found=project.Properties.find("project.version");found!=project.Properties.end())Data().Version=found->second;

@@ -143,3 +143,13 @@ These are editor/compiler dependencies; they are not copied into native games.
 | Invoke | Paramiko packaging support | BSD-2-Clause |
 
 Zig, MinGW-w64, WSL distributions, target sysroots and remote workers are supplied by users. BAZZALT does not bundle or silently download them. Redistributors must also retain their own toolchain/runtime notices. Wayland runtime libraries and compositor services are provided by the Linux distribution.
+
+## Multiplayer transport and save cryptography
+
+[Yojimbo](https://github.com/mas-bandwidth/yojimbo) is pinned in
+`scripts/dependencies/yojimbo.json` (BSD-3-Clause). Its bundled netcode, reliable,
+serialize and TLSF sources retain their individual BSD notices. The bundled
+libsodium subset is ISC licensed. The transport is distributed as
+`bazzalt_network`; the shared cryptography provider is `bazzalt_crypto`.
+Full upstream notices are retained in `licenses/third_party/yojimbo-*`.
+No networking or cryptography dependency is downloaded by a shipped game.

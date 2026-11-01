@@ -52,7 +52,7 @@ jobs:
           key: filament-1.77.0-macos-${{ matrix.architecture }}-rtti-v2
       - name: Download pinned dependencies
         run: |
-          for dependency in entt rapidyaml filament sdl3 stb_image lua sol2 miniaudio jolt freetype text_shaping pybind11; do
+          for dependency in entt rapidyaml filament sdl3 stb_image lua sol2 miniaudio jolt yojimbo freetype text_shaping pybind11; do
             if [ -f "scripts/get_${dependency}.sh" ]; then sh "scripts/get_${dependency}.sh"; fi
           done
       - name: Build missing native Filament architecture on CI

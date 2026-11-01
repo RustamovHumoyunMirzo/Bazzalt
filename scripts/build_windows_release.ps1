@@ -44,6 +44,8 @@ function Copy-ReleaseSDK([string]$Destination) {
     Copy-Item -LiteralPath (Join-Path $Build 'Editor/Release/bazzalt_lua.dll') -Destination (Join-Path $Destination 'lib/bazzalt_lua.dll')
     Copy-Item -LiteralPath (Join-Path $Build 'Editor/Release/bazzalt_gui.dll') -Destination (Join-Path $Destination 'lib/bazzalt_gui.dll')
     Copy-Item -LiteralPath (Join-Path $Build 'Editor/Release/bazzalt_physics.dll') -Destination (Join-Path $Destination 'lib/bazzalt_physics.dll')
+    Copy-Item -LiteralPath (Join-Path $Build 'Editor/Release/bazzalt_network.dll') -Destination (Join-Path $Destination 'lib/bazzalt_network.dll')
+    Copy-Item -LiteralPath (Join-Path $Build 'Editor/Release/bazzalt_crypto.dll') -Destination (Join-Path $Destination 'lib/bazzalt_crypto.dll')
     Copy-Item -LiteralPath (Join-Path $Build 'ScriptSDK/lib/Release/Bazzalt.lib') -Destination (Join-Path $Destination 'lib/Bazzalt.lib')
 }
 if ($Product -ne 'hub') {
@@ -85,7 +87,7 @@ if ($Product -eq 'core') {
         $Native = Get-ChildItem -LiteralPath $NativeFolder -Filter '_bazzalt_runtime*.pyd' | Select-Object -First 1
         if (-not $Native) { throw 'Native editor module missing' }
         New-Item -ItemType Directory -Force -Path (Join-Path $Stage 'Editor') | Out-Null
-        foreach ($File in @($Native.FullName, (Join-Path $NativeFolder 'Bazzalt.dll'), (Join-Path $NativeFolder 'bshad.dll'), (Join-Path $NativeFolder 'bazzalt_lua.dll'), (Join-Path $NativeFolder 'bazzalt_gui.dll'), (Join-Path $NativeFolder 'bazzalt_physics.dll'))) {
+        foreach ($File in @($Native.FullName, (Join-Path $NativeFolder 'Bazzalt.dll'), (Join-Path $NativeFolder 'bshad.dll'), (Join-Path $NativeFolder 'bazzalt_lua.dll'), (Join-Path $NativeFolder 'bazzalt_gui.dll'), (Join-Path $NativeFolder 'bazzalt_physics.dll'), (Join-Path $NativeFolder 'bazzalt_network.dll'), (Join-Path $NativeFolder 'bazzalt_crypto.dll'))) {
             Copy-Item -LiteralPath $File -Destination (Join-Path $Stage 'Editor')
         }
         Copy-ReleaseSDK (Join-Path $Stage 'ScriptSDK')

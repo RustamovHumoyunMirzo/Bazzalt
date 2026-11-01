@@ -10,7 +10,7 @@ def main():
     if stage.exists():raise ValueError('Core staging directory already exists')
     stage.mkdir(parents=True);output.mkdir(parents=True,exist_ok=True)
     shutil.copytree(build/'ScriptSDK/include',stage/'include');(stage/'lib').mkdir()
-    for pattern in ('libBazzalt.so*','libbazzalt_lua.so*','libbazzalt_gui.so*','libbazzalt_physics.so*'):
+    for pattern in ('libBazzalt.so*','libbazzalt_lua.so*','libbazzalt_gui.so*','libbazzalt_physics.so*','libbazzalt_network.so*','libbazzalt_crypto.so*'):
         for path in (build/'Editor').glob(pattern):shutil.copy2(path,stage/'lib'/path.name)
     Stage(build,stage/'RuntimeTemplates/linux-x86','x86',platform='linux')
     version=json.loads((ROOT/'releases/versions.json').read_text())['core']

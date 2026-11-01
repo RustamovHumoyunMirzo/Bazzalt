@@ -1,3 +1,5 @@
+#include "Network/NetworkModuleApi.h"
+#include "Persistence/SaveAccess.h"
 #include "Runtime/StreamingRuntime.h"
 #include "Bazzalt/Profiler.h"
 #include "Runtime/GlobalEventsAccess.h"
@@ -120,6 +122,7 @@ void Engine::Update(bool renderFrame)
     }
 
     ApplicationEventsAccess::ThrowIfFailed();
+    NetworkAccess::Pump();SaveAccess::Pump();
     ProcessPendingSceneLoad();
     m_streaming->Pump();
     if(!m_subsystemAssets.empty())for(auto handle:m_scene->GetRegistry().view<ScriptComponents>())for(const auto& script:m_scene->GetRegistry().get<ScriptComponents>(handle).Values){
@@ -195,6 +198,7 @@ void Engine::RenderEditorFrame()
     m_audioRuntime->Update(0);
     // Editor and paused frames must not accumulate a giant gameplay delta.
     m_lastFrameTime = std::chrono::steady_clock::now();
+    NetworkAccess::Pump();SaveAccess::Pump();
     ProcessPendingSceneLoad();
     m_streaming->Pump();
     const bool profile=std::getenv("BAZZALT_PROFILE_FRAME")!=nullptr;
@@ -514,12 +518,12 @@ bool Engine::PrepareApplication(){
             ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforeInputInit});ApplicationAccess::SetInputReady(true);ApplicationEventsAccess::Emit({ApplicationEventType::OnInputInit});ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterInputInit});ApplicationEventsAccess::ThrowIfFailed();
         }
         return true;
-    }catch(const std::exception& error){m_lastError=error.what();if(m_subsystems)m_subsystems->Stop();ApplicationEventsAccess::BindStageLoader({});m_applicationPrepared=false;return false;}
+    }catch(const std::exception& error){m_lastError=error.what();if(m_subsystems)m_subsystems->Stop();ApplicationEventsAccess::BindStageLoader({});SaveAccess::Reset();NetworkAccess::Reset();m_applicationPrepared=false;return false;}
 }
 void Engine::BeginShutdown(){if(m_applicationPrepared&&!m_preShutdown){m_preShutdown=true;Application::Quit(Application::GetExitCode());ApplicationEventsAccess::Emit({ApplicationEventType::OnPreShutdown});}}
 void Engine::EndApplication(){
     if(!m_applicationPrepared)return;BeginShutdown();ApplicationAccess::SetServicesReady(false);ApplicationAccess::SetSceneReady(false);ApplicationAccess::SetAudioReady(false);ApplicationAccess::SetPhysicsReady(false);ApplicationAccess::SetInputReady(false);ApplicationEventsAccess::Emit({ApplicationEventType::OnShutdown});
-    ApplicationEventsAccess::DisconnectOwner(this);if(m_subsystems)m_subsystems->Stop();ApplicationEventsAccess::BindStageLoader({});m_applicationPrepared=false;ExtensionAccess::Clear();
+    ApplicationEventsAccess::DisconnectOwner(this);if(m_subsystems)m_subsystems->Stop();ApplicationEventsAccess::BindStageLoader({});SaveAccess::Reset();NetworkAccess::Reset();m_applicationPrepared=false;ExtensionAccess::Clear();
 }
 bool Engine::RefreshTextureAsset(const std::filesystem::path& source){if(!m_assetDatabase)return false;const bool result=m_assetDatabase->RefreshSource(source);if(!result)m_lastError=m_assetDatabase->GetLastError();return result;}
 

@@ -35,6 +35,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:-stdlib=${_bazzalt_linux_stdlib}>")
     add_link_options("$<$<LINK_LANGUAGE:CXX>:-stdlib=${_bazzalt_linux_stdlib}>")
 endif()
+include(cmake/Networking.cmake)
 include(cmake/Jolt.cmake)
 include(cmake/Lua.cmake)
 include(cmake/FreeType.cmake)
@@ -204,6 +205,7 @@ file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/EditorBridge/")
+list(FILTER LIB_SOURCES EXCLUDE REGEX "/Network/NetworkBackend\\.cpp$")
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/Physics/(JoltWorld|PhysicsGeometry)\\.cpp$")
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/GUI/CSS/")
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/GUI/(FontFace|GuiStyles|GuiPaint)\\.cpp$")
@@ -226,6 +228,15 @@ file(GLOB_RECURSE LIB_HEADERS CONFIGURE_DEPENDS
 )
 
 find_package(Threads REQUIRED)
+add_library(BazzaltNetwork SHARED src/Network/NetworkBackend.cpp)
+target_include_directories(BazzaltNetwork PRIVATE include src)
+target_link_libraries(BazzaltNetwork PRIVATE BazzaltYojimbo)
+set_target_properties(BazzaltNetwork PROPERTIES OUTPUT_NAME bazzalt_network POSITION_INDEPENDENT_CODE ON
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor" LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"
+    BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+if(APPLE)
+    set_target_properties(BazzaltNetwork BazzaltCrypto PROPERTIES BUILD_RPATH "@loader_path" INSTALL_RPATH "@loader_path")
+endif()
 add_library(Bazzalt SHARED
     ${LIB_SOURCES}
     ${LIB_HEADERS}
@@ -274,7 +285,9 @@ target_include_directories(Bazzalt
     "${BAZZALT_MINIAUDIO_DIR}"
 )
 
-target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE Threads::Threads BazzaltMiniaudio BazzaltLuaBindings BazzaltLua SDL3::SDL3-static ryml::ryml Filament::Filament ${CMAKE_DL_LIBS})
+set_source_files_properties(src/Runtime/Network.cpp src/Persistence/SaveGame.cpp PROPERTIES INCLUDE_DIRECTORIES "${BAZZALT_YOJIMBO_DIR}/sodium")
+add_dependencies(Bazzalt BazzaltNetwork)
+target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE Threads::Threads BazzaltCrypto BazzaltMiniaudio BazzaltLuaBindings BazzaltLua SDL3::SDL3-static ryml::ryml Filament::Filament ${CMAKE_DL_LIBS})
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SIZEOF_VOID_P EQUAL 4)
     target_link_libraries(Bazzalt PRIVATE atomic)
 endif()
@@ -300,6 +313,11 @@ endif()
 if(MSVC)
     target_compile_options(BazzaltPhysics PRIVATE /utf-8 /bigobj)
 endif()
+foreach(_online_module BazzaltCrypto BazzaltNetwork)
+    add_custom_command(TARGET ${_online_module} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/ScriptSDK/lib"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:${_online_module}>" "${CMAKE_BINARY_DIR}/ScriptSDK/lib/$<TARGET_FILE_NAME:${_online_module}>" VERBATIM)
+endforeach()
 add_custom_command(TARGET BazzaltPhysics POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:BazzaltPhysics>"
         "${CMAKE_BINARY_DIR}/ScriptSDK/lib/$<TARGET_FILE_NAME:BazzaltPhysics>" VERBATIM)
@@ -489,7 +507,7 @@ target_link_libraries(BazzaltExample
 add_dependencies(BazzaltExample BazzaltGui BazzaltPhysics)
 if(WIN32)
     add_custom_command(TARGET BazzaltExample POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE:BazzaltLua>" "$<TARGET_FILE:BazzaltGui>" "$<TARGET_FILE:BazzaltPhysics>" "$<TARGET_FILE_DIR:BazzaltExample>")
+        "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE:BazzaltCrypto>" "$<TARGET_FILE:BazzaltNetwork>" "$<TARGET_FILE:BazzaltLua>" "$<TARGET_FILE:BazzaltGui>" "$<TARGET_FILE:BazzaltPhysics>" "$<TARGET_FILE_DIR:BazzaltExample>")
 endif()
 
 include(CTest)
@@ -518,7 +536,7 @@ if(BUILD_TESTING)
         target_sources(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests/TestDiagnostics.cpp")
         if(WIN32)
             add_custom_command(TARGET ${target} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE:BazzaltLua>" "$<TARGET_FILE:BazzaltGui>" "$<TARGET_FILE:BazzaltPhysics>" "$<TARGET_FILE_DIR:${target}>")
+                "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE:BazzaltCrypto>" "$<TARGET_FILE:BazzaltNetwork>" "$<TARGET_FILE:BazzaltLua>" "$<TARGET_FILE:BazzaltGui>" "$<TARGET_FILE:BazzaltPhysics>" "$<TARGET_FILE_DIR:${target}>")
         endif()
         if(MSVC)
             target_compile_options(${target} PRIVATE /UNDEBUG)
@@ -723,4 +741,13 @@ if(BUILD_TESTING)
     bazzalt_enable_test_assertions(BazzaltGlobalEventTests)
     add_dependencies(BazzaltGlobalEventTests BazzaltScriptLifecycleModule)
     add_test(NAME BazzaltGlobalEventTests COMMAND BazzaltGlobalEventTests $<TARGET_FILE:BazzaltScriptLifecycleModule>)
+endif()
+
+if(BUILD_TESTING)
+    add_executable(BazzaltNetworkSaveTests tests/NetworkSaveTests.cpp)
+    target_link_libraries(BazzaltNetworkSaveTests PRIVATE Bazzalt)
+    target_include_directories(BazzaltNetworkSaveTests PRIVATE src)
+    bazzalt_enable_test_assertions(BazzaltNetworkSaveTests)
+    add_test(NAME BazzaltNetworkSaveTests COMMAND BazzaltNetworkSaveTests)
+    set_tests_properties(BazzaltNetworkSaveTests PROPERTIES TIMEOUT 45)
 endif()

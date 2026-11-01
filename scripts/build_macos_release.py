@@ -11,7 +11,7 @@ from Compiler.macos import Sign
 def Run(*args):subprocess.run([str(x) for x in args],cwd=ROOT,check=True)
 def Libraries(build,destination):
     destination.mkdir(parents=True,exist_ok=True)
-    for pattern in ('libBazzalt*.dylib','libbazzalt_lua*.dylib','libbazzalt_gui*.dylib','libbazzalt_physics*.dylib','libbshad*.dylib'):
+    for pattern in ('libBazzalt*.dylib','libbazzalt_lua*.dylib','libbazzalt_gui*.dylib','libbazzalt_physics*.dylib','libbazzalt_network*.dylib','libbazzalt_crypto*.dylib','libbshad*.dylib'):
         for path in (build/'Editor').glob(pattern):shutil.copy2(path,destination/path.name)
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--product',choices=('core','editor','hub','compiler','all'),default='all');parser.add_argument('--build',type=Path,default=ROOT/'build');parser.add_argument('--output',type=Path,default=ROOT/'dist/releases');parser.add_argument('--base-url',default='');args=parser.parse_args()

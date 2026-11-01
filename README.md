@@ -15,6 +15,12 @@ See [what is new in 0.8.0](docs/public/0.8.0/whats-new/en.html).
 > **Alpha status:** core workflows are functional, but APIs and file formats may
 > still change. BAZZALT is not yet recommended for production projects.
 
+Networking and player persistence are available through `Bazzalt/Network.h` and
+`Bazzalt/SaveGame.h`, with matching Lua APIs. See the
+[networking and save-game guide](docs/public/0.8.0/native/network-save/en.html).
+Fetch the pinned transport sources with `scripts/get_yojimbo.ps1` or
+`scripts/get_yojimbo.sh` before configuring CMake.
+
 ## Supported platforms & backends
 
 ### Platforms

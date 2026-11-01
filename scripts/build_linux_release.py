@@ -9,7 +9,7 @@ from scripts.stage_game_runtime import Stage
 def Run(*args):subprocess.run([str(x) for x in args],cwd=ROOT,check=True)
 def Libraries(build,destination):
     destination.mkdir(parents=True,exist_ok=True)
-    for pattern in ('libBazzalt.so*','libbazzalt_lua.so*','libbazzalt_gui.so*','libbazzalt_physics.so*','libbshad.so*'):
+    for pattern in ('libBazzalt.so*','libbazzalt_lua.so*','libbazzalt_gui.so*','libbazzalt_physics.so*','libbazzalt_network.so*','libbazzalt_crypto.so*','libbshad.so*'):
         for path in (build/'Editor').glob(pattern):shutil.copy2(path,destination/path.name)
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--product',choices=('core','editor','hub','compiler','all'),default='all');parser.add_argument('--build',type=Path,default=ROOT/'build');parser.add_argument('--output',type=Path,default=ROOT/'dist/releases');parser.add_argument('--base-url',default='');args=parser.parse_args()

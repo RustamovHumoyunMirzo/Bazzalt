@@ -18,6 +18,31 @@ int main(){
     write(R"lua(
 local B = Bazzalt
 local Behavior = { Speed = 1.0 }
+local progress = B.SaveDocument.new()
+progress:Set("coins", 25)
+progress:Set("inventory", {"key", "map"})
+progress:Set("position", B.Vec3.new(1,2,3))
+progress:SetBytes("blob", "a\0b")
+assert(progress:GetType("blob") == B.SaveValueType.Bytes)
+local decoded = B.SaveGame.Decode(B.SaveGame.Encode(progress))
+assert(decoded:Get("coins") == 25 and decoded:Get("inventory")[2] == "map")
+assert(decoded:Get("position").Y == 2 and decoded:Get("blob") == "a\0b")
+local cycle = {}; cycle.self = cycle
+assert(not pcall(function() progress:Set("cycle", cycle) end))
+assert(progress:Migrate(2, function(candidate, old, target)
+    candidate:Set("migrated", true)
+    return old == 1 and target == 2
+end))
+assert(progress.SchemaVersion == 2 and progress:Get("migrated"))
+local writer = B.BinaryWriter()
+writer:WriteUInt32(123)
+writer:WriteString("hello")
+local reader = B.BinaryReader(writer:GetData())
+assert(reader:ReadUInt32() == 123 and reader:ReadString() == "hello" and reader:IsAtEnd())
+local peer = B.Network.CreateClientId()
+assert(B.NetworkPeerId.Parse(peer:ToString()) == peer)
+assert(#B.Network.CreateKey() == 32 and #B.SaveGame.CreateEncryptionKey() == 32)
+
 assert(B.AntiAliasing.MSAA2x==3 and B.AntiAliasing.MSAA4x==4)
 assert(B.AntiAliasing.TAAFXAA==5 and B.AntiAliasing.MSAA2xFXAA==6 and B.AntiAliasing.MSAA4xFXAA==7)
 function Behavior:OnCreate()

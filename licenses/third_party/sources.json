@@ -543,5 +543,35 @@
     "file": "Jolt/LICENSE",
     "source": "https://raw.githubusercontent.com/jrouwe/JoltPhysics/0373ec0dd762e4bc2f6acdb08371ee84fa23c6db/LICENSE",
     "sha256": "800abe35d64ad9defd636ff1ee8c961e06f0ebca3ef8d10083e8aa0e8ef86ac3"
+  },
+  {
+    "file": "yojimbo-BSD-3-Clause.txt",
+    "source": "https://raw.githubusercontent.com/mas-bandwidth/yojimbo/f0cde95f5a27ca345f83dad65dc36712366077db/LICENCE",
+    "sha256": "290e546b7a0b24de219cdd6b9f22d3cc99b2138d2570dbf96d28d4457622c6b4"
+  },
+  {
+    "file": "yojimbo-netcode-NOTICE.txt",
+    "source": "https://raw.githubusercontent.com/mas-bandwidth/yojimbo/f0cde95f5a27ca345f83dad65dc36712366077db/netcode/netcode.c",
+    "sha256": "37c652d3cb681690c9fafdcc6d44ef2d28f7455189ff6151439c1349f8d273ac"
+  },
+  {
+    "file": "yojimbo-reliable-NOTICE.txt",
+    "source": "https://raw.githubusercontent.com/mas-bandwidth/yojimbo/f0cde95f5a27ca345f83dad65dc36712366077db/reliable/reliable.c",
+    "sha256": "804e16e9f7079c320ee5170b019dc049855e3ce4d4a08cf40e9042dc64e43b63"
+  },
+  {
+    "file": "yojimbo-serialize-NOTICE.txt",
+    "source": "https://raw.githubusercontent.com/mas-bandwidth/yojimbo/f0cde95f5a27ca345f83dad65dc36712366077db/serialize/serialize.h",
+    "sha256": "f6a62d16fda5a87c98554552e0d751a1f00827d474fbf680d66323664b01e8a7"
+  },
+  {
+    "file": "yojimbo-tlsf-NOTICE.txt",
+    "source": "https://raw.githubusercontent.com/mas-bandwidth/yojimbo/f0cde95f5a27ca345f83dad65dc36712366077db/tlsf/tlsf.h",
+    "sha256": "a56c3866a46f99654b0402c177e3baee91d3de58af65f996d77b350f729015a5"
+  },
+  {
+    "file": "yojimbo-libsodium-NOTICE.txt",
+    "source": "https://raw.githubusercontent.com/mas-bandwidth/yojimbo/f0cde95f5a27ca345f83dad65dc36712366077db/sodium/sodium.c",
+    "sha256": "93e7cac854d71cdafc9d9e4e9f8fd28d87ae541b3dda224d7c8fe23d37875704"
   }
 ]

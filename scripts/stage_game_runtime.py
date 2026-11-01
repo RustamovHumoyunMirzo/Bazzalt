@@ -23,8 +23,8 @@ def Stage(build,output,architecture,root=None,platform=None):
     platform=platform or HostPlatform();linux=platform!="windows"
     build=Path(build).resolve();output=Path(output).resolve();root=Path(root or Path(__file__).resolve().parents[1]);native=build/('Editor' if linux else 'Editor/Release')
     output.mkdir(parents=True,exist_ok=True)
-    names=['BazzaltPlayer.exe','Bazzalt.dll','bazzalt_lua.dll','bazzalt_gui.dll','bazzalt_physics.dll'] if not linux else ['BazzaltPlayer','libbazzalt_player.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so','libbazzalt_physics.so']
-    if platform=="macos":names=["BazzaltPlayer","libbazzalt_player.dylib","libBazzalt.dylib","libbazzalt_lua.dylib","libbazzalt_gui.dylib","libbazzalt_physics.dylib"]+sorted(p.name for p in native.glob("libbazzalt_lua.*.dylib"))
+    names=['BazzaltPlayer.exe','Bazzalt.dll','bazzalt_lua.dll','bazzalt_gui.dll','bazzalt_physics.dll','bazzalt_network.dll','bazzalt_crypto.dll'] if not linux else ['BazzaltPlayer','libbazzalt_player.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so','libbazzalt_physics.so','libbazzalt_network.so','libbazzalt_crypto.so']
+    if platform=="macos":names=["BazzaltPlayer","libbazzalt_player.dylib","libBazzalt.dylib","libbazzalt_lua.dylib","libbazzalt_gui.dylib","libbazzalt_physics.dylib","libbazzalt_network.dylib","libbazzalt_crypto.dylib"]+sorted(p.name for p in native.glob("libbazzalt_lua.*.dylib"))
     if platform=="linux":
         names+=sorted(p.name for p in native.glob('libbazzalt_lua.so.*'))
     for name in names:
