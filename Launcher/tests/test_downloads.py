@@ -163,7 +163,11 @@ class DownloadTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"bazzalt_gui.dll"):Audit(self.Root,"x64","core")
         (self.Root/"lib/bazzalt_gui.dll").write_bytes(PE())
         with self.assertRaisesRegex(ValueError,"bazzalt_physics.dll"):Audit(self.Root,"x64","core")
-        (self.Root/"lib/bazzalt_physics.dll").write_bytes(PE());Audit(self.Root,"x64","core")
+        (self.Root/"lib/bazzalt_physics.dll").write_bytes(PE())
+        with self.assertRaisesRegex(ValueError,"bazzalt_network.dll"):Audit(self.Root,"x64","core")
+        (self.Root/"lib/bazzalt_network.dll").write_bytes(PE())
+        with self.assertRaisesRegex(ValueError,"bazzalt_crypto.dll"):Audit(self.Root,"x64","core")
+        (self.Root/"lib/bazzalt_crypto.dll").write_bytes(PE());Audit(self.Root,"x64","core")
 
     def test_release_architecture_and_hub_separation(self):
         executable=self.Root/"BazzaltHub.exe";executable.write_bytes(PE());self.assertEqual(Architecture(executable),"x64");Audit(self.Root,"x64","hub")
