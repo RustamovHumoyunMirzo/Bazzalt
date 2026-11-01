@@ -93,7 +93,7 @@ class RuntimeGuiTests(unittest.TestCase):
         source=Path(native.__file__).parent
         with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[2]/"build",prefix="gui-module-") as directory:
             folder=Path(directory)
-            for name in (Path(native.__file__).name,"Bazzalt.dll","bazzalt_lua.dll","bshad.dll"):
+            for name in (Path(native.__file__).name,"Bazzalt.dll","bazzalt_lua.dll","bazzalt_crypto.dll","bazzalt_network.dll","bshad.dll"):
                 if (source/name).is_file():shutil.copy2(source/name,folder/name)
             code="""import importlib.util,os,sys
 handle=os.add_dll_directory(sys.argv[1])
