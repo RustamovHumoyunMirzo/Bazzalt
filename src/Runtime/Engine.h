@@ -44,7 +44,9 @@ public:
     bool Init();
     bool Init(bool headless, bool startScripts = true);
     [[nodiscard]] bool IsInitialized() const { return m_isInitialized; }
+    bool IsScriptsRunning()const{return m_scriptsRunning;}
     bool RefreshAssets();
+    void AdoptPrefabScripts(Entity root);
     bool RefreshLuaAsset(const std::filesystem::path& source);
     bool RefreshTextureAsset(const std::filesystem::path& source);
     bool SetEnvironmentImportSettings(UUID id,const PropertyMap& settings);

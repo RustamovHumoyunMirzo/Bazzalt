@@ -1,5 +1,6 @@
 #pragma once
 #include "Bazzalt/Streaming.h"
+#include "Bazzalt/Entity.h"
 #include <filesystem>
 #include <memory>
 namespace Bazzalt::Runtime {
@@ -20,6 +21,7 @@ public:
     void Pump();
     void Reset();
     void StopScripts();
+    void AdoptHierarchy(Entity root);
     void Update(float dt);
     void FixedUpdate(float dt);
     void LateUpdate(float dt);

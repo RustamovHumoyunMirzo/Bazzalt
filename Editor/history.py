@@ -18,6 +18,8 @@ class SceneHistory(QObject):
         self.LastRestoreStructural=True;self.LastCommitSceneChanged=False;self._files={}
     def Begin(self,label:str)->None:
         if self._pending is None and not self._restoring:self._pending=(label,self.Runtime.CaptureScene(),"scene",())
+    def BeginScenes(self,label:str)->None:
+        if self._pending is None and not self._restoring:self._pending=(label,self.Runtime.CaptureScenes(),"scenes",())
     def BeginTransforms(self,label:str,entities)->None:
         if self._pending is not None or self._restoring:return
         entities=tuple(dict.fromkeys(entities));before=self.Runtime.CaptureTransforms(entities)
@@ -64,7 +66,7 @@ class SceneHistory(QObject):
         self.LastCommitSceneChanged=False
         if self._pending is None:return False
         label,before,kind,entities=self._pending
-        after=self.Runtime.CaptureTransforms(entities) if kind=="transforms" else self.Runtime.CaptureScene()
+        after=self.Runtime.CaptureTransforms(entities) if kind=="transforms" else self.Runtime.CaptureScenes() if kind=="scenes" else self.Runtime.CaptureScene()
         files=tuple((path,prior,path.read_bytes() if path.exists() else None) for path,prior in self._files.items());self._pending=None;self._files={};files=tuple(row for row in files if row[1]!=row[2])
         if not before or not after or (before==after and not files):return False
         self.LastCommitSceneChanged=before!=after
@@ -82,10 +84,10 @@ class SceneHistory(QObject):
         try:
             ok=self._ApplyFiles(command.Files,True)
             if ok:
-                ok=self.Runtime.RestoreTransforms(command.Before) if command.Kind=="transforms" else self.Runtime.RestoreScene(command.Before)
+                ok=self.Runtime.RestoreTransforms(command.Before) if command.Kind=="transforms" else self.Runtime.RestoreScenes(command.Before) if command.Kind=="scenes" else self.Runtime.RestoreScene(command.Before)
                 if not ok:self._ApplyFiles(command.Files,False)
         finally:self._restoring=False
-        if ok:self.LastRestoreStructural=command.Kind=="scene";self._redo.append(command);self.Changed.emit()
+        if ok:self.LastRestoreStructural=command.Kind!="transforms";self._redo.append(command);self.Changed.emit()
         else:self._undo.append(command)
         return ok
     def Redo(self)->bool:
@@ -94,10 +96,10 @@ class SceneHistory(QObject):
         try:
             ok=self._ApplyFiles(command.Files,False)
             if ok:
-                ok=self.Runtime.RestoreTransforms(command.After) if command.Kind=="transforms" else self.Runtime.RestoreScene(command.After)
+                ok=self.Runtime.RestoreTransforms(command.After) if command.Kind=="transforms" else self.Runtime.RestoreScenes(command.After) if command.Kind=="scenes" else self.Runtime.RestoreScene(command.After)
                 if not ok:self._ApplyFiles(command.Files,True)
         finally:self._restoring=False
-        if ok:self.LastRestoreStructural=command.Kind=="scene";self._undo.append(command);self.Changed.emit()
+        if ok:self.LastRestoreStructural=command.Kind!="transforms";self._undo.append(command);self.Changed.emit()
         else:self._redo.append(command)
         return ok
     def Clear(self)->None:self._undo.clear();self._redo.clear();self._pending=None;self._files={};self.Changed.emit()

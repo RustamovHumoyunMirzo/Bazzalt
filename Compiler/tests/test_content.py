@@ -43,6 +43,13 @@ class ContentFilterTests(unittest.TestCase):
             source.write_bytes(payload);cache.write_bytes(payload);records.append(dict(UUID=identity,Source=name,Cache=cache.relative_to(root).as_posix(),Importer='Bazzalt.Raw'))
         (root/'Game.bproject').write_text('StartupScene: Assets/Main.bscene\n')
         (root/'.bazzalt/CookedAssets.yaml').write_text(yaml.safe_dump(dict(FormatVersion=1,Assets=records)))
+    def test_prefab_dependencies_are_kept_transitively(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);self.Fixture(root);(root/'Assets/Main.bscene').write_text('Prefab: prefab\n')
+            source=root/'Assets/Object.bprefab';source.write_text('PrefabVersion: 1\nMaterial: model\n');cache=root/'.bazzalt/Cache/prefab/current.bprefab';cache.parent.mkdir(parents=True);cache.write_bytes(source.read_bytes())
+            index=root/'.bazzalt/CookedAssets.yaml';data=yaml.safe_load(index.read_text());data['Assets'].append(dict(UUID='prefab',Source='Assets/Object.bprefab',Cache=cache.relative_to(root).as_posix(),Importer='Bazzalt.Prefab'));index.write_text(yaml.safe_dump(data))
+            settings=copy.deepcopy(DEFAULTS['packaging']);settings['include_assets']='Assets/Main.bscene';FilterCooked(root,settings)
+            self.assertTrue(source.exists());self.assertTrue((root/'Assets/Model.bin').exists());self.assertFalse((root/'Assets/Unused.bin').exists())
     def test_stylesheet_references_keep_fonts_and_manifest(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);self.Fixture(root)

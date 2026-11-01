@@ -1,3 +1,4 @@
+#include "Bazzalt/Prefab.h"
 #include "Script/LuaBindings.h"
 #include "Script/LuaSystems.h"
 #include "Bazzalt/EntityReference.h"
@@ -67,6 +68,7 @@ void BindLuaScene(sol::table api){
     scene["RemoveParent"]=[](Scene& s,Entity c,sol::optional<bool> stays){return s.RemoveParent(c,stays.value_or(true));};
     scene["GetParent"]=&Scene::GetParent;scene["GetChildren"]=[](Scene& s,Entity p){return sol::as_table(s.GetChildren(p));};scene["IsAncestor"]=&Scene::IsAncestor;
     scene["GetWorldMatrix"]=&Scene::GetWorldMatrix;scene["GetWorldTransform"]=&Scene::GetWorldTransform;scene["SetWorldTransform"]=&Scene::SetWorldTransform;
+    scene["InstantiatePrefab"]=[](Scene& scene,UUID asset,sol::optional<Entity> parent){return scene.InstantiatePrefab(asset,parent.value_or(Entity{}));};
     scene["InstantiateModel"]=sol::overload([](Scene& s,UUID id,sol::optional<Entity> p,sol::optional<std::string> n){return s.InstantiateModel(id,p.value_or(Entity{}),n.value_or(""));},[](Scene& s,const ModelAsset& asset,sol::optional<Entity> p,sol::optional<std::string> n){return s.InstantiateModel(asset,p.value_or(Entity{}),n.value_or(""));});
     scene["ScreenPointToRay"]=&Scene::ScreenPointToRay;
     scene["TryGetInheritedComponent"]=[operations](Scene&,Entity value,const std::string& type){

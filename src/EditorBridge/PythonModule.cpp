@@ -1,3 +1,5 @@
+#include "Bazzalt/Prefab.h"
+#include "Prefab/PrefabAccess.h"
 #include "Bazzalt/Profiler.h"
 #include "EditorBridge/LODBridge.h"
 #include <algorithm>
@@ -81,6 +83,7 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
     py::dict result;
     result["uuid"] = entity.GetUUID().ToString();
     result["name"] = entity.GetComponent<Name>().Value;
+    if(auto* link=entity.TryGetComponent<Runtime::PrefabLink>())result["prefab_source"]=link->Asset.ToString();
     const Entity parent = entity.GetParent();
     result["parent"] = parent ? parent.GetUUID().ToString() : std::string{};
     const Transform transform = entity.GetWorldTransform();
@@ -461,6 +464,41 @@ public:
         return entity?entity.GetUUID().ToString():std::string{};
     }
 
+    void SetPrefabScriptModules(const std::map<std::string,std::string>& values){if(m_playing)throw std::logic_error("Cannot replace prefab modules while playing");std::map<std::string,std::filesystem::path> modules;for(const auto& [type,path]:values){auto file=std::filesystem::u8path(path);if(!std::filesystem::is_regular_file(file)||(file.extension()!=".dll"&&file.extension()!=".so"&&file.extension()!=".dylib"))throw std::runtime_error("Missing compiled prefab script module");modules[type]=file;}Runtime::PrefabAccess::SetScriptModules(modules);}
+    bool SyncPrefabScripts(const py::list& records){
+        if(m_playing)return false;std::vector<std::pair<Entity,ScriptAttachment>> pending;
+        for(auto row:records){auto data=py::cast<py::dict>(row);auto entity=FindEntity(py::cast<std::string>(data["entity"])).second;if(!entity)continue;auto asset=AssetManager::GetAsset(std::filesystem::u8path(py::cast<std::string>(data["source"])));if(!asset||asset->State!=AssetState::Ready)return false;ScriptAttachment value;value.Source=asset->Id.ToString();value.TypeName=py::cast<std::string>(data["type"]);value.Lua=asset->SourcePath.extension()==".lua";value.Enabled=py::cast<bool>(data["enabled"]);for(auto item:py::cast<py::list>(data["properties"])){auto field=py::cast<py::dict>(item);value.Properties.push_back({py::cast<std::string>(field["name"]),py::cast<std::string>(field["type"]),py::cast<std::string>(field["value"])});}pending.emplace_back(entity,std::move(value));}
+        for(auto& [entity,value]:pending){auto* scripts=entity.TryGetComponent<ScriptComponents>();if(!scripts)scripts=&entity.AddComponent<ScriptComponents>();std::erase_if(scripts->Values,[&](const auto& previous){return previous.TypeName==value.TypeName;});scripts->Values.push_back(std::move(value));}return true;
+    }
+    py::dict PrefabInfo(const std::string& id){
+        auto [scene,entity]=FindEntity(id);auto root=Prefab::GetInstanceRoot(entity);if(!root)return {};
+        auto asset=Prefab::GetSource(root);auto info=AssetManager::GetAsset(asset);py::dict result;result["root"]=root.GetUUID().ToString();result["asset"]=asset.ToString();result["overrides"]=Prefab::HasOverrides(root);result["available"]=bool(info&&info->State==AssetState::Ready);result["path"]=info?PathText(info->SourcePath):py::str();return result;
+    }
+    std::string InstantiatePrefabPath(const std::string& path,const std::string& parent){
+        const auto asset=AssetManager::GetAsset(std::filesystem::u8path(path));if(!asset)return {};
+        Scene* scene=&m_engine->GetScene();Entity parentEntity;if(!parent.empty()){if(auto loaded=FindLoadedScene(parent))scene=&SceneAt(*loaded);else{auto found=FindEntity(parent);scene=found.first;parentEntity=found.second;if(!scene||!parentEntity)return {};}}
+        auto value=scene->InstantiatePrefab(asset->Id,parentEntity);return value?value.GetUUID().ToString():std::string{};
+    }
+    bool SavePrefab(const std::string& id,const std::string& destination){
+        if(m_playing)throw std::runtime_error("Cannot author prefab assets during Play");
+        auto [scene,entity]=FindEntity(id);if(!entity||m_projectPath.empty())return false;
+        auto path=std::filesystem::weakly_canonical(std::filesystem::u8path(destination));auto assets=std::filesystem::weakly_canonical(m_projectPath.parent_path()/m_engine->GetProject().AssetDirectory);auto relative=path.lexically_relative(assets);if(relative.empty()||relative.is_absolute()||*relative.begin()=="..")throw std::runtime_error("Save prefabs inside the project's asset directory");
+        std::string error;if(!Runtime::PrefabAccess::Save(entity,path,m_engine->GetSceneSerializer(),error))throw std::runtime_error(error);
+        if(!m_engine->RefreshAssets())return false;auto asset=AssetManager::GetAsset(path);if(!asset||asset->State!=AssetState::Ready)throw std::runtime_error("Prefab asset import failed");if(!Runtime::PrefabAccess::Link(entity,asset->Id,m_engine->GetSceneSerializer(),error))throw std::runtime_error(error);return true;
+    }
+    std::string PrefabOperation(const std::string& id,const std::string& operation){
+        if(m_playing)throw std::runtime_error("Prefab authoring is unavailable during Play");
+        auto [scene,entity]=FindEntity(id);auto root=Prefab::GetInstanceRoot(entity);if(!root)return {};const auto rootId=root.GetUUID();
+        if(operation=="unpack"){Prefab::Unpack(root);return rootId.ToString();}
+        if(operation=="revert")return Prefab::Revert(root).GetUUID().ToString();
+        if(operation=="refresh")return Prefab::Refresh(root).GetUUID().ToString();
+        if(operation!="apply")throw std::invalid_argument("Unknown prefab operation");
+        const auto source=Prefab::GetSource(root);const auto asset=AssetManager::GetAsset(source);if(!asset||asset->State!=AssetState::Ready)throw std::runtime_error("Prefab source is missing or invalid");
+        std::string error;if(!Runtime::PrefabAccess::Save(root,asset->SourcePath,m_engine->GetSceneSerializer(),error,true))throw std::runtime_error(error);if(!m_engine->RefreshAssets())throw std::runtime_error("Could not refresh prefab asset database");if(!Runtime::PrefabAccess::Link(root,source,m_engine->GetSceneSerializer(),error))throw std::runtime_error(error);
+        for(std::size_t i=0;i<m_loadedScenes.size();++i){auto& current=SceneAt(i);std::vector<UUID> roots;for(auto h:current.GetRegistry().view<Runtime::PrefabLink>())roots.push_back(current.GetEntity(static_cast<Entity::Id>(h)).GetUUID());for(auto uuid:roots){auto value=current.GetEntity(uuid);if(value&&value!=root&&Prefab::GetSource(value)==source)try{Prefab::Refresh(value);}catch(const std::exception& error){Console::Warning(error.what(),"Prefab");}}}
+        return rootId.ToString();
+    }
+
     bool AddComponent(const std::string& id, const std::string& type) {
         Entity entity = RequireEntity(id);
         if(type=="LOD"){if(!entity.HasComponent<LOD>())entity.AddComponent<LOD>();return true;}
@@ -551,6 +589,14 @@ public:
         if(data.contains("skybox"))value.SkyboxVisible=data["skybox"].cast<bool>();
         if(data.contains("show_sun"))value.ShowSun=data["show_sun"].cast<bool>();
         return SceneAt(*index).SetEnvironment(value);
+    }
+    py::dict CaptureScenes(){
+        py::dict result;for(std::size_t i=0;i<m_loadedScenes.size();++i){auto path=std::filesystem::temp_directory_path()/("bazzalt-history-"+UUID::Generate().ToString()+".bscene");if(!m_engine->SaveSceneAsset(SceneAt(i),path))throw std::runtime_error("Could not snapshot loaded scene");std::ifstream file(path,std::ios::binary);std::string text((std::istreambuf_iterator<char>(file)),{});file.close();std::error_code ignored;std::filesystem::remove(path,ignored);result[py::str(SceneAt(i).GetUUID().ToString())]=py::str(text);}return result;
+    }
+    bool RestoreScenes(const py::dict& snapshots){
+        if(m_playing||snapshots.size()!=m_loadedScenes.size())return false;std::vector<std::unique_ptr<Scene>> staged;
+        for(std::size_t i=0;i<m_loadedScenes.size();++i){auto id=SceneAt(i).GetUUID();auto key=py::str(id.ToString());if(!snapshots.contains(key))return false;auto text=snapshots[key].cast<std::string>();if(text.size()>64u*1024u*1024u)return false;auto path=std::filesystem::temp_directory_path()/("bazzalt-history-"+UUID::Generate().ToString()+".bscene");{std::ofstream file(path,std::ios::binary);file.write(text.data(),text.size());if(!file)return false;}auto value=m_engine->LoadSceneAsset(path);std::error_code ignored;std::filesystem::remove(path,ignored);if(!value||value->GetUUID()!=id)return false;staged.push_back(std::move(value));}
+        for(std::size_t i=0;i<staged.size();++i)if(i==m_activeScene)m_engine->SetScene(std::move(staged[i]));else m_loadedScenes[i].Data=std::move(staged[i]);return true;
     }
     py::bytes CaptureScene() {
         const auto path=std::filesystem::temp_directory_path()/("bazzalt-history-"+UUID::Generate().ToString()+".bscene");
@@ -736,11 +782,11 @@ public:
         return true;
     }
 
-    py::list LuaSceneScripts() {
+    py::list LuaSceneScripts(bool includeNative=false) {
         py::list result;
         for(std::size_t i=0;i<m_loadedScenes.size();++i){auto& scene=SceneAt(i);
             for(auto handle:scene.GetRegistry().view<ScriptComponents>())for(const auto& attachment:scene.GetRegistry().get<ScriptComponents>(handle).Values){
-                if(!attachment.Lua)continue;UUID id;if(!UUID::TryParse(attachment.Source,id))continue;
+                if(!includeNative&&!attachment.Lua)continue;UUID id;if(!UUID::TryParse(attachment.Source,id))continue;
                 auto asset=AssetManager::GetAsset(id);if(!asset)continue;
                 py::dict value,properties;value["entity"]=scene.GetEntity(static_cast<Entity::Id>(handle)).GetUUID().ToString();
                 const auto path=asset->SourcePath.u8string();value["source"]=std::string(reinterpret_cast<const char*>(path.data()),path.size());value["type"]=attachment.TypeName;value["enabled"]=attachment.Enabled;
@@ -891,6 +937,12 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("translate", &Bazzalt::EditorBridge::EditorHost::Translate)
         .def("instantiate_model", &Bazzalt::EditorBridge::EditorHost::InstantiateModel,
              py::arg("asset"), py::arg("parent") = "")
+        .def("set_prefab_script_modules", &Bazzalt::EditorBridge::EditorHost::SetPrefabScriptModules)
+        .def("sync_prefab_scripts", &Bazzalt::EditorBridge::EditorHost::SyncPrefabScripts)
+        .def("prefab_info", &Bazzalt::EditorBridge::EditorHost::PrefabInfo)
+        .def("save_prefab", &Bazzalt::EditorBridge::EditorHost::SavePrefab)
+        .def("prefab_operation", &Bazzalt::EditorBridge::EditorHost::PrefabOperation)
+        .def("instantiate_prefab_path", &Bazzalt::EditorBridge::EditorHost::InstantiatePrefabPath)
         .def("instantiate_model_path", &Bazzalt::EditorBridge::EditorHost::InstantiateModelPath,
              py::arg("path"), py::arg("parent") = "")
         .def("add_component", &Bazzalt::EditorBridge::EditorHost::AddComponent)
@@ -909,6 +961,8 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("set_scene_extension_property",&Bazzalt::EditorBridge::EditorHost::SetSceneExtensionProperty)
         .def("set_scene_environment", &Bazzalt::EditorBridge::EditorHost::SetSceneEnvironment)
         .def("set_environment_import_settings", &Bazzalt::EditorBridge::EditorHost::SetEnvironmentImportSettings)
+        .def("capture_scenes", &Bazzalt::EditorBridge::EditorHost::CaptureScenes)
+        .def("restore_scenes", &Bazzalt::EditorBridge::EditorHost::RestoreScenes)
         .def("capture_scene", &Bazzalt::EditorBridge::EditorHost::CaptureScene)
         .def("restore_scene", &Bazzalt::EditorBridge::EditorHost::RestoreScene)
         .def("create_captured_viewport",&Bazzalt::EditorBridge::EditorHost::CreateCapturedViewport)
@@ -949,7 +1003,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("set_scene_render_mode", &Bazzalt::EditorBridge::EditorHost::SetSceneRenderMode)
         .def("configure_scripts", &Bazzalt::EditorBridge::EditorHost::ConfigureScripts)
         .def("sync_lua_scripts", &Bazzalt::EditorBridge::EditorHost::SyncLuaScripts)
-        .def("lua_scene_scripts", &Bazzalt::EditorBridge::EditorHost::LuaSceneScripts)
+        .def("lua_scene_scripts", &Bazzalt::EditorBridge::EditorHost::LuaSceneScripts,py::arg("include_native")=false)
         .def("refresh_lua_assets", &Bazzalt::EditorBridge::EditorHost::RefreshLuaAssets)
         .def("play", &Bazzalt::EditorBridge::EditorHost::Play)
         .def("pause", &Bazzalt::EditorBridge::EditorHost::Pause)

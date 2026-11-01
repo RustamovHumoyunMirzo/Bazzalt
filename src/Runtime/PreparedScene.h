@@ -16,5 +16,6 @@ struct PreparedScene {
     PropertyMap ExtensionProperties;
 };
 // Worker-safe: parses data only. Never invokes component/user code or creates ECS entities.
+bool PrepareSceneData(const std::string& text, PreparedScene& output, std::string& error);
 bool PrepareScene(const std::filesystem::path& path, PreparedScene& output, std::string& error);
 }

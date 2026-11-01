@@ -1,3 +1,4 @@
+#include "Prefab/PrefabAccess.h"
 #include "Network/NetworkModuleApi.h"
 #include "Persistence/SaveAccess.h"
 #include "Runtime/StreamingRuntime.h"
@@ -660,6 +661,8 @@ std::optional<AssetInfo> Engine::FindAsset(UUID id) const
     return m_assetDatabase ? m_assetDatabase->Find(id) : std::nullopt;
 }
 
+void Engine::AdoptPrefabScripts(Entity root){if(root.GetScene()==m_scene.get()&&(m_scriptsRunning||(m_applicationPrepared&&ApplicationAccess::AreRuntimeServicesReady())))m_streaming->AdoptHierarchy(root);}
+
 bool Engine::RefreshAssets() { return m_assetDatabase && m_assetDatabase->Refresh(); }
 bool Engine::SetEnvironmentImportSettings(UUID id,const PropertyMap& settings){const bool result=m_assetDatabase&&m_assetDatabase->SetEnvironmentImportSettings(id,settings);if(!result)m_lastError=m_assetDatabase?m_assetDatabase->GetLastError():"No asset database";return result;}
 PropertyMap Engine::GetAssetImportSettings(UUID id){return m_assetDatabase?m_assetDatabase->GetImportSettings(id):PropertyMap{};}
@@ -743,10 +746,12 @@ bool Engine::ExportCookedProject(const std::filesystem::path& destination,const 
                 if(auto sourceAsset=m_assetDatabase->Find(source))script.Source=sourceAsset->Id.ToString();
                 else throw std::runtime_error("Script source is outside project assets: "+script.Source);
             }
+            PrefabAccess::CookLinks(*scene,modules,projectRoot);
             for(const auto& source:{asset.SourcePath,asset.CachePath}){
                 if(!SaveSceneAsset(*scene,cookedPath(source)))throw std::runtime_error("Could not save cooked scene: "+m_lastError);
             }
         }
+        for(const auto& [id,asset]:m_assetDatabase->GetRecords())if(asset.SourcePath.extension()==".bprefab")for(const auto& source:{asset.SourcePath,asset.CachePath})PrefabAccess::CookAsset(asset.SourcePath,cookedPath(source),modules,projectRoot);
         if(!index)throw std::runtime_error("Could not write script index");return true;
     }catch(const std::exception& error){m_lastError=error.what();return false;}
 }

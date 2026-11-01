@@ -223,6 +223,38 @@ class RuntimeService(QObject):
         value = self._host.create_entity(name, parent) if self._host is not None else ""
         self.SceneChanged.emit(); return value
 
+    def SetPrefabScriptModules(self,modules):
+        if self._host and hasattr(self._host,'set_prefab_script_modules'):self._host.set_prefab_script_modules(modules)
+    def SyncPrefabScripts(self,records)->bool:
+        try:return bool(self._host and self._host.sync_prefab_scripts(records))
+        except RuntimeError as error:self.ErrorOccurred.emit(str(error));return False
+    def SceneScripts(self):
+        return list(self._host.lua_scene_scripts(True)) if self._host and hasattr(self._host,'sync_prefab_scripts') else self.LuaSceneScripts()
+
+    def PrefabInfo(self,entity_id:str)->dict:
+        return dict(self._host.prefab_info(entity_id)) if self._host and hasattr(self._host,"prefab_info") else {}
+
+    def InstantiatePrefabPath(self,path,parent="")->str:
+        if self.IsEditorLocked(parent):return ""
+        try:value=self._host.instantiate_prefab_path(str(path),parent) if self._host else ""
+        except Exception as error:self.ErrorOccurred.emit(str(error));return ""
+        if value:self.SceneChanged.emit()
+        return value
+
+    def SavePrefab(self,entity_id,path)->bool:
+        if self.IsPlaying() or self.IsEditorLocked(entity_id):return False
+        try:result=bool(self._host and self._host.save_prefab(entity_id,str(path)))
+        except Exception as error:self.ErrorOccurred.emit(str(error));return False
+        if result:self.SceneChanged.emit()
+        return result
+
+    def PrefabOperation(self,entity_id,operation)->str:
+        if self.IsPlaying() or self.IsEditorLocked(entity_id):return ""
+        try:value=self._host.prefab_operation(entity_id,operation) if self._host else ""
+        except Exception as error:self.ErrorOccurred.emit(str(error));return ""
+        if value:self.SceneChanged.emit()
+        return value
+
     def InstantiateModelPath(self, path: str | Path, parent: str = "") -> str:
         if self.IsEditorLocked(parent):return ""
         value=self._host.instantiate_model_path(str(path),parent) if self._host is not None and hasattr(self._host,"instantiate_model_path") else ""
@@ -279,6 +311,20 @@ class RuntimeService(QObject):
         if self._host is not None and hasattr(self._host, "scene_info"):
             return dict(self._host.scene_info())
         return {"uuid": "0", "name": "Untitled"}
+
+    def CaptureScenes(self)->bytes:
+        import json
+        if not self._host or not hasattr(self._host,'capture_scenes'):return self.CaptureScene()
+        return json.dumps(dict(self._host.capture_scenes()),ensure_ascii=False).encode('utf-8')
+
+    def RestoreScenes(self,data:bytes)->bool:
+        import json
+        if not self._host or not hasattr(self._host,'restore_scenes'):return self.RestoreScene(data)
+        if len(data)>256*1024*1024:return False
+        try:result=bool(self._host.restore_scenes(json.loads(data.decode('utf-8'))))
+        except (ValueError,RuntimeError):return False
+        if result:self.SceneChanged.emit()
+        return result
 
     def CaptureScene(self) -> bytes:
         return bytes(self._host.capture_scene()) if self._host is not None and hasattr(self._host,"capture_scene") else b""

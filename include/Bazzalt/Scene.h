@@ -75,6 +75,7 @@ public:
     [[nodiscard]] Mat4 GetWorldMatrix(Entity entity) const;
     [[nodiscard]] Transform GetWorldTransform(Entity entity) const;
     bool SetWorldTransform(Entity entity, const Transform& transform);
+    Entity InstantiatePrefab(UUID prefabAsset,Entity parent={});
     Entity InstantiateModel(const ModelAsset& model, Entity parent = {},
                             std::string name = {});
     Entity InstantiateModel(UUID modelAsset, Entity parent = {}, std::string name = {});

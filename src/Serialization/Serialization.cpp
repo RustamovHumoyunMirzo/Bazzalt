@@ -1,4 +1,5 @@
 #include "Runtime/PreparedScene.h"
+#include "Prefab/PrefabAccess.h"
 #include "Bazzalt/Profiler.h"
 #include "Bazzalt/Serialization.h"
 #include "Utils/NumberParsing.h"
@@ -221,8 +222,21 @@ namespace Bazzalt
         return nullptr;
     }
 
+    void ComponentSerializationRegistry::RegisterEntityReference(std::string type,std::string property){
+        if(type.empty()||property.empty()||type.size()>256||property.size()>256||m_entityReferences.size()>1024)throw std::invalid_argument("Invalid entity reference declaration");
+        auto& keys=m_entityReferences[type];if(std::find(keys.begin(),keys.end(),property)==keys.end()){if(keys.size()>=256)throw std::length_error("Too many entity reference declarations");keys.push_back(std::move(property));}
+    }
+    bool ComponentSerializationRegistry::IsEntityReference(const std::string& type,const std::string& property)const{
+        if(type=="Bazzalt.LOD"&&property.starts_with("Level.")&&property.find(".Root.")!=std::string::npos)return true;
+        if(property=="ConnectedBody"&&(type=="Bazzalt.Joint"||type.ends_with("Joint")))return true;
+        if((type=="Bazzalt.VehicleDifferential"||type=="Bazzalt.VehicleAntiRollBar")&&(property=="LeftWheel"||property=="RightWheel"))return true;
+        if((type=="Bazzalt.Frame"||type=="Bazzalt.GuiImage")&&property=="Camera")return true;
+        auto found=m_entityReferences.find(type);if(found==m_entityReferences.end())return false;
+        for(const auto& pattern:found->second)if(pattern==property||(pattern.ends_with('*')&&property.starts_with(pattern.substr(0,pattern.size()-1))))return true;return false;
+    }
     SceneSerializer::SceneSerializer()
     {
+        Runtime::PrefabAccess::Register(m_components);
         Runtime::RegisterAudioComponents(m_components);
         Runtime::RegisterPhysicsComponents(m_components);
         Runtime::RegisterGuiComponents(m_components);
@@ -370,9 +384,15 @@ o["Post.Material"]=v.PostProcessing.MaterialAsset.ToString();o["Post.Materials.C
         std::string y(static_cast<std::size_t>(length), '\0');
         f.read(y.data(), static_cast<std::streamsize>(y.size()));
         if(!f || f.peek()!=std::char_traits<char>::eof()){error="Scene changed while reading";return false;}
+        return PrepareSceneData(y,output,error);
+    }
+    bool Runtime::PrepareSceneData(const std::string& y,PreparedScene& output,std::string& error)
+    {
+        output={};error.clear();
+        if(y.size()>64u*1024u*1024u){error="Scene data exceeds size limit";return false;}
         if (y.empty())
         {
-            error = "Could not read scene: " + PathUtf8(path);
+            error = "Could not read scene data";
             return false;
         }
         SceneEnvironment environment;

@@ -1,3 +1,4 @@
+#include "Prefab/PrefabAccess.h"
 #include "Runtime/ApplicationEventsAccess.h"
 #include "Runtime/StreamingRuntime.h"
 #include "Runtime/PreparedScene.h"
@@ -78,7 +79,7 @@ struct StreamingRuntime::Impl {
         std::filesystem::path Path;
         UUID Asset;
         Transform Offset;
-        bool Additive=false,Unload=false;
+        bool Additive=false,Unload=false,Prefab=false,PendingScripts=false;
         std::shared_ptr<SceneLoadState> State=std::make_shared<SceneLoadState>();
         std::unique_ptr<Scene> Staging;
         std::vector<UUID> Owned;
@@ -111,7 +112,7 @@ struct StreamingRuntime::Impl {
         cell.Owned.clear();
     }
     void Stop(Cell& cell) {if(cell.Lua)cell.Lua->Stop();if(cell.Native)cell.Native->Stop();cell.Lua.reset();cell.Native.reset();}
-    void Release(Cell& cell) {Stop(cell);RemoveEntities(cell);cell.Staging.reset();{std::lock_guard lock(cell.State->Mutex);cell.State->Prepared.reset();cell.State->Memory.reset();}}
+    void Release(Cell& cell) {Stop(cell);if(!cell.Prefab)RemoveEntities(cell);cell.Staging.reset();{std::lock_guard lock(cell.State->Mutex);cell.State->Prepared.reset();cell.State->Memory.reset();}}
     void StartCellScripts(Cell& cell) {
         if(!Host.m_scriptsRunning)return;
         std::vector<ScriptBinding> native,lua;
@@ -125,9 +126,9 @@ struct StreamingRuntime::Impl {
                 else {auto path=std::filesystem::u8path(script.Source);asset=Host.FindAsset(path.is_absolute()?path:Host.m_projectPath.parent_path()/path);}
                 if(!asset||asset->State!=AssetState::Ready)throw std::runtime_error("World cell script asset is not ready: "+script.TypeName);
                 if(Host.m_subsystemAssets.contains(asset->Id))throw std::runtime_error("Global subsystem cannot be attached in a world cell");
-                ScriptBinding binding;binding.Module=asset->CachePath;binding.Entity=id.ToString();binding.TypeName=script.TypeName;
+                ScriptBinding binding;binding.Module=PrefabAccess::ScriptModule(script.TypeName,asset->CachePath);binding.Entity=id.ToString();binding.TypeName=script.TypeName;
                 for(auto& property:script.Properties)binding.Properties[property.Name]=property.Value;
-                const auto extension=asset->CachePath.extension();
+                const auto extension=binding.Module.extension();
                 if(extension==".dll"||extension==".so"||extension==".dylib")native.push_back(std::move(binding));
                 else if(extension==".blua"||extension==".lua")lua.push_back(std::move(binding));
                 else throw std::runtime_error("World cell script has not been compiled/imported: "+script.TypeName);
@@ -202,6 +203,13 @@ void StreamingRuntime::Reset() {
     for(auto& resource:impl.Resources){if(!Terminal(resource->Status)){resource->Cancelled=true;resource->Status=AsyncLoadStatus::Cancelled;}}
     impl.Resources.clear();impl.Registered.clear();impl.Automatic.clear();impl.HasPosition=false;
 }
+void StreamingRuntime::AdoptHierarchy(Entity root){
+    if(!root||root.GetScene()!=&m_impl->Host.GetScene())return;
+    if(m_impl->Cells.size()>=4096)throw std::length_error("Too many dynamic script hierarchies");
+    auto cell=std::make_shared<Impl::Cell>();cell->Additive=true;cell->Prefab=true;cell->PendingScripts=true;cell->State->Root=root.GetUUID();cell->State->Status=AsyncLoadStatus::Complete;
+    std::vector<Entity> entities{root};bool scripted=false;for(std::size_t i=0;i<entities.size();++i){auto entity=entities[i];cell->Owned.push_back(entity.GetUUID());if(auto* scripts=entity.TryGetComponent<ScriptComponents>())scripted=scripted||(!scripts->Values.empty()&&scripts->IsEnabled());auto children=entity.GetChildren();entities.insert(entities.end(),children.begin(),children.end());}
+    if(scripted)m_impl->Cells.push_back(std::move(cell));
+}
 void StreamingRuntime::StopScripts(){const auto cells=m_impl->Cells;for(auto& cell:cells)m_impl->Stop(*cell);}
 bool StreamingRuntime::IsReplacingScene() const{return m_impl->Replacing;}
 bool StreamingRuntime::HasPendingScene() const{for(auto& cell:m_impl->Cells)if(!cell->Additive&&!Terminal(cell->State->Status))return true;return false;}
@@ -260,6 +268,10 @@ void StreamingRuntime::Pump() {
     for(auto& cell:cells){auto& state=*cell->State;
         if(cell->Additive&&state.Status==AsyncLoadStatus::Complete&&state.Root&&!impl.Host.GetScene().GetEntity(state.Root))cell->Unload=true;
         if(cell->Unload||state.Cancelled){impl.Release(*cell);state.Status=cell->Unload?AsyncLoadStatus::Unloaded:AsyncLoadStatus::Cancelled;continue;}
+        if(cell->Prefab&&cell->PendingScripts){
+            if(!impl.Host.m_scriptsRunning)continue;
+            try{impl.StartCellScripts(*cell);cell->PendingScripts=false;}catch(...){impl.Stop(*cell);if(auto root=impl.Host.GetScene().GetEntity(state.Root))impl.Host.GetScene().DestroyEntity(root);state.Status=AsyncLoadStatus::Failed;Console::Error("Could not initialize prefab scripts","Prefab");continue;}
+        }
         auto status=state.Status.load();if(status!=AsyncLoadStatus::Ready&&status!=AsyncLoadStatus::Activating)continue;
         if(!state.Activation||!remaining||std::chrono::steady_clock::now()>=deadline)continue;
         try {

@@ -70,6 +70,9 @@ public:
         RegisterDescriptor(std::move(descriptor));
     }
 
+    // Declare serialized entity-reference keys; a trailing '*' matches a key prefix.
+    void RegisterEntityReference(std::string componentType,std::string propertyPattern);
+    [[nodiscard]] bool IsEntityReference(const std::string& type,const std::string& property) const;
     void RegisterDescriptor(Descriptor descriptor);
     [[nodiscard]] const Descriptor* Find(const std::string& type) const;
     [[nodiscard]] const std::vector<Descriptor>& GetDescriptors() const { return m_descriptors; }
@@ -77,6 +80,7 @@ public:
 private:
     std::vector<std::shared_ptr<void>> m_gameplayModules;
     std::vector<Descriptor> m_descriptors;
+    std::map<std::string,std::vector<std::string>> m_entityReferences;
 };
 
 class BAZZALT_API SceneSerializer final {

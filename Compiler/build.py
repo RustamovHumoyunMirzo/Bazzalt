@@ -149,7 +149,7 @@ def CompileScripts(project,runtime,architecture,cache,compiler_path=''):
     for meta in assets.rglob('*.meta'):
         record=yaml.safe_load(meta.read_text(encoding='utf-8-sig')) or {}
         if isinstance(record,dict) and record.get('UUID'):identities[str(record['UUID'])]=Path(str(meta)[:-5])
-    for path in assets.rglob('*.bscene'):
+    for path in (*assets.rglob('*.bscene'),*assets.rglob('*.bprefab')):
         scene=yaml.safe_load(path.read_text(encoding='utf-8-sig')) or {}
         for entity in scene.get('Entities') or []:
             for component in entity.get('Components') or []:

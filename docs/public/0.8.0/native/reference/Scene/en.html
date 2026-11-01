@@ -325,6 +325,7 @@ bool RemoveParent(Entity child, bool worldPositionStays = true);
 [[nodiscard]] Mat4 GetWorldMatrix(Entity entity) const;
 [[nodiscard]] Transform GetWorldTransform(Entity entity) const;
 bool SetWorldTransform(Entity entity, const Transform&amp; transform);
+Entity InstantiatePrefab(UUID prefabAsset,Entity parent={});
 Entity InstantiateModel(const ModelAsset&amp; model, Entity parent = {},
                             std::string name = {});
 Entity InstantiateModel(UUID modelAsset, Entity parent = {}, std::string name = {});

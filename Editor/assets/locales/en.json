@@ -1360,5 +1360,20 @@
   "profiler.total": "Total (ms)",
   "profiler.maximum": "Maximum (ms)",
   "profiler.capturing": "Recording CPU scopes. Continue working in the editor, then stop the capture.",
-  "profiler.finished": "Capture stopped. Nested scope totals overlap; this is CPU timing, not GPU timing."
+  "profiler.finished": "Capture stopped. Nested scope totals overlap; this is CPU timing, not GPU timing.",
+  "prefab.menu": "Prefab",
+  "prefab.create": "Create Prefab from Selection…",
+  "prefab.apply": "Apply Overrides to Asset",
+  "prefab.revert": "Revert Overrides",
+  "prefab.refresh": "Update from Asset",
+  "prefab.unpack": "Unpack Prefab",
+  "prefab.instantiate": "Instantiate Prefab",
+  "prefab.file_filter": "Bazzalt Prefab (*.bprefab)",
+  "prefab.source": "Source",
+  "prefab.overrides": "Overrides",
+  "prefab.missing": "Missing or invalid source",
+  "prefab.short.apply": "Apply",
+  "prefab.short.revert": "Revert",
+  "prefab.short.refresh": "Update",
+  "prefab.short.unpack": "Unpack"
 }

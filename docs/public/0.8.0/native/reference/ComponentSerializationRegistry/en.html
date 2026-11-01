@@ -73,6 +73,9 @@ struct Descriptor {
 template&lt;typename ComponentType, typename SerializeFunction, typename DeserializeFunction&gt;
     void Register(std::string type, std::uint32_t version,
                   SerializeFunction&amp;&amp; serialize, DeserializeFunction&amp;&amp; deserialize);
+// Declare serialized entity-reference keys; a trailing &#x27;*&#x27; matches a key prefix.
+    void RegisterEntityReference(std::string componentType,std::string propertyPattern);
+[[nodiscard]] bool IsEntityReference(const std::string&amp; type,const std::string&amp; property) const;
 void RegisterDescriptor(Descriptor descriptor);
 [[nodiscard]] const Descriptor* Find(const std::string&amp; type) const;
 [[nodiscard]] const std::vector&lt;Descriptor&gt;&amp; GetDescriptors() const;

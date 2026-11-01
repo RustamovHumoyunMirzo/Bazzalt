@@ -1,3 +1,4 @@
+#include "Prefab/PrefabAccess.h"
 #include "Runtime/StreamingRuntime.h"
 #include "Bazzalt/AssetManager.h"
 #include "Bazzalt/Detail/SubsystemAccess.h"
@@ -249,11 +250,13 @@ std::optional<ModelAsset> AssetManager::LoadModel(UUID id) {
 }
 
 void AssetManager::Bind(Runtime::Engine* engine) {
+    Runtime::PrefabAccess::Bind(engine);
     Detail::BoundMaterialServices=Runtime::GetMaterialServices();
     if (engine && std::find(Engines.begin(), Engines.end(), engine) == Engines.end())
         Engines.push_back(engine);
 }
 void AssetManager::Unbind(Runtime::Engine* engine) {
+    Runtime::PrefabAccess::Unbind(engine);
     Engines.erase(std::remove(Engines.begin(), Engines.end(), engine), Engines.end());
     if(Engines.empty()){Runtime::ResetMaterialLibrary();Runtime::ResetTextureLibrary();Detail::BoundMaterialServices=nullptr;}
 }

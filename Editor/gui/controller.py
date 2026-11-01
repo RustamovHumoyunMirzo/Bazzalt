@@ -120,6 +120,8 @@ class EditorController(QObject):
         window.AssetBrowser.AssetInfoProvider=runtime.AssetStatus
         window.AssetBrowser.UpdateAssetIssues()
         window.AssetBrowser.AssetsChanged.connect(self._AssetsChanged)
+        from ..prefabs import PrefabEditor
+        self.Prefabs=PrefabEditor(self)
         window.AssetBrowser.AssetActivated.connect(self.ActivateAsset)
         window.AssetBrowser.LoadSceneRequested.connect(self.LoadSceneAdditive)
         window.AssetBrowser.SceneRenameHandler=self.RenameSceneAsset
@@ -251,7 +253,7 @@ class EditorController(QObject):
                 for entity in list(pending):
                     parent_id=str(entity.get("parent",""))
                     if parent_id not in root_ids and parent_id not in items:continue
-                    parent=items.get(parent_id,scene_root);items[entity["uuid"]]=self.Window.Hierarchy.AddItem(entity["name"],entity["uuid"],parent,self.Window.Resources.Icon(f"icons/{theme}/obj.svg"),"entity");pending.remove(entity);progress=True
+                    parent=items.get(parent_id,scene_root);items[entity["uuid"]]=self.Window.Hierarchy.AddItem(entity["name"],entity["uuid"],parent,self.Window.Resources.Icon(f"icons/{theme}/prefab.svg" if entity.get("prefab_source") else f"icons/{theme}/obj.svg"),"entity");pending.remove(entity);progress=True
                 if not progress:
                     for entity in pending:items[entity["uuid"]]=self.Window.Hierarchy.AddItem(entity["name"],entity["uuid"],scene_root,self.Window.Resources.Icon(f"icons/{theme}/obj.svg"),"entity")
                     break
@@ -293,6 +295,7 @@ class EditorController(QObject):
         inspected_entity=self.SelectedEntity
         name = StringInput(str(details["name"]));name.editingFinished.connect(lambda:self._Rename(inspected_entity,name.text()))
         identity.AddField("Name", name)
+        self.Prefabs.Inspect(self.SelectedEntity)
         transform = self.Window.Properties.AddComponentSection("transform", "Transform", removable=False,
             icon=self.Window.Resources.Icon("icons/comp_transform.svg"))
         position = Vec3Input(details["position"])
@@ -435,7 +438,7 @@ class EditorController(QObject):
         self._inspected_asset=Path(path)
         path=Path(path);self.SelectedEntity="";self.SelectedEntities=[];self.Window.Scene.Surface.SetSelection(None);self.Runtime.SetGizmo("",0);self.Window.Properties.Clear();self.Window.Properties.AddComponentButton.setVisible(False)
         resolver=getattr(self.Runtime,'ResolveAssetRecord',None)
-        if path.suffix.lower() in AUDIO_EXTENSIONS|FONT_EXTENSIONS|{'.bmixer','.css','.event'} and callable(resolver):resolver(path)
+        if path.suffix.lower() in AUDIO_EXTENSIONS|FONT_EXTENSIONS|{'.bmixer','.css','.event','.bprefab'} and callable(resolver):resolver(path)
         self.InspectedScene="";self._UpdateGizmo()
         section=self.Window.Properties.AddComponentSection("asset",self.Window.Localization.Translate("properties.asset"),removable=False)
         for label,value in (("Name",path.name),("Type",path.suffix.lower() or "Folder"),("Path",str(path)),("Size",self._FormatAssetSize(self._AssetSize(path)))):section.AddField(self.Window.Localization.Translate(f"properties.asset_{label.lower()}") if label!="Name" else self.Window.Localization.Translate("properties.asset_name"),QLabel(value))
@@ -444,7 +447,8 @@ class EditorController(QObject):
             label=QLabel(issue);label.setWordWrap(True);label.setTextFormat(Qt.TextFormat.PlainText);label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             warning=self.Window.Properties.AddComponentSection('asset.issue',self.Window.Localization.Translate('assets.import_issue'),removable=False)
             warning.AddWideWidget(label);self.Window.AssetBrowser.UpdateAssetIssues();return
-        if path.suffix.lower()==".matinst":self._InspectMaterial(path)
+        if path.suffix.lower()==".bprefab":self.Prefabs.InspectAsset(path)
+        elif path.suffix.lower()==".matinst":self._InspectMaterial(path)
         elif path.suffix.lower()==".btexture":self._InspectTexture(path)
         elif path.suffix.lower()==".event":
             from .global_event import GlobalEventEditor
@@ -1080,7 +1084,8 @@ class EditorController(QObject):
 
     def ActivateAsset(self,path)->None:
         path=Path(path)
-        if path.suffix.lower()==".bscene":self.LoadSceneAdditive(path)
+        if path.suffix.lower()==".bprefab":self.Prefabs.Instantiate(path,"")
+        elif path.suffix.lower()==".bscene":self.LoadSceneAdditive(path)
         elif path.suffix.lower()==".bmixer":self.OpenAudioMixer(path)
         elif path.suffix.lower()==".shadg":self.OpenShaderGraph(path)
         elif path.suffix.lower() in AUDIO_EXTENSIONS:
@@ -1247,7 +1252,9 @@ class EditorController(QObject):
         else:self.History.Cancel()
 
     def InstantiateAsset(self,path:str,parent_id:str)->None:
-        if Path(path).suffix.lower() in {".gltf",".glb",".obj",".fbx",".dae",".filamesh"}:
+        if Path(path).suffix.lower()==".bprefab":
+            self.Prefabs.Instantiate(path,parent_id)
+        elif Path(path).suffix.lower() in {".gltf",".glb",".obj",".fbx",".dae",".filamesh"}:
             self.History.Begin("Instantiate model");entity=self.Runtime.InstantiateModelPath(path,parent_id)
             if entity:self.History.Commit();self.SetDirty(True,[self._SceneForParent(parent_id)]);self.SelectEntity(entity)
             else:self.History.Cancel()
@@ -1363,6 +1370,7 @@ class EditorController(QObject):
                 attachments=WithSubsystems(self.ScriptAttachments,sources);self.ScriptCompiler.SubsystemSources=list(sources.values())
             except (ValueError,OSError,TypeError) as error:self._ScriptValidationFailed(error);return
             native_sources=[path for path in attachments.UsedSources() if Path(path).suffix.lower()!=".lua"]
+            native_sources=list(dict.fromkeys([*native_sources,*self.Prefabs.NativeSources()]))
             progress=None
             if native_sources:
                 progress=QProgressDialog(tr("scripting.compiling"),None,0,0,self.Window);progress.setWindowModality(Qt.WindowModality.WindowModal);progress.setCancelButton(None);progress.show();QApplication.processEvents()
@@ -1377,6 +1385,7 @@ class EditorController(QObject):
                 self.Window.Console.AddMessage(message,level,True,tr("scripting.compiler_source"))
             if not result.success:self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
             if result.outputs and self.Window.PreferenceValue("scripting","show_compile_success",True):self.Window.Console.AddMessage(tr("scripting.compile_success",count=len(result.outputs)),ConsoleLevel.Info,True,tr("scripting.compiler_source"))
+            self.Prefabs.RegisterModules(native_sources,result.outputs)
             try:bindings=attachments.RuntimeBindings(result.outputs)
             except ScriptValidationError as error:self._ScriptValidationFailed(error);self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
             active_entities={str(entity["uuid"]) for entity in self.Runtime.Entities()}

@@ -26,10 +26,16 @@ class ImportDropTarget:
         if mime.hasFormat('application/x-bazzalt-asset') or not mime.hasUrls():return []
         return [Path(url.toLocalFile()) for url in mime.urls() if url.isLocalFile()]
     def dragEnterEvent(self,event):
-        if self._ExternalPaths(event):event.setDropAction(Qt.DropAction.CopyAction);event.accept()
+        if event.mimeData().hasFormat("application/x-bazzalt-entity") or self._ExternalPaths(event):event.setDropAction(Qt.DropAction.CopyAction);event.accept()
         else:event.ignore()
     def dragMoveEvent(self,event):self.dragEnterEvent(event)
     def dropEvent(self,event):
+        if event.mimeData().hasFormat('application/x-bazzalt-entity'):
+            try:entity=bytes(event.mimeData().data('application/x-bazzalt-entity')).decode('utf-8')
+            except UnicodeError:event.ignore();return
+            item=self.itemAt(event.position().toPoint());target=item.data(0,Qt.ItemDataRole.UserRole) if isinstance(self,QTreeWidget) and item else item.data(Qt.ItemDataRole.UserRole) if item else None
+            folder=Path(target) if target and Path(target).is_dir() else None
+            self.EntityDropped.emit(entity,folder);event.setDropAction(Qt.DropAction.CopyAction);event.accept();return
         paths=self._ExternalPaths(event)
         if not paths:event.ignore();return
         item=self.itemAt(event.position().toPoint());target=item.data(0,Qt.ItemDataRole.UserRole) if isinstance(self,QTreeWidget) and item else item.data(Qt.ItemDataRole.UserRole) if item else None
@@ -37,11 +43,11 @@ class ImportDropTarget:
         self.PathsDropped.emit(paths,folder);event.setDropAction(Qt.DropAction.CopyAction);event.accept()
 
 class AssetTree(ImportDropTarget,QTreeWidget):
-    PathsDropped=Signal(object,object)
+    EntityDropped=Signal(str,object);PathsDropped=Signal(object,object)
 
 class AssetList(ImportDropTarget,QListWidget):
     EmptyClicked=Signal()
-    SelectionCommitted=Signal();PathsDropped=Signal(object,object)
+    EntityDropped=Signal(str,object);SelectionCommitted=Signal();PathsDropped=Signal(object,object)
     Gesture=False
     def startDrag(self,actions):
         self._drag_started=True
@@ -72,7 +78,7 @@ class AssetNameDelegate(QStyledItemDelegate):
 
 class AssetBrowserPanel(QWidget):
     AssetsChanged=Signal()
-    UnlockGraphRequested=Signal(object);AssetActivated=Signal(object);AssetSelected=Signal(object);ContextMenuRequested=Signal(object,object);SelectionCleared=Signal();LoadSceneRequested=Signal(object);AssetOperationFailed=Signal(str)
+    EntityDropped=Signal(str,object);UnlockGraphRequested=Signal(object);AssetActivated=Signal(object);AssetSelected=Signal(object);ContextMenuRequested=Signal(object,object);SelectionCleared=Signal();LoadSceneRequested=Signal(object);AssetOperationFailed=Signal(str)
     def __init__(self,localization:LocalizationManager,resources=None)->None:
         super().__init__();self._localization=localization;self._resources=resources;self._root=None;self._folder=None;self._clipboard=[];self.SceneRenameHandler=None;self.DirectoryRenameHandler=None;self.SceneLoadedChecker=None;self.ExternalOpener=None;self.AssetInfoProvider=None;self._issues={}
         self._watcher=QFileSystemWatcher(self);self._watcher.directoryChanged.connect(lambda _path:self.Refresh())
@@ -91,7 +97,7 @@ class AssetBrowserPanel(QWidget):
         # QListView::setMovement resets drag/drop mode, so drag-source setup
         # must be applied after all icon-layout configuration.
         self.Browser.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop);self.Browser.setDragEnabled(True);self.Browser.setDefaultDropAction(Qt.DropAction.CopyAction);self.Browser.setSupportedDragActions(Qt.DropAction.CopyAction)
-        for view in (self.Browser,self.Tree):view.setAcceptDrops(True);view.viewport().setAcceptDrops(True);view.PathsDropped.connect(self.ImportPaths)
+        for view in (self.Browser,self.Tree):view.setAcceptDrops(True);view.viewport().setAcceptDrops(True);view.PathsDropped.connect(self.ImportPaths);view.EntityDropped.connect(lambda entity,folder:self.EntityDropped.emit(entity,folder or self.CurrentFolder()))
         self.Tree.setDragDropMode(QAbstractItemView.DragDropMode.DropOnly)
         self.Browser.SelectionCommitted.connect(self._SelectionChanged)
         self.Browser.itemDoubleClicked.connect(self._Activate);self.Browser.itemSelectionChanged.connect(self._SelectionChanged);self.Browser.itemChanged.connect(self._ItemRenamed);self.Browser.EmptyClicked.connect(self.SelectionCleared);self.Tree.itemClicked.connect(self._TreeSelected)
@@ -128,7 +134,7 @@ class AssetBrowserPanel(QWidget):
             pixmap=QPixmap(64,64);pixmap.fill(Qt.GlobalColor.transparent);painter=QPainter(pixmap);gradient=QRadialGradient(25,20,35);gradient.setColorAt(0,QColor("#f4f4f4"));gradient.setColorAt(.35,QColor("#9aa5b5"));gradient.setColorAt(1,QColor("#1d222a"));painter.setBrush(gradient);painter.setPen(QColor("#59616d"));painter.drawEllipse(7,7,50,50);painter.end();return QIcon(pixmap)
         if ext in ENVIRONMENT_EXTENSIONS:
             pixmap=QPixmap(64,64);gradient=QLinearGradient(0,0,0,64);gradient.setColorAt(0,QColor("#456f9b"));gradient.setColorAt(.55,QColor("#d4b678"));gradient.setColorAt(1,QColor("#252d25"));painter=QPainter(pixmap);painter.fillRect(pixmap.rect(),gradient);painter.end();return QIcon(pixmap)
-        name="shadergraph.svg" if ext==".shadg" else "dir.svg" if path.is_dir() else "texture.svg" if ext==".btexture" else "scene.svg" if ext==".bscene" else "header.svg" if ext in {".h",".hpp"} else "nativecpp.svg" if ext in {".c",".cc",".cpp"} else "3dfiles.svg" if ext in MODEL_EXTENSIONS else "shader.svg" if ext in SHADER_EXTENSIONS else "file.svg"
+        name="prefab.svg" if ext==".bprefab" else "shadergraph.svg" if ext==".shadg" else "dir.svg" if path.is_dir() else "texture.svg" if ext==".btexture" else "scene.svg" if ext==".bscene" else "header.svg" if ext in {".h",".hpp"} else "nativecpp.svg" if ext in {".c",".cc",".cpp"} else "3dfiles.svg" if ext in MODEL_EXTENSIONS else "shader.svg" if ext in SHADER_EXTENSIONS else "file.svg"
         return self._resources.Icon(f"icons/abrowser/{name}") if self._resources else QIcon()
     def _ThumbnailReady(self,path,image):
         self._thumbnail_timer.start(0)

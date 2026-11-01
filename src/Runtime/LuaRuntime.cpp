@@ -1,3 +1,4 @@
+#include <set>
 #include "Bazzalt/GlobalEvent.h"
 #include "Runtime/GlobalEventsAccess.h"
 #include "Runtime/LuaRuntime.h"
@@ -178,9 +179,10 @@ void LuaRuntime::FixedUpdate(float dt){for(auto& instance:m_impl->Instances)try{
 void LuaRuntime::LateUpdate(float dt){for(auto& instance:m_impl->Instances)try{instance->Call("OnLateUpdate",dt,true);}catch(const std::exception& error){instance->Failed=true;std::cerr<<"[Lua] "<<error.what()<<'\n';}}
 void LuaRuntime::Stop() noexcept {
     ApplicationEventsAccess::DisconnectOwner(m_impl.get());
-    if(!m_impl->Instances.empty())if(auto* scene=SceneManager::GetActiveScene())try{scene->RemoveSystem<LuaSystems>();}catch(const std::exception& error){std::cerr<<"[Lua] "<<error.what()<<'\n';}
+    const auto removeOwnedSystems=[&]{if(auto* scene=SceneManager::GetActiveScene())try{if(!scene->HasSystem<LuaSystems>())return;auto& systems=scene->GetSystem<LuaSystems>();std::set<lua_State*> owners;for(auto& instance:m_impl->Instances)owners.insert(instance->Vm->State);std::vector<std::string> names;for(const auto& [name,entry]:systems.Entries)if(owners.contains(entry.Object.lua_state()))names.push_back(name);for(const auto& name:names){auto found=systems.Entries.find(name);if(found==systems.Entries.end())continue;auto object=found->second.Object;systems.Entries.erase(found);try{LuaSystems::Invoke(object,"OnDestroy",*scene,0,false);}catch(const std::exception& error){std::cerr<<"[Lua] "<<error.what()<<'\n';}}}catch(const std::exception& error){std::cerr<<"[Lua] "<<error.what()<<'\n';}};
+    removeOwnedSystems();
     for(auto it=m_impl->Instances.rbegin();it!=m_impl->Instances.rend();++it)try{(*it)->Call("OnDestroy");}catch(const std::exception& error){std::cerr<<"[Lua] "<<error.what()<<'\n';}
-    if(!m_impl->Instances.empty())if(auto* scene=SceneManager::GetActiveScene())try{scene->RemoveSystem<LuaSystems>();}catch(const std::exception& error){std::cerr<<"[Lua] "<<error.what()<<'\n';}
+    removeOwnedSystems();
     m_impl->Instances.clear();
 }
 bool LuaRuntime::Import(const std::filesystem::path& source,const std::filesystem::path& output,std::string& error){
