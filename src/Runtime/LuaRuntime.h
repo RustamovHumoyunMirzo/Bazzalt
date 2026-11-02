@@ -19,7 +19,11 @@ public:
     LuaRuntime();
     ~LuaRuntime();
     bool Configure(std::vector<ScriptBinding> bindings,std::string& error);
-    bool Start(std::string& error);
+    bool Start(std::string& error,bool reloading=false);
+    bool PreserveFrom(const LuaRuntime& previous,std::string& error);
+    const std::vector<ScriptBinding>& GetBindings()const;
+    void ActivateReload();
+    void DiscardForReload() noexcept;
     void Update(float deltaTime);
     void FixedUpdate(float deltaTime);
     void LateUpdate(float deltaTime);

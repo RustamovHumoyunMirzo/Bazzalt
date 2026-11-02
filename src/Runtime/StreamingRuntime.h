@@ -1,10 +1,12 @@
 #pragma once
 #include "Bazzalt/Streaming.h"
+#include "Runtime/NativeScriptRuntime.h"
 #include "Bazzalt/Entity.h"
 #include <filesystem>
 #include <memory>
 namespace Bazzalt::Runtime {
 class Engine;
+class LuaRuntime;
 class StreamingRuntime final {
 public:
     explicit StreamingRuntime(Engine& engine);
@@ -21,6 +23,11 @@ public:
     void Pump();
     void Reset();
     void StopScripts();
+    void CollectReloadBindings(std::vector<ScriptBinding>& bindings)const;
+    bool PrepareReload(const std::vector<ScriptBinding>& bindings,std::string& error);
+    void CommitReload();
+    void NotifyReload();
+    void CancelReload();
     void AdoptHierarchy(Entity root);
     void Update(float dt);
     void FixedUpdate(float dt);

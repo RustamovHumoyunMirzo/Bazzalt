@@ -74,6 +74,7 @@ struct LuaRuntime::Impl {
         Entity Owner;
         std::string Name;
         bool Failed=false;
+        bool ReloadMatched=false;
         bool Destroyed=false;
         void Call(const char* name,float dt=0,bool timed=false){
             struct CallerScope{std::string Previous;~CallerScope(){ExtensionAccess::SetCaller(std::move(Previous));}} scope{ExtensionAccess::SetCaller(ExtensionAccess::ComponentOwner(Name))};
@@ -94,6 +95,7 @@ struct LuaRuntime::Impl {
             if(!result.valid()){sol::error error=result;throw std::runtime_error(Name+": "+error.what());}
         }
     };
+    bool Reloading=false;
     std::vector<ScriptBinding> Bindings;
     std::vector<std::unique_ptr<Instance>> Instances;
 };
@@ -110,8 +112,8 @@ bool LuaRuntime::Configure(std::vector<ScriptBinding> bindings,std::string& erro
     }
     m_impl->Bindings=std::move(bindings);error.clear();return true;
 }
-bool LuaRuntime::Start(std::string& error){
-    Stop();error.clear();
+bool LuaRuntime::Start(std::string& error,bool reloading){
+    Stop();m_impl->Reloading=reloading;error.clear();
     try{for(const auto& binding:m_impl->Bindings){
         UUID id;if(!UUID::TryParse(binding.Entity,id))throw std::runtime_error("Invalid Lua entity UUID");
         auto* scene=SceneManager::GetActiveScene();auto owner=scene?scene->GetEntity(id):Entity{};
@@ -157,7 +159,7 @@ bool LuaRuntime::Start(std::string& error){
         // Declaration functions are source-initialization helpers, not lifecycle APIs.
         lua["COMPONENT"]=sol::lua_nil;lua["PROPERTY"]=sol::lua_nil;
         for(const auto& [key,value]:binding.Properties)SetProperty(active.Object,key,value);
-        active.Call("OnCreate");
+        if(!m_impl->Reloading)active.Call("OnCreate");
         if(m_impl->Instances.size()==1){
             auto previous=ApplicationEventsAccess::SetOwner(m_impl.get());
             try{for(int i=0;i<6;++i)scene->GetPhysics().Subscribe(PhysicsEventType(i),[this](const CollisionEvent& event){
@@ -174,14 +176,75 @@ bool LuaRuntime::Start(std::string& error){
     }}catch(const std::exception& failure){error=failure.what();Stop();return false;}
     return true;
 }
+namespace {
+sol::object CopyReloadNumber(const sol::object& value,lua_State* target){
+ auto* source=value.lua_state();value.push();const bool integer=lua_isinteger(source,-1);const auto whole=lua_tointeger(source,-1);const auto number=lua_tonumber(source,-1);lua_pop(source,1);
+ return integer?sol::make_object(target,whole):sol::make_object(target,number);
+}
+void CopyReloadTable(sol::table source,sol::table target,std::size_t& count,int depth=0){
+ if(depth>16)throw std::runtime_error("Reload tables are cyclic or exceed 16 levels");
+ for(auto pair:source){if(++count>16384)throw std::runtime_error("Lua reload state exceeds 16384 fields");
+  auto key=pair.first;auto value=pair.second;if(value.get_type()==sol::type::function)continue;
+  sol::object targetKey;
+  if(key.get_type()==sol::type::string){auto name=key.as<std::string>();if(depth==0&&name=="Entity")continue;targetKey=sol::make_object(target.lua_state(),name);}
+  else if(key.get_type()==sol::type::number)targetKey=CopyReloadNumber(key,target.lua_state());
+  else throw std::runtime_error("Reload tables require string/number keys");
+  sol::object existing=target.raw_get<sol::object>(targetKey);
+  if(existing.valid()&&existing!=sol::lua_nil&&existing.get_type()!=value.get_type())throw std::runtime_error("Lua reload field type changed");
+  if(value.get_type()==sol::type::table){auto child=existing.is<sol::table>()?existing.as<sol::table>():sol::state_view(target.lua_state()).create_table();CopyReloadTable(value.as<sol::table>(),child,count,depth+1);target.raw_set(targetKey,child);}
+  else if(value.get_type()==sol::type::number)target.raw_set(targetKey,CopyReloadNumber(value,target.lua_state()));
+  else if(value.get_type()==sol::type::boolean)target.raw_set(targetKey,value.as<bool>());
+  else if(value.get_type()==sol::type::string){auto text=value.as<std::string>();if(text.size()>1024*1024)throw std::runtime_error("Lua reload string exceeds 1 MiB");target.raw_set(targetKey,text);}
+#define BAZZALT_COPY_RELOAD_TYPE(Type) else if(value.is<Type>())target.raw_set(targetKey,value.as<Type>());
+  BAZZALT_COPY_RELOAD_TYPE(Vec2) BAZZALT_COPY_RELOAD_TYPE(Vec3) BAZZALT_COPY_RELOAD_TYPE(Vec4) BAZZALT_COPY_RELOAD_TYPE(Quaternion)
+  BAZZALT_COPY_RELOAD_TYPE(UUID) BAZZALT_COPY_RELOAD_TYPE(Entity) BAZZALT_COPY_RELOAD_TYPE(EntityReference)
+  BAZZALT_COPY_RELOAD_TYPE(Material) BAZZALT_COPY_RELOAD_TYPE(Shader) BAZZALT_COPY_RELOAD_TYPE(Texture) BAZZALT_COPY_RELOAD_TYPE(AudioClip) BAZZALT_COPY_RELOAD_TYPE(Font) BAZZALT_COPY_RELOAD_TYPE(GlobalEvent)
+#undef BAZZALT_COPY_RELOAD_TYPE
+  else throw std::runtime_error("Unsupported Lua reload state: use serializable fields");
+ }
+}
+}
+bool LuaRuntime::PreserveFrom(const LuaRuntime& previous,std::string& error){
+ try{
+  for(auto& target:m_impl->Instances)for(auto& old:previous.m_impl->Instances){
+   if(target->Owner.GetUUID()!=old->Owner.GetUUID()||target->Name!=old->Name)continue;
+   target->ReloadMatched=true;
+   sol::table state=old->Object;
+   sol::object save=old->Object.raw_get<sol::object>("OnSaveReloadState");
+   if(save.valid()&&save!=sol::lua_nil){
+    if(save.get_type()!=sol::type::function)throw std::runtime_error("OnSaveReloadState must be a function");
+    lua_sethook(old->Vm->State,Budget,LUA_MASKCOUNT,1000000);
+    sol::protected_function callback=save;auto result=callback(old->Object);
+    lua_sethook(old->Vm->State,nullptr,0,0);
+    if(!result.valid()){sol::error failure=result;throw std::runtime_error(failure.what());}
+    if(result.get_type()!=sol::type::table)throw std::runtime_error("OnSaveReloadState must return a data table");
+    state=result.get<sol::table>();
+   }
+   std::size_t count=0;sol::object restore=target->Object.raw_get<sol::object>("OnRestoreReloadState");
+   if(restore.valid()&&restore!=sol::lua_nil){
+    if(restore.get_type()!=sol::type::function)throw std::runtime_error("OnRestoreReloadState must be a function");
+    sol::table transferred=sol::state_view(target->Vm->State).create_table();CopyReloadTable(state,transferred,count);
+    lua_sethook(target->Vm->State,Budget,LUA_MASKCOUNT,1000000);
+    sol::protected_function callback=restore;auto result=callback(target->Object,transferred);
+    lua_sethook(target->Vm->State,nullptr,0,0);
+    if(!result.valid()){sol::error failure=result;throw std::runtime_error(failure.what());}
+   }else CopyReloadTable(state,target->Object,count);
+   break;
+  }
+ }catch(const std::exception& failure){error=failure.what();return false;}
+ return true;
+}
+const std::vector<ScriptBinding>& LuaRuntime::GetBindings()const{return m_impl->Bindings;}
+void LuaRuntime::DiscardForReload() noexcept{m_impl->Reloading=true;Stop();}
+void LuaRuntime::ActivateReload(){m_impl->Reloading=false;for(auto& instance:m_impl->Instances)try{instance->Call(instance->ReloadMatched?"OnReload":"OnCreate");}catch(const std::exception& error){instance->Failed=true;Console::Error(error.what(),"Lua Reload");}}
 void LuaRuntime::Update(float dt){for(auto& instance:m_impl->Instances)try{instance->Call("OnUpdate",dt,true);}catch(const std::exception& error){instance->Failed=true;std::cerr<<"[Lua] "<<error.what()<<'\n';}}
 void LuaRuntime::FixedUpdate(float dt){for(auto& instance:m_impl->Instances)try{instance->Call("OnFixedUpdate",dt,true);}catch(const std::exception& error){instance->Failed=true;std::cerr<<"[Lua] "<<error.what()<<'\n';}}
 void LuaRuntime::LateUpdate(float dt){for(auto& instance:m_impl->Instances)try{instance->Call("OnLateUpdate",dt,true);}catch(const std::exception& error){instance->Failed=true;std::cerr<<"[Lua] "<<error.what()<<'\n';}}
 void LuaRuntime::Stop() noexcept {
     ApplicationEventsAccess::DisconnectOwner(m_impl.get());
-    const auto removeOwnedSystems=[&]{if(auto* scene=SceneManager::GetActiveScene())try{if(!scene->HasSystem<LuaSystems>())return;auto& systems=scene->GetSystem<LuaSystems>();std::set<lua_State*> owners;for(auto& instance:m_impl->Instances)owners.insert(instance->Vm->State);std::vector<std::string> names;for(const auto& [name,entry]:systems.Entries)if(owners.contains(entry.Object.lua_state()))names.push_back(name);for(const auto& name:names){auto found=systems.Entries.find(name);if(found==systems.Entries.end())continue;auto object=found->second.Object;systems.Entries.erase(found);try{LuaSystems::Invoke(object,"OnDestroy",*scene,0,false);}catch(const std::exception& error){std::cerr<<"[Lua] "<<error.what()<<'\n';}}}catch(const std::exception& error){std::cerr<<"[Lua] "<<error.what()<<'\n';}};
+    const auto removeOwnedSystems=[&]{if(auto* scene=SceneManager::GetActiveScene())try{if(!scene->HasSystem<LuaSystems>())return;auto& systems=scene->GetSystem<LuaSystems>();std::set<lua_State*> owners;for(auto& instance:m_impl->Instances)owners.insert(instance->Vm->State);std::vector<std::string> names;for(const auto& [name,entry]:systems.Entries)if(owners.contains(entry.Object.lua_state()))names.push_back(name);for(const auto& name:names){auto found=systems.Entries.find(name);if(found==systems.Entries.end())continue;auto object=found->second.Object;systems.Entries.erase(found);try{if(!m_impl->Reloading)LuaSystems::Invoke(object,"OnDestroy",*scene,0,false);}catch(const std::exception& error){std::cerr<<"[Lua] "<<error.what()<<'\n';}}}catch(const std::exception& error){std::cerr<<"[Lua] "<<error.what()<<'\n';}};
     removeOwnedSystems();
-    for(auto it=m_impl->Instances.rbegin();it!=m_impl->Instances.rend();++it)try{(*it)->Call("OnDestroy");}catch(const std::exception& error){std::cerr<<"[Lua] "<<error.what()<<'\n';}
+    for(auto it=m_impl->Instances.rbegin();it!=m_impl->Instances.rend();++it)try{if(!m_impl->Reloading)(*it)->Call("OnDestroy");}catch(const std::exception& error){std::cerr<<"[Lua] "<<error.what()<<'\n';}
     removeOwnedSystems();
     m_impl->Instances.clear();
 }

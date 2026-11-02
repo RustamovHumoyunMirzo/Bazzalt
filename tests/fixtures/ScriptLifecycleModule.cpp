@@ -10,12 +10,16 @@ public:
     PROPERTY(std::string, LogPath, "")
     PROPERTY(Bazzalt::Material, Surface, {})
     PROPERTY(Bazzalt::GlobalEvent, Signal, {})
+    int ReloadState=3;
+    std::string OnSaveReloadState()const override{return std::to_string(ReloadState);}
+    void OnRestoreReloadState(const std::string& state)override{ReloadState=std::stoi(state);}
     void Write(const char* value){std::ofstream(LogPath,std::ios::app)<<value<<':'<<GetEntityUUID()<<'\n';}
-    void OnCreate() override { if(!Bazzalt::Detail::BoundMaterialServices)throw std::runtime_error("Material host service was not bound");if(Surface.IsValid())Surface.SetFloat("roughness",0.1f);Bazzalt::Time::SetSlowMotion(0.25f);if(Signal.IsValid())Signal.Fire({5.0,std::string("hit")});Write("create"); }
+    void OnCreate() override { ReloadState=99;if(!Bazzalt::Detail::BoundMaterialServices)throw std::runtime_error("Material host service was not bound");if(Surface.IsValid())Surface.SetFloat("roughness",0.1f);Bazzalt::Time::SetSlowMotion(0.25f);if(Signal.IsValid())Signal.Fire({5.0,std::string("hit")});Write("create"); }
     void OnUpdate(float delta) override { if(Bazzalt::Time::GetDeltaTime()!=delta)throw std::runtime_error("Module clock was not shared");Write("update");if(Bazzalt::Input::GetKeyDown(Bazzalt::KeyCode::W))Write("input_w"); }
     void OnFixedUpdate(float delta) override { if(!Bazzalt::Time::IsInFixedTimeStep()||Bazzalt::Time::GetDeltaTime()!=delta)throw std::runtime_error("Module fixed clock was not shared");Write("fixed"); }
     void OnTriggerEnter(const Bazzalt::CollisionEvent& event) override { if(event.Contacts.empty())throw std::runtime_error("Missing trigger contact manifold");Write("trigger"); }
     void OnDestroy() override { Write("destroy"); }
+    void OnReload() override { if(ReloadState!=99)throw std::runtime_error("Custom state was lost");Write("reload"); }
     void OnLateUpdate(float) override { Write("late"); }
 };
 
@@ -40,3 +44,9 @@ extern "C" SCRIPT_EXPORT void BazzaltBindMaterialsV1(Bazzalt::Detail::MaterialSe
 extern "C" SCRIPT_EXPORT void BazzaltFixedUpdateV1(void* value,float delta){static_cast<LifecycleProbe*>(value)->OnFixedUpdate(delta);}
 extern "C" SCRIPT_EXPORT void BazzaltLateUpdateV1(void* value,float delta){static_cast<LifecycleProbe*>(value)->OnLateUpdate(delta);}
 extern "C" SCRIPT_EXPORT Bazzalt::Behavior* BazzaltGetBehaviorV1(void* value){return static_cast<LifecycleProbe*>(value);}
+
+extern "C" SCRIPT_EXPORT void BazzaltVisitPropertiesV1(void* value,void* context,void(*visit)(void*,const char*,const char*,const char*)) noexcept(false){auto* self=static_cast<LifecycleProbe*>(value);visit(context,"LogPath","std::string",self->LogPath.c_str());}
+extern "C" SCRIPT_EXPORT void BazzaltReloadV1(void* value) noexcept(false){static_cast<LifecycleProbe*>(value)->OnReload();}
+
+extern "C" SCRIPT_EXPORT const char* BazzaltSaveReloadStateV1(void* value) noexcept(false){static thread_local std::string state;state=static_cast<LifecycleProbe*>(value)->OnSaveReloadState();return state.c_str();}
+extern "C" SCRIPT_EXPORT void BazzaltRestoreReloadStateV1(void* value,const char* state) noexcept(false){static_cast<LifecycleProbe*>(value)->OnRestoreReloadState(state);}

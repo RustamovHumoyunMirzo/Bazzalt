@@ -464,7 +464,7 @@ public:
         return entity?entity.GetUUID().ToString():std::string{};
     }
 
-    void SetPrefabScriptModules(const std::map<std::string,std::string>& values){if(m_playing)throw std::logic_error("Cannot replace prefab modules while playing");std::map<std::string,std::filesystem::path> modules;for(const auto& [type,path]:values){auto file=std::filesystem::u8path(path);if(!std::filesystem::is_regular_file(file)||(file.extension()!=".dll"&&file.extension()!=".so"&&file.extension()!=".dylib"))throw std::runtime_error("Missing compiled prefab script module");modules[type]=file;}Runtime::PrefabAccess::SetScriptModules(modules);}
+    void SetPrefabScriptModules(const std::map<std::string,std::string>& values){std::map<std::string,std::filesystem::path> modules;for(const auto& [type,path]:values){auto file=std::filesystem::u8path(path);if(!std::filesystem::is_regular_file(file)||(file.extension()!=".dll"&&file.extension()!=".so"&&file.extension()!=".dylib"))throw std::runtime_error("Missing compiled prefab script module");modules[type]=file;}Runtime::PrefabAccess::SetScriptModules(modules);}
     bool SyncPrefabScripts(const py::list& records){
         if(m_playing)return false;std::vector<std::pair<Entity,ScriptAttachment>> pending;
         for(auto row:records){auto data=py::cast<py::dict>(row);auto entity=FindEntity(py::cast<std::string>(data["entity"])).second;if(!entity)continue;auto asset=AssetManager::GetAsset(std::filesystem::u8path(py::cast<std::string>(data["source"])));if(!asset||asset->State!=AssetState::Ready)return false;ScriptAttachment value;value.Source=asset->Id.ToString();value.TypeName=py::cast<std::string>(data["type"]);value.Lua=asset->SourcePath.extension()==".lua";value.Enabled=py::cast<bool>(data["enabled"]);for(auto item:py::cast<py::list>(data["properties"])){auto field=py::cast<py::dict>(item);value.Properties.push_back({py::cast<std::string>(field["name"]),py::cast<std::string>(field["type"]),py::cast<std::string>(field["value"])});}pending.emplace_back(entity,std::move(value));}
@@ -748,10 +748,10 @@ public:
     bool IsPlaying() const { return m_playing; }
     bool IsPaused() const { return m_paused; }
 
-    bool ConfigureScripts(const py::list& values) {
+    bool ConfigureScripts(const py::list& values,bool reload=false) {
         std::vector<Runtime::ScriptBinding> bindings;
         try{for(const py::handle itemHandle:values){const auto item=py::reinterpret_borrow<py::dict>(itemHandle);Runtime::ScriptBinding binding;binding.Module=std::filesystem::u8path(py::str(item["module"]).cast<std::string>());binding.Entity=py::str(item["entity"]).cast<std::string>();binding.TypeName=py::str(item["type"]).cast<std::string>();const auto properties=py::reinterpret_borrow<py::dict>(item["properties"]);for(const auto& pair:properties){const std::string name=py::str(pair.first).cast<std::string>();const py::handle value=pair.second;std::string text;if(py::isinstance<py::bool_>(value))text=value.cast<bool>()?"true":"false";else if(py::isinstance<py::sequence>(value)&&!py::isinstance<py::str>(value)){const auto sequence=py::reinterpret_borrow<py::sequence>(value);for(const auto part:sequence){if(!text.empty())text+=',';text+=py::str(part).cast<std::string>();}}else text=py::str(value).cast<std::string>();binding.Properties.emplace(name,std::move(text));}bindings.push_back(std::move(binding));}}catch(const py::error_already_set& error){m_bridgeError=error.what();return false;}
-        m_bridgeError.clear();return m_engine->ConfigureScripts(std::move(bindings));
+        m_bridgeError.clear();return reload?m_engine->ReloadScripts(std::move(bindings)):m_engine->ConfigureScripts(std::move(bindings));
     }
 
     bool SyncLuaScripts(const py::list& values) {
@@ -777,7 +777,7 @@ public:
         m_bridgeError.clear();return true;
     }
     bool RefreshLuaAssets(const std::vector<std::string>& paths){
-        if(m_playing)return false;
+        // Import bytecode independently; live VMs are replaced only by ReloadScripts.
         for(const auto& path:paths)if(!m_engine->RefreshLuaAsset(std::filesystem::u8path(path)))return false;
         return true;
     }
@@ -1001,7 +1001,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("set_editor_entity_state", &Bazzalt::EditorBridge::EditorHost::SetEditorEntityState)
         .def("set_editor_orientation_visible", &Bazzalt::EditorBridge::EditorHost::SetEditorOrientationVisible)
         .def("set_scene_render_mode", &Bazzalt::EditorBridge::EditorHost::SetSceneRenderMode)
-        .def("configure_scripts", &Bazzalt::EditorBridge::EditorHost::ConfigureScripts)
+        .def("configure_scripts", &Bazzalt::EditorBridge::EditorHost::ConfigureScripts,py::arg("values"),py::arg("reload")=false)
         .def("sync_lua_scripts", &Bazzalt::EditorBridge::EditorHost::SyncLuaScripts)
         .def("lua_scene_scripts", &Bazzalt::EditorBridge::EditorHost::LuaSceneScripts,py::arg("include_native")=false)
         .def("refresh_lua_assets", &Bazzalt::EditorBridge::EditorHost::RefreshLuaAssets)

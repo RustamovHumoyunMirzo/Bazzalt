@@ -512,6 +512,9 @@ class RuntimeService(QObject):
     def GameScroll(self,x:float,y:float)->None:
         if self._host is not None and hasattr(self._host,"game_scroll"):self._host.game_scroll(x,y)
 
+    def ReloadScripts(self,bindings:list[dict])->bool:
+        return bool(self._host and self._host.configure_scripts(bindings,True))
+
     def ConfigureScripts(self,bindings:list[dict])->bool:
         return bool(self._host and hasattr(self._host,"configure_scripts") and self._host.configure_scripts(bindings))
     def SyncLuaScripts(self,bindings:list[dict])->bool:

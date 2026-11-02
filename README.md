@@ -15,12 +15,6 @@ See [what is new in 0.8.0](docs/public/0.8.0/whats-new/en.html).
 > **Alpha status:** core workflows are functional, but APIs and file formats may
 > still change. BAZZALT is not yet recommended for production projects.
 
-Networking and player persistence are available through `Bazzalt/Network.h` and
-`Bazzalt/SaveGame.h`, with matching Lua APIs. See the
-[networking and save-game guide](docs/public/0.8.0/native/network-save/en.html).
-Fetch the pinned transport sources with `scripts/get_yojimbo.ps1` or
-`scripts/get_yojimbo.sh` before configuring CMake.
-
 ## Supported platforms & backends
 
 ### Platforms
@@ -30,13 +24,13 @@ Fetch the pinned transport sources with `scripts/get_yojimbo.ps1` or
 | Windows | ✅ x64 | ✅ x64, x86, ARM64 |
 | Linux | ✅ x64; X11, Wayland | ✅ x64, x86, ARM64; X11, Wayland |
 | macOS 12+ | ✅ Intel x64, Apple silicon | ✅ x64, ARM64 |
-| iOS / iPadOS | Not supported | Not supported |
-| Android | Not supported | Not supported |
-| Web / WebAssembly | Not supported | Not supported |
-| Xbox consoles | Not supported | Not supported |
-| PlayStation consoles | Not supported | Not supported |
-| Nintendo consoles | Not supported | Not supported |
-| FreeBSD / other BSD systems | Not supported | Not supported |
+| iOS / iPadOS | ❌ | ❌ |
+| Android | ❌ | ❌ |
+| Web / WebAssembly | ❌ | ❌ |
+| Xbox consoles | ❌ | ❌ |
+| PlayStation consoles | ❌ | ❌ |
+| Nintendo consoles | ❌ | ❌ |
+| FreeBSD / other BSD systems | ❌ | ❌ |
 
 Hub, Editor and game compiler require a 64-bit machine. x86 is a game-output
 option only. ARM64 Core/game runtime artifacts are built on native Windows/Linux CI
@@ -52,15 +46,15 @@ and [remote workers](docs/public/0.8.0/manual/remote-builds/en.html).
 
 ### Rendering backends
 
-| Backend | Windows | Linux | macOS | Notes |
-| --- | --- | --- | --- | --- |
-| Automatic | Supported | Supported | Metal | Selects an available SDK backend. |
-| Vulkan | Supported | Supported | Unsupported | Compatible GPU/driver required. |
-| OpenGL | Supported | Supported | Unsupported | Compatible GPU/driver required. |
-| Metal | Unsupported | Unsupported | Supported | Native Cocoa / Metal presentation. |
-| Direct3D 11 / 12 | Unsupported | Unsupported | Unsupported | No backend. |
-| OpenGL ES / WebGPU / WebGL | Unsupported | Unsupported | Unsupported | No mobile/browser distribution. |
-| NOOP | Tests only | Tests only | Tests only | No presentation. |
+| Backend | Windows | Linux | macOS |
+| --- | --- | --- | --- |
+| Automatic | ✅ | ✅ | ✅ Metal |
+| Vulkan | ✅ | ✅ | ❌ |
+| OpenGL | ✅ | ✅ | ❌ |
+| Metal | ❌ | ❌ | ✅ |
+| Direct3D 11 / 12 | ❌ | ❌ | ❌ |
+| OpenGL ES / WebGPU / WebGL | ❌ | ❌ | ❌ |
+| NOOP | Tests only | Tests only | Tests only |
 
 Backend choices depend on the backends included in the installed runtime SDK;
 Preferences lists those available in that build. A renderer dependency's support

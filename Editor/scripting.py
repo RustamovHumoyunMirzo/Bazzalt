@@ -135,7 +135,7 @@ class ScriptCompiler:
     def Build(self, used: list[str|Path])->BuildResult:
         try:
             return self._Build(used)
-        except (OSError, ValueError) as error:
+        except (OSError, ValueError, subprocess.TimeoutExpired) as error:
             return BuildResult(False, diagnostics=(Diagnostic("error", str(error)),))
 
     def _Build(self, used: list[str|Path])->BuildResult:
@@ -203,7 +203,7 @@ class ScriptCompiler:
                     if os.sys.platform!="darwin":
                         command.extend(["-stdlib=libstdc++" if self.Architecture=='x86' else "-stdlib=libc++","-Wl,--no-undefined"])
                         if self.Architecture=='x86':command.extend(['-m32','-msse2','-mfpmath=sse'])
-            process=subprocess.run(command,cwd=self.project,text=True,capture_output=True,encoding="utf-8",errors="replace",creationflags=subprocess.CREATE_NO_WINDOW if os.name=="nt" else 0)
+            process=subprocess.run(command,cwd=self.project,text=True,capture_output=True,encoding="utf-8",errors="replace",creationflags=subprocess.CREATE_NO_WINDOW if os.name=="nt" else 0,timeout=300)
             for line in (process.stdout+"\n"+process.stderr).splitlines():
                 if line.strip():diagnostics.append(Diagnostic("error" if "error:" in line.lower() else "warning" if "warning:" in line.lower() else "info",line.strip()))
             if process.returncode:return BuildResult(False,tuple(outputs),tuple(diagnostics))
@@ -250,7 +250,7 @@ class ScriptCompiler:
                 type_name=kind.split("::")[-1];body=f'{{Bazzalt::UUID id;if(std::strcmp(value,"0")!=0&&!Bazzalt::UUID::TryParse(value,id))return false;self->{prop.name}=Bazzalt::{type_name}::Load(id);return !id||self->{prop.name}.IsValid();}}'
             elif kind in ("Vec2","Bazzalt::Vec2"):body=f'return std::sscanf(value,"%f,%f",&self->{prop.name}.X,&self->{prop.name}.Y)==2;'
             elif kind in ("Vec3","Bazzalt::Vec3"):body=f'return std::sscanf(value,"%f,%f,%f",&self->{prop.name}.X,&self->{prop.name}.Y,&self->{prop.name}.Z)==3;'
-            elif kind in ("Vec4","Bazzalt::Vec4"):body=f'return std::sscanf(value,"%f,%f,%f,%f",&self->{prop.name}.X,&self->{prop.name}.Y,&self->{prop.name}.Z,&self->{prop.name}.W)==4;'
+            elif kind in ("Vec4","Bazzalt::Vec4","Quaternion","Bazzalt::Quaternion"):body=f'return std::sscanf(value,"%f,%f,%f,%f",&self->{prop.name}.X,&self->{prop.name}.Y,&self->{prop.name}.Z,&self->{prop.name}.W)==4;'
             else:body=f'{{std::istringstream input(value);input>>self->{prop.name};return !input.fail();}}'
             setters.append(f'if(std::strcmp(name,"{prop.name}")==0){{{body}}}')
         source=str(descriptor.path).replace("\\","/").replace('"','\\"')
@@ -265,6 +265,23 @@ class ScriptCompiler:
         wrapper += f'\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltFixedUpdateV1(void* p,float dt){{static_cast<{name}*>(p)->OnFixedUpdate(dt);}}\n'
         wrapper += f'\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltLateUpdateV1(void* p,float dt){{static_cast<{name}*>(p)->OnLateUpdate(dt);}}\n'
         wrapper += f'\nextern "C" BAZZALT_SCRIPT_EXPORT Bazzalt::Behavior* BazzaltGetBehaviorV1(void* p){{return static_cast<{name}*>(p);}}\n'
+        getters=[]
+        for prop in descriptor.properties:
+            kind=prop.type.replace("const", "").replace("&", "").strip().split("::")[-1]
+            value=f'self->{prop.name}'
+            if kind in ("Vec2","Vec3","Vec4","Quaternion"):
+                axes="XY" if kind=="Vec2" else "XYZ" if kind=="Vec3" else "XYZW"
+                expr=' << "," << '.join(value+'.'+axis for axis in axes)
+            elif kind=="bool":expr=f'({value}?"true":"false")'
+            elif kind=="Entity":expr=f'{value}.GetUUID().ToString()'
+            elif kind=="EntityReference":expr=f'{value}.GetUUID().ToString()'
+            elif kind in ("Material","Shader","Texture","AudioClip","Font","GlobalEvent"):expr=f'{value}.GetAssetUUID().ToString()'
+            else:expr=value
+            getters.append(f'{{std::ostringstream out;out.precision(17);out << {expr};auto text=out.str();if(text.find(char(0))!=std::string::npos)throw std::runtime_error("Reload strings cannot contain NUL");visit(context,"{prop.name}","{prop.type}",text.c_str());}}')
+        wrapper += f'\nextern "C" BAZZALT_SCRIPT_EXPORT void BazzaltVisitPropertiesV1(void* p,void* context,void(*visit)(void*,const char*,const char*,const char*)) noexcept(false){{auto* self=static_cast<{name}*>(p);{"".join(getters)}}}\n'
+        wrapper += f'extern "C" BAZZALT_SCRIPT_EXPORT const char* BazzaltSaveReloadStateV1(void* p) noexcept(false){{static thread_local std::string state;state=static_cast<{name}*>(p)->OnSaveReloadState();if(state.find(char(0))!=std::string::npos)throw std::runtime_error("Reload strings cannot contain NUL");return state.c_str();}}\n'
+        wrapper += f'extern "C" BAZZALT_SCRIPT_EXPORT void BazzaltRestoreReloadStateV1(void* p,const char* state) noexcept(false){{static_cast<{name}*>(p)->OnRestoreReloadState(state);}}\n'
+        wrapper += f'extern "C" BAZZALT_SCRIPT_EXPORT void BazzaltReloadV1(void* p) noexcept(false){{static_cast<{name}*>(p)->OnReload();}}\n'
         return wrapper.replace(f"void* Create(){{return new {name}();}}",f"void* Create(const char* entity){{auto* value=new {name}();Bazzalt::ScriptRuntimeAccess::Bind(*value,entity);return value;}}")
 
     @staticmethod

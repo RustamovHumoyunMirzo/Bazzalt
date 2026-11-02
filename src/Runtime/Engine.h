@@ -111,6 +111,7 @@ public:
     void SetEditorOrientationVisible(bool visible);
     bool SetSceneRenderMode(const std::string& mode);
     bool ConfigureScripts(std::vector<ScriptBinding> bindings);
+    bool ReloadScripts(std::vector<ScriptBinding> bindings);
     bool StartScripts(bool resetTime = true);
     void StopScripts();
     bool PrepareApplication();

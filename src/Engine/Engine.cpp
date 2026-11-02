@@ -443,6 +443,36 @@ bool Engine::ConfigureScripts(std::vector<ScriptBinding> bindings){
     if(!m_scriptRuntime->Configure(std::move(native),m_lastError))return false;
     m_luaConfigured=m_luaRuntime->Configure(std::move(lua),m_lastError);return m_luaConfigured;
 }
+bool Engine::ReloadScripts(std::vector<ScriptBinding> bindings){
+ if(!m_editorHost||!m_scriptsRunning){m_lastError="Hot reload requires editor Play mode";return false;}
+ try{
+ std::vector<ScriptBinding> streamed;m_streaming->CollectReloadBindings(streamed);
+ std::vector<ScriptBinding> existing=m_scriptRuntime->GetBindings();for(auto& binding:m_luaRuntime->GetBindings())existing.push_back(binding);existing.insert(existing.end(),streamed.begin(),streamed.end());
+ for(auto& old:existing){if(std::any_of(bindings.begin(),bindings.end(),[&](const auto& value){return value.Entity==old.Entity&&value.TypeName==old.TypeName;}))continue;auto replacement=std::find_if(bindings.begin(),bindings.end(),[&](const auto& value){return value.TypeName==old.TypeName;});if(replacement!=bindings.end())old.Module=replacement->Module;bindings.push_back(std::move(old));}
+ std::vector<ScriptBinding> native,lua;std::set<std::pair<std::string,std::string>> unique;
+ for(auto& binding:bindings){
+  if(binding.Entity.starts_with("@"))continue; // Subsystems keep their original lifetime.
+  UUID id;if(!UUID::TryParse(binding.Entity,id)||!m_scene->GetEntity(id))continue;
+  if(!unique.emplace(binding.Entity,binding.TypeName).second){m_lastError="Duplicate reload attachment";return false;}
+  auto extension=binding.Module.extension().string();std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){return char(std::tolower(c));});
+  if(extension==".lua"){auto asset=m_assetDatabase->Find(binding.Module);if(!asset||asset->State!=AssetState::Ready){m_lastError="Lua reload asset is not ready";return false;}binding.Module=asset->CachePath;lua.push_back(std::move(binding));}
+  else if(extension==".blua")lua.push_back(std::move(binding));else native.push_back(std::move(binding));
+ }
+ std::vector<ScriptBinding> all=native;all.insert(all.end(),lua.begin(),lua.end());
+ const auto isStreamed=[&](const ScriptBinding& binding){return std::any_of(streamed.begin(),streamed.end(),[&](const auto& value){return value.Entity==binding.Entity&&value.TypeName==binding.TypeName;});};
+ std::erase_if(native,isStreamed);std::erase_if(lua,isStreamed);
+ auto nextNative=std::make_unique<NativeScriptRuntime>();auto nextLua=std::make_unique<LuaRuntime>();
+ if(!nextNative->Configure(std::move(native),m_lastError)||!nextLua->Configure(std::move(lua),m_lastError))return false;
+ if(!nextNative->Start(m_lastError,false,true)||!nextLua->Start(m_lastError,true))return false;
+ if(!nextNative->PreserveFrom(*m_scriptRuntime,m_lastError)||!nextLua->PreserveFrom(*m_luaRuntime,m_lastError))return false;
+ if(!m_streaming->PrepareReload(all,m_lastError))return false;
+ m_scriptRuntime->DiscardForReload();m_luaRuntime->DiscardForReload();
+ m_scriptRuntime=std::move(nextNative);m_luaRuntime=std::move(nextLua);
+ m_scriptRuntime->ActivateReload(false);m_streaming->CommitReload();
+ m_scriptRuntime->NotifyReload();m_luaRuntime->ActivateReload();m_streaming->NotifyReload();m_lastError.clear();return true;
+ }catch(const std::exception& failure){m_streaming->CancelReload();m_lastError=failure.what();return false;}
+ catch(...){m_streaming->CancelReload();m_lastError="Gameplay reload failed with an unknown exception";return false;}
+}
 bool Engine::RefreshLuaAsset(const std::filesystem::path& source){
     auto extension=source.extension().string();std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){return char(std::tolower(c));});
     if(extension!=".lua"){m_lastError="Not a Lua source asset";return false;}

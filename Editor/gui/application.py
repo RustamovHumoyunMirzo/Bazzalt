@@ -483,6 +483,7 @@ class Editor(QMainWindow):
         self._camera_save_timer.stop();self._SaveSceneCamera()
         self._layout_save_timer.stop();self._SaveWorkspace()
         self.Scene.Detach(); self.Output.Detach()
+        self.Controller.HotReload.Shutdown()
         self.Controller.Stop()
         # close() hides a Qt widget; it does not destroy it. Release native GPU
         # ownership now, before another editor can initialize its own runtime.

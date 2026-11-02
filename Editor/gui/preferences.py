@@ -10,7 +10,7 @@ from pathlib import Path
 from ..platform_services import ChooseApplication
 from .transform_units import DEFAULT_UNITS,TransformUnits
 
-DEFAULT_PREFERENCES={"general":{"confirm_unsaved":True,"save_workspace":True},"appearance":{"theme":"dark","locale":"en"},"scene":{"navigation_speed":5.0,"grid_visible":True,"grid_plane":1},"console":{"clear_on_play":False},"scripting":{"show_compile_success":True}}
+DEFAULT_PREFERENCES={"general":{"confirm_unsaved":True,"save_workspace":True},"appearance":{"theme":"dark","locale":"en"},"scene":{"navigation_speed":5.0,"grid_visible":True,"grid_plane":1},"console":{"clear_on_play":False},"scripting":{"show_compile_success":True,"hot_reload":True}}
 DEFAULT_PREFERENCES["scene"].update(pivot_center=False,local_space=False,gizmos_visible=True,stats_visible=False,icons_visible=True,shading_mode=0,look_sensitivity=.35,fly_boost=3.0)
 DEFAULT_PREFERENCES["scene"]["orientation_visible"]=True
 DEFAULT_PREFERENCES["scene"]["save_camera_position"]=True
@@ -78,6 +78,7 @@ class PreferencesDialog(QDialog):
             field=RangeInput(minimum,maximum,value,decimals=0);layout.addRow(self.Tr(f"preferences.{key}"),field);self.Controls[key]=field
     def _AddScripting(self):
         layout=self._Page("scripting");success=QCheckBox(self.Tr("preferences.show_compile_success"));layout.addRow(success);self.Controls["show_compile_success"]=success
+        reload=QCheckBox(self.Tr("preferences.hot_reload"));layout.addRow(reload);self.Controls["hot_reload"]=reload
     def _AddRendering(self):
         layout=self._Page("rendering");backend=QComboBox()
         for name in self.Editor.Runtime.SupportedRenderingBackends():
@@ -129,7 +130,7 @@ class PreferencesDialog(QDialog):
     def _ComboSet(combo,value):index=combo.findData(value);combo.setCurrentIndex(max(0,index))
     def SetValues(self,value:dict)->None:
         self.Controls["expand_new_hierarchy_items"].setChecked(bool(MergePreferences(value)["general"]["expand_new_hierarchy_items"]))
-        p=MergePreferences(value);c=self.Controls;c["confirm_unsaved"].setChecked(bool(p["general"]["confirm_unsaved"]));c["save_workspace"].setChecked(bool(p["general"]["save_workspace"]));self._ComboSet(c["theme"],p["appearance"]["theme"]);self._ComboSet(c["locale"],p["appearance"]["locale"]);c["navigation_speed"].setValue(float(p["scene"]["navigation_speed"]));c["grid_visible"].setChecked(bool(p["scene"]["grid_visible"]));self._ComboSet(c["grid_plane"],int(p["scene"]["grid_plane"]));c["clear_on_play"].setChecked(bool(p["console"]["clear_on_play"]));c["show_compile_success"].setChecked(bool(p["scripting"]["show_compile_success"]))
+        p=MergePreferences(value);c=self.Controls;c["hot_reload"].setChecked(bool(p["scripting"]["hot_reload"]));c["confirm_unsaved"].setChecked(bool(p["general"]["confirm_unsaved"]));c["save_workspace"].setChecked(bool(p["general"]["save_workspace"]));self._ComboSet(c["theme"],p["appearance"]["theme"]);self._ComboSet(c["locale"],p["appearance"]["locale"]);c["navigation_speed"].setValue(float(p["scene"]["navigation_speed"]));c["grid_visible"].setChecked(bool(p["scene"]["grid_visible"]));self._ComboSet(c["grid_plane"],int(p["scene"]["grid_plane"]));c["clear_on_play"].setChecked(bool(p["console"]["clear_on_play"]));c["show_compile_success"].setChecked(bool(p["scripting"]["show_compile_success"]))
         for key in ("save_camera_position","pivot_center","local_space","gizmos_visible","stats_visible","icons_visible","orientation_visible","high_level_selection","trail_translate","trail_rotate","trail_scale"):c[key].setChecked(bool(p["scene"][key]))
         self._ComboSet(c["shading_mode"],p["scene"]["shading_mode"])
         for key in ("look_sensitivity","fly_boost","trail_duration"):c[key].SetValue(p["scene"][key])
@@ -142,7 +143,7 @@ class PreferencesDialog(QDialog):
         for key in STATISTIC_FIELDS:c["stat_"+key].setChecked(bool(p["statistics"][key]))
     def Values(self)->dict:
         c=self.Controls;result=MergePreferences(self.Editor.GetPreferences())
-        result.update(general={"confirm_unsaved":c["confirm_unsaved"].isChecked(),"save_workspace":c["save_workspace"].isChecked()},appearance={"theme":c["theme"].currentData(),"locale":c["locale"].currentData()},console={"clear_on_play":c["clear_on_play"].isChecked()},scripting={"show_compile_success":c["show_compile_success"].isChecked()})
+        result.update(general={"confirm_unsaved":c["confirm_unsaved"].isChecked(),"save_workspace":c["save_workspace"].isChecked()},appearance={"theme":c["theme"].currentData(),"locale":c["locale"].currentData()},console={"clear_on_play":c["clear_on_play"].isChecked()},scripting={"show_compile_success":c["show_compile_success"].isChecked(),"hot_reload":c["hot_reload"].isChecked()})
         result["scene"].update(navigation_speed=c["navigation_speed"].value(),grid_visible=c["grid_visible"].isChecked(),grid_plane=c["grid_plane"].currentData(),shading_mode=c["shading_mode"].currentData())
         result["general"]["expand_new_hierarchy_items"]=c["expand_new_hierarchy_items"].isChecked()
         for key in ("save_camera_position","pivot_center","local_space","gizmos_visible","stats_visible","icons_visible","orientation_visible","high_level_selection","trail_translate","trail_rotate","trail_scale"):result["scene"][key]=c[key].isChecked()

@@ -86,6 +86,8 @@ struct StreamingRuntime::Impl {
         std::size_t Created=0,Applied=0;
         std::unique_ptr<NativeScriptRuntime> Native;
         std::unique_ptr<LuaRuntime> Lua;
+        std::unique_ptr<NativeScriptRuntime> ReloadNative;
+        std::unique_ptr<LuaRuntime> ReloadLua;
     };
     std::vector<std::shared_ptr<Cell>> Cells;
     std::unordered_map<UUID,StreamingCell> Registered;
@@ -210,6 +212,18 @@ void StreamingRuntime::AdoptHierarchy(Entity root){
     std::vector<Entity> entities{root};bool scripted=false;for(std::size_t i=0;i<entities.size();++i){auto entity=entities[i];cell->Owned.push_back(entity.GetUUID());if(auto* scripts=entity.TryGetComponent<ScriptComponents>())scripted=scripted||(!scripts->Values.empty()&&scripts->IsEnabled());auto children=entity.GetChildren();entities.insert(entities.end(),children.begin(),children.end());}
     if(scripted)m_impl->Cells.push_back(std::move(cell));
 }
+void StreamingRuntime::CollectReloadBindings(std::vector<ScriptBinding>& bindings)const{for(auto& cell:m_impl->Cells){if(cell->Native)for(auto& binding:cell->Native->GetBindings())bindings.push_back(binding);if(cell->Lua)for(auto& binding:cell->Lua->GetBindings())bindings.push_back(binding);}}
+bool StreamingRuntime::PrepareReload(const std::vector<ScriptBinding>& bindings,std::string& error){
+ CancelReload();
+ const auto replaced=[&](const std::vector<ScriptBinding>& old){auto result=old;for(auto& binding:result){auto found=std::find_if(bindings.begin(),bindings.end(),[&](const auto& value){return value.Entity==binding.Entity&&value.TypeName==binding.TypeName;});if(found!=bindings.end())binding=*found;}return result;};
+ for(auto& cell:m_impl->Cells){
+  if(cell->Native){cell->ReloadNative=std::make_unique<NativeScriptRuntime>();if(!cell->ReloadNative->Configure(replaced(cell->Native->GetBindings()),error)||!cell->ReloadNative->Start(error,false,true)||!cell->ReloadNative->PreserveFrom(*cell->Native,error)){CancelReload();return false;}}
+  if(cell->Lua){cell->ReloadLua=std::make_unique<LuaRuntime>();if(!cell->ReloadLua->Configure(replaced(cell->Lua->GetBindings()),error)||!cell->ReloadLua->Start(error,true)||!cell->ReloadLua->PreserveFrom(*cell->Lua,error)){CancelReload();return false;}}
+ }return true;
+}
+void StreamingRuntime::CancelReload(){for(auto& cell:m_impl->Cells){cell->ReloadNative.reset();cell->ReloadLua.reset();}}
+void StreamingRuntime::CommitReload(){for(auto& cell:m_impl->Cells){if(cell->ReloadNative){cell->Native->DiscardForReload();cell->Native=std::move(cell->ReloadNative);cell->Native->ActivateReload(false);}if(cell->ReloadLua){cell->Lua->DiscardForReload();cell->Lua=std::move(cell->ReloadLua);}}}
+void StreamingRuntime::NotifyReload(){for(auto& cell:m_impl->Cells){if(cell->Native)cell->Native->NotifyReload();if(cell->Lua)cell->Lua->ActivateReload();}}
 void StreamingRuntime::StopScripts(){const auto cells=m_impl->Cells;for(auto& cell:cells)m_impl->Stop(*cell);}
 bool StreamingRuntime::IsReplacingScene() const{return m_impl->Replacing;}
 bool StreamingRuntime::HasPendingScene() const{for(auto& cell:m_impl->Cells)if(!cell->Additive&&!Terminal(cell->State->Status))return true;return false;}

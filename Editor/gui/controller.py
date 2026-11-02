@@ -74,6 +74,9 @@ class EditorController(QObject):
         self._asset_picker_records=None
         self._material_scenes=None
         self.History=SceneHistory(runtime,self)
+        from ..hot_reload import HotReloadController
+        self.HotReload=HotReloadController(self)
+        window.MenuBar.ReloadScriptsRequested.connect(self.HotReload.Reload)
         self.Timer = QTimer(self)
         self.Timer.setInterval(16)
         self.Timer.timeout.connect(self._Tick)
@@ -1358,6 +1361,8 @@ class EditorController(QObject):
 
     def Play(self) -> None:
         if self.Runtime.IsPlaying():return
+        if self.HotReload.Worker is not None:
+            self._ScriptValidationFailed(self.Window.Localization.Translate("scripting.reload_busy"));self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
         if self.LuaAssets.IsBusy():self._lua_play_pending=True;return
         if not self._PrepareUsedMaterials():self.Window.Toolbar.SetPlayState(PlayState.Stopped);return
         if self.Window.PreferenceValue("console","clear_on_play",False):self.Window.Console.Clear()
@@ -1397,7 +1402,7 @@ class EditorController(QObject):
         authoring=(set(self._dirty_scenes),self.History.Checkpoint())
         if not self.Runtime.Play():self.Window.Toolbar.SetPlayState(PlayState.Stopped)
         else:
-            self._play_authoring=authoring;self.History.Clear()
+            self._play_authoring=authoring;self.History.Clear();self.HotReload.Track()
             self.Window.Output.SetGameCameraAvailable(self.Runtime.HasGameOutput())
             self.Window.Docking.activate_panel("output");self.GameInput.FocusGame()
 
@@ -1476,6 +1481,7 @@ class EditorController(QObject):
         self._lua_play_pending=False;self._ScriptValidationFailed(error);self.Window.Toolbar.SetPlayState(PlayState.Stopped)
 
     def Stop(self) -> None:
+        self.HotReload.Stop()
         self._lua_play_pending=False
         self.Runtime.SetGameInputActive(False)
         self.Runtime.Stop()

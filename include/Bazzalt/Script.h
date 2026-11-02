@@ -29,6 +29,10 @@ public:
     virtual void OnTriggerEnter(const CollisionEvent&) {}
     virtual void OnTriggerStay(const CollisionEvent&) {}
     virtual void OnTriggerExit(const CollisionEvent&) {}
+    // Reload hooks run without replaying OnCreate/OnDestroy. State is application-defined.
+    virtual std::string OnSaveReloadState() const { return {}; }
+    virtual void OnRestoreReloadState(const std::string&) {}
+    virtual void OnReload() {}
     [[nodiscard]] const std::string& GetEntityUUID() const { return m_entityUUID; }
     [[nodiscard]] Entity GetEntity() const {
         UUID id;

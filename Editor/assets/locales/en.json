@@ -1375,5 +1375,11 @@
   "prefab.short.apply": "Apply",
   "prefab.short.revert": "Revert",
   "prefab.short.refresh": "Update",
-  "prefab.short.unpack": "Unpack"
+  "prefab.short.unpack": "Unpack",
+  "scripting.reload": "Reload Gameplay Scripts",
+  "scripting.reload_failed": "Script compilation failed. Active scripts were kept.",
+  "scripting.reload_error": "Script reload failed: {error}",
+  "scripting.reload_success": "Gameplay scripts reloaded. Scene and script state preserved.",
+  "preferences.hot_reload": "Automatically reload gameplay scripts during Play",
+  "scripting.reload_busy": "A script reload is still compiling. Wait for it to finish before starting Play again."
 }

@@ -13,6 +13,7 @@
 #include "Runtime/InputAccess.h"
 #include "Runtime/MaterialLibrary.h"
 #include <exception>
+#include <iostream>
 #include <map>
 #include <set>
 #ifdef _WIN32
@@ -61,6 +62,7 @@ struct NativeScriptRuntime::Instance {
     void (*OnLateUpdate)(void*,float) = nullptr;
     void (*OnApplicationEvent)(void*,const Bazzalt::ApplicationEvent*) = nullptr;
     bool Application=false;
+    bool ReloadMatched=false;
     Behavior* BehaviorObject=nullptr;
 };
 NativeScriptRuntime::NativeScriptRuntime()=default;
@@ -78,8 +80,8 @@ bool NativeScriptRuntime::Configure(std::vector<ScriptBinding> bindings,std::str
     }
     m_bindings=std::move(bindings);error.clear();return true;
 }
-bool NativeScriptRuntime::Start(std::string& error,bool application){
-    Stop();error.clear();
+bool NativeScriptRuntime::Start(std::string& error,bool application,bool reloading){
+    Stop();m_reloading=reloading;error.clear();
     for(const auto& binding:m_bindings){Instance instance;instance.Application=application;
 #ifdef _WIN32
         instance.Library=LoadLibraryExW(binding.Module.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);auto entry=instance.Library?reinterpret_cast<GetScriptModuleApi>(GetProcAddress(instance.Library,"BazzaltGetScriptModuleV1")):nullptr;
@@ -150,10 +152,10 @@ bool NativeScriptRuntime::Start(std::string& error,bool application){
             if(!valid){error="Invalid property '"+name+"' on "+binding.TypeName+(reason.empty()?"":": "+reason);m_instances.push_back(instance);Stop();return false;}
         }
         m_instances.push_back(instance);
-        try{BehaviorAccess::Register(binding.Entity,binding.TypeName,instance.BehaviorObject);}catch(const std::exception& failure){error=failure.what();Stop();return false;}
+        try{if(!m_reloading)BehaviorAccess::Register(binding.Entity,binding.TypeName,instance.BehaviorObject);}catch(const std::exception& failure){error=failure.what();Stop();return false;}
     }
     if(application)for(auto& instance:m_instances)if(!instance.OnApplicationEvent){error="Application script must be rebuilt with application event support";Stop();return false;}
-    try{if(!application)for(auto& instance:m_instances){ModuleScope scope(instance.Lease,instance.Object,instance.Api->TypeName);instance.Api->OnCreate(instance.Object);}}catch(const std::exception& e){error=std::string("Script OnCreate failed: ")+e.what();Stop();return false;}catch(...){error="Script OnCreate failed";Stop();return false;}
+    try{if(!application&&!m_reloading)for(auto& instance:m_instances){ModuleScope scope(instance.Lease,instance.Object,instance.Api->TypeName);instance.Api->OnCreate(instance.Object);}}catch(const std::exception& e){error=std::string("Script OnCreate failed: ")+e.what();Stop();return false;}catch(...){error="Script OnCreate failed";Stop();return false;}
     try{if(auto* scene=SceneManager::GetActiveScene()){
         auto previous=ApplicationEventsAccess::SetOwner(this);
         try{for(int i=0;i<6;++i)scene->GetPhysics().Subscribe(PhysicsEventType(i),[this](const CollisionEvent& event){
@@ -166,9 +168,41 @@ bool NativeScriptRuntime::Start(std::string& error,bool application){
     }}catch(const std::exception& failure){error=failure.what();Stop();return false;}
     return true;
 }
+namespace {
+void* ReloadSymbol(void* library,const char* name){
+#ifdef _WIN32
+return reinterpret_cast<void*>(GetProcAddress(static_cast<HMODULE>(library),name));
+#else
+return dlsym(library,name);
+#endif
+}
+using ReloadProperties=std::map<std::string,std::pair<std::string,std::string>>;
+using VisitReloadProperties=void(*)(void*,void*,void(*)(void*,const char*,const char*,const char*));
+ReloadProperties ReadReloadProperties(void* library,void* object){
+ auto visit=reinterpret_cast<VisitReloadProperties>(ReloadSymbol(library,"BazzaltVisitPropertiesV1"));
+ if(!visit)throw std::runtime_error("Script must be rebuilt with hot reload support");
+ ReloadProperties values;visit(object,&values,[](void* context,const char* name,const char* type,const char* value){auto& values=*static_cast<ReloadProperties*>(context);if(values.size()>4096||std::char_traits<char>::length(value)>1024*1024)throw std::runtime_error("Reload state exceeds limits");values[name]={type,value};});return values;
+}
+}
+bool NativeScriptRuntime::PreserveFrom(const NativeScriptRuntime& previous,std::string& error){
+ try{for(std::size_t i=0;i<m_instances.size();++i){auto& target=m_instances[i];
+  for(std::size_t j=0;j<previous.m_instances.size();++j){if(m_bindings[i].Entity!=previous.m_bindings[j].Entity||m_bindings[i].TypeName!=previous.m_bindings[j].TypeName)continue;
+   target.ReloadMatched=true;auto& old=previous.m_instances[j];JobAccess::WaitForModule(old.Lease);if(target.BehaviorObject&&old.BehaviorObject)target.BehaviorObject->Enabled=old.BehaviorObject->Enabled;
+   ModuleScope oldScope(old.Lease,old.Object,old.Api->TypeName);auto state=ReadReloadProperties(old.Library,old.Object);
+   ModuleScope newScope(target.Lease,target.Object,target.Api->TypeName);auto schema=ReadReloadProperties(target.Library,target.Object);
+   for(auto& [name,value]:state){auto found=schema.find(name);if(found==schema.end())continue;if(found->second.first!=value.first)throw std::runtime_error("Reload property type changed: "+name);if(!target.Api->SetProperty(target.Object,name.c_str(),value.second.c_str()))throw std::runtime_error("Could not restore reload property: "+name);}
+   auto save=reinterpret_cast<const char*(*)(void*)>(ReloadSymbol(old.Library,"BazzaltSaveReloadStateV1"));
+   auto restore=reinterpret_cast<void(*)(void*,const char*)>(ReloadSymbol(target.Library,"BazzaltRestoreReloadStateV1"));
+   if(save&&restore){ModuleScope saving(old.Lease,old.Object,old.Api->TypeName);std::string extra=save(old.Object);if(extra.size()>1024*1024)throw std::runtime_error("Custom reload state exceeds 1 MiB");ModuleScope restoring(target.Lease,target.Object,target.Api->TypeName);restore(target.Object,extra.c_str());}break;
+  }
+ }}catch(const std::exception& failure){error=failure.what();return false;}catch(...){error="Reload state callback failed";return false;}return true;
+}
+void NativeScriptRuntime::DiscardForReload() noexcept{for(auto& instance:m_instances)BehaviorAccess::Remove(instance.BehaviorObject);m_reloading=true;Stop();}
+void NativeScriptRuntime::ActivateReload(bool notify){m_reloading=false;for(std::size_t i=0;i<m_instances.size();++i)BehaviorAccess::Register(m_bindings[i].Entity,m_bindings[i].TypeName,m_instances[i].BehaviorObject);if(notify)NotifyReload();}
+void NativeScriptRuntime::NotifyReload(){for(auto& instance:m_instances){if(!instance.ReloadMatched){ModuleScope scope(instance.Lease,instance.Object,instance.Api->TypeName);try{instance.Api->OnCreate(instance.Object);}catch(const std::exception& error){std::cerr<<"[Reload] "<<error.what()<<'\n';}catch(...){std::cerr<<"[Reload] New script initialization failed\n";}continue;}auto callback=reinterpret_cast<void(*)(void*)>(ReloadSymbol(instance.Library,"BazzaltReloadV1"));if(callback){ModuleScope scope(instance.Lease,instance.Object,instance.Api->TypeName);try{callback(instance.Object);}catch(const std::exception& error){std::cerr<<"[Reload] "<<error.what()<<'\n';}catch(...){std::cerr<<"[Reload] OnReload failed\n";}}}}
 void NativeScriptRuntime::Update(float deltaTime){for(auto& instance:m_instances){ModuleScope scope(instance.Lease,instance.Object,instance.Api->TypeName);instance.Api->OnUpdate(instance.Object,deltaTime);}}
 void NativeScriptRuntime::FixedUpdate(float deltaTime){for(auto& instance:m_instances)if(instance.OnFixedUpdate){ModuleScope scope(instance.Lease,instance.Object,instance.Api->TypeName);instance.OnFixedUpdate(instance.Object,deltaTime);}}
 void NativeScriptRuntime::LateUpdate(float deltaTime){for(auto& instance:m_instances)if(instance.OnLateUpdate){ModuleScope scope(instance.Lease,instance.Object,instance.Api->TypeName);instance.OnLateUpdate(instance.Object,deltaTime);}}
 void NativeScriptRuntime::ApplicationEvent(const Bazzalt::ApplicationEvent& event){for(auto& instance:m_instances)if(instance.OnApplicationEvent){ModuleScope scope(instance.Lease,instance.Object,instance.Api->TypeName);instance.OnApplicationEvent(instance.Object,&event);}}
-void NativeScriptRuntime::Stop() noexcept{for(const auto& instance:m_instances)JobAccess::WaitForModule(instance.Lease);ApplicationEventsAccess::DisconnectOwner(this);for(auto it=m_instances.rbegin();it!=m_instances.rend();++it)if(it->Object&&it->Api){ModuleScope scope(it->Lease,it->Object,it->Api->TypeName);BehaviorAccess::Remove(it->BehaviorObject);try{if(!it->Application)it->Api->OnDestroy(it->Object);}catch(...){}JobAccess::WaitForModule(it->Lease);GraphicsAccess::DisconnectScope(it->Object);ApplicationEventsAccess::DisconnectOwner(it->Object);try{it->Api->Destroy(it->Object);}catch(...){}}m_instances.clear();}
+void NativeScriptRuntime::Stop() noexcept{for(const auto& instance:m_instances)JobAccess::WaitForModule(instance.Lease);ApplicationEventsAccess::DisconnectOwner(this);for(auto it=m_instances.rbegin();it!=m_instances.rend();++it)if(it->Object&&it->Api){ModuleScope scope(it->Lease,it->Object,it->Api->TypeName);if(!m_reloading)BehaviorAccess::Remove(it->BehaviorObject);try{if(!it->Application&&!m_reloading)it->Api->OnDestroy(it->Object);}catch(...){}JobAccess::WaitForModule(it->Lease);GraphicsAccess::DisconnectScope(it->Object);ApplicationEventsAccess::DisconnectOwner(it->Object);try{it->Api->Destroy(it->Object);}catch(...){}}m_instances.clear();}
 }

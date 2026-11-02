@@ -67,13 +67,16 @@ return Example</code></pre>
 <p>Host cleanup callback. Release owned transient resources; do not destroy shared assets or take over host shutdown.</p>
 <p><strong>Returns:</strong> no required return value.</p>
 <p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<h2 id="OnSaveReloadState">OnSaveReloadState</h2><pre><code>function Behavior:OnSaveReloadState()</code></pre><p>Optional: return a supported data table to transfer, replacing automatic capture of all self fields. Keep it side-effect-free. An error rejects reload.</p>
+<h2 id="OnRestoreReloadState">OnRestoreReloadState</h2><pre><code>function Behavior:OnRestoreReloadState(state)</code></pre><p>Optional: validate/migrate the transferred table onto the candidate. Replaces automatic merging; default is to merge data. An error rejects reload before commit. This is the place to handle versioned state and omit transient userdata.</p>
+<h2 id="OnReload">OnReload</h2><pre><code>function Behavior:OnReload()</code></pre><p>Called after a successful editor hot reload, with supported instance data restored. Reconnect subscriptions and rebuild caches here. OnCreate is not replayed. See <a href="../../hot-reload/en.html">Lua reload state</a>.</p>
 <h2 id="Entity">Entity</h2>
 <pre><code>self.Entity</code></pre>
 <p>Host-supplied owning entity handle. Do not replace it or reuse it after the host destroys the scene.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../BallAndSocketJoint/en.html"><small>Previous</small>BallAndSocketJoint</a>
 <a class="next" href="../BinaryReader/en.html"><small>Next</small>BinaryReader</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#OnCreate">OnCreate</a><a class="toc-link" href="#OnUpdate">OnUpdate</a><a class="toc-link" href="#OnFixedUpdate">OnFixedUpdate</a><a class="toc-link" href="#OnLateUpdate">OnLateUpdate</a><a class="toc-link" href="#OnDestroy">OnDestroy</a><a class="toc-link" href="#Entity">Entity</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#OnCreate">OnCreate</a><a class="toc-link" href="#OnUpdate">OnUpdate</a><a class="toc-link" href="#OnFixedUpdate">OnFixedUpdate</a><a class="toc-link" href="#OnLateUpdate">OnLateUpdate</a><a class="toc-link" href="#OnDestroy">OnDestroy</a><a class="toc-link" href="#OnSaveReloadState">OnSaveReloadState</a><a class="toc-link" href="#OnRestoreReloadState">OnRestoreReloadState</a><a class="toc-link" href="#OnReload">OnReload</a><a class="toc-link" href="#Entity">Entity</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

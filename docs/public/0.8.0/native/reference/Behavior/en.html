@@ -74,7 +74,10 @@ public:
 <h2 id="GetEntity">GetEntity</h2>
 <pre><code>Entity GetEntity() const</code></pre>
 <p>Resolves a UUID or transient registry ID in this scene. Returns an invalid Entity when it cannot resolve; registry IDs are not persistent asset IDs.</p>
-<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p><!-- API-SOURCE-BEGIN -->
+<p><strong>Result:</strong> the return type at the start of each declaration. <code>void</code> returns no value; <code>bool</code> reports true/false; <code>&amp;</code> is a reference rather than a copy. Constructors create a value; deleted declarations cannot be called.</p><h2 id="OnSaveReloadState">OnSaveReloadState</h2><pre><code>virtual std::string OnSaveReloadState() const;</code></pre><p>Returns custom per-instance data before editor hot reload. Default: empty. Matching PROPERTY values are copied separately. Keep this callback side-effect-free; a thrown exception rejects the candidate. Use a versioned, NUL-free payload up to 1 MiB.</p>
+<h2 id="OnRestoreReloadState">OnRestoreReloadState</h2><pre><code>virtual void OnRestoreReloadState(const std::string&amp; state);</code></pre><p>Receives custom state on the staged replacement, after matching properties are restored and before commit. Default: no operation. Throw to reject invalid or unsupported versions. Only mutate this instance's data; external effects cannot be rolled back.</p>
+<h2 id="OnReload">OnReload</h2><pre><code>virtual void OnReload();</code></pre><p>Runs after successful gameplay code replacement. Default: no operation. Reconnect event subscriptions and rebuild temporary caches. OnCreate and OnDestroy are not replayed during replacement; exceptions here are reported after commit. See <a href="../../hot-reload/en.html">reload examples and lifetimes</a>.</p>
+<!-- API-SOURCE-BEGIN -->
 <h2 id="source-contract">Public declarations</h2>
 <p>Header: <code>Bazzalt/Script.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
 <pre><code class="language-cpp">class Behavior {
@@ -90,6 +93,10 @@ virtual void OnCollisionExit(const CollisionEvent&amp;);
 virtual void OnTriggerEnter(const CollisionEvent&amp;);
 virtual void OnTriggerStay(const CollisionEvent&amp;);
 virtual void OnTriggerExit(const CollisionEvent&amp;);
+// Reload hooks run without replaying OnCreate/OnDestroy. State is application-defined.
+    virtual std::string OnSaveReloadState() const;
+virtual void OnRestoreReloadState(const std::string&amp;);
+virtual void OnReload();
 [[nodiscard]] const std::string&amp; GetEntityUUID() const;
 [[nodiscard]] Entity GetEntity() const;
 };</code></pre>
@@ -97,7 +104,7 @@ virtual void OnTriggerExit(const CollisionEvent&amp;);
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../BallAndSocketJoint/en.html"><small>Previous</small>BallAndSocketJoint</a>
 <a class="next" href="../BinaryReader/en.html"><small>Next</small>BinaryReader</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#destructor-Behavior">~Behavior</a><a class="toc-link" href="#OnCreate">OnCreate</a><a class="toc-link" href="#OnUpdate">OnUpdate</a><a class="toc-link" href="#OnFixedUpdate">OnFixedUpdate</a><a class="toc-link" href="#OnLateUpdate">OnLateUpdate</a><a class="toc-link" href="#OnDestroy">OnDestroy</a><a class="toc-link" href="#GetEntityUUID">GetEntityUUID</a><a class="toc-link" href="#GetEntity">GetEntity</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#destructor-Behavior">~Behavior</a><a class="toc-link" href="#OnCreate">OnCreate</a><a class="toc-link" href="#OnUpdate">OnUpdate</a><a class="toc-link" href="#OnFixedUpdate">OnFixedUpdate</a><a class="toc-link" href="#OnLateUpdate">OnLateUpdate</a><a class="toc-link" href="#OnDestroy">OnDestroy</a><a class="toc-link" href="#GetEntityUUID">GetEntityUUID</a><a class="toc-link" href="#GetEntity">GetEntity</a><a class="toc-link" href="#OnSaveReloadState">OnSaveReloadState</a><a class="toc-link" href="#OnRestoreReloadState">OnRestoreReloadState</a><a class="toc-link" href="#OnReload">OnReload</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

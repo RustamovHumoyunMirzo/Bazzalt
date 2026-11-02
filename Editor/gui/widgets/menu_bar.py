@@ -74,6 +74,7 @@ class EditorMenuBar(QMenuBar):
     UndoRequested = Signal()
     RedoRequested = Signal()
     PreferencesRequested = Signal()
+    ReloadScriptsRequested = Signal()
     ProjectSettingsRequested = Signal()
     ExtensionsRequested = Signal()
     BuildPackageRequested = Signal()
@@ -197,6 +198,7 @@ class EditorMenuBar(QMenuBar):
             action=self.EditMenu.addAction("");action.setShortcut(shortcut)
             action.triggered.connect(lambda _=False,command=key:self.EditCommandRequested.emit(command));self.EditActions[key]=action
         self.EditMenu.addSeparator()
+        self.ReloadScriptsAction=action=self.EditMenu.addAction("");action.setShortcut(QKeySequence("Ctrl+Alt+R"));action.triggered.connect(self.ReloadScriptsRequested)
         self.PreferencesAction=action=self.EditMenu.addAction("")
         action.triggered.connect(self.PreferencesRequested)
 
@@ -288,6 +290,7 @@ class EditorMenuBar(QMenuBar):
         self.UndoAction.setText(tr("action.undo"))
         self.RedoAction.setText(tr("action.redo"))
         self.PreferencesAction.setText(tr("action.preferences"))
+        self.ReloadScriptsAction.setText(tr("scripting.reload"))
         for key,action in self.EditActions.items():action.setText(tr("action."+key))
         self.ProjectSettingsAction.setText(tr("action.project_settings"))
         self.MaximizeViewportAction.setText(tr("view.maximize"));self.CameraMenu.setTitle(tr("view.camera_presets"))
