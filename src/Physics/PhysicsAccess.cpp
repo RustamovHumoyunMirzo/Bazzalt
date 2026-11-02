@@ -40,7 +40,7 @@ const PhysicsModuleApi* Load(){
     auto get=reinterpret_cast<GetPhysicsModuleApi>(dlsym(module,"BazzaltGetPhysicsModuleApi"));
 #endif
     const auto* api=get?get(PhysicsModuleVersion,sizeof(PhysicsModuleApi)):nullptr;
-    if(!api||api->Version!=PhysicsModuleVersion||api->Size!=sizeof(PhysicsModuleApi)||!api->Release||!api->Start||!api->Stop||!api->Step||!api->Synchronize||!api->IsRunning||!api->BodyCount||!api->Query||!api->Command||!api->Velocity||!api->Awake||!api->Subscribe||!api->Unsubscribe||!api->DisconnectOwner||!api->SetInterpolationAlpha||!api->RenderMatrix||!api->Guides||!api->JointControl||!api->SoftVertices||!api->SoftControl||!api->Render||!api->VehicleInput||!api->VehicleGear||!api->ReadVehicle||!api->ReadWheel)throw std::runtime_error("Incompatible physics runtime; reinstall matching bazzalt_physics");
+    if(!api||api->Version!=PhysicsModuleVersion||api->Size!=sizeof(PhysicsModuleApi)||!api->Release||!api->Start||!api->Stop||!api->Step||!api->Synchronize||!api->IsRunning||!api->BodyCount||!api->Query||!api->Command||!api->Velocity||!api->Awake||!api->Subscribe||!api->Unsubscribe||!api->DisconnectOwner||!api->SetInterpolationAlpha||!api->RenderMatrix||!api->Guides||!api->JointControl||!api->SoftVertices||!api->SoftControl||!api->Render||!api->VehicleInput||!api->VehicleGear||!api->ReadVehicle||!api->ReadWheel||!api->Replay.GetDeterminism||!api->Replay.SetDeterminism||!api->Replay.CrossPlatform||!api->Replay.Capture||!api->Replay.Restore||!api->Replay.Control||!api->Replay.Status||!api->Replay.Frame)throw std::runtime_error("Incompatible physics runtime; reinstall matching bazzalt_physics");
     return api;
 }
 }

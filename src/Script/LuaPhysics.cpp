@@ -1,4 +1,5 @@
 #include "Script/LuaBindings.h"
+#include "Bazzalt/PhysicsReplay.h"
 #include "Physics/PhysicsFields.h"
 #include "Runtime/ApplicationEventsAccess.h"
 namespace Bazzalt::Runtime {
@@ -14,6 +15,33 @@ template<class T> void Operations(sol::table api,const char* name){
 }
 }
 void BindLuaPhysics(sol::table api){
+    api.new_enum("PhysicsReplayMode","Idle",PhysicsReplayMode::Idle,"Recording",PhysicsReplayMode::Recording,"Playback",PhysicsReplayMode::Playback);
+    auto deterministic=api.new_usertype<PhysicsDeterminismSettings>("PhysicsDeterminismSettings",sol::constructors<PhysicsDeterminismSettings()>());
+    deterministic["Enabled"]=&PhysicsDeterminismSettings::Enabled;deterministic["SingleThreaded"]=&PhysicsDeterminismSettings::SingleThreaded;deterministic["FixedDeltaTime"]=&PhysicsDeterminismSettings::FixedDeltaTime;deterministic["IsValid"]=&PhysicsDeterminismSettings::IsValid;
+    auto replaySettings=api.new_usertype<PhysicsReplaySettings>("PhysicsReplaySettings",sol::constructors<PhysicsReplaySettings()>());replaySettings["MaxFrames"]=&PhysicsReplaySettings::MaxFrames;replaySettings["MaxMemoryBytes"]=&PhysicsReplaySettings::MaxMemoryBytes;replaySettings["IsValid"]=&PhysicsReplaySettings::IsValid;
+    auto state=api.new_usertype<PhysicsState>("PhysicsState",sol::constructors<PhysicsState()>());state["IsValid"]=&PhysicsState::IsValid;state["GetTick"]=&PhysicsState::GetTick;state["GetByteSize"]=&PhysicsState::GetByteSize;state["GetHash"]=&PhysicsState::GetHash;
+    auto status=api.new_usertype<PhysicsReplayStatus>("PhysicsReplayStatus",sol::constructors<PhysicsReplayStatus()>());
+    status["Mode"]=&PhysicsReplayStatus::Mode;
+    status["Tick"]=&PhysicsReplayStatus::Tick;
+    status["FrameCount"]=&PhysicsReplayStatus::FrameCount;
+    status["Cursor"]=&PhysicsReplayStatus::Cursor;
+    status["MemoryBytes"]=&PhysicsReplayStatus::MemoryBytes;
+    status["LimitReached"]=&PhysicsReplayStatus::LimitReached;
+    status["AtEnd"]=&PhysicsReplayStatus::AtEnd;
+    auto replay=api.new_usertype<PhysicsReplay>("PhysicsReplay",sol::no_constructor);replay["ForScene"]=&PhysicsReplay::ForScene;
+    replay["GetDeterminismSettings"]=&PhysicsReplay::GetDeterminismSettings;
+    replay["SetDeterminismSettings"]=&PhysicsReplay::SetDeterminismSettings;
+    replay["IsSolverCrossPlatformDeterministic"]=&PhysicsReplay::IsSolverCrossPlatformDeterministic;
+    replay["CaptureState"]=&PhysicsReplay::CaptureState;
+    replay["RestoreState"]=&PhysicsReplay::RestoreState;
+    replay["EndRecording"]=&PhysicsReplay::EndRecording;
+    replay["StopPlayback"]=&PhysicsReplay::StopPlayback;
+    replay["SeekFrame"]=&PhysicsReplay::SeekFrame;
+    replay["AdvancePlayback"]=&PhysicsReplay::AdvancePlayback;
+    replay["Clear"]=&PhysicsReplay::Clear;
+    replay["GetStatus"]=&PhysicsReplay::GetStatus;
+    replay["GetFrame"]=&PhysicsReplay::GetFrame;
+    replay["BeginRecording"]=sol::overload([](PhysicsReplay p){p.BeginRecording();},[](PhysicsReplay p,PhysicsReplaySettings value){p.BeginRecording(value);});replay["BeginPlayback"]=sol::overload([](PhysicsReplay p){p.BeginPlayback();},[](PhysicsReplay p,bool loop){p.BeginPlayback(loop);});
     api.new_enum("BodyMotionType","Static",BodyMotionType::Static,"Kinematic",BodyMotionType::Kinematic,"Dynamic",BodyMotionType::Dynamic);
     api.new_enum("CollisionDetectionMode","Discrete",CollisionDetectionMode::Discrete,"Continuous",CollisionDetectionMode::Continuous);
     api.new_enum("BodyInterpolation","None",BodyInterpolation::None,"Interpolate",BodyInterpolation::Interpolate);

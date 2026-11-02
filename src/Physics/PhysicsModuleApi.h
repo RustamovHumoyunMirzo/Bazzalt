@@ -4,12 +4,14 @@
 #error Bazzalt physics consumers require standard MSVC exception handling
 #endif
 #include "Bazzalt/Physics.h"
+#include "Physics/PhysicsReplayAccess.h"
 namespace Bazzalt { class ComponentSerializationRegistry; }
 namespace Bazzalt::Runtime {
-inline constexpr std::uint32_t PhysicsModuleVersion=3;
+inline constexpr std::uint32_t PhysicsModuleVersion=4;
 enum class PhysicsCommand { Force,ForceAtPosition,Impulse,ImpulseAtPosition,Torque,AngularImpulse,LinearVelocity,AngularVelocity,MoveKinematic,Teleport,Wake,Sleep };
 struct PhysicsModuleApi {
     std::uint32_t Version,Size;
+    PhysicsReplayModuleApi Replay;
     bool (*VehicleInput)(Scene&,Entity,float,float,float,float);
     bool (*VehicleGear)(Scene&,Entity,int,float);
     std::optional<VehicleState> (*ReadVehicle)(Scene&,Entity);

@@ -5,6 +5,7 @@
 #include <Jolt/Core/JobSystemThreadPool.h>
 #include <Jolt/Core/StreamWrapper.h>
 #include <Jolt/Physics/PhysicsSystem.h>
+#include <Jolt/Physics/StateRecorderImpl.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyLock.h>
 #include <Jolt/Physics/Collision/ContactListener.h>
@@ -91,6 +92,13 @@ ContactPair ContactKey(const CollisionEvent& e){auto a=std::pair{e.BodyAUUID,e.C
 bool IsExit(PhysicsEventType type){return type==PhysicsEventType::CollisionExit||type==PhysicsEventType::TriggerExit;}
 
 struct World final:JPH::ContactListener {
+    UUID ReplaySession=UUID::Generate();
+    PhysicsDeterminismSettings Determinism;
+    PhysicsReplaySettings ReplayLimits;
+    PhysicsReplayMode ReplayMode=PhysicsReplayMode::Idle;
+    std::vector<PhysicsState> ReplayFrames;
+    std::uint64_t Tick=0,ReplayCursor=0,ReplayBytes=0;
+    bool ReplayLimitReached=false,ReplayLoop=false;
     bool Preview=false;
     std::map<UUID,std::string> SoftDiagnostics;
     Scene* ScenePtr;bool Running=false,Dead=false,Stepping=false,Dispatching=false,Updating=false;float Alpha=1,LastDelta=0;
@@ -136,7 +144,8 @@ struct World final:JPH::ContactListener {
         if(changedGravity||changedSleep)for(auto& [uuid,entry]:Bodies)if(entry.Authored.MotionType==BodyMotionType::Dynamic)System.GetBodyInterface().ActivateBody(entry.Id);
         JPH::PhysicsSettings settings=System.GetPhysicsSettings();settings.mNumVelocitySteps=Settings.VelocityIterations;settings.mNumPositionSteps=Settings.PositionIterations;settings.mSpeculativeContactDistance=Settings.SpeculativeContactDistance;settings.mPenetrationSlop=Settings.PenetrationSlop;settings.mBaumgarte=Settings.Baumgarte;settings.mTimeBeforeSleep=Settings.TimeBeforeSleep;settings.mPointVelocitySleepThreshold=Settings.PointVelocitySleepThreshold;
         System.SetPhysicsSettings(settings);
-        if(!Jobs||Jobs->GetMaxConcurrency()!=int(Settings.WorkerThreads+1))Jobs=std::make_unique<JPH::JobSystemThreadPool>(JPH::cMaxPhysicsJobs,JPH::cMaxPhysicsBarriers,int(Settings.WorkerThreads));
+        const auto workers=Determinism.Enabled&&Determinism.SingleThreaded?0:Settings.WorkerThreads;
+        if(!Jobs||Jobs->GetMaxConcurrency()!=int(workers+1))Jobs=std::make_unique<JPH::JobSystemThreadPool>(JPH::cMaxPhysicsJobs,JPH::cMaxPhysicsBarriers,int(workers));
     }
     const ColliderData* Data(const JPH::Body& body,const JPH::SubShapeID& sub)const{if(body.IsSoftBody()){auto s=SoftColliders.find(body.GetID().GetIndexAndSequenceNumber());return s==SoftColliders.end()?nullptr:&s->second;}auto it=Colliders.find(body.GetShape()->GetSubShapeUserData(sub));return it==Colliders.end()?nullptr:&it->second;}
     JPH::ValidateResult OnContactValidate(const JPH::Body& a,const JPH::Body& b,JPH::RVec3Arg,const JPH::CollideShapeResult& hit)override{
@@ -197,7 +206,7 @@ struct Service {
     std::map<Scene*,std::shared_ptr<World>> Worlds;
     std::thread::id MainThread=std::this_thread::get_id();
     std::uint64_t NextSubscription=1;
-    Service(){JPH::RegisterDefaultAllocator();JPH::Factory::sInstance=new JPH::Factory();JPH::RegisterTypes();}
+    Service(){if(!JPH::VerifyJoltVersionID())throw std::runtime_error("Jolt SDK configuration mismatch: verify the pinned library and BAZZALT_JOLT_PREBUILT_CROSS_PLATFORM_DETERMINISTIC flag");JPH::RegisterDefaultAllocator();JPH::Factory::sInstance=new JPH::Factory();JPH::RegisterTypes();}
     ~Service(){Worlds.clear();JPH::UnregisterTypes();delete JPH::Factory::sInstance;JPH::Factory::sInstance=nullptr;}
 };
 Service& State(){static Service service;if(service.MainThread!=std::this_thread::get_id())throw std::logic_error("Physics APIs must be called on the main thread");return service;}
@@ -313,6 +322,7 @@ void World::Synchronize(){
 void World::Step(float dt,bool manual){
     if(!std::isfinite(dt)||dt<=0||dt>1)throw std::invalid_argument("Physics step must be finite, greater than zero and at most one second");
     if(Stepping||Dispatching||Updating)throw std::logic_error("Recursive physics simulation is not allowed");
+    if(Determinism.Enabled&&dt!=Determinism.FixedDeltaTime)throw std::invalid_argument("Deterministic physics requires the configured fixed delta time");
     if(!manual&&!ScenePtr->GetPhysicsSettings().AutoSimulation)return;
     Updating=true;struct UpdateReset{bool& Flag;~UpdateReset(){Flag=false;}} updating{Updating};
     ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforePhysicsStep,dt});ApplicationEventsAccess::ThrowIfFailed();
@@ -329,7 +339,7 @@ void World::Step(float dt,bool manual){
     std::stable_sort(order.begin(),order.end(),[&](UUID a,UUID b){return depth(a)<depth(b);});
     for(auto id:order){auto entity=ScenePtr->GetEntity(id);if(!entity)continue;auto transform=entity.GetWorldTransform();
         if(auto soft=SoftBodies.find(id);soft!=SoftBodies.end()){auto& entry=soft->second;transform.Scale=entry.RestScale;transform.Rotation=Q(interface.GetRotation(entry.Id));transform.Position=V(interface.GetPosition(entry.Id))-transform.Rotation.Rotate(entry.ReferenceCenter);if(!ScenePtr->SetWorldTransform(entity,transform))throw std::runtime_error("Cannot synchronize soft body under a singular parent transform");entry.Pose=entity.GetWorldTransform();}
-        else{auto& entry=Bodies.at(id);if(entry.Authored.MotionType==BodyMotionType::Static)continue;transform.Position=V(interface.GetPosition(entry.Id));transform.Rotation=Q(interface.GetRotation(entry.Id));if(!ScenePtr->SetWorldTransform(entity,transform))throw std::runtime_error("Cannot synchronize physics under a singular parent transform");entry.LastScene=transform;}
+        else{auto& entry=Bodies.at(id);if(entry.Authored.MotionType==BodyMotionType::Static)continue;transform.Position=V(interface.GetPosition(entry.Id));transform.Rotation=Q(interface.GetRotation(entry.Id));transform.Scale=entry.LastScene.Scale;if(!ScenePtr->SetWorldTransform(entity,transform))throw std::runtime_error("Cannot synchronize physics under a singular parent transform");entry.LastScene=transform;}
     }
     UpdateWheelTransforms();
     UpdateExtras(dt);Stepping=false;Dispatch();ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterPhysicsStep,dt});ApplicationEventsAccess::ThrowIfFailed();
@@ -377,7 +387,7 @@ std::vector<PhysicsHit> Query(Scene& scene,int mode,const PhysicsShape& shape,co
 }
 BodyEntry* BodyFor(World& w,Entity e){if(e.GetScene()!=w.ScenePtr||!e)return nullptr;for(auto current=e;current;current=current.GetParent()){if(auto* cloth=current.TryGetComponent<Cloth>();cloth&&cloth->Enabled)return nullptr;if(auto* rope=current.TryGetComponent<Rope>();rope&&rope->Enabled)return nullptr;if(auto* body=current.TryGetComponent<Rigidbody>();body&&!body->Enabled)return nullptr;auto found=w.Bodies.find(current.GetUUID());if(found!=w.Bodies.end())return &found->second;if(current.HasComponent<Rigidbody>())return nullptr;}return nullptr;}
 bool Command(Scene& scene,Entity e,PhysicsCommand command,Vec3 value,Vec3 point,Quaternion rotation,float dt,bool activate){
-    RequireVector(value);RequireVector(point);auto w=Get(scene);if(!w->Running)throw std::logic_error("Physics body control requires a running simulation");if(w->TopologyDirty)w->Synchronize();auto* entry=BodyFor(*w,e);if(!entry)return false;auto& body=w->System.GetBodyInterface();const auto id=entry->Id;const auto motion=body.GetMotionType(id);
+    RequireVector(value);RequireVector(point);auto w=Get(scene);if(w->ReplayMode==PhysicsReplayMode::Playback)return false;if(!w->Running)throw std::logic_error("Physics body control requires a running simulation");if(w->TopologyDirty)w->Synchronize();auto* entry=BodyFor(*w,e);if(!entry)return false;auto& body=w->System.GetBodyInterface();const auto id=entry->Id;const auto motion=body.GetMotionType(id);
     const bool dynamic=motion==JPH::EMotionType::Dynamic;
     switch(command){
     case PhysicsCommand::Force:case PhysicsCommand::ForceAtPosition:case PhysicsCommand::Torque:if(!dynamic)return false;if(w->Forces.size()>=65536)throw std::length_error("Physics force queue exceeded limit; advance simulation before submitting more forces");w->Forces.push_back({entry->Owner,scene.GetEntity(entry->Owner).GetId(),command,value,point});break;
@@ -434,13 +444,15 @@ static std::vector<std::array<float,10>> Guides(Scene& scene,UUID selected){
     w->DrawVehicleGuides(selected,lines);
     return lines;
 }
+#include "Physics/PhysicsReplayWorld.inl"
 static const PhysicsModuleApi Api{
-    PhysicsModuleVersion,sizeof(PhysicsModuleApi),
-    SetVehicleInput,SetVehicleGear,ReadVehicleState,ReadVehicleWheelState,
+    PhysicsModuleVersion,sizeof(PhysicsModuleApi),ReplayApi,
+    [](Scene& scene,Entity e,float a,float b,float c,float d){return Get(scene)->ReplayMode!=PhysicsReplayMode::Playback&&SetVehicleInput(scene,e,a,b,c,d);},
+    [](Scene& scene,Entity e,int gear,float clutch){return Get(scene)->ReplayMode!=PhysicsReplayMode::Playback&&SetVehicleGear(scene,e,gear,clutch);},ReadVehicleState,ReadVehicleWheelState,
     [](Scene& scene){auto& worlds=State().Worlds;auto it=worlds.find(&scene);if(it!=worlds.end()){it->second->Dead=true;worlds.erase(it);}},
     [](Scene& scene){auto w=Get(scene);w->Synchronize();w->Running=true;w->SyncVehicles();},
     [](Scene& scene){auto& worlds=State().Worlds;auto it=worlds.find(&scene);if(it!=worlds.end()){it->second->Dead=true;worlds.erase(it);}},
-    [](Scene& scene,float dt,bool manual){auto w=Get(scene);if(!w->Running)throw std::logic_error("Physics simulation has not started");w->Step(dt,manual);},
+    [](Scene& scene,float dt,bool manual){auto w=Get(scene);if(!w->Running)throw std::logic_error("Physics simulation has not started");if(!manual&&!scene.GetPhysicsSettings().AutoSimulation)return;if(w->ReplayMode==PhysicsReplayMode::Playback)throw std::logic_error("Use AdvancePlayback while playing a physics replay");w->Step(dt,manual);++w->Tick;RecordReplayFrame(*w);},
     [](Scene& scene){Get(scene)->Synchronize();},
     [](Scene& scene){auto& worlds=State().Worlds;auto it=worlds.find(&scene);return it!=worlds.end()&&it->second->Running;},
     [](Scene& scene){auto w=Get(scene);if(!w->Running||w->TopologyDirty)w->Synchronize();return w->Bodies.size()+w->SoftBodies.size();},
@@ -452,9 +464,9 @@ static const PhysicsModuleApi Api{
     [](const void* owner){for(auto& [scene,w]:State().Worlds){std::vector<std::uint64_t> ids;for(auto& [id,s]:w->Subscriptions)if(s->Owner==owner)ids.push_back(id);for(auto id:ids)w->Subscriptions.erase(id);}},
     [](Scene& scene,float alpha){auto it=State().Worlds.find(&scene);if(it!=State().Worlds.end())it->second->Alpha=std::clamp(alpha,0.f,1.f);},
     RenderMatrix,
-    [](Scene& scene,Entity e,JointType t,int operation){auto w=Get(scene);if(!e||e.GetScene()!=&scene||int(t)>4)return false;w->Synchronize();bool result=false;for(auto& [key,j]:w->Joints)if(key.first==e.GetUUID()&&j.Settings.Type==t){if(operation==0){j.Broken=true;if(j.Native){j.Native->SetEnabled(false);for(auto* body:{j.Native->GetBody1(),j.Native->GetBody2()})if(body->IsDynamic())w->System.GetBodyInterface().ActivateBody(body->GetID());}result=true;}else if(operation==1){j.Broken=false;if(j.Native)j.Native->SetEnabled(true);if(j.Native)for(auto* body:{j.Native->GetBody1(),j.Native->GetBody2()})if(body->IsDynamic())w->System.GetBodyInterface().ActivateBody(body->GetID());result=true;}else result|=j.Broken;}return result;},
+    [](Scene& scene,Entity e,JointType t,int operation){auto w=Get(scene);if(w->ReplayMode==PhysicsReplayMode::Playback||!e||e.GetScene()!=&scene||int(t)>4)return false;w->Synchronize();bool result=false;for(auto& [key,j]:w->Joints)if(key.first==e.GetUUID()&&j.Settings.Type==t){if(operation==0){j.Broken=true;if(j.Native){j.Native->SetEnabled(false);for(auto* body:{j.Native->GetBody1(),j.Native->GetBody2()})if(body->IsDynamic())w->System.GetBodyInterface().ActivateBody(body->GetID());}result=true;}else if(operation==1){j.Broken=false;if(j.Native)j.Native->SetEnabled(true);if(j.Native)for(auto* body:{j.Native->GetBody1(),j.Native->GetBody2()})if(body->IsDynamic())w->System.GetBodyInterface().ActivateBody(body->GetID());result=true;}else result|=j.Broken;}return result;},
     [](Scene& scene,Entity e){return SoftVertices(*Get(scene),e);},
-    [](Scene& scene,Entity e,Vec3 value,int index,int operation){return SoftControl(*Get(scene),e,value,index,operation);},
+    [](Scene& scene,Entity e,Vec3 value,int index,int operation){auto w=Get(scene);return w->ReplayMode!=PhysicsReplayMode::Playback&&SoftControl(*w,e,value,index,operation);},
     [](Scene& scene){auto w=Get(scene);const bool old=w->Preview;w->Preview=!w->Running;struct Restore{World& W;bool Old;~Restore(){W.Preview=Old;}} restore{*w,old};if(!w->Running||w->TopologyDirty)w->Synchronize();w->DrawSoftBodies();},Guides
 };
 }

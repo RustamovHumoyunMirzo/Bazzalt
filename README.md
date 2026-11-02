@@ -67,6 +67,9 @@ Read the [public guides](docs/public/index.html). Open the downloaded HTML in a 
 offline use. Documentation authoring and version/language setup are described
 in [docs/public/README.md](docs/public/README.md).
 
+Gameplay workflows include [live script reload](docs/public/0.8.0/manual/hot-reload/en.html)
+and [deterministic physics checkpoints and replay](docs/public/0.8.0/manual/physics-replay/en.html).
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines, API/Lua parity,

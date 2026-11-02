@@ -254,3 +254,8 @@ Regression coverage includes physical acceleration/braking, ground contact force
 Jolt is built without C++/STL exceptions, but its `_HAS_EXCEPTIONS=0` definition must stay private to the solver. Upstream marks it PUBLIC; the dependency wrapper removes it only from INTERFACE_COMPILE_DEFINITIONS, retaining Jolt's own compilation setting and all ABI/SIMD definitions. MSVC uses a different exception base class in this mode. Leaking the macro into bazzalt_physics makes its std::invalid_argument bypass catch(std::exception&) in core/editor preview code, and the graphics regression reports an unhandled non-standard exception. Imported-Jolt builds previously did not inherit this macro, which masked the source-build failure locally.
 
 PhysicsModuleApi and the dependency probe reject this macro for consumers at compile time. The dependency-only CMake probe also checks the interface; configuration alone can verify the flag boundary without building the solver. GraphicsTests retains strict invalid-soft-body exception validation and preview recovery checks, with phase diagnostics to locate any future CI-only failure. Do not fix this by broadening catches or disabling the invalid-component tests.
+
+
+## Deterministic stepping and physics replay
+
+See [physics-replay.md](physics-replay.md) for fixed-step policy, solver checkpoints, soft pinning, bounded same-session playback and C++/Lua controls. Source builds enable Jolt deterministic arithmetic; this does not certify whole-engine or cross-platform deterministic networking. Imported Jolt packages must declare their matching build flag.

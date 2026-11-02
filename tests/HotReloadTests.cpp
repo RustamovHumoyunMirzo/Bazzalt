@@ -21,7 +21,7 @@ int main(int argc,char** argv){
  const auto source=root/"Walk.lua",bytecode=root/"Walk.blua";
  auto write=[&](const char* text){std::ofstream(source)<<text;assert(LuaRuntime::Import(source,bytecode,error));};
  write(R"lua(local T={Speed=1,State={Ticks=0,Large=9223372036854775806},Direction=Bazzalt.Vec3.new(1,2,3)}
- function T:OnCreate() self.Speed=7 end
+ function T:OnCreate() self.Speed=7;self.Replay=Bazzalt.PhysicsReplay.ForScene(self.Entity:GetScene());self.Checkpoint=Bazzalt.PhysicsState.new() end
  function T:OnUpdate(dt) self.State.Ticks=self.State.Ticks+1 end
  function T:OnDestroy() error('reload must not destroy old gameplay') end
  return T)lua");
@@ -29,7 +29,7 @@ int main(int argc,char** argv){
  write(R"lua(local T={Speed=1,Added=12,State={Ticks=0,Large=9223372036854775806},Direction=Bazzalt.Vec3.new(0,0,0)}
  function T:OnCreate() error('reload must not recreate gameplay') end
  function T:OnSaveReloadState() return {Version=2,Speed=self.Speed,State=self.State,Direction=self.Direction} end
- function T:OnReload() assert(self.Speed==7 and self.State.Ticks==1 and self.State.Large==9223372036854775806 and self.Added==12 and self.Direction.Y==2);local p=self.Entity:GetWorldTransform();p.Position.X=42;self.Entity:SetWorldTransform(p) end
+ function T:OnReload() assert(self.Replay:GetStatus().Mode==Bazzalt.PhysicsReplayMode.Idle and not self.Checkpoint:IsValid());assert(self.Speed==7 and self.State.Ticks==1 and self.State.Large==9223372036854775806 and self.Added==12 and self.Direction.Y==2);local p=self.Entity:GetWorldTransform();p.Position.X=42;self.Entity:SetWorldTransform(p) end
  function T:OnUpdate(dt) local p=self.Entity:GetWorldTransform();p.Position.X=p.Position.X+2;self.Entity:SetWorldTransform(p) end
  return T)lua");
  LuaRuntime nextLua;assert(nextLua.Configure({luaBinding},error));assert(nextLua.Start(error,true));assert(nextLua.PreserveFrom(lua,error));lua.DiscardForReload();nextLua.ActivateReload();assert(entity.GetWorldTransform().Position.X==42);nextLua.Update(.1f);assert(entity.GetWorldTransform().Position.X==44);

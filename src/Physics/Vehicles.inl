@@ -71,7 +71,7 @@ void World::SyncVehicles() {
         const auto found=Bodies.find(root.GetUUID());if(found==Bodies.end()||found->second.Shapes.empty())throw std::invalid_argument("Vehicle has no chassis collider");
         const auto scale=root.GetWorldTransform().Scale;
         if(scale.X<=0||std::abs(scale.X-scale.Y)>.0001f||std::abs(scale.X-scale.Z)>.0001f)throw std::invalid_argument("Vehicle requires positive uniform world scale");
-        std::string signature;VehicleSignature<Vehicle>(root,signature);AppendPhysicsKey(signature,scale.X);AppendPhysicsKey(signature,Settings.Gravity);
+        std::string signature;VehicleSignature<Vehicle>(root,signature);AppendPhysicsKey(signature,PoseKey(scale).X);AppendPhysicsKey(signature,Settings.Gravity);
         VehicleSignature<VehicleEngine>(root,signature);VehicleSignature<VehicleTransmission>(root,signature);
         auto& wheels=wheelGroups[root.GetUUID()];auto& differentials=differentialGroups[root.GetUUID()];auto& bars=barGroups[root.GetUUID()];
         if(wheels.size()<2||wheels.size()>32)throw std::invalid_argument("Vehicle requires 2 to 32 enabled child wheels with WheelSuspension");

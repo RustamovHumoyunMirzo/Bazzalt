@@ -308,6 +308,16 @@ function W:OnCreate()
  local lod=group:AddComponent('LOD');local a=B.LODLevel.new();a.ScreenHeight=.5;a.Roots={high:GetUUID()};local b=B.LODLevel.new();b.ScreenHeight=.1;b.Roots={low:GetUUID()};lod.Levels={a,b};assert(lod:IsValid() and lod:SelectLevel(.2)==1);group:SetComponent('LOD',lod)
  local copy=group:GetComponent('LOD');assert(#copy.Levels==2 and copy.Levels[2].Roots[1]==low:GetUUID());copy:ForceLevel(0);group:SetComponent('LOD',copy);assert(group:GetComponent('LOD'):SelectLevel(.01)==0)
 
+ local replay=B.PhysicsReplay.ForScene(scene);assert(type(replay:IsSolverCrossPlatformDeterministic())=="boolean")
+ local deterministic=B.PhysicsDeterminismSettings.new();deterministic.Enabled=true;replay:SetDeterminismSettings(deterministic)
+ local manual=world:GetSettings();manual.AutoSimulation=false;assert(world:SetSettings(manual))
+ local checkpoint=replay:CaptureState();assert(checkpoint:IsValid() and checkpoint:GetByteSize()>0)
+ world:Simulate(deterministic.FixedDeltaTime);replay:RestoreState(checkpoint);assert(replay:CaptureState():GetHash()==checkpoint:GetHash())
+ local recording=B.PhysicsReplaySettings.new();recording.MaxFrames=3;replay:BeginRecording(recording)
+ for i=1,4 do world:Simulate(deterministic.FixedDeltaTime) end
+ assert(replay:GetStatus().LimitReached and replay:GetStatus().FrameCount==3)
+ replay:BeginPlayback();assert(replay:GetStatus().Mode==B.PhysicsReplayMode.Playback);assert(replay:AdvancePlayback());replay:SeekFrame(0);replay:StopPlayback();replay:Clear()
+ local pose=self.Entity:GetWorldTransform();pose.Position=p;self.Entity:SetWorldTransform(pose);world:Synchronize()
  local options=B.PhysicsQueryOptions.new();options.ExcludedEntities={self.Entity:GetUUID()}
  assert(not world:Raycast(p+B.Vec3.new(0,4,0),B.Vec3.new(0,-1,0),10,options):IsValid())
 end
