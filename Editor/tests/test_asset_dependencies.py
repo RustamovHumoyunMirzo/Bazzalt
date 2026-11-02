@@ -36,7 +36,10 @@ class AssetDependencyTests(unittest.TestCase):
                 self.assertTrue(runtime.LoadProject(project));info=runtime.AssetInfo(str(target));self.assertTrue(info)
                 material=assets/'source.matinst';material.write_text('{"shader":"'+info['uuid']+'"}',encoding='utf-8');self.assertTrue(runtime.RefreshAsset(material))
                 report=runtime.AssetDependencies(material);self.assertEqual(report['references'][0]['target'],info['uuid']);self.assertEqual(report['references'][0]['state'],2)
-                self.assertEqual(runtime.AssetDependencies(target)['referencers'][0]['path'].replace('\\','/'),str(material).replace('\\','/'))
+                # Native paths are canonical: macOS /var and Windows 8.3 temp
+                # aliases can spell the same file differently from tempfile.
+                referencers=runtime.AssetDependencies(target)['referencers'];self.assertEqual(len(referencers),1)
+                self.assertTrue(Path(referencers[0]['path']).samefile(material))
                 material.write_text('{"shader":null}',encoding='utf-8');self.assertTrue(runtime.RefreshAsset(material));self.assertEqual(runtime.AssetDependencies(target)['referencers'],[])
                 large=assets/'large.matinst';large.write_text(json.dumps({'shader':info['uuid'],'properties':{f'texture{i}':info['uuid'] for i in range(250)}}),encoding='utf-8');self.assertTrue(runtime.RefreshAsset(large))
                 summary=runtime.AssetDependencies(large);self.assertEqual(summary['reference_count'],251);self.assertEqual(len(summary['references']),200)
