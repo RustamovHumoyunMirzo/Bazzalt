@@ -23,6 +23,14 @@ class RuntimeLifecycleTests(unittest.TestCase):
             runtime.CreateViewport.assert_not_called();self.assertFalse(surface._attached)
         finally:surface._fly_timer.stop();surface.close();surface.deleteLater()
 
+    def test_play_uses_headless_backend_for_offscreen_platform(self):
+        from Editor.runtime import RuntimeService
+        from types import SimpleNamespace
+        runtime=SimpleNamespace(_host=Mock())
+        runtime._host.play.return_value=True
+        self.assertTrue(RuntimeService.Play(runtime))
+        runtime._host.play.assert_called_once_with(True)
+
     def test_close_releases_runtime_and_does_not_restart_delayed_ticks(self):
         window=Editor(ThemeManager(self.App))
         window.Controller.Timer.start();self.assertTrue(window.Controller.Timer.isActive())

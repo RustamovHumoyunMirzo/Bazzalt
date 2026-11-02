@@ -697,7 +697,7 @@ public:
         m_engine->SetEditorCamera(id, eye[0], eye[1], eye[2], target[0], target[1], target[2]);
     }
 
-    bool Play() {
+    bool Play(bool headless=false) {
         if (m_playing) return true;
         CleanupSnapshot();
         m_snapshot = std::filesystem::temp_directory_path() /
@@ -709,7 +709,7 @@ public:
             m_extraSnapshots.emplace_back(SceneAt(i).GetUUID(),path);
         }
         // Initialize rendering without gameplay, then start exactly once per Play.
-        if (!m_engine->Init(false, false)||!m_engine->StartScripts()) {m_engine->BeginShutdown();m_engine->StopScripts();m_engine->EndApplication();m_engine->LoadScene(m_snapshot);CleanupSnapshot();return false;}
+        if (!m_engine->Init(headless, false)||!m_engine->StartScripts()) {m_engine->BeginShutdown();m_engine->StopScripts();m_engine->EndApplication();m_engine->LoadScene(m_snapshot);CleanupSnapshot();return false;}
         m_playing = true; m_paused = false;
         ApplicationEvent size{ApplicationEventType::OnWindowResize};size.Width=m_gameWidth;size.Height=m_gameHeight;Runtime::ApplicationEventsAccess::Emit(size);
         return true;
@@ -1005,7 +1005,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("sync_lua_scripts", &Bazzalt::EditorBridge::EditorHost::SyncLuaScripts)
         .def("lua_scene_scripts", &Bazzalt::EditorBridge::EditorHost::LuaSceneScripts,py::arg("include_native")=false)
         .def("refresh_lua_assets", &Bazzalt::EditorBridge::EditorHost::RefreshLuaAssets)
-        .def("play", &Bazzalt::EditorBridge::EditorHost::Play)
+        .def("play", &Bazzalt::EditorBridge::EditorHost::Play, py::arg("headless")=false)
         .def("pause", &Bazzalt::EditorBridge::EditorHost::Pause)
         .def("step", &Bazzalt::EditorBridge::EditorHost::Step)
         .def("tick", &Bazzalt::EditorBridge::EditorHost::Tick)

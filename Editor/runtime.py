@@ -479,7 +479,9 @@ class RuntimeService(QObject):
         return bool(self._host and hasattr(self._host,"set_scene_render_mode") and self._host.set_scene_render_mode(mode))
 
     def Play(self) -> bool:
-        result=bool(self._host and self._host.play())
+        from PySide6.QtGui import QGuiApplication
+        headless=QGuiApplication.platformName().casefold() in {"offscreen","minimal","minimalegl"}
+        result=bool(self._host and self._host.play(headless))
         if not result:self.ErrorOccurred.emit(self.LastError())
         return result
 

@@ -20,6 +20,10 @@ struct OwnedWork {
     std::shared_ptr<void> Module;
     std::function<void()> Function;
     void operator()() {
+        struct ReleaseCaptures {
+            OwnedWork& Work;
+            ~ReleaseCaptures(){Work.Function={};Work.Module.reset();}
+        } release{*this};
         struct Restore {
             std::shared_ptr<void> Previous;
             ~Restore(){Detail::SetCurrentGameplayModule(std::move(Previous));}
@@ -92,7 +96,9 @@ JobHandle Jobs::Schedule(std::function<void()> work) {
          (*task)();
          // Destroy the queued closure before signaling the teardown barrier.
          task.reset();
-         {std::lock_guard lock(pool.Mutex);--pool.Pending;if(module){auto found=pool.ModulePending.find(module.get());if(--found->second==0)pool.ModulePending.erase(found);}}
+         const auto* moduleKey=module.get();
+         module.reset();
+         {std::lock_guard lock(pool.Mutex);--pool.Pending;if(moduleKey){auto found=pool.ModulePending.find(moduleKey);if(--found->second==0)pool.ModulePending.erase(found);}}
          pool.Idle.notify_all();
      });}catch(...){if(module&&pool.ModulePending.at(module.get())==0)pool.ModulePending.erase(module.get());throw;}
      ++pool.Pending;if(module)++pool.ModulePending.at(module.get());}

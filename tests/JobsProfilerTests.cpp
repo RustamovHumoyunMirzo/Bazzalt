@@ -25,6 +25,15 @@ int main() {
     });
     Detail::SetCurrentGameplayModule({});lease.reset();
     retained.Wait();retained={};Jobs::WaitAll();assert(weak.expired());
+    // Completed futures must not retain gameplay code or captures, even while handles live.
+    for(int repeat=0;repeat<64;++repeat){
+        lease=std::make_shared<int>(repeat);weak=lease;
+        Detail::SetCurrentGameplayModule(lease);
+        auto completed=Jobs::Schedule([capture=lease,repeat]{if(repeat%2)throw std::runtime_error("expected");});
+        Detail::SetCurrentGameplayModule({});lease.reset();
+        try{completed.Wait();}catch(const std::runtime_error&){}
+        Jobs::WaitAll();assert(weak.expired());assert(completed.IsComplete());
+    }
     // A single-worker pool cannot run a module task while another task deliberately blocks it.
     if(Jobs::GetWorkerCount()>1){
     std::promise<void> releaseIO;
