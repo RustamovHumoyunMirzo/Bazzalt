@@ -1,3 +1,4 @@
+#include "Bazzalt/Components/Impostor.h"
 #include "Prefab/PrefabAccess.h"
 #include "Network/NetworkModuleApi.h"
 #include "Persistence/SaveAccess.h"
@@ -303,6 +304,10 @@ UUID Engine::PickEditorPrimitive(Vec3 origin,Vec3 direction,Vec3* hitPosition,co
         if(geometry->Picking&&geometry->Picking->Raycast(o,d,nearest,1e-8f))result=entity.GetUUID();
     }
 
+    if(m_isInitialized)if(auto camera=m_renderBackend->GetEditorCameraWorld())for(auto handle:m_scene->GetRegistry().view<Impostor>()){
+        auto entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));const auto id=entity.GetUUID();const auto& c=entity.GetComponent<Impostor>();if(!c.Enabled||!c.Visible||!c.IsValid()||!c.Atlas||m_editorUnselectable.contains(id)||m_editorHidden.contains(id)||m_renderBackend->IsEditorLODHidden(id)||ignored(id))continue;
+        Mat4 inverse;if(!c.GetMatrix(PhysicsRenderMatrix(*m_scene,entity),*camera).TryInverse(inverse))continue;auto point=inverse.TransformPoint(origin),ray=inverse.TransformDirection(direction);if(std::abs(ray.Z)<1e-8f)continue;float distance=-point.Z/ray.Z;auto hit=point+ray*distance;if(distance>=0&&distance<nearest&&hit.X>=0&&hit.X<=1&&hit.Y>=0&&hit.Y<=1){nearest=distance;result=id;}
+    }
     if(m_isInitialized)for(const auto& mesh:m_renderBackend->GetAssets().GetEditorMeshes()){
         if(m_renderBackend->IsEditorLODHidden(mesh.Owner)||m_editorHidden.contains(mesh.Owner)||m_editorUnselectable.contains(mesh.Owner)||ignored(mesh.Owner)||GraphicsAccess::IsDeformed(mesh.Owner))continue;
         Mat4 inverse;if(!mesh.World.TryInverse(inverse))continue;

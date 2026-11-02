@@ -6,6 +6,7 @@
 #include "Bazzalt/UUID.h"
 namespace filament {class View;class Scene;class MaterialInstance;}
 namespace Bazzalt::Runtime {
+struct LODViewState;
 class RenderBackend;
 class GraphicsRenderer final {
 public:
@@ -14,6 +15,8 @@ public:
     void BeginFrame();
     void AddCamera(filament::View*,UUID,std::uint64_t viewport,bool editor);
     void Prepare();
+    void CollectUnsupportedLOD(LODViewState& state) const;
+    void PrepareLOD(const LODViewState& state);
     void BeforeCamera(filament::View*,std::uint64_t viewport);
     void AfterCamera(filament::View*,std::uint64_t viewport);
     void EndFrame();

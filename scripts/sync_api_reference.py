@@ -291,6 +291,12 @@ def supplement(language, name, record, types):
 
 
 OVERVIEWS = {
+    'HLOD': 'Authored hierarchical render proxy group. Sources and Proxies are disjoint child subtrees; nested source LOD/HLOD groups are supported. GetLOD exposes the equivalent two-level selection settings. IsValid checks property data; IsConfigured also requires both root lists. This does not bake or simplify meshes or disable simulation.',
+    'LODTransition': 'Attach beside LOD or HLOD to request reversible timed ordered-coverage transitions. Duration uses unscaled render time (0.01..10 seconds), Easing is Linear or SmoothStep, and FadeCulling includes entering/leaving culling. Unsupported materials cause an atomic whole-group hard cut. Histories and overrides are private per-view state.',
+    'LODEasing': 'Linear preserves normalized transition progress. SmoothStep uses the cubic p*p*(3-2*p) curve. Reversal preserves coverage and the same representation pair.',
+    'Impostor': 'World-sized camera-facing alpha-cutout quad with an authored color atlas. Columns/Rows pack azimuth frames left-to-right and top-to-bottom; ViewCount is 1..256 and starts at local +Z toward +X. AzimuthOffset is in degrees. Pivot positions the local unit quad relative to Center. GetMatrix maps Pivot to the world center. Camera-facing state never writes the entity transform.',
+    'ImpostorFacing': 'Spherical uses camera right/up. Cylindrical stays upright on world Y and turns toward the camera horizontally, with a stable fallback for overhead views.',
+
     'AssetDependency': 'One saved direct asset reference. Source and Target are UUIDs; TargetPath is the resolved project path when available, Field identifies the authored location, and State describes identity resolution independently of import readiness. Null UUIDs are excluded. Built-in shader presets need no project file.',
     'AssetDependencyReport': 'Saved direct references for Asset, with extractor coverage State and LastError. Complete is local format coverage, not a claim that the entire reachable graph is complete. Partial, Unknown and Failed must not be treated as safe deletion or stripping evidence. Queries are snapshots on the engine thread.',
     'AssetReferenceState': 'Unknown means unresolved/unclassified; Missing means a declared target is absent from the index; Found means an indexed identity, even if import failed; Builtin means an engine shader preset. Check AssetInfo.State separately for import readiness.',

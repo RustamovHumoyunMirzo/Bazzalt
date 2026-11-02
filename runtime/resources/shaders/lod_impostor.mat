@@ -1,0 +1,36 @@
+material {
+    name : BazzaltImpostor,
+    shadingModel : unlit,
+    doubleSided : true,
+    flipUV : true,
+    blending : masked,
+    maskThreshold : 0.5,
+    parameters : [
+        { type : sampler2d, name : atlas },
+        { type : float4, name : atlasRect },
+        { type : float4, name : tint },
+        { type : float, name : cutoff },
+        { type : float3, name : maskColor },
+        { type : float4, name : bazzaltLodFade }
+    ],
+    requires : [ uv0 ]
+}
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        if (materialParams.bazzaltLodFade.z > 0.5) {
+            ivec2 p = ivec2(floor(getNormalizedViewportCoord().xy * getResolution().xy)) & 7;
+            int n = 0;
+            for (int b = 0; b < 3; ++b) {
+                int x = (p.x >> b) & 1; int y = (p.y >> b) & 1;
+                n |= ((x ^ y) * 2 + y) << (2 * (2 - b));
+            }
+            float threshold = (float(n) + 0.5) / 64.0;
+            if (threshold < materialParams.bazzaltLodFade.x || threshold >= materialParams.bazzaltLodFade.y) discard;
+        }
+        vec4 color = texture(materialParams_atlas, materialParams.atlasRect.xy + getUV0() * materialParams.atlasRect.zw) * materialParams.tint;
+        if (color.a < materialParams.cutoff) discard;
+        if (materialParams.maskColor.z > 0.5) color.rgb = vec3(materialParams.maskColor.xy, 0.0);
+        material.baseColor = vec4(color.rgb, 1.0);
+    }
+}

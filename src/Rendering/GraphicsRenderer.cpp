@@ -1,6 +1,7 @@
 #include "Rendering/GraphicsRenderer.h"
 #include "Rendering/RenderBackend.h"
 #include "Rendering/RenderAssets.h"
+#include "Rendering/LODFade.h"
 #include "Runtime/GraphicsAccess.h"
 #include "Bazzalt/Console.h"
 #include <filament/Engine.h>
@@ -39,13 +40,14 @@ struct GraphicsRenderer::Impl {
     std::map<std::pair<UUID,bool>,std::weak_ptr<filament::MaterialInstance>> SharedMaterials;
     std::uint64_t Allocations=0,Builds=0;
     filament::Scene* MaskScene=nullptr;std::vector<std::pair<utils::Entity,filament::MaterialInstance*>> MaskMaterials;
+    LODFadeSwaps Fades;
     std::vector<Draw> Draws;std::vector<Camera> Cameras;std::set<UUID> InvalidMaterials;
     explicit Impl(RenderBackend& b):Backend(b),Engine(b.GetEngine()){
 
     }
     void Destroy(Draw& draw){if(draw.Added)Backend.GetScene().remove(draw.Entity);Engine.destroy(draw.Entity);draw.Shared.reset();Engine.getEntityManager().destroy(draw.Entity);}
     void Destroy(Geometry& g){Engine.destroy(g.Vertices);Engine.destroy(g.Indices);}
-    ~Impl(){for(auto& draw:Draws)Destroy(draw);for(auto& [key,g]:Geometries)Destroy(g);}
+    ~Impl(){Fades.Clear(Engine);for(auto& draw:Draws)Destroy(draw);for(auto& [key,g]:Geometries)Destroy(g);}
     Geometry Upload(const GraphicsGeometry& data){Geometry result;return Upload(data,result);}
     Geometry Upload(const GraphicsGeometry& data,Geometry result){
         const bool allocate=!result.Vertices;if(allocate)++Allocations;result.Topology=data.Topology;result.VertexCount=data.Vertices.size();result.IndexCount=data.Indices.size();
@@ -77,7 +79,7 @@ GraphicsRenderer::GraphicsRenderer(RenderBackend& backend):m_impl(std::make_uniq
 }
 GraphicsRenderer::~GraphicsRenderer(){EndSelectionMask();m_impl->Backend.GetAssets().EndDeformedView();m_impl->Backend.GetAssets().SetDeformationRelease({});}
 std::array<std::uint64_t,2> GraphicsRenderer::GetResourceStatistics()const{return {m_impl->Allocations,m_impl->Builds};}
-void GraphicsRenderer::BeginFrame(){m_impl->Cameras.clear();GraphicsAccess::BeginFrame();}
+void GraphicsRenderer::BeginFrame(){m_impl->Fades.Clear(m_impl->Engine);m_impl->Cameras.clear();GraphicsAccess::BeginFrame();}
 void GraphicsRenderer::AddCamera(filament::View* view,UUID camera,std::uint64_t viewport,bool editor){
     if(!view)return;GraphicsEvent event;event.Camera=camera;event.Viewport=viewport;event.IsEditorCamera=editor;
     const auto bounds=view->getViewport();event.Width=bounds.width;event.Height=bounds.height;event.View=Matrix(view->getCamera().getViewMatrix());event.Projection=Matrix(view->getCamera().getProjectionMatrix());event.ViewProjection=event.Projection*event.View;
@@ -135,12 +137,15 @@ bool GraphicsRenderer::BeginSelectionMask(filament::Scene& scene,const std::unor
     return !impl.MaskMaterials.empty();
 }
 void GraphicsRenderer::EndSelectionMask(){auto& impl=*m_impl;if(!impl.MaskScene)return;for(auto& [entity,material]:impl.MaskMaterials){auto ri=impl.Engine.getRenderableManager().getInstance(entity);if(ri)impl.Engine.getRenderableManager().setMaterialInstanceAt(ri,0,material);impl.MaskScene->remove(entity);}impl.MaskMaterials.clear();impl.MaskScene=nullptr;}
+void GraphicsRenderer::CollectUnsupportedLOD(LODViewState& state) const{if(!state.HasFades)return;const auto& commands=GraphicsAccess::Commands();for(std::size_t i=0;i<std::min(m_impl->Draws.size(),commands.size());++i)if(m_impl->Draws[i].Valid){const bool supported=SupportsLODFade(m_impl->Draws[i].Material);state.RejectUnsupported(commands[i].Owner,supported);state.RejectUnsupported(commands[i].Source,supported);}}
+void GraphicsRenderer::PrepareLOD(const LODViewState& state){auto& impl=*m_impl;const auto& commands=GraphicsAccess::Commands();for(std::size_t i=0;i<std::min(impl.Draws.size(),commands.size());++i)if(impl.Draws[i].Valid){auto found=state.Masks.find(commands[i].Source?commands[i].Source:commands[i].Owner);if(found!=state.Masks.end())impl.Fades.Apply(impl.Engine,impl.Draws[i].Entity,found->second);}impl.Fades.Restore(impl.Engine);}
 void GraphicsRenderer::BeforeCamera(filament::View* view,std::uint64_t viewport){
-    auto& impl=*m_impl;auto context=std::find_if(impl.Cameras.begin(),impl.Cameras.end(),[&](const auto& c){return c.View==view&&c.Event.Viewport==viewport;});
+    auto& impl=*m_impl;impl.Fades.Restore(impl.Engine);auto context=std::find_if(impl.Cameras.begin(),impl.Cameras.end(),[&](const auto& c){return c.View==view&&c.Event.Viewport==viewport;});
     const auto& commands=GraphicsAccess::Commands();for(std::size_t i=0;i<impl.Draws.size();++i){auto& draw=impl.Draws[i];const bool visible=draw.Valid&&!impl.Backend.IsLODHidden(commands[i].Source)&&!impl.Backend.IsLODHidden(commands[i].Owner)&&context!=impl.Cameras.end()&&GraphicsAccess::Matches(commands[i],context->Event)&&(!context->Event.IsEditorCamera||!commands[i].Owner||(!impl.Backend.IsEditorHidden(commands[i].Owner)&&(!commands[i].Source||!impl.Backend.IsEditorHidden(commands[i].Source))));
         if(visible&&!draw.Added)impl.Backend.GetScene().addEntity(draw.Entity);else if(!visible&&draw.Added)impl.Backend.GetScene().remove(draw.Entity);draw.Added=visible;
+        if(visible){auto mask=impl.Backend.GetLODMask(commands[i].Source?commands[i].Source:commands[i].Owner);if(mask.Minimum>0||mask.Maximum<1)impl.Fades.Apply(impl.Engine,draw.Entity,mask);}
     }
 }
-void GraphicsRenderer::AfterCamera(filament::View* view,std::uint64_t viewport){for(const auto& c:m_impl->Cameras)if(c.View==view&&c.Event.Viewport==viewport){GraphicsAccess::AfterCamera(c.Event);break;}}
-void GraphicsRenderer::EndFrame(){EndSelectionMask();for(auto& draw:m_impl->Draws)if(draw.Added){m_impl->Backend.GetScene().remove(draw.Entity);draw.Added=false;}m_impl->Backend.GetAssets().EndDeformedView();GraphicsAccess::EndFrame();}
+void GraphicsRenderer::AfterCamera(filament::View* view,std::uint64_t viewport){m_impl->Fades.Restore(m_impl->Engine);for(const auto& c:m_impl->Cameras)if(c.View==view&&c.Event.Viewport==viewport){GraphicsAccess::AfterCamera(c.Event);break;}}
+void GraphicsRenderer::EndFrame(){EndSelectionMask();m_impl->Fades.Clear(m_impl->Engine);for(auto& draw:m_impl->Draws)if(draw.Added){m_impl->Backend.GetScene().remove(draw.Entity);draw.Added=false;}m_impl->Backend.GetAssets().EndDeformedView();GraphicsAccess::EndFrame();}
 }

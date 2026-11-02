@@ -76,3 +76,22 @@ class LODLevelsInput(QWidget):
             data=self.Controller.Runtime.EntityDetails(self.Entity).get('component_data',{}).get('LOD',{})
             blocker=QSignalBlocker(forced);forced.SetOptions([(self.Tr('lod.automatic'),-1),(self.Tr('lod.culled'),-2)]+[(self.Tr('lod.level',index=i),i) for i in range(len(data.get('Levels',[])))]);forced.SetValue(data.get('Forced Level',-1));del blocker
         add=self._Button('lod.add_level',self._AddLevel);add.setEnabled(len(self._value)<8);self.Layout.addWidget(add)
+
+class HLODRootsInput(LODLevelsInput):
+    def __init__(self,controller,entity,value,name="Sources",parent=None):
+        self.LabelKey="field."+name;super().__init__(controller,entity,value,parent)
+    def SetValue(self,value):
+        self._value=[{'ScreenHeight':0.,'Roots':list(value)}];self._Rebuild()
+    def GetValue(self):return super().GetValue()[0]['Roots']
+    def _Rebuild(self):
+        super()._Rebuild()
+        header=self.Layout.itemAt(0).layout() if self.Layout.count() else None
+        if header:
+            for index in range(header.count()):
+                widget=header.itemAt(index).widget()
+                if widget:widget.hide()
+            title=header.itemAt(0).widget()
+            if title:title.setText(self.Tr(self.LabelKey));title.show()
+        if self.Layout.count():
+            widget=self.Layout.itemAt(self.Layout.count()-1).widget()
+            if widget:widget.hide()

@@ -1,5 +1,6 @@
 #include "Runtime/PreparedScene.h"
 #include "Prefab/PrefabAccess.h"
+#include "Serialization/AdvancedLODSerialization.h"
 #include "Bazzalt/Profiler.h"
 #include "Bazzalt/Serialization.h"
 #include "Utils/NumberParsing.h"
@@ -227,6 +228,7 @@ namespace Bazzalt
         auto& keys=m_entityReferences[type];if(std::find(keys.begin(),keys.end(),property)==keys.end()){if(keys.size()>=256)throw std::length_error("Too many entity reference declarations");keys.push_back(std::move(property));}
     }
     bool ComponentSerializationRegistry::IsEntityReference(const std::string& type,const std::string& property)const{
+        if(type=="Bazzalt.HLOD"&&(property.starts_with("Sources.")||property.starts_with("Proxies."))&&!property.ends_with(".Count"))return true;
         if(type=="Bazzalt.LOD"&&property.starts_with("Level.")&&property.find(".Root.")!=std::string::npos)return true;
         if(property=="ConnectedBody"&&(type=="Bazzalt.Joint"||type.ends_with("Joint")))return true;
         if((type=="Bazzalt.VehicleDifferential"||type=="Bazzalt.VehicleAntiRollBar")&&(property=="LeftWheel"||property=="RightWheel"))return true;
@@ -237,6 +239,7 @@ namespace Bazzalt
     SceneSerializer::SceneSerializer()
     {
         Runtime::PrefabAccess::Register(m_components);
+        Runtime::RegisterAdvancedLODComponents(m_components);
         Runtime::RegisterAudioComponents(m_components);
         Runtime::RegisterPhysicsComponents(m_components);
         Runtime::RegisterGuiComponents(m_components);

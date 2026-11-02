@@ -1393,5 +1393,21 @@
   "assets.reference_unknown": "Unknown reference",
   "assets.reference_missing": "Missing asset",
   "assets.reference_found": "Asset",
-  "assets.reference_builtin": "Built-in asset"
+  "assets.reference_builtin": "Built-in asset",
+  "component.HLOD": "HLOD",
+  "component.LOD Transition": "LOD Transition",
+  "component.Impostor": "Impostor",
+  "field.Sources": "Sources",
+  "field.Proxies": "Proxies",
+  "field.Atlas": "Atlas",
+  "field.Fade Culling": "Fade Culling",
+  "field.View Count": "View Count",
+  "field.Azimuth Offset": "Azimuth Offset",
+  "field.Alpha Cutoff": "Alpha Cutoff",
+  "field.Screen Height": "Screen Height",
+  "field.Cull Height": "Cull Height",
+  "lod.linear": "Linear",
+  "lod.smooth_step": "Smooth Step",
+  "lod.spherical": "Spherical",
+  "lod.cylindrical": "Cylindrical"
 }

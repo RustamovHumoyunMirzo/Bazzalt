@@ -8,12 +8,16 @@
 #endif
 #include "Rendering/RenderBackend.h"
 #include "Rendering/GraphicsRenderer.h"
+#include "Rendering/ImpostorRenderer.h"
+#include "Bazzalt/Components/HLOD.h"
+#include "Bazzalt/Components/Impostor.h"
 #include "Runtime/GraphicsAccess.h"
 #include "Rendering/CaptureGraph.h"
 #include "GUI/GuiRenderer.h"
 #include "GUI/GuiSystem.h"
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Input.h"
+#include "Bazzalt/Console.h"
 #include "Rendering/RenderSystems.h"
 #include "Rendering/PrimitiveGeometry.h"
 
@@ -653,22 +657,31 @@ std::unordered_map<std::string,double> RenderBackend::GetStatistics() const{
     if(m_assets){auto instancing=m_assets->GetInstancingResourceCounts();result["instancing_enabled"]=m_engine->isAutomaticInstancingEnabled()?1:0;result["primitive_gpu_geometries"]=double(instancing[0]);result["primitive_gpu_materials"]=double(instancing[1]);result["shared_surface_materials"]=double(instancing[2]);auto counts=m_assets->GetUploadCounts();result["transform_uploads"]=double(counts[0]);result["render_state_uploads"]=double(counts[1]);result["primitive_color_uploads"]=double(counts[2]);auto geometry=GetPrimitiveCacheStatistics();result["primitive_cache_hits"]=double(geometry[0]);result["primitive_cache_builds"]=double(geometry[1]);result["primitive_cache_bytes"]=double(geometry[2]);}
     return result;
 }
-void RenderBackend::SetGuiScene(Bazzalt::Scene* scene){GraphicsAccess::BindScene(scene);if(m_guiScene!=scene){ClearGuiResources();m_lodViews.clear();}m_guiScene=scene;}
-void RenderBackend::ClearGuiResources(){if(m_guiRenderer)m_guiRenderer->Clear();}
+void RenderBackend::SetGuiScene(Bazzalt::Scene* scene){GraphicsAccess::BindScene(scene);if(m_guiScene!=scene){ClearGuiResources();m_lodViews.clear();m_impostors.reset();}m_guiScene=scene;}
+void RenderBackend::ClearGuiResources(){if(m_guiRenderer)m_guiRenderer->Clear();if(m_impostors)m_impostors->InvalidateTextures();}
 namespace {
-struct LODScope {RenderAssets& Assets;const std::unordered_set<UUID>*& Current;bool Owns;~LODScope(){if(Owns){Assets.EndLODView();Current=nullptr;}}};
+struct LODScope {RenderAssets& Assets;const std::unordered_set<UUID>*& Current;LODViewState*& State;bool Owns;~LODScope(){if(Owns){Assets.EndLODView();Current=nullptr;State=nullptr;}}};
+struct ImpostorScope {ImpostorRenderer* Renderer;bool Owns;~ImpostorScope(){if(Renderer&&Owns)Renderer->EndView();}};
 }
 const std::unordered_set<UUID>& RenderBackend::GetLODHidden(filament::View* view){
     static const std::unordered_set<UUID> empty;
-    if(!m_guiScene||!view||!view->hasCamera()||m_guiScene->GetRegistry().view<LOD>().size()==0)return empty;
+    if(!m_guiScene||!view||!view->hasCamera())return empty;
+    if(m_guiScene->GetRegistry().view<LOD>().size()==0&&m_guiScene->GetRegistry().view<HLOD>().size()==0){m_lodViews.erase(view);return empty;}
     auto& state=m_lodViews[view];if(state.Frame!=m_lodFrame){const auto& camera=view->getCamera();const auto eye=camera.getPosition();const auto projection=camera.getProjectionMatrix();EvaluateLOD(*m_guiScene,{float(eye.x),float(eye.y),float(eye.z)},float(projection[1][1]),std::abs(projection[3][3])>.5,state);state.Frame=m_lodFrame;}
+    if(state.HasFades){state.UnsupportedGroups.clear();m_assets->CollectUnsupportedLOD(state);if(m_graphics)m_graphics->CollectUnsupportedLOD(state);for(auto id:state.UnsupportedGroups)if(state.FallbackWarnings.insert(id).second)Console::Warning("LOD transition uses a hard switch because a representation has an incompatible material: "+id.ToString(),"Rendering");state.Resolve();}
     return state.Hidden;
 }
+void RenderBackend::BeginImpostors(filament::View* view,bool editor){
+    if(!m_guiScene||!view)return;
+    if(m_impostors){static const std::unordered_set<UUID> empty;static const std::unordered_map<UUID,LODMask> masks;m_impostors->BeginView(*m_guiScene,view,m_currentLODHidden?*m_currentLODHidden:empty,editor?m_editorHidden:empty,m_currentLODState?m_currentLODState->Masks:masks);}
+}
+std::optional<Mat4> RenderBackend::GetEditorCameraWorld() const{for(const auto& [_,view]:m_viewports)if(view->Kind==ViewportKind::Scene&&view->View&&view->View->hasCamera()){Mat4 matrix;const auto native=view->View->getCamera().getModelMatrix();for(int c=0;c<4;++c)for(int r=0;r<4;++r)matrix(r,c)=float(native[c][r]);return matrix;}return {};}
 bool RenderBackend::IsEditorLODHidden(UUID id){for(auto& [key,view]:m_viewports)if(view->Kind==ViewportKind::Scene)return GetLODHidden(view->View).contains(id);return false;}
 void RenderBackend::RenderCameraView(filament::View* view,std::uint64_t viewport,bool applyLOD){
     if(!view)return;
-    if(applyLOD){m_currentLODHidden=&GetLODHidden(view);m_assets->BeginLODView(*m_currentLODHidden);}
-    LODScope lodScope{*m_assets,m_currentLODHidden,applyLOD};
+    if(applyLOD){m_currentLODHidden=&GetLODHidden(view);auto found=m_lodViews.find(view);m_currentLODState=found==m_lodViews.end()?nullptr:&found->second;m_assets->BeginLODView(*m_currentLODHidden,GetLODMasks());}
+    LODScope lodScope{*m_assets,m_currentLODHidden,m_currentLODState,applyLOD};
+    const bool ownImpostors=!m_impostors||!m_impostors->IsActive(view);if(ownImpostors)BeginImpostors(view,false);ImpostorScope impostors{m_impostors.get(),ownImpostors};
     if(m_graphics)m_graphics->BeforeCamera(view,viewport);
     auto* scene=view->getScene();auto* sky=scene?scene->getSkybox():nullptr;
     const bool clearTarget=view->getRenderTarget()&&scene&&!sky;
@@ -710,10 +723,11 @@ void RenderBackend::Render(double materialTime) {
     m_renderer->setMaterialTimeEpoch(epoch);
     // Scripts may change camera targets/descriptors after Scene.Update systems.
     if(m_guiScene&&m_guiScene->HasSystem<CameraSystem>())m_guiScene->GetSystem<CameraSystem>().Synchronize(*m_guiScene);
+    m_assets->ResetLODMaterials();
     m_assets->SynchronizeTextures();
     if(!m_graphics)m_graphics=std::make_unique<GraphicsRenderer>(*this);
     m_graphics->BeginFrame();
-    struct GraphicsFrameScope {GraphicsRenderer& Renderer;~GraphicsFrameScope(){Renderer.EndFrame();}} graphicsFrame{*m_graphics};
+    struct GraphicsFrameScope {GraphicsRenderer& Renderer;RenderAssets& Assets;~GraphicsFrameScope(){Renderer.EndFrame();Assets.ResetLODMaterials();}} graphicsFrame{*m_graphics,*m_assets};
     auto cameraId=[&](filament::View* view){for(const auto& [id,stored]:m_cameraViews)if(stored==view)return id;return UUID{};};
     for(auto* view:m_activeViews)if(view&&view->getRenderTarget())m_graphics->AddCamera(view,cameraId(view),0,false);
     for(const auto& [id,resource]:m_viewports){
@@ -721,14 +735,19 @@ void RenderBackend::Render(double materialTime) {
         else for(auto* view:m_activeViews)if(view&&!view->getRenderTarget())m_graphics->AddCamera(view,cameraId(view),id,false);
     }
     m_graphics->Prepare();
+    if(m_guiScene){if(!m_impostors&&m_guiScene->GetRegistry().view<Impostor>().size())m_impostors=std::make_unique<ImpostorRenderer>(*this);if(m_impostors)m_impostors->Prepare(*m_guiScene);}
     if(m_guiScene&&m_guiRenderer){auto& system=m_guiScene->GetSystem<GuiSystem>();system.Layout(*m_guiScene,{float(m_presentationWidth),float(m_presentationHeight)});if(!Input::IsActive())system.ProcessInput(*m_guiScene);m_guiRenderer->PrepareSpatial(*m_guiScene);}
+    // Prepare immutable per-view fade materials before any render pass starts.
+    const auto prepareLOD=[&](filament::View* view){if(!view||!view->hasCamera())return;const auto& hidden=GetLODHidden(view);auto found=m_lodViews.find(view);if(found!=m_lodViews.end()){m_assets->BeginLODView(hidden,found->second.Masks);m_assets->EndLODView();m_graphics->PrepareLOD(found->second);}if(m_guiScene&&m_impostors){static const std::unordered_map<UUID,LODMask> empty;m_impostors->BeginView(*m_guiScene,view,hidden,{},found==m_lodViews.end()?empty:found->second.Masks);m_impostors->EndView();}};
+    for(auto* view:m_activeViews)prepareLOD(view);
+    for(const auto& [_,resource]:m_viewports)if(resource->Kind==ViewportKind::Scene)prepareLOD(resource->View);
     // Capture once per tick, independent of visible Qt / game windows. Prepare
     // all mutable resources before beginFrame, as required by Filament.
     const bool captures=std::any_of(m_activeViews.begin(),m_activeViews.end(),[](auto* view){return view&&view->getRenderTarget();});
     if(captures){
         if(!m_captureSwapChain)m_captureSwapChain=m_engine->createSwapChain(1u,1u);
         std::vector<UUID> cameras;std::unordered_map<UUID,std::vector<UUID>> dependencies;
-        const auto worldSources=m_assets->GetCameraDependencies();
+        auto worldSources=m_assets->GetCameraDependencies();if(m_guiScene)for(auto h:m_guiScene->GetRegistry().view<Impostor>()){const auto& c=m_guiScene->GetRegistry().get<Impostor>(h);if(c.Enabled&&c.Visible&&c.IsValid())if(auto producer=m_assets->GetTextureProducer(c.Atlas))worldSources.push_back(producer);}
         bool sharedFeeds=!worldSources.empty();
         for(auto* view:m_activeViews)if(view&&view->getRenderTarget()){
             auto entry=std::find_if(m_cameraViews.begin(),m_cameraViews.end(),[&](const auto& entry){return entry.second==view;});if(entry==m_cameraViews.end())continue;
@@ -809,14 +828,16 @@ void RenderBackend::Render(double materialTime) {
         if (!resource->SwapChain || !m_renderer->beginFrame(resource->SwapChain,frameNanoseconds)) continue;
         if(m_guiRenderer){m_guiRenderer->RenderSpatialEffects();m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});}
         if (resource->Kind == ViewportKind::Scene) {
-            m_currentLODHidden=&GetLODHidden(resource->View);m_assets->BeginLODView(*m_currentLODHidden);
-            LODScope lodScope{*m_assets,m_currentLODHidden,true};
+            m_currentLODHidden=&GetLODHidden(resource->View);auto lodState=m_lodViews.find(resource->View);m_currentLODState=lodState==m_lodViews.end()?nullptr:&lodState->second;m_assets->BeginLODView(*m_currentLODHidden,GetLODMasks());
+            LODScope lodScope{*m_assets,m_currentLODHidden,m_currentLODState,true};
+            BeginImpostors(resource->View,true);ImpostorScope impostors{m_impostors.get(),true};
             bool outlined=false;
             if(!m_outlineSelected.empty()||!m_outlineHovered.empty()){
                 outlined=m_assets->BeginSelectionMask(*resource->MaskScene,m_outlineSelected,m_outlineHovered,m_gizmo->SelectedMask,m_gizmo->HoverMask);
                 if(m_graphics)outlined=m_graphics->BeginSelectionMask(*resource->MaskScene,m_outlineSelected,m_outlineHovered,m_gizmo->SelectedMask,m_gizmo->HoverMask)||outlined;
-                try{if(outlined)m_renderer->render(resource->MaskView);}catch(...){if(m_graphics)m_graphics->EndSelectionMask();m_assets->EndSelectionMask(*resource->MaskScene);throw;}
-                if(m_graphics)m_graphics->EndSelectionMask();m_assets->EndSelectionMask(*resource->MaskScene);
+                if(m_impostors)outlined=m_impostors->BeginSelectionMask(*resource->MaskScene,m_outlineSelected,m_outlineHovered)||outlined;
+                try{if(outlined)m_renderer->render(resource->MaskView);}catch(...){if(m_impostors)m_impostors->EndSelectionMask();if(m_graphics)m_graphics->EndSelectionMask();m_assets->EndSelectionMask(*resource->MaskScene);throw;}
+                if(m_impostors)m_impostors->EndSelectionMask();if(m_graphics)m_graphics->EndSelectionMask();m_assets->EndSelectionMask(*resource->MaskScene);
             }
             m_assets->BeginEditorView(m_editorHidden);
             std::vector<utils::Entity> suspendedLights;
@@ -874,7 +895,8 @@ bool RenderBackend::WaitForViewportFrame(std::uint64_t id){
 }
 
 void RenderBackend::Shutdown() {
-    m_lodViews.clear();m_currentLODHidden=nullptr;
+    m_lodViews.clear();m_currentLODHidden=nullptr;m_currentLODState=nullptr;
+    m_impostors.reset();
     if (m_engine == nullptr) return;
     GraphicsAccess::BindScene(nullptr);m_graphics.reset();
     m_guiScene=nullptr;m_guiRenderer.reset();m_cameraViews.clear();

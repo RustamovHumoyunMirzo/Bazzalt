@@ -1,10 +1,22 @@
 material {
+    parameters: [{ type: float4, name: bazzaltLodFade }],
     name: BazzaltGraphics, shadingModel: unlit, doubleSided: true,
     blending: transparent, depthWrite: true, requires: [color]
 }
 fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
+        if (materialParams.bazzaltLodFade.z > 0.5) {
+            ivec2 p = ivec2(floor(getNormalizedViewportCoord().xy * getResolution().xy)) & 7;
+            int n = 0;
+            for (int b = 0; b < 3; ++b) {
+                int x = (p.x >> b) & 1; int y = (p.y >> b) & 1;
+                n |= ((x ^ y) * 2 + y) << (2 * (2 - b));
+            }
+            float threshold = (float(n) + 0.5) / 64.0;
+            if (threshold < materialParams.bazzaltLodFade.x || threshold >= materialParams.bazzaltLodFade.y) discard;
+        }
+
         material.baseColor = getColor();
     }
 }

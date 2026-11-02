@@ -326,7 +326,7 @@ class EditorController(QObject):
                 for property_name, value in dict(component_data.get(component, {})).items():
                     editor = self._ComponentEditor(inspected_entity, component, property_name, value)
                     if editor is not None:
-                        if (component=="Camera" and property_name=="Post Process Materials") or (component=="LOD" and property_name=="Levels"):section.AddWideWidget(editor);section._fields[property_name]=editor
+                        if (component=="Camera" and property_name=="Post Process Materials") or (component=="LOD" and property_name=="Levels") or (component=="HLOD" and property_name in ("Sources","Proxies")):section.AddWideWidget(editor);section._fields[property_name]=editor
                         else:section.AddField(property_name,editor)
                 if component=="GuiElement":
                     from .stylesheet_fields import Field
@@ -815,11 +815,20 @@ class EditorController(QObject):
         return self.Window.Resources.Icon(f"icons/{filename}") if filename else None
 
     def _ComponentEditor(self, entity_id: str, component: str, name: str, value):  # type: ignore[no-untyped-def]
+        if component=="HLOD" and name in ("Sources","Proxies"):
+            from .lod import HLODRootsInput
+            field=HLODRootsInput(self,entity_id,value,name);field.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return field
+        if component=="Impostor" and name=="Atlas":return self._AssetPicker(value,IMAGE_EXTENSIONS|{".btexture"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
+        if (component=="Impostor" and name=="Facing") or (component=="LOD Transition" and name=="Easing"):
+            field=EnumInput();tr=self.Window.Localization.Translate;keys=("spherical","cylindrical") if name=="Facing" else ("linear","smooth_step")
+            field.SetOptions([(tr("lod."+key),index) for index,key in enumerate(keys)]);field.SetValue(value);field.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,field.GetValue()));return field
+        if component=="LOD Transition" and name=="Duration":
+            field=FloatInput(minimum=.01,maximum=10,value=value,decimals=3);field.valueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return field
         if component=="LOD" and name=="Levels":
             from .lod import LODLevelsInput
             field=LODLevelsInput(self,entity_id,value);field.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return field
-        if component=="LOD" and name=="Forced Level":
-            field=EnumInput();count=len(self.Runtime.EntityDetails(entity_id).get("component_data",{}).get("LOD",{}).get("Levels",[]));tr=self.Window.Localization.Translate
+        if component in ("LOD","HLOD") and name=="Forced Level":
+            field=EnumInput();count=2 if component=="HLOD" else len(self.Runtime.EntityDetails(entity_id).get("component_data",{}).get("LOD",{}).get("Levels",[]));tr=self.Window.Localization.Translate
             field.SetOptions([(tr('lod.automatic'),-1),(tr('lod.culled'),-2)]+[(tr('lod.level',index=i),i) for i in range(count)]);field.SetValue(value);field.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,field.GetValue()));return field
         from .physics import ComponentField
         physics_field=ComponentField(self,entity_id,component,name,value)
@@ -1321,7 +1330,7 @@ class EditorController(QObject):
         if not entity_ids:return
         previous=self._hierarchy_clipboard
         self.CopyHierarchyEntities(entity_ids);nodes=self._hierarchy_clipboard;self._hierarchy_clipboard=previous
-        self.History.Begin("Duplicate entities");created=[];scenes=set();remap={};self._clone_lod_fields=[]
+        self.History.Begin("Duplicate entities");created=[];scenes=set();remap={};self._clone_lod_fields=[];self._clone_hlod_fields=[]
         try:
             for node in nodes:
                 details=node["details"];parent=str(details.get("parent") or "")
@@ -1335,7 +1344,7 @@ class EditorController(QObject):
 
     def PasteHierarchyEntities(self,parent_id)->None:
         if not self._hierarchy_clipboard:return
-        self.History.Begin("Paste entities");created=[];remap={};self._clone_lod_fields=[]
+        self.History.Begin("Paste entities");created=[];remap={};self._clone_lod_fields=[];self._clone_hlod_fields=[]
         try:
             for node in self._hierarchy_clipboard:
                 value=self._CloneHierarchyNode(node,str(parent_id or ""),True,remap)
@@ -1355,6 +1364,8 @@ class EditorController(QObject):
         supported=set(self.Runtime.ComponentTypes())
         for component,fields in details.get("component_data",{}).items():
             if component not in supported or not self.Runtime.AddComponent(entity,component):continue
+            if component=="HLOD":
+                self._clone_hlod_fields.append((entity,dict(fields)));self.Runtime.SetComponentEnabled(entity,component,bool(details.get("component_enabled",{}).get(component,True)));continue
             if component=="LOD":
                 self._clone_lod_fields.append((entity,dict(fields)));self.Runtime.SetComponentEnabled(entity,component,bool(details.get("component_enabled",{}).get(component,True)));continue
             for field,value in dict(fields).items():self.Runtime.SetComponentProperty(entity,component,field,value)
@@ -1377,6 +1388,11 @@ class EditorController(QObject):
             for field,value in fields.items():
                 if field!="Levels":self.Runtime.SetComponentProperty(entity,"LOD",field,value)
         self._clone_lod_fields=[]
+        for entity,fields in getattr(self,"_clone_hlod_fields",[]):
+            for key,value in fields.items():
+                if key in ("Sources","Proxies"):value=[remap.get(str(root),str(root)) for root in value]
+                if not self.Runtime.SetComponentProperty(entity,"HLOD",key,value):raise ValueError("Could not restore copied HLOD fields")
+        self._clone_hlod_fields=[]
 
     def ReparentEntity(self, entity_id: str, parent_id: str) -> None:
         scene_id=str(self.Runtime.EntityDetails(entity_id).get("scene_uuid",""))

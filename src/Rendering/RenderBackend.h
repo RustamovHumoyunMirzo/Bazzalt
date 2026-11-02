@@ -41,6 +41,7 @@ using ::operator&=;
 class RenderAssets;
 class GuiRenderer;
 class GraphicsRenderer;
+class ImpostorRenderer;
 
 // Owns Filament's low-level objects. No Filament type crosses the public API.
 class RenderBackend final {
@@ -91,6 +92,11 @@ public:
     const std::unordered_set<UUID>& GetLODHidden(filament::View* view);
     bool IsLODHidden(UUID id) const{return m_currentLODHidden&&m_currentLODHidden->contains(id);}
     bool IsEditorLODHidden(UUID id);
+    const std::unordered_map<UUID,LODMask>& GetLODMasks() const {static const std::unordered_map<UUID,LODMask> empty;return m_currentLODState?m_currentLODState->Masks:empty;}
+    LODMask GetLODMask(UUID id) const {if(m_currentLODState){auto found=m_currentLODState->Masks.find(id);if(found!=m_currentLODState->Masks.end())return found->second;}return {};}
+    std::optional<Mat4> GetEditorCameraWorld() const;
+    void BeginImpostors(filament::View* view,bool editor);
+
     bool IsEditorHidden(UUID id) const{return m_editorHidden.contains(id);}
     void SetEditorHidden(std::unordered_set<UUID> hidden){m_editorHidden=std::move(hidden);}
     void RecordLightUpload(){++m_lightUploads;}
@@ -143,6 +149,7 @@ private:
     std::unordered_map<filament::View*, std::vector<CustomPostProcessEffect>> m_postProcessEffects;
     std::unique_ptr<RenderAssets> m_assets;
     std::unique_ptr<GraphicsRenderer> m_graphics;
+    std::unique_ptr<ImpostorRenderer> m_impostors;
     std::unique_ptr<GuiRenderer> m_guiRenderer;
     std::unique_ptr<GuiRenderer> m_statisticsRenderer;
     std::unique_ptr<Bazzalt::Scene> m_statisticsScene;
@@ -170,6 +177,7 @@ private:
     bool m_orientationVisible = true;
     std::unordered_map<const filament::View*,LODViewState> m_lodViews;
     const std::unordered_set<UUID>* m_currentLODHidden=nullptr;
+    LODViewState* m_currentLODState=nullptr;
     std::uint64_t m_lodFrame=1;
     std::unordered_set<UUID> m_editorHidden;
     std::unordered_set<UUID> m_outlineSelected,m_outlineHovered;

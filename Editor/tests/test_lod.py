@@ -21,6 +21,18 @@ class LODTests(unittest.TestCase):
         self.assertTrue(r.SetComponentProperty(group,'LOD','Forced Level',1));w.Controller.SelectEntity(group,force=True);w.Controller.DuplicateHierarchyEntities([group]);clone=w.Controller.SelectedEntity;data=r.EntityDetails(clone)['component_data']['LOD'];self.assertEqual(data['Forced Level'],1);self.assertNotEqual(data['Levels'][0]['Roots'],[high]);self.assertEqual(r.EntityDetails(data['Levels'][0]['Roots'][0])['parent'],clone)
         w.Controller.SelectEntity(group,force=True);widget=w.Properties._sections['runtime.LOD']._fields['Levels'];widget._AddLevel();self.assertEqual(len(r.EntityDetails(group)['component_data']['LOD']['Levels']),3);self.assertEqual(len(widget.GetValue()),3)
         w.Controller._CommitComponent(group,'LOD','Size',-1);self.assertGreater(r.EntityDetails(group)['component_data']['LOD']['Size'],0);self.assertGreater(w.Properties._sections['runtime.LOD']._fields['Size'].GetValue(),0)
+    def test_hlod_impostor_authoring_and_duplicate_references(self):
+        r=self.R;w=self.Window;group=r.CreateEntity('Cluster');source=r.CreateEntity('Sources',group);proxy=r.CreateEntity('Proxy',group)
+        self.assertTrue(r.AddComponent(group,'HLOD'));self.assertFalse(r.AddComponent(group,'LOD'))
+        self.assertTrue(r.SetComponentProperty(group,'HLOD','Sources',[source]));self.assertTrue(r.SetComponentProperty(group,'HLOD','Proxies',[proxy]))
+        self.assertFalse(r.SetComponentProperty(group,'HLOD','Proxies',[source]));self.assertFalse(r.SetComponentProperty(group,'HLOD','Sources',[group]))
+        self.assertTrue(r.AddComponent(group,'LOD Transition'));self.assertTrue(r.SetComponentProperty(group,'LOD Transition','Duration',.4))
+        self.assertTrue(r.AddComponent(proxy,'Impostor'));self.assertTrue(r.SetComponentProperty(proxy,'Impostor','Columns',4));self.assertTrue(r.SetComponentProperty(proxy,'Impostor','View Count',4));self.assertFalse(r.SetComponentProperty(proxy,'Impostor','Columns',0))
+        w.Controller.SelectEntity(group,force=True);section=w.Properties._sections['runtime.HLOD'];self.assertEqual(section._fields['Sources'].GetValue(),[source]);self.assertEqual(section._fields['Proxies'].GetValue(),[proxy])
+        w.Controller.DuplicateHierarchyEntities([group]);clone=w.Controller.SelectedEntity;values=r.EntityDetails(clone)['component_data']['HLOD'];self.assertNotEqual(values['Sources'],[source]);self.assertNotEqual(values['Proxies'],[proxy]);self.assertEqual(r.EntityDetails(values['Sources'][0])['parent'],clone)
+        w.Controller.SelectEntity(values['Proxies'][0],force=True);fields=w.Properties._sections['runtime.Impostor']._fields;self.assertEqual(fields['View Count'].GetValue(),4)
+        self.assertTrue(r.SetComponentEnabled(values['Proxies'][0],'Impostor',False));self.assertFalse(r.EntityDetails(values['Proxies'][0])['component_enabled']['Impostor'])
+
     def test_inspector_elides_unchanged_writes_but_updates_live_values(self):
         r=self.R;w=self.Window;e=r.CreateEntity('Body');r.AddComponent(e,'Rigidbody');w.Controller.SelectEntity(e,force=True);field=w.Properties._sections['runtime.Rigidbody']._fields['Mass'];original=field.SetValue;field.SetValue=Mock(wraps=original)
         w.Controller._RefreshInspectorValues(preserve_editing=True);field.SetValue.reset_mock();w.Controller._RefreshInspectorValues(preserve_editing=True);field.SetValue.assert_not_called()

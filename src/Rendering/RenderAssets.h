@@ -9,6 +9,7 @@
 #include <filament/TextureSampler.h>
 #include "Bazzalt/Texture.h"
 #include "Bazzalt/UUID.h"
+#include "Rendering/LODVisibility.h"
 
 #include "Bazzalt/Components/Mesh.h"
 #include "Bazzalt/Components/PrimitiveObject.h"
@@ -49,8 +50,10 @@ public:
     bool BeginSelectionMask(filament::Scene& scene,const std::unordered_set<UUID>& selected,const std::unordered_set<UUID>& hovered,
                             filament::MaterialInstance* selectedMaterial,filament::MaterialInstance* hoverMaterial);
     void EndSelectionMask(filament::Scene& scene);
-    void BeginLODView(const std::unordered_set<UUID>& hidden);
+    void BeginLODView(const std::unordered_set<UUID>& hidden,const std::unordered_map<UUID,LODMask>& masks={});
+    void CollectUnsupportedLOD(LODViewState& state) const;
     void EndLODView();
+    void ResetLODMaterials();
     std::array<std::uint64_t,3> GetUploadCounts() const;
     std::array<std::uint64_t,3> GetInstancingResourceCounts() const;
     void BeginEditorView(const std::unordered_set<UUID>& hidden);

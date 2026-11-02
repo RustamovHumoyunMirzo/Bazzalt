@@ -25,6 +25,7 @@
 
 #include <filament/Engine.h>
 #include <filament/Material.h>
+#include "Rendering/LODFade.h"
 #include <filament/MaterialInstance.h>
 #include <filament/MaterialEnums.h>
 #include <filament/RenderableManager.h>
@@ -290,6 +291,7 @@ struct RenderAssets::Impl {
     std::unordered_map<Handle, Instance> Instances;
     std::vector<utils::Entity> EditorSuspended,DeformedSuspended,LODSuspended;
     const std::unordered_set<UUID>* LODHidden=nullptr;
+    LODFadeSwaps LODFades;
     std::uint64_t TransformUploads=0,StateUploads=0,ColorUploads=0;
     std::function<void(UUID)> DeformationRelease;
     std::unordered_set<UUID> DeformedSources;
@@ -909,15 +911,30 @@ std::array<std::uint64_t,3> RenderAssets::GetInstancingResourceCounts() const {
     for(auto& [key,value]:m_impl->SharedMaterials)if(!value.expired())++counts[2];return counts;
 }
 std::array<std::uint64_t,3> RenderAssets::GetUploadCounts()const{return m_impl?std::array<std::uint64_t,3>{m_impl->TransformUploads,m_impl->StateUploads,m_impl->ColorUploads}:std::array<std::uint64_t,3>{};}
-void RenderAssets::BeginLODView(const std::unordered_set<UUID>& hidden){
-    if(!m_impl)return;EndLODView();m_impl->LODHidden=&hidden;if(hidden.empty())return;
-    for(const auto& [id,value]:m_impl->Instances){if(!value.AddedToScene||!hidden.contains(value.EditorOwner))continue;
+void RenderAssets::CollectUnsupportedLOD(LODViewState& state) const{
+    if(!m_impl||!state.HasFades)return;auto& manager=m_impl->Engine.getRenderableManager();
+    for(const auto& [_,value]:m_impl->Instances){if(!value.AddedToScene||!state.Contributions.contains(value.EditorOwner))continue;
+        bool supported=true;const auto check=[&](utils::Entity entity){auto instance=manager.getInstance(entity);if(instance)for(std::size_t i=0;i<manager.getPrimitiveCount(instance);++i)supported&=SupportsLODFade(manager.getMaterialInstanceAt(instance,i));};
+        if(value.Type==Impl::Kind::Gltf){if(value.SelectedGltfEntity)check(value.SelectedGltfEntity);else for(std::size_t i=0;i<value.Gltf->getEntityCount();++i)check(value.Gltf->getEntities()[i]);}else check(value.Type==Impl::Kind::Primitive?value.PrimitiveEntity:value.Filamesh.renderable);
+        state.RejectUnsupported(value.EditorOwner,supported);
+    }
+}
+void RenderAssets::BeginLODView(const std::unordered_set<UUID>& hidden,const std::unordered_map<UUID,LODMask>& masks){
+    if(!m_impl)return;EndLODView();m_impl->LODHidden=&hidden;if(hidden.empty()&&masks.empty())return;
+    for(const auto& [id,value]:m_impl->Instances){if(!value.AddedToScene)continue;
+        if(!hidden.contains(value.EditorOwner)){
+            if(auto mask=masks.find(value.EditorOwner);mask!=masks.end()){
+                const auto apply=[&](utils::Entity entity){m_impl->LODFades.Apply(m_impl->Engine,entity,mask->second);};
+                if(value.Type==Impl::Kind::Gltf){if(value.SelectedGltfEntity)apply(value.SelectedGltfEntity);else for(std::size_t i=0;i<value.Gltf->getEntityCount();++i)apply(value.Gltf->getEntities()[i]);}else apply(value.Type==Impl::Kind::Primitive?value.PrimitiveEntity:value.Filamesh.renderable);
+            }continue;
+        }
         const auto suspend=[&](utils::Entity entity){if(m_impl->Scene.hasEntity(entity)){m_impl->Scene.remove(entity);m_impl->LODSuspended.push_back(entity);}};
         if(value.Type==Impl::Kind::Gltf){if(value.SelectedGltfEntity)suspend(value.SelectedGltfEntity);else{for(std::size_t i=0;i<value.Gltf->getEntityCount();++i)suspend(value.Gltf->getEntities()[i]);if(value.DebugWireframeAdded)suspend(value.Gltf->getWireframe());}}
         else suspend(value.Type==Impl::Kind::Primitive?value.PrimitiveEntity:value.Filamesh.renderable);
     }
 }
-void RenderAssets::EndLODView(){if(!m_impl)return;for(auto entity:m_impl->LODSuspended)m_impl->Scene.addEntity(entity);m_impl->LODSuspended.clear();m_impl->LODHidden=nullptr;}
+void RenderAssets::ResetLODMaterials(){if(m_impl)m_impl->LODFades.Clear(m_impl->Engine);}
+void RenderAssets::EndLODView(){if(!m_impl)return;m_impl->LODFades.Restore(m_impl->Engine);for(auto entity:m_impl->LODSuspended)m_impl->Scene.addEntity(entity);m_impl->LODSuspended.clear();m_impl->LODHidden=nullptr;}
 void RenderAssets::BeginEditorView(const std::unordered_set<UUID>& hidden){
     if(!m_impl)return;EndEditorView();
     for(const auto& [_,value]:m_impl->Instances){
@@ -1008,6 +1025,7 @@ filament::TextureSampler RenderAssets::GetTextureSampler(filament::Texture* text
 
 void RenderAssets::Shutdown() {
     if (!m_impl) return;
+    EndLODView();ResetLODMaterials();
     m_impl->Uploads.clear();m_impl->Preparations.clear();
     if(m_impl->StandaloneTextures){m_impl->StandaloneTextures->cancelDecoding();m_impl->StandaloneTextures->waitForCompletion();m_impl->StandaloneTextures->updateQueue();m_impl->CollectTextures();}
     for(auto& [texture,pending]:m_impl->PendingTextures)m_impl->Engine.destroy(texture);

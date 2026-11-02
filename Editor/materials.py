@@ -164,6 +164,9 @@ class MaterialCompiler:
         if "getColor()" in translated and "color" not in requires:requires.append("color")
         if "requires" not in configuration and requires:translated=translated.replace("shadingModel :",f"requires : [{', '.join(requires)}],\n    shadingModel :",1)
         reflection["requires"]=requires
+        from .lod_shader import InjectCoverage
+        try:translated=InjectCoverage(translated,reflection)
+        except ValueError as error:raise MaterialError(str(error)) from error
         return translated,reflection
     def InspectShader(self,reference)->dict:
         if str(reference)==CANVAS_SHADER:
@@ -172,7 +175,7 @@ class MaterialCompiler:
         if not asset:raise MaterialError("Shader asset is not registered")
         source=Path(asset["path"]);suffix=source.suffix.lower()
         if suffix not in {".mat",".shad",".shadg",".bshader"}:raise MaterialError("Expected a .mat, .shad or .bshader shader asset")
-        stamp=(str(source),source.stat().st_mtime_ns,source.stat().st_size,str(asset["cache"]),"bshader-1.1-pipeline-v4")
+        stamp=(str(source),source.stat().st_mtime_ns,source.stat().st_size,str(asset["cache"]),"bshader-1.1-pipeline-v5")
         if stamp in self._reflections and (suffix=='.shadg' or Path(str(asset["cache"])+".reflection.json").exists()) and Path(str(asset["cache"])+".translated.mat").exists():return self._reflections[stamp]
         if suffix==".shadg":
             from .shader_graph import Load,Generate

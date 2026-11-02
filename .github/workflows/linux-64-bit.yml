@@ -73,6 +73,7 @@ jobs:
           BAZZALT_GUI_GPU_TEST: '1'
         run: |
           xvfb-run -a ctest --test-dir build -R BazzaltGuiTests --output-on-failure
+          xvfb-run -a ./build/BazzaltLODTests --gpu
           xvfb-run -a python -m unittest Compiler.tests.test_linux_build -v
           # Qt only hosts the test widgets; Filament renders to its own headless
           # Vulkan target. Avoid requiring Qt's unrelated XCB platform plugin.
