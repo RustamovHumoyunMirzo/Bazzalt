@@ -341,6 +341,16 @@ public:
         if(asset){result["uuid"]=asset->Id.ToString();result["path"]=PathText(asset->SourcePath);result["cache"]=PathText(asset->CachePath);result["importer"]=asset->Importer;result["error"]=asset->LastError;result["settings"]=m_engine->GetAssetImportSettings(asset->Id);}
         return result;
     }
+    py::dict AssetDependencies(const std::string& text) const {
+        const auto asset=AssetManager::GetAsset(std::filesystem::u8path(text));UUID id;
+        if(asset)id=asset->Id;else if(!UUID::TryParse(text,id))return {};
+        const auto report=AssetManager::GetDependencyReport(id);py::dict result;py::list refs,referencers;
+        // The inspector is bounded; public C++/Lua queries still return full results.
+        for(std::size_t i=0;i<std::min<std::size_t>(200,report.References.size());++i){const auto& ref=report.References[i];py::dict item;item["target"]=ref.Target.ToString();item["path"]=PathText(ref.TargetPath);item["field"]=ref.Field;item["state"]=int(ref.State);refs.append(item);}
+        const auto users=AssetManager::GetReferencers(id,true);
+        for(std::size_t i=0;i<std::min<std::size_t>(200,users.size());++i){auto source=users[i];py::dict item;item["uuid"]=source.ToString();auto owner=AssetManager::GetAsset(source);item["path"]=owner?PathText(owner->SourcePath):py::str();referencers.append(item);}
+        result["state"]=int(report.State);result["error"]=report.LastError;result["references"]=refs;result["reference_count"]=report.References.size();result["referencers"]=referencers;result["referencer_count"]=users.size();return result;
+    }
     py::str AssetDirectory() const {
         if (m_projectPath.empty()) return py::str();
         return PathText(m_projectPath.parent_path() / m_engine->GetProject().AssetDirectory);
@@ -907,6 +917,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("update_project_info", &Bazzalt::EditorBridge::EditorHost::UpdateProjectInfo)
         .def("asset_directory", &Bazzalt::EditorBridge::EditorHost::AssetDirectory)
         .def("asset_info", &Bazzalt::EditorBridge::EditorHost::AssetInfo)
+        .def("asset_dependencies", &Bazzalt::EditorBridge::EditorHost::AssetDependencies)
         .def("asset_status", &Bazzalt::EditorBridge::EditorHost::AssetStatus)
         .def("refresh_assets", &Bazzalt::EditorBridge::EditorHost::RefreshAssets)
         .def("gui_asset_sources", &Bazzalt::EditorBridge::EditorHost::GuiAssetSources)

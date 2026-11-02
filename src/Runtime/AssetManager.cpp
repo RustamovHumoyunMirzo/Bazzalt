@@ -22,6 +22,7 @@
 #include <ryml.hpp>
 
 #include "Runtime/Engine.h"
+#include "Runtime/AssetDatabase.h"
 #include "Runtime/MaterialLibrary.h"
 
 namespace Bazzalt {
@@ -143,6 +144,15 @@ std::optional<AssetInfo> AssetManager::GetAsset(const std::filesystem::path& pat
     return engine != nullptr ? engine->FindAsset(path) : std::nullopt;
 }
 
+AssetDependencyReport AssetManager::GetDependencyReport(UUID id) {
+    auto* engine=ActiveEngine();return engine&&engine->m_assetDatabase?engine->m_assetDatabase->GetDependencyReport(id):AssetDependencyReport{id};
+}
+std::vector<UUID> AssetManager::GetDependencies(UUID id,bool recursive) {
+    auto* engine=ActiveEngine();return engine&&engine->m_assetDatabase?engine->m_assetDatabase->GetDependencies(id,recursive):std::vector<UUID>{};
+}
+std::vector<UUID> AssetManager::GetReferencers(UUID id,bool recursive) {
+    auto* engine=ActiveEngine();return engine&&engine->m_assetDatabase?engine->m_assetDatabase->GetReferencers(id,recursive):std::vector<UUID>{};
+}
 bool AssetManager::IsAssetReady(UUID id) {
     const auto asset = GetAsset(id);
     return asset && asset->State == AssetState::Ready;

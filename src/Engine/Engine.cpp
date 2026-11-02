@@ -592,7 +592,7 @@ std::unique_ptr<Scene> Engine::TakeScene()
 bool Engine::SaveScene(const std::filesystem::path& path)
 {
     m_lastError.clear();
-    if (m_sceneSerializer.Save(*m_scene, path)) return true;
+    if (m_sceneSerializer.Save(*m_scene, path)) {if(m_assetDatabase&&m_assetDatabase->Find(path))m_assetDatabase->RefreshSource(path);return true;}
     m_lastError = m_sceneSerializer.GetLastError();
     return false;
 }
@@ -625,7 +625,7 @@ std::unique_ptr<Scene> Engine::LoadSceneAsset(const std::filesystem::path& path)
 bool Engine::SaveSceneAsset(const Scene& scene, const std::filesystem::path& path)
 {
     m_lastError.clear();
-    if (m_sceneSerializer.Save(scene, path)) return true;
+    if (m_sceneSerializer.Save(scene, path)) {if(m_assetDatabase&&m_assetDatabase->Find(path))m_assetDatabase->RefreshSource(path);return true;}
     m_lastError = m_sceneSerializer.GetLastError();
     return false;
 }
@@ -782,7 +782,10 @@ bool Engine::ExportCookedProject(const std::filesystem::path& destination,const 
             }
         }
         for(const auto& [id,asset]:m_assetDatabase->GetRecords())if(asset.SourcePath.extension()==".bprefab")for(const auto& source:{asset.SourcePath,asset.CachePath})PrefabAccess::CookAsset(asset.SourcePath,cookedPath(source),modules,projectRoot);
-        if(!index)throw std::runtime_error("Could not write script index");return true;
+        if(!index)throw std::runtime_error("Could not write script index");index.close();
+        // Re-scan the shipped scene/prefab documents after native script remapping.
+        AssetDatabase cooked;if(!cooked.Open(destination,project.AssetDirectory))throw std::runtime_error(cooked.GetLastError());
+        cooked.RebuildDependencies();cooked.SaveDependencies(destination/".bazzalt/AssetDependencies.yaml");return true;
     }catch(const std::exception& error){m_lastError=error.what();return false;}
 }
 

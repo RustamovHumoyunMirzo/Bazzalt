@@ -445,6 +445,7 @@ class EditorController(QObject):
         self.InspectedScene="";self._UpdateGizmo()
         section=self.Window.Properties.AddComponentSection("asset",self.Window.Localization.Translate("properties.asset"),removable=False)
         for label,value in (("Name",path.name),("Type",path.suffix.lower() or "Folder"),("Path",str(path)),("Size",self._FormatAssetSize(self._AssetSize(path)))):section.AddField(self.Window.Localization.Translate(f"properties.asset_{label.lower()}") if label!="Name" else self.Window.Localization.Translate("properties.asset_name"),QLabel(value))
+        self._InspectAssetDependencies(path)
         issue=(self.Runtime.AssetInfo(str(path)) or {}).get('error','')
         if issue:
             label=QLabel(issue);label.setWordWrap(True);label.setTextFormat(Qt.TextFormat.PlainText);label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -467,6 +468,31 @@ class EditorController(QObject):
                 section.AddField(self.Window.Localization.Translate("materials.parameters"),QLabel(str(len(reflection["parameters"]))))
                 section.AddField(self.Window.Localization.Translate("materials.requires"),QLabel(", ".join(reflection["requires"])))
             except (OSError,ValueError) as error:self._MaterialError(error)
+
+    def _InspectAssetDependencies(self,path)->None:
+        provider=getattr(self.Runtime,'AssetDependencies',None)
+        if not callable(provider) or not path.is_file():return
+        data=provider(path)
+        if not isinstance(data,dict) or not data:return
+        tr=self.Window.Localization.Translate
+        section=self.Window.Properties.AddComponentSection('asset.references',tr('assets.references'),expanded=False,removable=False)
+        state=int(data.get('state',0));section.AddField(tr('assets.dependency_analysis'),QLabel(tr('assets.scan_'+('unknown','complete','partial','failed')[state if 0<=state<4 else 0])))
+        if data.get('error'):
+            error=QLabel(data['error']);error.setTextFormat(Qt.TextFormat.PlainText);error.setWordWrap(True);section.AddWideWidget(error)
+        groups=((tr('assets.dependencies'),data.get('references',[]),data.get('reference_count')),(tr('assets.referencers'),data.get('referencers',[]),data.get('referencer_count')))
+        for title,items,total in groups:
+            section.AddField(title,QLabel(str(len(items) if total is None else total)))
+            if not items:continue
+            listing=QListWidget();listing.setMaximumHeight(130)
+            for ref in items[:200]:
+                target=ref.get('path','');state=ref.get('state',2)
+                name=Path(target).name if target else tr('assets.reference_'+('unknown','missing','found','builtin')[state if 0<=state<4 else 0])
+                if state==1:name+=' ('+tr('assets.reference_missing')+')'
+                item=QListWidgetItem(name);item.setToolTip(str(target)+('\n'+ref['field'] if ref.get('field') else ''))
+                if target and state==2:item.setData(Qt.ItemDataRole.UserRole,target)
+                listing.addItem(item)
+            listing.itemDoubleClicked.connect(lambda item:self.SelectAsset(item.data(Qt.ItemDataRole.UserRole)) if item.data(Qt.ItemDataRole.UserRole) else None)
+            section.AddWideWidget(listing)
 
     def _GuiAssetsChanged(self,paths)->None:
         self.Window.AssetBrowser.UpdateAssetIssues()

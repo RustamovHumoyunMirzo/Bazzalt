@@ -68,6 +68,7 @@ class AssetDragImportTests(unittest.TestCase):
             section=Mock();properties=Mock();properties.AddComponentSection.return_value=section
             resources=ResourceManager();window=SimpleNamespace(Scene=Mock(),Properties=properties,Localization=LocalizationManager(resources),AssetBrowser=Mock())
             controller=SimpleNamespace(Runtime=runtime,Window=window,_UpdateGizmo=Mock(),_FormatAssetSize=str,_AssetSize=lambda _:7,_InspectAudioClip=Mock())
+            controller._InspectAssetDependencies=lambda value:EditorController._InspectAssetDependencies(controller,value)
             EditorController.SelectAsset(controller,path)
             controller._InspectAudioClip.assert_not_called();self.assertEqual(section.AddWideWidget.call_args.args[0].text(),issue)
             self.assertIsNone(controller._audio_preview)

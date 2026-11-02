@@ -68,6 +68,9 @@ class RuntimeService(QObject):
         self.WaveformBuilder=getattr(module,'audio_waveform',None)
         self._host = module.EditorHost() if module is not None else None
 
+    def AssetDependencies(self, identity) -> dict:
+        return dict(self._host.asset_dependencies(str(identity))) if self._host and hasattr(self._host,"asset_dependencies") else {}
+
     def ProfileCommand(self, command, *args):
         callback = getattr(getattr(self, '_profiler_module', None), command, None)
         if callback is None:

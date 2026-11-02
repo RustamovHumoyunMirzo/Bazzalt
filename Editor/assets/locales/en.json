@@ -1381,5 +1381,17 @@
   "scripting.reload_error": "Script reload failed: {error}",
   "scripting.reload_success": "Gameplay scripts reloaded. Scene and script state preserved.",
   "preferences.hot_reload": "Automatically reload gameplay scripts during Play",
-  "scripting.reload_busy": "A script reload is still compiling. Wait for it to finish before starting Play again."
+  "scripting.reload_busy": "A script reload is still compiling. Wait for it to finish before starting Play again.",
+  "assets.references": "Asset References",
+  "assets.dependency_analysis": "Analysis",
+  "assets.scan_unknown": "Not analyzed",
+  "assets.scan_complete": "Complete",
+  "assets.scan_partial": "Partial (static references only)",
+  "assets.scan_failed": "Analysis failed",
+  "assets.dependencies": "Direct references",
+  "assets.referencers": "Referenced by (transitive)",
+  "assets.reference_unknown": "Unknown reference",
+  "assets.reference_missing": "Missing asset",
+  "assets.reference_found": "Asset",
+  "assets.reference_builtin": "Built-in asset"
 }

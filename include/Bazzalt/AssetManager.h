@@ -6,6 +6,7 @@
 #include <optional>
 
 #include "Bazzalt/Asset.h"
+#include "Bazzalt/AssetDependencies.h"
 #include "Bazzalt/ModelAsset.h"
 
 namespace Bazzalt {
@@ -20,6 +21,9 @@ public:
     [[nodiscard]] static std::optional<AssetInfo> GetAsset(UUID id);
     [[nodiscard]] static std::optional<AssetInfo> GetAsset(const std::filesystem::path& sourcePath);
     [[nodiscard]] static bool IsAssetReady(UUID id);
+    [[nodiscard]] static AssetDependencyReport GetDependencyReport(UUID id);
+    [[nodiscard]] static std::vector<UUID> GetDependencies(UUID id, bool recursive=false);
+    [[nodiscard]] static std::vector<UUID> GetReferencers(UUID id, bool recursive=false);
     [[nodiscard]] static std::optional<ModelAsset> LoadModel(UUID id);
     [[nodiscard]] static ResourceLoadHandle LoadAsync(UUID id);
 

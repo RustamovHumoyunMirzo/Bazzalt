@@ -1,5 +1,6 @@
 #include "Script/LuaBindings.h"
 #include "Bazzalt/MaterialBuilder.h"
+#include "Bazzalt/AssetDependencies.h"
 namespace Bazzalt::Runtime {
 void BindLuaAssets(sol::table api){
     api.new_enum("TextureColorFormat","RGBA8",TextureColorFormat::RGBA8,"RGBA16F",TextureColorFormat::RGBA16F,"RGBA32F",TextureColorFormat::RGBA32F);
@@ -135,7 +136,18 @@ void BindLuaAssets(sol::table api){
     material["GetBoolean"]=&Material::GetBoolean;
     material["GetTexture"]=&Material::GetTexture;
     material["GetParameters"]=[](Material value){return sol::as_table(value.GetParameters());};
+    api.new_enum("AssetReferenceState","Unknown",AssetReferenceState::Unknown,"Missing",AssetReferenceState::Missing,"Found",AssetReferenceState::Found,"Builtin",AssetReferenceState::Builtin);
+    api.new_enum("AssetDependencyScanState","Unknown",AssetDependencyScanState::Unknown,"Complete",AssetDependencyScanState::Complete,"Partial",AssetDependencyScanState::Partial,"Failed",AssetDependencyScanState::Failed);
+    auto dependency=api.new_usertype<AssetDependency>("AssetDependency",sol::constructors<AssetDependency()>());
+    dependency["Source"]=&AssetDependency::Source;dependency["Target"]=&AssetDependency::Target;dependency["Field"]=&AssetDependency::Field;dependency["State"]=&AssetDependency::State;
+    dependency["TargetPath"]=sol::property([](const AssetDependency& ref){auto path=ref.TargetPath.u8string();return std::string(reinterpret_cast<const char*>(path.data()),path.size());});
+    auto report=api.new_usertype<AssetDependencyReport>("AssetDependencyReport",sol::constructors<AssetDependencyReport()>());
+    report["Asset"]=&AssetDependencyReport::Asset;report["State"]=&AssetDependencyReport::State;report["LastError"]=&AssetDependencyReport::LastError;
+    report["References"]=sol::property([](const AssetDependencyReport& value){return sol::as_table(value.References);});
     auto assets=api.create_named("AssetManager");
+    assets["GetDependencyReport"]=&AssetManager::GetDependencyReport;
+    assets["GetDependencies"]=[](UUID id,sol::optional<bool> recursive){return sol::as_table(AssetManager::GetDependencies(id,recursive.value_or(false)));};
+    assets["GetReferencers"]=[](UUID id,sol::optional<bool> recursive){return sol::as_table(AssetManager::GetReferencers(id,recursive.value_or(false)));};
     assets["GetAsset"]=sol::overload([](UUID id){return AssetManager::GetAsset(id);},[](const std::string& path){return AssetManager::GetAsset(std::filesystem::u8path(path));});
     assets["LoadAsync"]=&AssetManager::LoadAsync;
     assets["IsAssetReady"]=&AssetManager::IsAssetReady;assets["LoadModel"]=&AssetManager::LoadModel;

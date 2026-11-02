@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "Bazzalt/Asset.h"
+#include "Bazzalt/AssetDependencies.h"
 #include "Bazzalt/Serialization.h"
 
 namespace Bazzalt::Runtime {
@@ -28,6 +29,9 @@ public:
         const std::filesystem::path& source) const { const auto value=source.extension().u8string();return {reinterpret_cast<const char*>(value.data()),value.size()}; }
     [[nodiscard]] virtual std::string ComputeSourceHash(
         const std::filesystem::path& source) const;
+    // Return true when the importer supplies an authoritative dependency report.
+    // Paths are relative to SourcePath.parent_path(); UUID references need no path.
+    virtual bool CollectDependencies(const AssetInfo&, AssetDependencyReport&) const { return false; }
     virtual bool Import(const AssetImportContext& context, std::string& error) = 0;
 };
 
@@ -43,6 +47,9 @@ public:
     bool SetEnvironmentImportSettings(UUID id,const PropertyMap& settings);
     PropertyMap GetImportSettings(UUID id);
     bool ExportCooked(const std::filesystem::path& destination);
+    [[nodiscard]] AssetDependencyReport GetDependencyReport(UUID id) const;
+    [[nodiscard]] std::vector<UUID> GetDependencies(UUID id, bool recursive=false) const;
+    [[nodiscard]] std::vector<UUID> GetReferencers(UUID id, bool recursive=false) const;
     [[nodiscard]] const auto& GetRecords() const { return m_byId; }
 
     [[nodiscard]] std::optional<AssetInfo> Find(UUID id) const;
@@ -50,6 +57,15 @@ public:
     [[nodiscard]] const std::string& GetLastError() const { return m_lastError; }
 
 private:
+    friend class Engine;
+    void ScanDependencies(UUID id);
+    void RebuildDependencies();
+    void RebuildReferencers();
+    void SaveDependencies(const std::filesystem::path& path) const;
+    void LoadDependencies(const std::filesystem::path& path);
+    std::unordered_map<UUID,AssetDependencyReport> m_dependencies;
+    std::unordered_map<UUID,std::string> m_dependencyKeys;
+    std::unordered_map<UUID,std::vector<UUID>> m_referencers;
     struct Metadata {
         UUID Id{};
         std::string Importer;

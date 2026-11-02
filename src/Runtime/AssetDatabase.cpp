@@ -14,6 +14,8 @@
 #include <functional>
 #include <sstream>
 #include <system_error>
+#include <unordered_set>
+#include <tuple>
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -467,6 +469,7 @@ AssetDatabase::AssetDatabase() {
 }
 
 void AssetDatabase::RegisterImporter(std::unique_ptr<AssetImporter> importer) {
+    m_dependencyKeys.clear();
     if (!importer) return;
     for (auto& existing : m_importers) {
         if (existing->GetName() == importer->GetName()) { existing = std::move(importer); return; }
@@ -510,8 +513,9 @@ bool AssetDatabase::OpenCooked(const std::filesystem::path& index) {
             if(m_byId.contains(asset.Id))throw std::runtime_error("Duplicate cooked UUID");
             m_byPath.emplace(PathUtf8(NormalizeSource(asset.SourcePath)),asset.Id);m_byId.emplace(asset.Id,std::move(asset));
         }
+        LoadDependencies(m_projectDirectory/".bazzalt/AssetDependencies.yaml");
         return true;
-    }catch(const std::exception& error){m_lastError=error.what();m_byId.clear();m_byPath.clear();return false;}
+    }catch(const std::exception& error){m_lastError=error.what();m_byId.clear();m_byPath.clear();m_dependencies.clear();m_referencers.clear();return false;}
 }
 
 bool AssetDatabase::ExportCooked(const std::filesystem::path& destination) {
@@ -556,7 +560,7 @@ bool AssetDatabase::ExportCooked(const std::filesystem::path& destination) {
             }
             index<<"  - UUID: "<<QuoteYaml(id.ToString())<<"\n    Source: "<<QuoteYaml(PathUtf8(source))<<"\n    Cache: "<<QuoteYaml(PathUtf8(cache))<<"\n    Importer: "<<QuoteYaml(asset.Importer)<<'\n';
         }
-        if(!index)throw std::runtime_error("Could not write cooked asset index");return true;
+        if(!index)throw std::runtime_error("Could not write cooked asset index");SaveDependencies(destination/".bazzalt/AssetDependencies.yaml");return true;
     }catch(const std::exception& error){m_lastError=error.what();return false;}
 }
 
@@ -596,6 +600,7 @@ bool AssetDatabase::Refresh() {
         }
     }
     if (code) return fail("Could not scan assets: " + code.message());
+    RebuildDependencies();
     return true;
 }
 
@@ -636,9 +641,16 @@ bool AssetDatabase::RegisterSourceContent(const std::filesystem::path& source) {
 
     if (const auto duplicate = m_byId.find(metadata.Id);
         duplicate != m_byId.end() && duplicate->second.SourcePath != normalized) {
-        metadata.Id = UUID::Generate();
-        metadata.SourceHash.clear();
-        metadataDirty = true;
+        std::error_code previousError;
+        if(!std::filesystem::exists(duplicate->second.SourcePath,previousError)&&!previousError){
+            // An incremental rename with its .meta file preserves identity.
+            m_byPath.erase(PathUtf8(NormalizeSource(duplicate->second.SourcePath)));
+            m_byId.erase(duplicate);
+        }else{
+            metadata.Id = UUID::Generate();
+            metadata.SourceHash.clear();
+            metadataDirty = true;
+        }
     }
     AssetImporter* importer = SelectImporter(normalized, metadata.Importer);
     if (importer == nullptr) {
@@ -810,10 +822,17 @@ bool AssetDatabase::RefreshSource(const std::filesystem::path& source){
     if(m_cooked){m_lastError="Cooked assets are read-only";return false;}
     const auto path=NormalizeSource(source);
     if(!IsPathWithin(m_assetDirectory,path)){m_lastError="Asset source is outside the project Assets directory";return false;}
+    if(!std::filesystem::exists(path)){
+        m_lastError.clear();
+        if(auto old=Find(path)){m_byId.erase(old->Id);m_byPath.erase(PathUtf8(path));m_dependencies.erase(old->Id);m_dependencyKeys.erase(old->Id);RebuildReferencers();}
+        return true;
+    }
     m_lastError.clear();const bool result=RegisterSource(path);
     if(!result)if(auto found=m_byPath.find(PathUtf8(path));found!=m_byPath.end()){
         auto& record=m_byId.at(found->second);record.State=AssetState::Failed;record.LastError=m_lastError;
     }
+    if(auto asset=Find(path))ScanDependencies(asset->Id);
+    RebuildReferencers();
     return result;
 }
 
@@ -821,5 +840,7 @@ std::optional<AssetInfo> AssetDatabase::Find(const std::filesystem::path& source
     const auto found = m_byPath.find(PathUtf8(NormalizeSource(sourcePath)));
     return found == m_byPath.end() ? std::nullopt : Find(found->second);
 }
+
+#include "AssetDependencies.inl"
 
 } // namespace Bazzalt::Runtime
