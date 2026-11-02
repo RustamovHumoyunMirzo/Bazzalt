@@ -10,7 +10,16 @@ if (Test-Path "$Destination/src/lua.h") {
 if (Test-Path $Destination) { throw 'Lua destination already exists; refusing to overwrite it' }
 $Archive = Join-Path $Root 'deps/lua-source.tar.gz'
 New-Item -ItemType Directory -Force (Join-Path $Root 'deps') | Out-Null
-Invoke-WebRequest "https://www.lua.org/ftp/lua-$Version.tar.gz" -OutFile $Archive
+for ($Attempt = 1; $Attempt -le 5; ++$Attempt) {
+    try {
+        Invoke-WebRequest "https://www.lua.org/ftp/lua-$Version.tar.gz" -OutFile $Archive -TimeoutSec 120
+        break
+    } catch {
+        if ($Attempt -eq 5) { throw }
+        Write-Warning "Lua download failed (attempt $Attempt/5); retrying."
+        Start-Sleep -Seconds (2 * $Attempt)
+    }
+}
 if ((Get-FileHash $Archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Hash) { throw 'Lua archive integrity check failed' }
 & tar -xzf $Archive -C (Join-Path $Root 'deps')
 if ($LASTEXITCODE -ne 0) { throw 'Lua extraction failed' }
