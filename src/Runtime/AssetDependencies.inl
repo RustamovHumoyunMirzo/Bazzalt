@@ -60,7 +60,7 @@ void AssetDatabase::ScanDependencies(UUID id){
                         if(field.size()>4096)throw std::runtime_error("Dependency field path exceeds 4096 bytes");
                         if(child.has_children()){stack.push_back({child,field,component});continue;}
                         if(!child.has_val())continue;const auto value=Text(child);
-                        if((extension==".shadg"&&key=="texture")||(extension==".vfx"&&(key=="asset"||key=="material"||key=="texture")))add(value,field);
+                        if((extension==".shadg"&&key=="texture")||(extension==".vfx"&&(key=="asset"||key=="material"||key=="texture"||key=="mesh")))add(value,field);
                         if(extension==".matinst"){
                             if(key=="shader"||entry.Field=="properties")add(value,field);
                             continue;

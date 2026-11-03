@@ -34,6 +34,7 @@ UUID Graph{},MaterialOverride{};
 unsigned MaxParticles=4096,Seed=1;
 float SimulationSpeed=1,RateMultiplier=1,SizeMultiplier=1;
 Vec4 Tint{1,1,1,1};
+ParticleSimulationBackend Backend=ParticleSimulationBackend::CPU;
 ParticleSimulationSpace Space=ParticleSimulationSpace::Local;
 bool PlayOnAwake=true,UseUnscaledTime=false;
 [[nodiscard]] bool IsValid() const;

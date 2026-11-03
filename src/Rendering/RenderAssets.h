@@ -19,6 +19,7 @@
 namespace filament { class Engine; class Scene; class MaterialInstance; class Texture; class RenderTarget; }
 
 namespace Bazzalt::Runtime {
+struct ParticleGpuUniforms;
 struct ModelGeometry;
 
 // Private UUID-to-GPU bridge. Renderer ownership never crosses the public API.
@@ -67,8 +68,8 @@ public:
     filament::MaterialInstance* CreateCanvasMaterial(UUID asset);
     filament::MaterialInstance* CreateSurfaceMaterial(UUID asset);
     filament::MaterialInstance* CreateGraphicsMaterial();
-    filament::MaterialInstance* CreateParticleMaterial(UUID texture);
-    void UpdateParticleMaterial(filament::MaterialInstance*,UUID texture);
+    filament::MaterialInstance* CreateParticleMaterial(UUID texture,unsigned style=0);
+    void UpdateParticleMaterial(filament::MaterialInstance*,UUID texture,unsigned style=0,const ParticleGpuUniforms* parameters=nullptr);
     bool UpdateSurfaceMaterial(filament::MaterialInstance* instance,UUID asset);
     bool UpdateCanvasMaterial(filament::MaterialInstance*,UUID asset,filament::Texture* source,Vec4 sourceRect);
     void SetCameraTexture(UUID camera,filament::Texture* texture);

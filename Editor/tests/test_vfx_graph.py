@@ -42,6 +42,23 @@ class VFXGraphTests(unittest.TestCase):
                 graph=G.NewGraph();output=next(n for n in graph['nodes'] if n['type']=='Output');output['values']['material']='12345678-1234-4234-8234-123456789abc';path=Path(folder)/'effect.vfx';G.Save(path,graph);self.assertTrue(panel.Open(path));panel.SelectNodes({output['id']});pickers=panel.Fields.findChildren(AssetPickerInput);self.assertEqual(len(pickers),2);pickers[0].Clear();self.assertEqual(next(n for n in G.Load(path)['nodes'] if n['type']=='Output')['values']['material'],'00000000-0000-0000-0000-000000000000')
         finally:panel.deleteLater();self.App.processEvents()
 
+    def test_advanced_modules_and_unsigned_collision_mask(self):
+        graph=G.NewGraph();output=next(n for n in graph['nodes'] if n['type']=='Output')
+        for kind in ('Trails','Collision','Physics','Lights','MeshOutput'):
+            node=G.AddNode(graph,kind);node['inputs']['in']=output['inputs']['in'];output['inputs']['in']=node['id']
+        self.assertEqual(G.Validate(graph),graph)
+        module=_LoadNativeModule()
+        if module:
+            self.assertIsInstance(module.preview_vfx(G.Generate(graph),.05),list)
+        resources=ResourceManager();panel=VFXGraphPanel(None,LocalizationManager(resources),resources,ThemeManager(self.App));panel.Preview=lambda:None
+        try:
+            from Editor.gui.widgets.fields import UIntInput,EnumInput,AssetPickerInput
+            with tempfile.TemporaryDirectory() as folder:
+                path=Path(folder)/'advanced.vfx';G.Save(path,graph);self.assertTrue(panel.Open(path))
+                collision=next(n for n in panel.Graph['nodes'] if n['type']=='Collision');panel.SelectNodes({collision['id']});self.assertTrue(panel.Fields.findChildren(UIntInput));self.assertTrue(panel.Fields.findChildren(EnumInput))
+                mesh=next(n for n in panel.Graph['nodes'] if n['type']=='MeshOutput');panel.SelectNodes({mesh['id']});self.assertTrue(panel.Fields.findChildren(AssetPickerInput))
+        finally:panel.deleteLater();self.App.processEvents()
+
     def test_native_preview_and_component_authoring(self):
         module=_LoadNativeModule()
         if not module or not hasattr(module,'preview_vfx'):self.skipTest('Rebuild the native bridge')

@@ -18,7 +18,16 @@ DEFAULTS={
  'Flipbook':dict(columns=1,rows=1),'Import':dict(asset='00000000-0000-0000-0000-000000000000'),
  'Output':dict(material='00000000-0000-0000-0000-000000000000',texture='00000000-0000-0000-0000-000000000000')}
 RANGES={'rate':(0,100000),'duration':(.01,3600),'delay':(0,3600),'burst':(0,65535),'capacity':(1,32768),'lifetimeMin':(.000001,600),'lifetimeMax':(.000001,600),'sizeMin':(0,10000),'sizeMax':(0,10000),'cone':(0,180),'coefficient':(0,1000000),'strength':(0,1000000),'frequency':(0,1000000),'radius':(0,1000000),'endMultiplier':(0,10000),'columns':(1,64),'rows':(1,64)}
-NODES={name:NodeSpec('Spawn' if name=='Spawn' else 'Initialize' if name in ('Initialize','Box','Sphere','Velocity') else 'Assets' if name=='Import' else 'Output' if name=='Output' else 'Update',() if name=='Spawn' else ('in',),Output='surface' if name=='Output' else 'flow') for name in DEFAULTS}
+DEFAULTS.update({
+ 'Trails':dict(lifetime=.5,width=.05,minDistance=.03,ratio=1.,segments=16,dieWithParticle=False),
+ 'Collision':dict(mode=0,bounce=.5,friction=.2,radius=.05,kill=False,normal=[0.,1.,0.],distance=0.,layerMask=4294967295),
+ 'Physics':dict(sceneGravity=True,gravityScale=1.,mass=.1,transferImpulse=True),
+ 'Lights':dict(intensity=200.,range=3.,ratio=1.,maxLights=8,shadows=False),
+ 'MeshOutput':dict(mesh='00000000-0000-0000-0000-000000000000',primitive=0,node=-1,shadows=False)
+})
+DEFAULTS['Output']['lit']=False
+RANGES.update(lifetime=(.01,30),width=(.0001,1000),minDistance=(.001,10000),ratio=(0,1),segments=(2,128),mode=(0,1),bounce=(0,1),friction=(0,1),layerMask=(0,4294967295),gravityScale=(-100,100),mass=(.0001,10000),intensity=(0,1000000),range=(.001,1000),maxLights=(1,32),primitive=(0,6),node=(-1,1000000))
+NODES={name:NodeSpec('Spawn' if name=='Spawn' else 'Initialize' if name in ('Initialize','Box','Sphere','Velocity') else 'Assets' if name=='Import' else 'Output' if name in ('Output','MeshOutput','Lights') else 'Update',() if name=='Spawn' else ('in',),Output='surface' if name=='Output' else 'flow') for name in DEFAULTS}
 def NewGraph():
     graph=dict(version=1,name='ParticleEffect',nodes=[]);previous=None
     for kind in ('Spawn','Initialize','Gravity','ColorOverLife','Output'):
@@ -50,7 +59,7 @@ def Validate(graph):
                 if not isinstance(value,list) or len(value)!=len(default) or any(type(v) not in (float,int) or not math.isfinite(v) or abs(v)>1e6 for v in value):raise ValueError('Invalid VFX vector')
             elif isinstance(default,bool):
                 if type(value)!=bool:raise ValueError('Invalid VFX boolean')
-            elif type(value) not in (float,int) or not math.isfinite(value) or abs(value)>1e6 or isinstance(default,int) and int(value)!=value:raise ValueError('Invalid VFX number')
+            elif type(value) not in (float,int) or not math.isfinite(value) or abs(value)>(4294967295 if key=='layerMask' else 1e6) or isinstance(default,int) and int(value)!=value:raise ValueError('Invalid VFX number')
         pos=n.get('position',[0,0])
         if not isinstance(pos,list) or len(pos)!=2 or any(type(v) not in (float,int) or not math.isfinite(v) or abs(v)>1e6 for v in pos):raise ValueError('Invalid VFX node position')
         index[n['id']]=n

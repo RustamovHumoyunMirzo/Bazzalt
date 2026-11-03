@@ -34,6 +34,9 @@ unsigned Alive=0,Capacity=0;
 std::uint64_t Spawned=0,Dropped=0;
 double Time=0;
 bool Playing=false,Paused=false;
+ParticleSimulationBackend Backend=ParticleSimulationBackend::CPU;
+std::string BackendMessage;
+unsigned TrailPoints=0,CollisionQueries=0,CollisionBudgetMisses=0,EmittedLights=0;
 };</code></pre>
 <!-- API-SOURCE-END --></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../ParticleSimulationSpace/en.html"><small>Previous</small>ParticleSimulationSpace</a>

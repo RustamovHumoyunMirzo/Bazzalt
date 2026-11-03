@@ -824,6 +824,8 @@ class EditorController(QObject):
 
     def _ComponentEditor(self, entity_id: str, component: str, name: str, value):  # type: ignore[no-untyped-def]
         if component=="Particle Emitter" and name in {"Graph","Material Override"}:return self._AssetPicker(value,{".vfx"} if name=="Graph" else {".matinst"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
+        if component=="Particle Emitter" and name=="Backend":
+            editor=EnumInput();editor.SetOptions([(self.Window.Localization.Translate("vfx.backend."+key),index) for index,key in enumerate(('automatic','cpu','gpu'))]);editor.SetValue(value);editor.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
         if component=="Particle Emitter" and name=="Space":
             editor=EnumInput();editor.SetOptions([(self.Window.Localization.Translate("vfx.space.local"),0),(self.Window.Localization.Translate("vfx.space.world"),1)]);editor.SetValue(value);editor.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
         if component=="HLOD" and name in ("Sources","Proxies"):

@@ -1,0 +1,38 @@
+material {
+ name: BazzaltGpuLitParticles, shadingModel: lit, doubleSided: true,
+ blending: transparent, depthWrite: false, flipUV: false, requires: [color,uv0,custom0,custom1,custom2,custom3],
+ parameters: [{type:sampler2d,name:particleTexture},{type:float,name:textured},{type:float,name:solid},{type:float3,name:gravity},{type:float,name:drag},{type:float,name:endSize},{type:float,name:angularSpeed},{type:float,name:sizeScale},{type:float4,name:colorStart},{type:float4,name:colorEnd},{type:float4,name:tint},{type:float,name:mesh}]
+}
+fragment {
+ void material(inout MaterialInputs material) {
+  prepareMaterial(material);
+  vec4 color=getColor();
+  if(materialParams.textured>0.5) color*=texture(materialParams_particleTexture,getUV0());
+  else if(materialParams.solid<0.5) color.a*=1.0-smoothstep(0.35,0.5,length(getUV0()-vec2(0.5)));
+  if(color.a<0.001) discard;
+  material.baseColor=color; material.roughness=0.65; material.metallic=0.0;
+ }
+}
+
+vertex {
+ void materialVertex(inout MaterialVertexInputs material) {
+  vec4 velocityAge=getCustom0(); vec4 life=getCustom1();vec3 offset=getCustom2().xyz;
+  float age=velocityAge.w,d=materialParams.drag,decay=exp(-d*age);
+  float factor=d>0.0001?(1.0-decay)/d:age;
+  float acceleration=d>0.0001?(age-factor)/d:0.5*age*age;
+  vec3 position=getPosition().xyz+velocityAge.xyz*factor+materialParams.gravity*acceleration;
+  float t=clamp(age/life.x,0.0,1.0),size=life.y*mix(1.0,materialParams.endSize,t)*materialParams.sizeScale;
+  float angle=life.z+materialParams.angularSpeed*age,s=sin(angle),c=cos(angle);
+  vec4 world=getWorldFromModelMatrix()*vec4(position,1.0);
+  if(materialParams.mesh>0.5){
+   vec3 rotated=vec3(offset.x*c+offset.z*s,offset.y,-offset.x*s+offset.z*c);
+   world=getWorldFromModelMatrix()*vec4(position+rotated*size,1.0);
+   vec3 n=getCustom3().xyz;material.worldNormal=normalize(getWorldFromModelNormalMatrix()*vec3(n.x*c+n.z*s,n.y,-n.x*s+n.z*c));
+  }else{
+   vec3 right=getWorldFromViewMatrix()[0].xyz,up=getWorldFromViewMatrix()[1].xyz;
+   world.xyz+=((right*c+up*s)*offset.x+(up*c-right*s)*offset.y)*(size*0.5);
+   material.worldNormal=normalize(cross(right,up));
+  }
+  material.worldPosition=world;material.color=mix(materialParams.colorStart,materialParams.colorEnd,t)*materialParams.tint;
+ }
+}

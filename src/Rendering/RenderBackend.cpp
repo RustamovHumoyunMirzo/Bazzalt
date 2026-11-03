@@ -10,6 +10,7 @@
 #include "Rendering/GraphicsRenderer.h"
 #include "Rendering/ImpostorRenderer.h"
 #include "Bazzalt/Components/HLOD.h"
+#include "VFX/VFXInternal.h"
 #include "Bazzalt/Components/Impostor.h"
 #include "Runtime/GraphicsAccess.h"
 #include "Rendering/CaptureGraph.h"
@@ -657,7 +658,7 @@ std::unordered_map<std::string,double> RenderBackend::GetStatistics() const{
     if(m_assets){auto instancing=m_assets->GetInstancingResourceCounts();result["instancing_enabled"]=m_engine->isAutomaticInstancingEnabled()?1:0;result["primitive_gpu_geometries"]=double(instancing[0]);result["primitive_gpu_materials"]=double(instancing[1]);result["shared_surface_materials"]=double(instancing[2]);auto counts=m_assets->GetUploadCounts();result["transform_uploads"]=double(counts[0]);result["render_state_uploads"]=double(counts[1]);result["primitive_color_uploads"]=double(counts[2]);auto geometry=GetPrimitiveCacheStatistics();result["primitive_cache_hits"]=double(geometry[0]);result["primitive_cache_builds"]=double(geometry[1]);result["primitive_cache_bytes"]=double(geometry[2]);}
     return result;
 }
-void RenderBackend::SetGuiScene(Bazzalt::Scene* scene){GraphicsAccess::BindScene(scene);if(m_guiScene!=scene){ClearGuiResources();m_lodViews.clear();m_impostors.reset();}m_guiScene=scene;}
+void RenderBackend::SetGuiScene(Bazzalt::Scene* scene){if(m_guiScene&&m_guiScene!=scene)VFXAccess::SetGPUAvailable(*m_guiScene,false);if(scene&&m_engine)VFXAccess::SetGPUAvailable(*scene,m_engine->getBackend()!=filament::Engine::Backend::NOOP);GraphicsAccess::BindScene(scene);if(m_guiScene!=scene){ClearGuiResources();m_lodViews.clear();m_impostors.reset();}m_guiScene=scene;}
 void RenderBackend::ClearGuiResources(){if(m_guiRenderer)m_guiRenderer->Clear();if(m_impostors)m_impostors->InvalidateTextures();}
 namespace {
 struct LODScope {RenderAssets& Assets;const std::unordered_set<UUID>*& Current;LODViewState*& State;bool Owns;~LODScope(){if(Owns){Assets.EndLODView();Current=nullptr;State=nullptr;}}};

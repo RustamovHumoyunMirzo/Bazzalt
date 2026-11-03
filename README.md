@@ -11,8 +11,8 @@ combines a native runtime with a PySide6 editor and Hub while keeping low-level
 engine lifetime, rendering, importing, and persistence away from game code.
 
 See [what is new in 0.8.0](docs/public/0.8.0/whats-new/en.html), including
-[particle/VFX graphs](docs/public/0.8.0/manual/vfx/en.html) with reusable imports
-and native C++/Lua emitter controls.
+[particle/VFX graphs](docs/public/0.8.0/manual/vfx/en.html) with reusable imports, GPU analytic motion, trails, physics collisions, mesh particles,
+particle lights and native C++/Lua emitter controls.
 
 > **Alpha status:** core workflows are functional, but APIs and file formats may
 > still change. BAZZALT is not yet recommended for production projects.
