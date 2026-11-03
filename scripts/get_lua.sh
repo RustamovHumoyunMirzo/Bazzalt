@@ -9,7 +9,14 @@ if [ -f "$root/deps/lua/src/lua.h" ]; then
 fi
 [ ! -e "$root/deps/lua" ] || { echo 'Lua destination exists' >&2; exit 1; }
 mkdir -p "$root/deps"
-curl --fail --location --proto '=https' --retry 4 --retry-all-errors --connect-timeout 20 --max-time 120 "https://www.lua.org/ftp/lua-$version.tar.gz" -o "$root/deps/lua-source.tar.gz"
+downloaded=false
+for host in https://www.lua.org/ftp https://www.tecgraf.puc-rio.br/lua/ftp https://lua.org/ftp; do
+    if curl --fail --location --proto '=https' --retry 1 --retry-all-errors --connect-timeout 15 --max-time 90 "$host/lua-$version.tar.gz" -o "$root/deps/lua-source.tar.gz"; then
+        downloaded=true
+        break
+    fi
+done
+[ "$downloaded" = true ] || { echo 'All pinned Lua download endpoints failed' >&2; exit 1; }
 if command -v sha256sum >/dev/null 2>&1; then actual=$(sha256sum "$root/deps/lua-source.tar.gz" | cut -d ' ' -f 1); else actual=$(shasum -a 256 "$root/deps/lua-source.tar.gz" | cut -d ' ' -f 1); fi
 [ "$actual" = "$hash" ] || { echo 'Lua checksum mismatch' >&2; exit 1; }
 tar -xzf "$root/deps/lua-source.tar.gz" -C "$root/deps"
