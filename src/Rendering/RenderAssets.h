@@ -67,6 +67,8 @@ public:
     filament::MaterialInstance* CreateCanvasMaterial(UUID asset);
     filament::MaterialInstance* CreateSurfaceMaterial(UUID asset);
     filament::MaterialInstance* CreateGraphicsMaterial();
+    filament::MaterialInstance* CreateParticleMaterial(UUID texture);
+    void UpdateParticleMaterial(filament::MaterialInstance*,UUID texture);
     bool UpdateSurfaceMaterial(filament::MaterialInstance* instance,UUID asset);
     bool UpdateCanvasMaterial(filament::MaterialInstance*,UUID asset,filament::Texture* source,Vec4 sourceRect);
     void SetCameraTexture(UUID camera,filament::Texture* texture);

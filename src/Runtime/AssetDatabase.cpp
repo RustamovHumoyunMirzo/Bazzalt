@@ -5,6 +5,7 @@
 #include "Audio/AudioRuntime.h"
 #include "Runtime/LuaRuntime.h"
 #include "Runtime/TextureLibrary.h"
+#include "VFX/VFXInternal.h"
 
 #include <algorithm>
 #include <array>
@@ -309,6 +310,18 @@ public:
     }
 };
 
+class VFXImporter final : public AssetImporter {
+public:
+ std::string GetName()const override{return "Bazzalt.VFX";}
+ std::uint32_t GetVersion()const override{return 1;}
+ bool Supports(const std::filesystem::path& path)const override{return LowerExtension(path)==".vfx";}
+ bool Import(const AssetImportContext& context,std::string& error)override{
+  std::error_code ec;auto size=std::filesystem::file_size(context.SourcePath,ec);if(ec||size>1024*1024){error="VFX graph exceeds 1 MiB or cannot be read";return false;}
+  std::ifstream file(context.SourcePath,std::ios::binary);std::string text(std::size_t(size),'\0');if(!file.read(text.data(),std::streamsize(size))){error="Cannot read VFX graph";return false;}
+  return VFXAccess::ValidateSource(text,error)&&CopyAsset(context,error);
+ }
+};
+
 class EnvironmentImporter final : public AssetImporter {
 public:
     std::string GetName() const override { return "Bazzalt.Environment"; }
@@ -454,6 +467,7 @@ AssetDatabase::AssetDatabase() {
         }
     };
     RegisterImporter(std::make_unique<RawImporter>());
+    RegisterImporter(std::make_unique<VFXImporter>());
     RegisterImporter(std::make_unique<GlobalEventImporter>());
     RegisterImporter(std::make_unique<PrefabImporter>());
     RegisterImporter(std::make_unique<GuiDataImporter>(false));RegisterImporter(std::make_unique<GuiDataImporter>(true));

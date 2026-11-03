@@ -10,7 +10,9 @@ BAZZALT is an editor-first C++20 game engine in active alpha development. It
 combines a native runtime with a PySide6 editor and Hub while keeping low-level
 engine lifetime, rendering, importing, and persistence away from game code.
 
-See [what is new in 0.8.0](docs/public/0.8.0/whats-new/en.html).
+See [what is new in 0.8.0](docs/public/0.8.0/whats-new/en.html), including
+[particle/VFX graphs](docs/public/0.8.0/manual/vfx/en.html) with reusable imports
+and native C++/Lua emitter controls.
 
 > **Alpha status:** core workflows are functional, but APIs and file formats may
 > still change. BAZZALT is not yet recommended for production projects.
@@ -66,9 +68,6 @@ for another platform does not make it a supported BAZZALT target. See the
 Read the [public guides](docs/public/index.html). Open the downloaded HTML in a browser for
 offline use. Documentation authoring and version/language setup are described
 in [docs/public/README.md](docs/public/README.md).
-
-Gameplay workflows include [live script reload](docs/public/0.8.0/manual/hot-reload/en.html)
-and [deterministic physics checkpoints and replay](docs/public/0.8.0/manual/physics-replay/en.html).
 
 ## Contributing
 

@@ -44,7 +44,7 @@ def FilterCooked(cooked, packaging,editor_sources=()):
         identity=registration['asset']
         if identity not in by_id or identity in denied:raise ValueError('Subsystem script is missing or excluded from the game build')
         kept.add(identity);queue.append(identity)
-    serialized={'.bprefab','.bscene','.matinst','.bmixer','.btexture','.event','.shadg'}
+    serialized={'.bprefab','.bscene','.matinst','.bmixer','.btexture','.event','.shadg','.vfx'}
     def References(value):
         visited=set();steps=0
         def Visit(item,depth=0):

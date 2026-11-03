@@ -6,6 +6,7 @@
 #include "Bazzalt/Profiler.h"
 #include "Runtime/GlobalEventsAccess.h"
 #include "Runtime/Engine.h"
+#include "Bazzalt/Systems/ParticleSystem.h"
 #include "Bazzalt/Console.h"
 #include "Runtime/GraphicsAccess.h"
 #include "Physics/PhysicsModuleApi.h"
@@ -53,6 +54,7 @@ Engine::Engine()
     : m_scene(std::make_unique<Scene>()), m_assetDatabase(std::make_unique<AssetDatabase>()),m_streaming(std::make_unique<StreamingRuntime>(*this)),
       m_renderBackend(std::make_unique<RenderBackend>()),m_scriptRuntime(std::make_unique<NativeScriptRuntime>()),m_luaRuntime(std::make_unique<LuaRuntime>()),m_audioRuntime(std::make_unique<AudioRuntime>())
 {
+    m_scene->AddSystem<ParticleSystem>();
     GlobalEventsAccess::BindThread();
     SceneManager::Bind(this);
     AssetManager::Bind(this);
@@ -524,7 +526,7 @@ bool Engine::StartScripts(bool resetTime){
     if(!m_luaRuntime->Start(m_lastError)){m_scriptRuntime->Stop();m_audioRuntime->Stop();PhysicsModule().Stop(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationAccess::SetAudioReady(false);ApplicationAccess::SetServicesReady(false);return false;}
     m_scriptsRunning=true;ApplicationEventsAccess::Emit({ApplicationEventType::OnPlay});return true;
 }
-void Engine::StopScripts(){m_streaming->StopScripts();if(m_scriptsRunning){ApplicationEventsAccess::Emit({ApplicationEventType::OnStop});m_scriptsRunning=false;}m_luaRuntime->Stop();m_scriptRuntime->Stop();ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforePhysicsShutdown});ReleasePhysicsScene(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterPhysicsShutdown});m_audioRuntime->Stop();ApplicationAccess::SetAudioReady(false);GraphicsAccess::CancelFrame();ResetRuntimeMaterials();ResetRuntimeTextures();}
+void Engine::StopScripts(){m_streaming->StopScripts();if(m_scriptsRunning){ApplicationEventsAccess::Emit({ApplicationEventType::OnStop});m_scriptsRunning=false;}m_luaRuntime->Stop();m_scriptRuntime->Stop();ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforePhysicsShutdown});ReleasePhysicsScene(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterPhysicsShutdown});m_audioRuntime->Stop();ApplicationAccess::SetAudioReady(false);if(m_scene->HasSystem<ParticleSystem>()){m_scene->RemoveSystem<ParticleSystem>();m_scene->AddSystem<ParticleSystem>();}GraphicsAccess::CancelFrame();ResetRuntimeMaterials();ResetRuntimeTextures();}
 
 bool Engine::PrepareApplication(){
     if(m_applicationPrepared)return true;
@@ -637,6 +639,7 @@ bool Engine::SaveSceneAsset(const Scene& scene, const std::filesystem::path& pat
 
 void Engine::AttachRenderSystems()
 {
+    m_scene->AddSystem<ParticleSystem>();
     if (!m_renderBackend->IsInitialized()) return;
     m_renderBackend->SetGuiScene(m_scene.get());
     m_scene->AddSystem<CameraSystem>(*m_renderBackend);

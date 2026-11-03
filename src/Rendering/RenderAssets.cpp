@@ -60,6 +60,7 @@ extern "C" void stbi_image_free(void*);
 #include "editor_wireframe_filamat.h"
 #include "primitive_lit_filamat.h"
 #include "graphics_unlit_filamat.h"
+#include "particle_unlit_filamat.h"
 
 namespace Bazzalt::Runtime {
 using ::operator|;
@@ -326,6 +327,7 @@ struct RenderAssets::Impl {
     filament::Material* DebugUnlit=nullptr;filament::Material* DebugLighting=nullptr;filament::Material* DebugOverdraw=nullptr;filament::Material* DebugWireframe=nullptr;
     filament::Material* PrimitiveMaterial=nullptr;
     filament::Material* GraphicsMaterial=nullptr;
+    filament::Material* ParticleMaterial=nullptr;
     filament::MaterialInstance* DebugUnlitInstance=nullptr;filament::MaterialInstance* DebugLightingInstance=nullptr;filament::MaterialInstance* DebugOverdrawInstance=nullptr;filament::MaterialInstance* DebugWireframeInstance=nullptr;
     std::string DebugMode="lit";
 
@@ -343,6 +345,7 @@ struct RenderAssets::Impl {
         DebugUnlit=filament::Material::Builder().package(Embedded::EditorUnlitFilamat,Embedded::EditorUnlitFilamatSize).build(Engine);DebugLighting=filament::Material::Builder().package(Embedded::EditorLightingOnlyFilamat,Embedded::EditorLightingOnlyFilamatSize).build(Engine);DebugOverdraw=filament::Material::Builder().package(Embedded::EditorOverdrawFilamat,Embedded::EditorOverdrawFilamatSize).build(Engine);DebugWireframe=filament::Material::Builder().package(Embedded::EditorWireframeFilamat,Embedded::EditorWireframeFilamatSize).build(Engine);
         if(DebugUnlit)DebugUnlitInstance=DebugUnlit->createInstance();if(DebugLighting)DebugLightingInstance=DebugLighting->createInstance();if(DebugOverdraw)DebugOverdrawInstance=DebugOverdraw->createInstance();if(DebugWireframe)DebugWireframeInstance=DebugWireframe->createInstance();
         PrimitiveMaterial=filament::Material::Builder().package(Embedded::PrimitiveLitFilamat,Embedded::PrimitiveLitFilamatSize).build(Engine);
+        ParticleMaterial=filament::Material::Builder().package(Embedded::ParticleUnlitFilamat,Embedded::ParticleUnlitFilamatSize).build(Engine);
         GraphicsMaterial=filament::Material::Builder().package(Embedded::GraphicsUnlitFilamat,Embedded::GraphicsUnlitFilamatSize).build(Engine);
     }
 
@@ -958,6 +961,8 @@ filament::MaterialInstance* RenderAssets::GetDeformedMaterial(UUID source,unsign
 }
 
 bool RenderAssets::SetDebugMode(const std::string& mode){if(!m_impl||mode!="lit"&&mode!="unlit"&&mode!="wireframe"&&mode!="lighting_only"&&mode!="overdraw")return false;m_impl->DebugMode=mode;for(auto& [_,instance]:m_impl->Instances)m_impl->ApplyDebug(instance);return true;}
+filament::MaterialInstance* RenderAssets::CreateParticleMaterial(UUID texture){if(!m_impl||!m_impl->ParticleMaterial)return nullptr;auto* value=m_impl->ParticleMaterial->createInstance();UpdateParticleMaterial(value,texture);return value;}
+void RenderAssets::UpdateParticleMaterial(filament::MaterialInstance* value,UUID texture){if(!value||!m_impl)return;auto* image=texture?GetGuiTexture(texture):nullptr;value->setParameter("particleTexture",image?image:m_impl->WhiteTexture,GetTextureSampler(image?image:m_impl->WhiteTexture));value->setParameter("textured",image?1.f:0.f);}
 filament::MaterialInstance* RenderAssets::CreateGraphicsMaterial(){return m_impl&&m_impl->GraphicsMaterial?m_impl->GraphicsMaterial->createInstance():nullptr;}
 filament::MaterialInstance* RenderAssets::CreateSurfaceMaterial(UUID asset){
     if(!m_impl||!Bazzalt::Material::Load(asset).IsValid())return nullptr;
@@ -1040,6 +1045,7 @@ void RenderAssets::Shutdown() {
     for(auto* material:m_impl->RetiredMaterials)m_impl->Engine.destroy(material);
     for(auto* instance:{m_impl->DebugUnlitInstance,m_impl->DebugLightingInstance,m_impl->DebugOverdrawInstance,m_impl->DebugWireframeInstance})if(instance)m_impl->Engine.destroy(instance);
     for(auto* material:{m_impl->DebugUnlit,m_impl->DebugLighting,m_impl->DebugOverdraw,m_impl->DebugWireframe})if(material)m_impl->Engine.destroy(material);
+    if(m_impl->ParticleMaterial)m_impl->Engine.destroy(m_impl->ParticleMaterial);
     if(m_impl->GraphicsMaterial)m_impl->Engine.destroy(m_impl->GraphicsMaterial);
     if(m_impl->PrimitiveMaterial)m_impl->Engine.destroy(m_impl->PrimitiveMaterial);
     m_impl->Textures.clear(); m_impl->Materials.clear();

@@ -30,6 +30,7 @@ from .wheel_policy import EditorWheelPolicy
 from .object_tools import ObjectTools
 from .panels.audio_mixer import AudioMixerPanel
 from .panels.shader_graph import ShaderGraphPanel
+from .panels.vfx_graph import VFXGraphPanel
 from .panels.macros import MacrosPanel
 
 
@@ -95,6 +96,7 @@ class Editor(QMainWindow):
         self.AudioMixer=AudioMixerPanel(self.Runtime,self.Localization,self.Resources,self.ThemeManager)
         self.Macros=MacrosPanel(self)
         self.ShaderGraph=ShaderGraphPanel(self.Runtime,self.Localization,self.Resources,self.ThemeManager)
+        self.VFXGraph=VFXGraphPanel(self.Runtime,self.Localization,self.Resources,self.ThemeManager)
         from ..asset_opening import ExternalAssetOpener
         self.AssetBrowser.ExternalOpener = ExternalAssetOpener(self._settings, self._settings_saver)
         self._PanelWidgets = {
@@ -104,7 +106,7 @@ class Editor(QMainWindow):
             "hierarchy": self.Hierarchy,
             "properties": self.Properties,
             "asset_browser": self.AssetBrowser,
-            "audio_mixer":self.AudioMixer,"shader_graph":self.ShaderGraph,"macros":self.Macros,
+            "vfx_graph":self.VFXGraph,"audio_mixer":self.AudioMixer,"shader_graph":self.ShaderGraph,"macros":self.Macros,
         }
         self._RegisterPanels()
         self._default_layout=self._LoadDefaultWorkspace()
@@ -235,6 +237,7 @@ class Editor(QMainWindow):
     def _EditContext(self):
         focus=QApplication.focusWidget()
         if isinstance(focus,(QLineEdit,QTextEdit,QPlainTextEdit)):return "text",focus
+        if focus is not None and (focus is self.VFXGraph or self.VFXGraph.isAncestorOf(focus)):return "graph",self.VFXGraph
         if focus is not None and (focus is self.ShaderGraph or self.ShaderGraph.isAncestorOf(focus)):return "graph",self.ShaderGraph
         if focus is not None and (focus is self.AssetBrowser or self.AssetBrowser.isAncestorOf(focus)):
             return "assets",self.AssetBrowser.Tree if focus is self.AssetBrowser.Tree or self.AssetBrowser.Tree.isAncestorOf(focus) else self.AssetBrowser.Browser
@@ -250,7 +253,7 @@ class Editor(QMainWindow):
             states=dict(copy=selected,paste=writable,delete=selected and writable,rename=False,duplicate=False,select_all=True,deselect_all=selected)
         elif context=="graph":
             from .panels.shader_graph import Node
-            items=widget.Canvas.scene().selectedItems();editable=any(isinstance(item,Node) and item.Data['type']!='Material' for item in items)
+            items=widget.Canvas.scene().selectedItems();editable=any(isinstance(item,Node) and item.Data['type']!=widget.OutputType for item in items)
             states=dict(copy=editable,paste=bool(widget._clipboard),delete=editable,rename=False,duplicate=editable,select_all=bool(widget.Nodes),deselect_all=bool(items))
         elif context=="assets" and widget is self.AssetBrowser.Tree:
             item=widget.currentItem();states=dict(copy=False,paste=False,delete=False,rename=bool(item and item.parent()),duplicate=False,select_all=widget.topLevelItemCount()>0,deselect_all=bool(widget.selectedItems()))
@@ -411,6 +414,7 @@ class Editor(QMainWindow):
         self.Docking.add_panel(self.AudioMixer,tr("panel.audio_mixer"),self._PanelIcon("audio_mixer"),relative_to=assets,panel_id="audio_mixer")
         self.Docking.add_panel(self.Macros,tr("panel.macros"),self._PanelIcon("macros"),relative_to=assets,panel_id="macros")
         self.Docking.add_panel(self.ShaderGraph,tr("panel.shader_graph"),self._PanelIcon("shader_graph"),relative_to=assets,panel_id="shader_graph")
+        self.Docking.add_panel(self.VFXGraph,tr("panel.vfx_graph"),self._PanelIcon("vfx_graph"),relative_to=assets,panel_id="vfx_graph")
 
     def _UpdatePanelPresentation(self) -> None:
         for panel_id in self._PanelWidgets:
@@ -459,6 +463,8 @@ class Editor(QMainWindow):
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         if self.GameBuild.IsRunning():
             QMessageBox.information(self,self.Localization.Translate('menu.build'),self.Localization.Translate('build.close_wait'));event.ignore();return
+        if not self.VFXGraph.Flush():
+            QMessageBox.warning(self,self.Localization.Translate("panel.vfx_graph"),self.VFXGraph.Error.text());event.ignore();return
         if not self.ShaderGraph.Flush():
             QMessageBox.warning(self,self.Localization.Translate("panel.shader_graph"),self.ShaderGraph.Error.text());event.ignore();return
         if not self.AudioMixer.Flush():
@@ -478,6 +484,7 @@ class Editor(QMainWindow):
         self.ObjectTools.Close()
         self.Scene.Surface._fly_timer.stop();self.Output.Surface._fly_timer.stop()
         self.Scene.Surface.ClearTransformTrail();self.AudioMixer.SyncTimer.stop()
+        self.VFXGraph.PreviewTimer.stop()
         self.ShaderGraph.PreviewTimer.stop()
         if hasattr(self.ShaderGraph,"PreviewService"):self.ShaderGraph.PreviewService.Close()
         self._camera_save_timer.stop();self._SaveSceneCamera()

@@ -62,6 +62,11 @@ class EditorController(QObject):
         self.LuaAssets.Finished.connect(self._LuaImportFinished);self.LuaAssets.Failed.connect(self._LuaImportFailed)
         self.MaterialCompiler=MaterialCompiler(runtime);self._material_check=0.0;self._material_error=""
         window.AudioMixer.AssetProvider=self._ProjectAssets
+        window.VFXGraph.AssetProvider=self._ProjectAssets
+        window.VFXGraph.AssetChanged.connect(self._GraphChanged)
+        window.VFXGraph.History.canUndoChanged.connect(self._HistoryChanged)
+        window.VFXGraph.History.canRedoChanged.connect(self._HistoryChanged)
+        window.VFXGraph.Canvas.scene().selectionChanged.connect(window.RefreshEditActions)
         window.ShaderGraph.AssetProvider=self._ProjectAssets
         window.ShaderGraph.AssetChanged.connect(self._GraphChanged)
         window.ShaderGraph.History.canUndoChanged.connect(self._HistoryChanged)
@@ -198,7 +203,7 @@ class EditorController(QObject):
         self.FrameCompleted.emit()
 
     def SaveActiveDocument(self) -> bool:
-        if self._GraphHasFocus():return self.Window.ShaderGraph.Flush()
+        if self._GraphHasFocus():return self._FocusedGraph().Flush()
         return self.SaveScene()
 
     def SaveScene(self) -> bool:
@@ -397,14 +402,17 @@ class EditorController(QObject):
             blocker=QSignalBlocker(self.Window.Hierarchy.Tree);self.Window.Hierarchy.Tree.clearSelection();self.Window.Hierarchy.Tree.setCurrentItem(None);del blocker
             self.SelectEntity(None)
 
-    def _GraphHasFocus(self):
-        graph=getattr(self.Window,"ShaderGraph",None);focus=QApplication.focusWidget()
-        return bool(graph and isValid(graph) and focus and (graph is focus or graph.isAncestorOf(focus)))
+    def _FocusedGraph(self):
+        focus=QApplication.focusWidget()
+        for name in ('ShaderGraph','VFXGraph'):
+            graph=getattr(self.Window,name,None)
+            if graph and isValid(graph) and focus and (graph is focus or graph.isAncestorOf(focus)):return graph
+    def _GraphHasFocus(self):return self._FocusedGraph() is not None
 
     def _HistoryChanged(self,*_)->None:
         if not isValid(self.Window) or not isValid(self.Window.MenuBar.UndoAction) or not isValid(self.Window.MenuBar.RedoAction):return
         if self._GraphHasFocus():
-            history=self.Window.ShaderGraph.History;self.Window.MenuBar.UndoAction.setEnabled(history.canUndo());self.Window.MenuBar.RedoAction.setEnabled(history.canRedo());return
+            history=self._FocusedGraph().History;self.Window.MenuBar.UndoAction.setEnabled(history.canUndo());self.Window.MenuBar.RedoAction.setEnabled(history.canRedo());return
         self.Window.MenuBar.UndoAction.setEnabled(self.History.CanUndo());self.Window.MenuBar.RedoAction.setEnabled(self.History.CanRedo())
         self.Window.MenuBar.UndoAction.setToolTip(self.History.UndoLabel());self.Window.MenuBar.RedoAction.setToolTip(self.History.RedoLabel())
 
@@ -418,7 +426,7 @@ class EditorController(QObject):
         return result
 
     def Undo(self)->None:
-        if self._GraphHasFocus():self.Window.ShaderGraph.History.undo();return
+        if self._GraphHasFocus():self._FocusedGraph().History.undo();return
         scene=self.InspectedScene
         if self.History.Undo():
             self.SetDirty(True)
@@ -426,7 +434,7 @@ class EditorController(QObject):
             else:self._RefreshInspectorValues();self._UpdateGizmo()
 
     def Redo(self)->None:
-        if self._GraphHasFocus():self.Window.ShaderGraph.History.redo();return
+        if self._GraphHasFocus():self._FocusedGraph().History.redo();return
         scene=self.InspectedScene
         if self.History.Redo():
             self.SetDirty(True)
@@ -815,6 +823,9 @@ class EditorController(QObject):
         return self.Window.Resources.Icon(f"icons/{filename}") if filename else None
 
     def _ComponentEditor(self, entity_id: str, component: str, name: str, value):  # type: ignore[no-untyped-def]
+        if component=="Particle Emitter" and name in {"Graph","Material Override"}:return self._AssetPicker(value,{".vfx"} if name=="Graph" else {".matinst"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
+        if component=="Particle Emitter" and name=="Space":
+            editor=EnumInput();editor.SetOptions([(self.Window.Localization.Translate("vfx.space.local"),0),(self.Window.Localization.Translate("vfx.space.world"),1)]);editor.SetValue(value);editor.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
         if component=="HLOD" and name in ("Sources","Proxies"):
             from .lod import HLODRootsInput
             field=HLODRootsInput(self,entity_id,value,name);field.ValueChanged.connect(lambda v:self._CommitComponent(entity_id,component,name,v));return field
@@ -1125,10 +1136,15 @@ class EditorController(QObject):
         if path.suffix.lower()==".bprefab":self.Prefabs.Instantiate(path,"")
         elif path.suffix.lower()==".bscene":self.LoadSceneAdditive(path)
         elif path.suffix.lower()==".bmixer":self.OpenAudioMixer(path)
+        elif path.suffix.lower()==".vfx":self.OpenVFXGraph(path)
         elif path.suffix.lower()==".shadg":self.OpenShaderGraph(path)
         elif path.suffix.lower() in AUDIO_EXTENSIONS:
             self.SelectAsset(path)
             if self._audio_preview is not None:self._audio_preview.Play()
+    def OpenVFXGraph(self,path):
+        if self.Window.VFXGraph.Open(path):
+            if not self.Window.Docking.is_panel_open("vfx_graph"):self.Window.Docking.dock("vfx_graph","center",relative_to="asset_browser")
+            self.Window.Docking.activate_panel("vfx_graph")
     def OpenShaderGraph(self,path,force=False):
         if self.Window.ShaderGraph.Open(path,force):
             if not self.Window.Docking.is_panel_open("shader_graph"):self.Window.Docking.dock("shader_graph","center",relative_to="asset_browser")
@@ -1138,7 +1154,8 @@ class EditorController(QObject):
         if self.Window.ShaderGraph.Path==Path(path):self.Window.ShaderGraph.Unlock()
     def _GraphChanged(self,path):
         browser=self.Window.AssetBrowser;item=browser.Browser.currentItem();selected=Path(item.data(Qt.ItemDataRole.UserRole)) if item else None
-        self.Runtime.RefreshAssets()
+        if Path(path).suffix.lower()==".vfx":self.Runtime.RefreshAsset(path)
+        else:self.Runtime.RefreshAssets()
         converted=bool(selected and not selected.exists() and selected.with_suffix('.shad')==Path(path) or selected and not selected.exists() and selected.with_suffix('.shadg')==Path(path))
         browser.Refresh(path if converted else None)
 

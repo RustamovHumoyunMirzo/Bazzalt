@@ -563,7 +563,7 @@ public:
     }
     py::list ComponentTypes() const {
         py::list result;
-        result.append("HLOD");result.append("LOD Transition");result.append("Impostor");result.append("LOD");result.append("Rigidbody");result.append("Shape Collider");result.append("Mesh Collider");result.append("Joint");result.append("Distance Joint");result.append("Hinge Joint");result.append("Slider Joint");result.append("Ball And Socket Joint");result.append("Fixed Joint");result.append("Cloth");result.append("Rope");result.append("Vehicle");result.append("Vehicle Wheel");result.append("Wheel Suspension");result.append("Wheel Tire");result.append("Wheel Brake");result.append("Wheel Steering");result.append("Vehicle Engine");result.append("Vehicle Transmission");result.append("Vehicle Differential");result.append("Vehicle Anti Roll Bar");result.append("Vehicle Aerodynamics");result.append("Audio Source");result.append("Audio Listener");
+        result.append("Particle Emitter");result.append("HLOD");result.append("LOD Transition");result.append("Impostor");result.append("LOD");result.append("Rigidbody");result.append("Shape Collider");result.append("Mesh Collider");result.append("Joint");result.append("Distance Joint");result.append("Hinge Joint");result.append("Slider Joint");result.append("Ball And Socket Joint");result.append("Fixed Joint");result.append("Cloth");result.append("Rope");result.append("Vehicle");result.append("Vehicle Wheel");result.append("Wheel Suspension");result.append("Wheel Tire");result.append("Wheel Brake");result.append("Wheel Steering");result.append("Vehicle Engine");result.append("Vehicle Transmission");result.append("Vehicle Differential");result.append("Vehicle Anti Roll Bar");result.append("Vehicle Aerodynamics");result.append("Audio Source");result.append("Audio Listener");
         for (const char* name : {"Camera", "Light", "Mesh", "Primitive Object", "Scene Query Bounds", "Gaussian Blur", "Vignette"})
             result.append(name);
         for(auto name:GuiNames)result.append(name);
@@ -632,7 +632,7 @@ public:
             const auto mode=value.cast<int>();if(mode<0||mode>7)return false;
         }
         Entity entity=RequireEntity(id);
-        if(type=="HLOD"||type=="LOD Transition"||type=="Impostor")return SetAdvancedLODProperty(entity,type,property,value);
+        if(type=="Particle Emitter"||type=="HLOD"||type=="LOD Transition"||type=="Impostor")return SetAdvancedLODProperty(entity,type,property,value);
         if(type=="LOD")return SetLODProperty(entity,property,value);
         if(type=="Rigidbody"||type=="Shape Collider"||type=="Mesh Collider"||type=="Joint"||type=="Distance Joint"||type=="Hinge Joint"||type=="Slider Joint"||type=="Ball And Socket Joint"||type=="Fixed Joint"||type=="Cloth"||type=="Rope"||type=="Vehicle"||type=="Vehicle Wheel"||type=="Wheel Suspension"||type=="Wheel Tire"||type=="Wheel Brake"||type=="Wheel Steering"||type=="Vehicle Engine"||type=="Vehicle Transmission"||type=="Vehicle Differential"||type=="Vehicle Anti Roll Bar"||type=="Vehicle Aerodynamics")return SetPhysicsProperty(entity,type,property,value);
         if(type=="Audio Source"||type=="Audio Listener")return SetAudioProperty(entity,type,property,value);
@@ -877,9 +877,10 @@ private:
 } // namespace Bazzalt::EditorBridge
 
 namespace Bazzalt::EditorBridge { void BindEditorLua(py::module_&);
-void BindShaderPreview(py::module_&); }
+void BindShaderPreview(py::module_&);void BindVFXPreview(py::module_&); }
 PYBIND11_MODULE(_bazzalt_runtime, module) {
     Bazzalt::EditorBridge::BindShaderPreview(module);
+    Bazzalt::EditorBridge::BindVFXPreview(module);
     Bazzalt::EditorBridge::BindEditorLua(module);
     module.def("begin_profile_capture", []{Bazzalt::Profiler::BeginCapture();});
     module.def("end_profile_capture", &Bazzalt::Profiler::EndCapture);

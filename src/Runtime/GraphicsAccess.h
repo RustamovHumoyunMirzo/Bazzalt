@@ -14,7 +14,8 @@ struct GraphicsCommand {
     UUID Material{};
     Mat4 Transform{};
     GraphicsDrawOptions Options;
-    bool Scoped=false;
+    bool Scoped=false,Particle=false;
+    UUID ParticleTexture{};
     UUID Camera{};
     UUID Owner{};
     UUID Source{};
@@ -23,6 +24,7 @@ struct GraphicsCommand {
 };
 struct GraphicsAccess {
     static void DrawEntity(GraphicsMesh mesh,UUID material,UUID owner,GraphicsDrawOptions options,UUID source={},unsigned node=0xffffffffu,unsigned slot=0);
+    static void DrawParticles(GraphicsMesh,UUID material,UUID texture,UUID owner,const GraphicsEvent&);
     static bool IsDeformed(UUID source);
     static void BindScene(Scene* scene);
     static void BeginFrame();

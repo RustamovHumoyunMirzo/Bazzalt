@@ -34,10 +34,10 @@ Mat4 Matrix(const auto& v){Mat4 out;for(int c=0;c<4;++c)for(int r=0;r<4;++r)out(
 struct GraphicsRenderer::Impl {
     RenderBackend& Backend;filament::Engine& Engine;
     struct Geometry {filament::VertexBuffer* Vertices=nullptr;filament::IndexBuffer* Indices=nullptr;filament::Box Bounds;GraphicsTopology Topology{};std::size_t VertexCount=0,IndexCount=0;};
-    struct Draw {utils::Entity Entity;filament::MaterialInstance* Material=nullptr;UUID Asset,Source;Key GeometryKey{};filament::VertexBuffer* Vertices=nullptr;filament::IndexBuffer* Indices=nullptr;bool Added=false,Valid=false,StateOverride=false,Borrowed=false;std::shared_ptr<filament::MaterialInstance> Shared;};
+    struct Draw {utils::Entity Entity;filament::MaterialInstance* Material=nullptr;UUID Asset,Source;Key GeometryKey{};filament::VertexBuffer* Vertices=nullptr;filament::IndexBuffer* Indices=nullptr;bool Added=false,Valid=false,StateOverride=false,Borrowed=false,Particle=false;UUID ParticleTexture{};std::shared_ptr<filament::MaterialInstance> Shared;};
     struct Camera {filament::View* View;GraphicsEvent Event;};
     std::map<Key,Geometry> Geometries;
-    std::map<std::pair<UUID,bool>,std::weak_ptr<filament::MaterialInstance>> SharedMaterials;
+    std::map<std::tuple<UUID,bool,bool,UUID>,std::weak_ptr<filament::MaterialInstance>> SharedMaterials;
     std::uint64_t Allocations=0,Builds=0;
     filament::Scene* MaskScene=nullptr;std::vector<std::pair<utils::Entity,filament::MaterialInstance*>> MaskMaterials;
     LODFadeSwaps Fades;
@@ -104,11 +104,11 @@ void GraphicsRenderer::Prepare(){
         if(inherited){
             if(draw.Material!=inherited){if(!rebuild)manager.setMaterialInstanceAt(manager.getInstance(draw.Entity),0,inherited);draw.Shared.reset();draw.Material=inherited;}
             draw.Borrowed=true;draw.Asset={};draw.StateOverride=false;
-        }else if(draw.Borrowed||draw.Asset!=c.Material||draw.StateOverride!=stateOverride||!draw.Material||(c.Material&&!impl.Backend.GetAssets().UpdateSurfaceMaterial(draw.Material,c.Material))){
-            const auto key=std::make_pair(c.Material,stateOverride);
+        }else if(draw.Borrowed||draw.Asset!=c.Material||draw.StateOverride!=stateOverride||draw.Particle!=c.Particle||draw.ParticleTexture!=c.ParticleTexture||!draw.Material||(c.Material&&!impl.Backend.GetAssets().UpdateSurfaceMaterial(draw.Material,c.Material))){
+            const auto key=std::make_tuple(c.Material,stateOverride,c.Particle,c.ParticleTexture);
             auto shared=impl.SharedMaterials[key].lock();
             if(shared&&c.Material&&!impl.Backend.GetAssets().UpdateSurfaceMaterial(shared.get(),c.Material))shared.reset();
-            if(!shared){auto* created=c.Material?impl.Backend.GetAssets().CreateSurfaceMaterial(c.Material):impl.Backend.GetAssets().CreateGraphicsMaterial();if(created){shared={created,[&impl](auto* value){impl.Engine.destroy(value);}};impl.SharedMaterials[key]=shared;}}
+            if(!shared){auto* created=c.Material?impl.Backend.GetAssets().CreateSurfaceMaterial(c.Material):(c.Particle?impl.Backend.GetAssets().CreateParticleMaterial(c.ParticleTexture):impl.Backend.GetAssets().CreateGraphicsMaterial());if(created){shared={created,[&impl](auto* value){impl.Engine.destroy(value);}};impl.SharedMaterials[key]=shared;}}
             auto* replacement=shared.get();
             if(!replacement){draw.Valid=false;if(draw.Added){impl.Backend.GetScene().remove(draw.Entity);draw.Added=false;}if(impl.InvalidMaterials.size()>128)impl.InvalidMaterials.clear();if(impl.InvalidMaterials.insert(c.Material).second)Console::Warning("Skipping a Graphics draw with an unavailable or incompatible surface material: "+c.Material.ToString(),"Graphics");continue;}
             impl.InvalidMaterials.erase(c.Material);draw.StateOverride=stateOverride;
@@ -116,7 +116,7 @@ void GraphicsRenderer::Prepare(){
             if(!rebuild)manager.setMaterialInstanceAt(manager.getInstance(draw.Entity),0,replacement);
             draw.Shared=std::move(shared);draw.Material=replacement;draw.Asset=c.Material;draw.Borrowed=false;
         }
-        draw.Valid=true;draw.Source=c.Source;
+        draw.Valid=true;draw.Source=c.Source;draw.Particle=c.Particle;draw.ParticleTexture=c.ParticleTexture;if(c.Particle&&!c.Material)impl.Backend.GetAssets().UpdateParticleMaterial(draw.Material,c.ParticleTexture);
         using P=filament::RenderableManager::PrimitiveType;static constexpr P types[]{P::POINTS,P::LINES,P::LINE_STRIP,P::TRIANGLES,P::TRIANGLE_STRIP};
         if(rebuild){++impl.Builds;
             const auto result=filament::RenderableManager::Builder(1).boundingBox(geometry.Bounds).culling(false).material(0,draw.Material).geometry(0,types[unsigned(geometry.Topology)],geometry.Vertices,geometry.Indices).build(impl.Engine,draw.Entity);

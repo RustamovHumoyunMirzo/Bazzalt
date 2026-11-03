@@ -291,6 +291,16 @@ def supplement(language, name, record, types):
 
 
 OVERVIEWS = {
+    'VFX': 'Engine-thread particle controls scoped to one live entity. Requires ParticleEmitter and a scene ParticleSystem. Play/Restart/Stop/Pause/Resume manage simulation; SetGraph replaces the runtime graph; Emit and Simulate are bounded manual operations. Snapshot queries never expose renderer internals. See the VFX guide for units, errors and limits.',
+    'VFXGraph': 'Immutable compiled data graph. Load resolves an imported .vfx UUID and transitive graph imports; FromSource parses a versioned data document. IsValid/GetError report failures. No arbitrary expressions execute. GetDependencies includes imported graphs and output material/texture assets.',
+    'ParticleEmitter': 'Serialized particle settings: Graph, MaterialOverride, MaxParticles (1..32768), Seed, SimulationSpeed (0..100), RateMultiplier (0..100), SizeMultiplier (0..10000), Tint, Space, PlayOnAwake and UseUnscaledTime. Disabling freezes simulation and hides rendering.',
+    'ParticleSystem': 'Automatically attached by Engine. Custom standalone Scene owners may add it. Owns bounded CPU simulation privately; public gameplay controls are on VFX, not engine update loops.',
+    'Particle': 'Copy of one live particle: simulation-space Position/Velocity, Age/Lifetime in seconds, full Size diameter, Rotation in radians, RGBA Color and transient Id. Editing a snapshot does not apply it.',
+    'ParticleStatistics': 'Copy of emitter counters and playback state. Dropped counts rejected capacity/budget births. Time is simulation seconds, independent per emitter.',
+    'ParticleEvent': 'Bounded per-update snapshot of Born, Died or Completed. Position uses emitter simulation space; ParticleId is zero for completion. Snapshots do not retain callbacks.',
+    'ParticleEventType': 'Born, Died and Completed particle event snapshot categories.',
+    'ParticleSimulationSpace': 'Local positions follow hierarchy transforms; World positions and velocities are transformed at birth. Restart after changing Space to avoid reinterpreting existing positions.',
+
     'HLOD': 'Authored hierarchical render proxy group. Sources and Proxies are disjoint child subtrees; nested source LOD/HLOD groups are supported. GetLOD exposes the equivalent two-level selection settings. IsValid checks property data; IsConfigured also requires both root lists. This does not bake or simplify meshes or disable simulation.',
     'LODTransition': 'Attach beside LOD or HLOD to request reversible timed ordered-coverage transitions. Duration uses unscaled render time (0.01..10 seconds), Easing is Linear or SmoothStep, and FadeCulling includes entering/leaving culling. Unsupported materials cause an atomic whole-group hard cut. Histories and overrides are private per-view state.',
     'LODEasing': 'Linear preserves normalized transition progress. SmoothStep uses the cubic p*p*(3-2*p) curve. Reversal preserves coverage and the same representation pair.',

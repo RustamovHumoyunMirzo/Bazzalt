@@ -24,6 +24,16 @@ class ContentFilterTests(unittest.TestCase):
             self.assertTrue((root/'Assets/Model.bin').is_file());self.assertTrue(Path(str(cache)+'.filamat').is_file());self.assertTrue(Path(str(cache)+'.reflection.json').is_file())
             self.assertFalse(Path(str(cache)+'.translated.mat').exists());self.assertFalse(Path(str(cache)+'.build.json').exists())
 
+    def test_vfx_imports_and_textures_are_retained_transitively(self):
+        import json
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);self.Fixture(root);index=root/'.bazzalt/CookedAssets.yaml';data=yaml.safe_load(index.read_text())
+            for identity,name,values in [('effect','Effect.vfx',{'asset':'module'}),('module','Module.vfx',{'texture':'model'})]:
+                source=root/'Assets'/name;source.write_text(json.dumps({'nodes':[{'type':'Import','values':values}]}));cache=root/'.bazzalt/Cache'/identity/'current.vfx';cache.parent.mkdir(parents=True);cache.write_bytes(source.read_bytes());data['Assets'].append(dict(UUID=identity,Source='Assets/'+name,Cache=cache.relative_to(root).as_posix(),Importer='Bazzalt.VFX'))
+            index.write_text(yaml.safe_dump(data));(root/'Assets/Main.bscene').write_text('Graph: effect\n');settings=copy.deepcopy(DEFAULTS['packaging']);settings['include_assets']='Assets/Main.bscene';FilterCooked(root,settings)
+            for name in ('Effect.vfx','Module.vfx','Model.bin'):self.assertTrue((root/'Assets'/name).exists())
+            self.assertFalse((root/'Assets/Unused.bin').exists())
+
     def test_application_entry_is_retained_and_cannot_be_excluded(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);self.Fixture(root)

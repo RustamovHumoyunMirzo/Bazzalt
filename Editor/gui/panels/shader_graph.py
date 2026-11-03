@@ -38,7 +38,7 @@ class Palette(QTreeWidget):
 
 class Node(QGraphicsObject):
     def __init__(self,panel,data):
-        super().__init__();self.Panel=panel;self.Data=data;self.Spec=Graph.NODES[data['type']]
+        super().__init__();self.Panel=panel;self.Data=data;self.Spec=panel.Model.NODES[data['type']]
         self.setFlags(self.GraphicsItemFlag.ItemIsMovable|self.GraphicsItemFlag.ItemIsSelectable|self.GraphicsItemFlag.ItemSendsGeometryChanges)
         self.setPos(*data.get('position',[0,0]));self.setZValue(2)
     def boundingRect(self):return QRectF(-7,-3,194,46+max(1,len(self.Spec.Inputs))*24)
@@ -80,10 +80,12 @@ class Canvas(QGraphicsView):
             raw=bytes(mime.data('application/x-bazzalt-asset'))
             if len(raw)>32768:return None
             record=self.Panel.Runtime.ResolveAssetRecord(raw.decode('utf-8'))
-            return record if record and record.get('extension','').lower() in {'.png','.jpg','.jpeg','.bmp','.tga','.webp','.btexture'} else None
+            return record if record and record.get('extension','').lower() in ({'.vfx'} if getattr(self.Panel,'IsVFX',False) else {'.png','.jpg','.jpeg','.bmp','.tga','.webp','.btexture'}) else None
         except (ValueError,UnicodeError,RuntimeError):return None
     def dropEvent(self,event):
         point=self.mapToScene(event.position().toPoint());asset=self.Asset(event.mimeData())
+        if asset and getattr(self.Panel,'IsVFX',False):
+            self.Panel.AddImport(asset['uuid'],point);event.acceptProposedAction();return
         if asset:
             def Op():
                 node=Graph.AddNode(self.Panel.Graph,'Texture',(point.x(),point.y()));node['values']={'name':('Tex_'+re.sub('[^A-Za-z0-9_]','_',Path(asset.get('path','Texture')).stem))[:48],'texture':asset['uuid']}
@@ -94,7 +96,7 @@ class Canvas(QGraphicsView):
             if len(raw)>64:return
             kind=raw.decode('utf-8')
         except UnicodeError:event.ignore();return
-        if kind in Graph.NODES:self.Panel.Add(kind,point);event.acceptProposedAction()
+        if kind in self.Panel.Model.NODES:self.Panel.Add(kind,point);event.acceptProposedAction()
     def _Socket(self,point):
         for node in self.Panel.Nodes.values():
             hit=node.Hit(point)
@@ -133,7 +135,7 @@ class Canvas(QGraphicsView):
         else:
             menu.addAction(self.Panel.Tr('action.copy'),self.Panel.Copy);menu.addAction(self.Panel.Tr('action.paste'),self.Panel.Paste)
             menu.addAction(self.Panel.Tr('assets.delete'),self.Panel.Delete);menu.addAction(self.Panel.Tr('graph.frame'),self.Panel.Frame)
-            if self.Panel.Path:menu.addAction(self.Panel.Tr('graph.unlock'),self.Panel.Unlock)
+            if self.Panel.Path and not getattr(self.Panel,'IsVFX',False):menu.addAction(self.Panel.Tr('graph.unlock'),self.Panel.Unlock)
         menu.exec(event.globalPos())
 
 class Change(QUndoCommand):
@@ -166,9 +168,11 @@ class Conversion(QUndoCommand):
         except (OSError,ValueError) as e:self.setObsolete(True);self.Panel.Error.setText(str(e))
 
 class ShaderGraphPanel(QWidget):
+    Model=Graph
+    OutputType="Material"
     AssetChanged=Signal(object)
     def __init__(self,runtime,locale,resources,themes,parent=None):
-        super().__init__(parent);self.Runtime=runtime;self.Locale=locale;self.Themes=themes;self.Resources=resources;self.Path=None;self.Graph=Graph.NewGraph();self.SavedGraph=copy.deepcopy(self.Graph);self.Stamp=None;self.Nodes={};self.Edges=[];self.History=QUndoStack(self);self.History.setUndoLimit(128);self.AssetProvider=lambda:[];self._clipboard=None
+        super().__init__(parent);self.Runtime=runtime;self.Locale=locale;self.Themes=themes;self.Resources=resources;self.Path=None;self.Graph=self.Model.NewGraph();self.SavedGraph=copy.deepcopy(self.Graph);self.Stamp=None;self.Nodes={};self.Edges=[];self.History=QUndoStack(self);self.History.setUndoLimit(128);self.AssetProvider=lambda:[];self._clipboard=None
         # Watch the directory, not the file: Windows file handles must never
         # prevent an external editor (or our atomic writer) replacing the asset.
         self.Watcher=QFileSystemWatcher(self);self.Watcher.directoryChanged.connect(self.ExternalChanged)
@@ -179,12 +183,12 @@ class ShaderGraphPanel(QWidget):
         undo.setEnabled(False);redo.setEnabled(False);self.History.canUndoChanged.connect(undo.setEnabled);self.History.canRedoChanged.connect(redo.setEnabled)
         split=QSplitter();root.addWidget(split,1);sidebar=QWidget();left=QVBoxLayout(sidebar);left.setContentsMargins(0,0,0,0);self.Search=QLineEdit();self.Search.setPlaceholderText(self.Tr('graph.search'));left.addWidget(self.Search);self.Palette=Palette();self.Palette.setHeaderHidden(True);self.Palette.setDragEnabled(True);left.addWidget(self.Palette);split.addWidget(sidebar)
         categories={}
-        for name,spec in Graph.NODES.items():
+        for name,spec in self.Model.NODES.items():
             if spec.Output=='surface':continue
             if spec.Category not in categories:
                 categories[spec.Category]=QTreeWidgetItem(self.Palette,[self.Tr('graph.category.'+spec.Category)]);categories[spec.Category].setData(0,Qt.ItemDataRole.UserRole+1,spec.Category)
             item=QTreeWidgetItem(categories[spec.Category],[self.Tr('graph.node.'+name)]);item.setData(0,Qt.ItemDataRole.UserRole,name)
-        self.Palette.expandAll();self.Search.textChanged.connect(self.Filter);self.Palette.itemDoubleClicked.connect(lambda item,_:self.Add(item.data(0,Qt.ItemDataRole.UserRole),self.Canvas.mapToScene(self.Canvas.viewport().rect().center())) if item.data(0,Qt.ItemDataRole.UserRole) else None)
+        self.Palette.collapseAll();self.Search.textChanged.connect(self.Filter);self.Palette.itemDoubleClicked.connect(lambda item,_:self.Add(item.data(0,Qt.ItemDataRole.UserRole),self.Canvas.mapToScene(self.Canvas.viewport().rect().center())) if item.data(0,Qt.ItemDataRole.UserRole) else None)
         self.Canvas=Canvas(self);split.addWidget(self.Canvas);self.Canvas.scene().selectionChanged.connect(self.Inspect)
         right=QWidget();layout=QVBoxLayout(right);layout.setContentsMargins(0,0,0,0)
         self.Shading=QComboBox()
@@ -218,11 +222,11 @@ class ShaderGraphPanel(QWidget):
         for i in range(self.Palette.topLevelItemCount()):
             category=self.Palette.topLevelItem(i)
             for j in range(category.childCount()):category.child(j).setHidden(text.casefold() not in category.child(j).text(0).casefold())
-            category.setHidden(all(category.child(j).isHidden() for j in range(category.childCount())))
+            category.setHidden(all(category.child(j).isHidden() for j in range(category.childCount())));category.setExpanded(bool(text.strip()))
     def Open(self,path,force=False):
         if self.Pin.isChecked() and self.Path and not force:return False
         if not self.Flush():return False
-        try:graph=Graph.Load(path)
+        try:graph=self.Model.Load(path)
         except (OSError,ValueError) as e:self.Error.setText(str(e));return False
         self.Path=Path(path);self.Graph=graph;self.SavedGraph=copy.deepcopy(graph);self.Stamp=self.FileStamp();self.Watch();self.History.clear();self.Error.clear();self.Rebuild();self.Frame();self.Preview();return True
     def FileStamp(self):
@@ -242,10 +246,10 @@ class ShaderGraphPanel(QWidget):
     def Reload(self):
         if not self.Path:return
         try:
-            graph=Graph.Load(self.Path);self.Graph=graph;self.SavedGraph=copy.deepcopy(graph);self.Stamp=self.FileStamp();self.History.clear();self.Rebuild();self.Error.clear();self.Watch();self.Preview()
+            graph=self.Model.Load(self.Path);self.Graph=graph;self.SavedGraph=copy.deepcopy(graph);self.Stamp=self.FileStamp();self.History.clear();self.Rebuild();self.Error.clear();self.Watch();self.Preview()
         except (OSError,ValueError) as e:self.Error.setText(str(e))
     def Apply(self,graph,preserve_fields=False,previous=None):
-        same=len(graph['nodes'])==len(self.Nodes) and all(n['id'] in self.Nodes and self.Nodes[n['id']].Spec is Graph.NODES[n['type']] for n in graph['nodes'])
+        same=len(graph['nodes'])==len(self.Nodes) and all(n['id'] in self.Nodes and self.Nodes[n['id']].Spec is self.Model.NODES[n['type']] for n in graph['nodes'])
         self.Graph=graph
         if same:
             for data in graph['nodes']:
@@ -265,7 +269,7 @@ class ShaderGraphPanel(QWidget):
     def Edit(self,operation):
         if not self.Path:return
         before=copy.deepcopy(self.Graph)
-        try:operation();Graph.Validate(self.Graph);self.Record(before);self.Error.clear()
+        try:operation();self.Model.Validate(self.Graph);self.Record(before);self.Error.clear()
         except (OSError,ValueError) as e:self.Graph=before;self.Rebuild();self.Error.setText(str(e))
     def SelectNodes(self,identities):
         self.Canvas.scene().blockSignals(True)
@@ -273,20 +277,20 @@ class ShaderGraphPanel(QWidget):
         self.Canvas.scene().blockSignals(False);self.Canvas.scene().selectionChanged.emit()
     def Add(self,kind,point):
         created=[]
-        self.Edit(lambda:created.append(Graph.AddNode(self.Graph,kind,(point.x(),point.y()))['id']))
+        self.Edit(lambda:created.append(self.Model.AddNode(self.Graph,kind,(point.x(),point.y()))['id']))
         if created:self.SelectNodes(set(created))
     def Connect(self,source,target,socket):
         def Op():
-            next(n for n in self.Graph['nodes'] if n['id']==target)['inputs'][socket]=source;Graph.Generate(self.Graph)
+            next(n for n in self.Graph['nodes'] if n['id']==target)['inputs'][socket]=source;self.Model.Generate(self.Graph)
         self.Edit(Op)
     def Disconnect(self,target,socket):self.Edit(lambda:next(n for n in self.Graph['nodes'] if n['id']==target)['inputs'].pop(socket,None))
     def Delete(self):
-        selected={n.Data['id'] for n in self.Canvas.scene().selectedItems() if isinstance(n,Node) and n.Data['type']!='Material'}
+        selected={n.Data['id'] for n in self.Canvas.scene().selectedItems() if isinstance(n,Node) and n.Data['type']!=self.OutputType}
         def Op():
             self.Graph['nodes']=[n for n in self.Graph['nodes'] if n['id'] not in selected]
             for node in self.Graph['nodes']:node['inputs']={k:v for k,v in node['inputs'].items() if v not in selected}
         if selected:self.Edit(Op)
-    def Copy(self):self._clipboard=copy.deepcopy([n.Data for n in self.Canvas.scene().selectedItems() if isinstance(n,Node) and n.Data['type']!='Material'])
+    def Copy(self):self._clipboard=copy.deepcopy([n.Data for n in self.Canvas.scene().selectedItems() if isinstance(n,Node) and n.Data['type']!=self.OutputType])
     def Paste(self):
         if not self._clipboard:return
         import uuid
@@ -336,22 +340,22 @@ class ShaderGraphPanel(QWidget):
                 if item and item.widget():item.widget().hide();item.widget().deleteLater()
         selected=[n for n in self.Canvas.scene().selectedItems() if isinstance(n,Node)]
         if len(selected)!=1:return
-        node=selected[0].Data;kind=node['type'];spec=Graph.NODES[kind]
+        node=selected[0].Data;kind=node['type'];spec=self.Model.NODES[kind]
         fields=list(spec.Inputs)
         if spec.Expression=='value':fields=['value']
         if kind in ('Property','Texture'):fields=['name']+(['kind','value'] if kind=='Property' else [])
         if kind=='Swizzle':fields=['mask']
         for field in fields:
             if field in node['inputs']:continue
-            value=node['values'].get(field,'GraphValue' if field=='name' else 'float' if field=='kind' else 'x' if field=='mask' else False if field=='value' and kind=='Boolean' else 1 if field=='value' and kind=='Integer' else 1. if field=='value' and kind in ('Float','Property') else [1.]*Graph.KINDS.get(spec.Output,1) if field=='value' else Graph.DefaultInput(node,field))
+            value=node['values'].get(field,'GraphValue' if field=='name' else 'float' if field=='kind' else 'x' if field=='mask' else False if field=='value' and kind=='Boolean' else 1 if field=='value' and kind=='Integer' else 1. if field=='value' and kind in ('Float','Property') else [1.]*self.Model.KINDS.get(spec.Output,1) if field=='value' else self.Model.DefaultInput(node,field))
             def Commit(value,f=field,identity=node['id']):
                 if isinstance(value,tuple):value=list(value)
                 def Op():
                     values=next(n for n in self.Graph['nodes'] if n['id']==identity)['values'];values[f]=value
-                    if f=='kind':values['value']=False if value=='bool' else 1 if value=='int' else 1. if value=='float' else [1.]*Graph.KINDS[value]
+                    if f=='kind':values['value']=False if value=='bool' else 1 if value=='int' else 1. if value=='float' else [1.]*self.Model.KINDS[value]
                 self.Edit(Op)
             if field=='kind':
-                editor=EnumInput();editor.SetOptions([(key,key) for key in Graph.KINDS if key!='texture2d']);editor.SetValue(value);editor.currentIndexChanged.connect(lambda _,e=editor,c=Commit:c(e.GetValue()))
+                editor=EnumInput();editor.SetOptions([(key,key) for key in self.Model.KINDS if key!='texture2d']);editor.SetValue(value);editor.currentIndexChanged.connect(lambda _,e=editor,c=Commit:c(e.GetValue()))
             elif isinstance(value,bool):editor=BoolInput(value);editor.ValueChanged.connect(Commit)
             elif isinstance(value,int):editor=IntInput(value=value);editor.valueChanged.connect(Commit)
             elif isinstance(value,float):editor=FloatInput(minimum=-1e30,maximum=1e30,value=value);editor.valueChanged.connect(Commit)
@@ -382,7 +386,7 @@ class ShaderGraphPanel(QWidget):
         if self.Graph==self.SavedGraph:return True
         if self.FileStamp()!=self.Stamp:self.Error.setText(self.Tr('graph.external_change'));return False
         try:
-            changed=Graph.Save(self.Path,self.Graph);self.SavedGraph=copy.deepcopy(self.Graph);self.Stamp=self.FileStamp();self.Watch()
+            changed=self.Model.Save(self.Path,self.Graph);self.SavedGraph=copy.deepcopy(self.Graph);self.Stamp=self.FileStamp();self.Watch()
             if changed:self.AssetChanged.emit(self.Path)
             return True
         except (OSError,ValueError) as e:self.Error.setText(str(e));return False

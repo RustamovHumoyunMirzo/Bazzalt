@@ -1,6 +1,7 @@
 #include "Serialization/AdvancedLODSerialization.h"
 #include "Bazzalt/Serialization.h"
 #include "Rendering/AdvancedLODFields.h"
+#include "VFX/ParticleFields.h"
 #include <sstream>
 #include <iomanip>
 namespace Bazzalt::Runtime {
@@ -30,7 +31,7 @@ template<class T> bool Decode(const PropertyMap& p,const std::string& name,T& v)
 }
 void RegisterAdvancedLODComponents(ComponentSerializationRegistry& registry){
 #define REGISTER(Type,Visit) registry.Register<Type>("Bazzalt." #Type,1,[](const Type& value,PropertyMap& p){Visit(value,[&](const char* name,const auto& field){Encode(p,name,field);});},[](Type& output,const PropertyMap& p,std::uint32_t version){if(version!=1)return false;Type value;bool valid=true;Visit(value,[&](const char* name,auto& field){valid&=Decode(p,name,field);});if(!valid||!value.IsValid())return false;output=std::move(value);return true;});
- REGISTER(HLOD,VisitHLOD) REGISTER(LODTransition,VisitLODTransition) REGISTER(Impostor,VisitImpostor)
+ REGISTER(HLOD,VisitHLOD) REGISTER(LODTransition,VisitLODTransition) REGISTER(Impostor,VisitImpostor) REGISTER(ParticleEmitter,VisitParticleEmitter)
 #undef REGISTER
 }
 }
