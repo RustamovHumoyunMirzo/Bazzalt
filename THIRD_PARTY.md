@@ -25,6 +25,11 @@ regression probes are in `scripts/patch_*` and `tests/Sol2CompatibilityProbe.cpp
 The x86 patch also limits libc++ mutex annotations to libc++ builds; it leaves
 mutex operations and unrelated diagnostics unchanged.
 
+The engine-owned `src/Rendering/LightingMaterialProvider.cpp` is a modified copy of
+Filament v1.77.0 `libs/gltfio/src/JitShaderProvider.cpp` (Google, Apache-2.0).
+Its copyright/license header is retained. Changes add baked-lighting shader hooks
+and material binding while preserving upstream glTF material generation.
+
 ## Core, GUI and scripting
 
 | Dependency / copyright owner | Used for | License and upstream notice |

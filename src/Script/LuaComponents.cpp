@@ -84,7 +84,7 @@ void BindLuaComponents(sol::table api){
      type["MaterialAsset"]=&CameraPostProcessing::MaterialAsset;type["AddMaterial"]=[](CameraPostProcessing& v,Material m,sol::optional<bool> enabled){return v.AddMaterial(m,enabled.value_or(true));};type["SetMaterialAt"]=&CameraPostProcessing::SetMaterialAt;type["SetMaterialEnabled"]=&CameraPostProcessing::SetMaterialEnabled;type["RemoveMaterial"]=&CameraPostProcessing::RemoveMaterial;type["MoveMaterial"]=&CameraPostProcessing::MoveMaterial;type["ClearMaterials"]=&CameraPostProcessing::ClearMaterials;type["GetMaterials"]=[](const CameraPostProcessing& v){return sol::as_table(v.GetMaterials());};type["SetMaterials"]=[](CameraPostProcessing& v,sol::table table){if(table.size()>CameraPostProcessing::MaxMaterials)throw std::length_error("Too many camera materials");std::vector<CameraMaterialPass> passes;for(std::size_t i=1;i<=table.size();++i)passes.push_back(table.get<CameraMaterialPass>(i));v.SetMaterials(std::move(passes));};type["Materials"]=sol::property([](const CameraPostProcessing& v){return sol::as_table(v.GetMaterials());},[](CameraPostProcessing& v,sol::table table){if(table.size()>CameraPostProcessing::MaxMaterials)throw std::length_error("Too many camera materials");std::vector<CameraMaterialPass> passes;for(std::size_t i=1;i<=table.size();++i)passes.push_back(table.get<CameraMaterialPass>(i));v.SetMaterials(std::move(passes));});type["MaxMaterials"]=sol::var(CameraPostProcessing::MaxMaterials);type["SetMaterial"]=&CameraPostProcessing::SetMaterial;type["GetMaterial"]=&CameraPostProcessing::GetMaterial;type["CustomEffects"]=&CameraPostProcessing::CustomEffects;
     }
     {auto type=api.new_usertype<Light>("Light",sol::constructors<Light()>(),sol::base_classes,sol::bases<Component>());
-     type["Type"]=&Light::Type;
+     type["Type"]=&Light::Type;type["Mode"]=&Light::Mode;
      type["Color"]=&Light::Color;
      type["Intensity"]=&Light::Intensity;
      type["Range"]=&Light::Range;
@@ -102,7 +102,7 @@ void BindLuaComponents(sol::table api){
      type["ModelNodeIndex"]=&Mesh::ModelNodeIndex;
      type["Materials"]=&Mesh::Materials;
      type["LayerMask"]=&Mesh::LayerMask;
-     type["Visible"]=&Mesh::Visible;
+     type["Visible"]=&Mesh::Visible;type["ContributeGI"]=&Mesh::ContributeGI;
      type["CastShadows"]=&Mesh::CastShadows;
      type["ReceiveShadows"]=&Mesh::ReceiveShadows;
     }
@@ -121,7 +121,7 @@ void BindLuaComponents(sol::table api){
      type["Color"]=&PrimitiveObject::Color;
      type["MaterialAsset"]=&PrimitiveObject::MaterialAsset;
      type["LayerMask"]=&PrimitiveObject::LayerMask;
-     type["Visible"]=&PrimitiveObject::Visible;
+     type["Visible"]=&PrimitiveObject::Visible;type["ContributeGI"]=&PrimitiveObject::ContributeGI;
      type["CastShadows"]=&PrimitiveObject::CastShadows;
      type["ReceiveShadows"]=&PrimitiveObject::ReceiveShadows;
     }

@@ -1,10 +1,11 @@
 material {
     name : BazzaltPrimitive,
     shadingModel : lit,
-    parameters : [ { type : float4, name : bazzaltLodFade }, { type : float4, name : baseColor } ],
+    parameters : [ { type : sampler2d, name : bazzaltLightingData, precision : high }, { type : float, name : bazzaltLightingEnabled }, { type : float4, name : bazzaltLodFade }, { type : float4, name : baseColor } ],
     requires : [ tangents ]
 }
 fragment {
+#include "baked_lighting.glsl"
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         if (materialParams.bazzaltLodFade.z > 0.5) {
@@ -21,5 +22,7 @@ fragment {
         material.baseColor = materialParams.baseColor;
         material.roughness = 0.72;
         material.metallic = 0.0;
+        bazzaltApplyDiffuse(material);
     }
+#include "baked_reflections.glsl"
 }

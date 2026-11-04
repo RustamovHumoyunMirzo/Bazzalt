@@ -116,7 +116,9 @@ Vec4 Color{0.72f, 0.72f, 0.75f, 1.0f};
 UUID MaterialAsset{};
 std::uint8_t LayerMask = 0xff;
 bool Visible = true;
-bool CastShadows = true;
+bool ContributeGI = false;
+// Static geometry included in the offline lighting snapshot.
+    bool CastShadows = true;
 bool ReceiveShadows = true;
 void SetMaterial(Material material);
 [[nodiscard]] Material GetMaterial() const;

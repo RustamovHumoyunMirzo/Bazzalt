@@ -175,7 +175,7 @@ class MaterialCompiler:
         if not asset:raise MaterialError("Shader asset is not registered")
         source=Path(asset["path"]);suffix=source.suffix.lower()
         if suffix not in {".mat",".shad",".shadg",".bshader"}:raise MaterialError("Expected a .mat, .shad or .bshader shader asset")
-        stamp=(str(source),source.stat().st_mtime_ns,source.stat().st_size,str(asset["cache"]),"bshader-1.1-pipeline-v5")
+        stamp=(str(source),source.stat().st_mtime_ns,source.stat().st_size,str(asset["cache"]),"bshader-1.1-pipeline-v6-baked-lighting")
         if stamp in self._reflections and (suffix=='.shadg' or Path(str(asset["cache"])+".reflection.json").exists()) and Path(str(asset["cache"])+".translated.mat").exists():return self._reflections[stamp]
         if suffix==".shadg":
             from .shader_graph import Load,Generate
@@ -183,6 +183,9 @@ class MaterialCompiler:
         else:text=source.read_text(encoding="utf-8-sig")
         if suffix in {".shad",".shadg",".bshader"}:translated,reflection=self._Translate(text)
         else:translated=text;reflection=Reflect(text)
+        from .lighting_shader import InjectLighting
+        try:translated=InjectLighting(translated,reflection)
+        except ValueError as error:raise MaterialError(str(error)) from error
         defaults={}
         for name,identity in re.findall(r'^// BazzaltTextureDefault ([A-Za-z_][A-Za-z0-9_]*) ([0-9a-fA-F-]{36})$',text,re.M):
             identity=ValidateValue({'kind':6},identity)

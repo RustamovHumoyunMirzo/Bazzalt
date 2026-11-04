@@ -1,3 +1,7 @@
+#include "Rendering/BakedLightingAtlas.h"
+#include "Rendering/LightingMaterialProvider.h"
+#include "Bazzalt/Lighting.h"
+#include "Rendering/LightingFields.h"
 #include "Bazzalt/Jobs.h"
 #include "Bazzalt/Animation.h"
 #include "Bazzalt/Components/Animator.h"
@@ -282,10 +286,10 @@ struct RenderAssets::Impl {
     std::shared_ptr<filament::MaterialInstance> ColorMaterial(Vec4 color) {
         const auto bits=[](float value){if(value==0)value=0;return std::bit_cast<std::uint32_t>(value);};
         const std::array<std::uint32_t,4> key{bits(color.X),bits(color.Y),bits(color.Z),bits(color.W)};
-        if(auto old=PrimitiveColorCache[key].lock())return old;
+        if(auto old=PrimitiveColorCache[key].lock()){BindProbes(old.get());return old;}
         auto result=std::shared_ptr<filament::MaterialInstance>(PrimitiveMaterial->createInstance(),[this](auto* material){Engine.destroy(material);});
         result->setParameter("baseColor",filament::math::float4{color.X,color.Y,color.Z,color.W});
-        PrimitiveColorCache[key]=result;return result;
+        BindProbes(result.get());PrimitiveColorCache[key]=result;return result;
     }
     bool Asynchronous=false;
     std::uint64_t Tick=0;
@@ -338,6 +342,22 @@ struct RenderAssets::Impl {
     std::function<filament::Texture*(UUID)> ResolveCamera;
     filament::Texture* WhiteTexture=nullptr;
     filament::Texture* BlackTexture=nullptr;
+    filament::Texture* ProbeTexture=nullptr;
+    std::vector<float> ProbePixels;
+    float ProbeCount=0;
+    std::uint64_t BakedFingerprint=0;
+    unsigned ProbeTextureWidth=10,ProbeTextureHeight=64,ReflectionCount=0;
+    std::string BakedError;
+    std::unordered_set<const filament::Material*> ProbeMaterials;
+    void BindProbes(filament::MaterialInstance* value){
+        if(!value)return;const auto* material=value->getMaterial();if(!material->hasParameter("bazzaltLightingData")||!material->hasParameter("bazzaltLightingEnabled"))return;
+        if(!ProbeMaterials.contains(material)){
+        std::vector<filament::Material::ParameterInfo> fields(material->getParameterCount());material->getParameters(fields.data(),fields.size());bool sampler=false,count=false;
+        for(const auto& p:fields){if(p.isSubpass||p.count>1)continue;if(std::string_view(p.name)=="bazzaltLightingData")sampler=p.isSampler&&p.samplerType==filament::Material::SamplerType::SAMPLER_2D;if(std::string_view(p.name)=="bazzaltLightingEnabled")count=!p.isSampler&&p.type==filament::Material::ParameterType::FLOAT;}
+        if(!sampler||!count)return;ProbeMaterials.insert(material);}
+        value->setParameter("bazzaltLightingData",ProbeTexture,filament::TextureSampler(filament::TextureSampler::MinFilter::NEAREST,filament::TextureSampler::MagFilter::NEAREST));value->setParameter("bazzaltLightingEnabled",ProbeCount);
+    }
+
     filament::Material* DebugUnlit=nullptr;filament::Material* DebugLighting=nullptr;filament::Material* DebugOverdraw=nullptr;filament::Material* DebugWireframe=nullptr;
     filament::Material* PrimitiveMaterial=nullptr;
     filament::Material* GraphicsMaterial=nullptr;
@@ -353,13 +373,18 @@ struct RenderAssets::Impl {
             texture->setImage(Engine,0,filament::Texture::PixelBufferDescriptor(pixel->data(),pixel->size(),filament::Texture::Format::RGBA,filament::Texture::Type::UBYTE,[](void*,std::size_t,void* data){delete static_cast<std::array<std::uint8_t,4>*>(data);},pixel));return texture;
         };
         WhiteTexture=solid(255);BlackTexture=solid(0);
-        GltfMaterials = filament::gltfio::createJitShaderProvider(&Engine);
+        ProbeTexture=filament::Texture::Builder().width(10).height(64).levels(1).format(filament::Texture::InternalFormat::RGBA32F).build(Engine);
+        auto* empty=new std::vector<float>(10*64*4,0);
+        ProbeTexture->setImage(Engine,0,filament::Texture::PixelBufferDescriptor(empty->data(),empty->size()*sizeof(float),filament::Texture::Format::RGBA,filament::Texture::Type::FLOAT,[](void*,std::size_t,void* p){delete static_cast<std::vector<float>*>(p);},empty));
+
+        GltfMaterials = CreateLightingMaterialProvider(&Engine,[this](filament::MaterialInstance* value){BindProbes(value);});
         GltfTextures = filament::gltfio::createStbProvider(&Engine);
         StandaloneTextures = filament::gltfio::createStbProvider(&Engine);
         if (GltfMaterials) GltfLoader = filament::gltfio::AssetLoader::create({&Engine, GltfMaterials});
         DebugUnlit=filament::Material::Builder().package(Embedded::EditorUnlitFilamat,Embedded::EditorUnlitFilamatSize).build(Engine);DebugLighting=filament::Material::Builder().package(Embedded::EditorLightingOnlyFilamat,Embedded::EditorLightingOnlyFilamatSize).build(Engine);DebugOverdraw=filament::Material::Builder().package(Embedded::EditorOverdrawFilamat,Embedded::EditorOverdrawFilamatSize).build(Engine);DebugWireframe=filament::Material::Builder().package(Embedded::EditorWireframeFilamat,Embedded::EditorWireframeFilamatSize).build(Engine);
         if(DebugUnlit)DebugUnlitInstance=DebugUnlit->createInstance();if(DebugLighting)DebugLightingInstance=DebugLighting->createInstance();if(DebugOverdraw)DebugOverdrawInstance=DebugOverdraw->createInstance();if(DebugWireframe)DebugWireframeInstance=DebugWireframe->createInstance();
         PrimitiveMaterial=filament::Material::Builder().package(Embedded::PrimitiveLitFilamat,Embedded::PrimitiveLitFilamatSize).build(Engine);
+        if(PrimitiveMaterial)BindProbes(PrimitiveMaterial->getDefaultInstance());
         ParticleLitMaterial=filament::Material::Builder().package(Embedded::ParticleLitFilamat,Embedded::ParticleLitFilamatSize).build(Engine);
         ParticleGPUMaterial=filament::Material::Builder().package(Embedded::ParticleGpuFilamat,Embedded::ParticleGpuFilamatSize).build(Engine);
         ParticleGPULitMaterial=filament::Material::Builder().package(Embedded::ParticleGpuLitFilamat,Embedded::ParticleGpuLitFilamatSize).build(Engine);
@@ -393,7 +418,7 @@ struct RenderAssets::Impl {
             if(builtin.Data || embedded.Data || MaterialPackages[id]==ownedBytes)return found->second;
         }
         auto* material = filament::Material::Builder().package(data, size).build(Engine);
-        if (material) {if(auto found=Materials.find(id);found!=Materials.end())RetiredMaterials.push_back(found->second);Materials[id]=material;MaterialPackages[id]=std::move(ownedBytes);}
+        if (material) {ProbeMaterials.erase(material);BindProbes(material->getDefaultInstance());if(auto found=Materials.find(id);found!=Materials.end())RetiredMaterials.push_back(found->second);Materials[id]=material;MaterialPackages[id]=std::move(ownedBytes);}
         return material;
     }
 
@@ -1009,12 +1034,12 @@ filament::MaterialInstance* RenderAssets::CreateSurfaceMaterial(UUID asset){
     if(!shader||shader->getMaterialDomain()!=filament::MaterialDomain::SURFACE)return nullptr;
     constexpr auto allowed=(1u<<unsigned(filament::VertexAttribute::POSITION))|(1u<<unsigned(filament::VertexAttribute::TANGENTS))|(1u<<unsigned(filament::VertexAttribute::UV0))|(1u<<unsigned(filament::VertexAttribute::UV1))|(1u<<unsigned(filament::VertexAttribute::COLOR));
     if(shader->getRequiredAttributes().getValue()&~allowed)return nullptr;
-    auto* instance=shader->createInstance();m_impl->ApplyMaterialValues(instance,asset);return instance;
+    auto* instance=shader->createInstance();m_impl->ApplyMaterialValues(instance,asset);m_impl->BindProbes(instance);return instance;
 }
 bool RenderAssets::UpdateSurfaceMaterial(filament::MaterialInstance* instance,UUID asset){
     if(!m_impl||!instance||!Bazzalt::Material::Load(asset).IsValid())return false;
     auto* shader=m_impl->LoadMaterial(Bazzalt::Material::Load(asset).GetShader().GetAssetUUID());if(shader!=instance->getMaterial())return false;
-    m_impl->ApplyMaterialValues(instance,asset);return true;
+    m_impl->ApplyMaterialValues(instance,asset);m_impl->BindProbes(instance);return true;
 }
 filament::MaterialInstance* RenderAssets::CreateCanvasMaterial(UUID asset){
     if(!m_impl||!Bazzalt::Material::Load(asset).IsCanvasCompatible())return nullptr;
@@ -1067,6 +1092,24 @@ void RenderAssets::SynchronizeTextures(){
 }
 filament::TextureSampler RenderAssets::GetTextureSampler(filament::Texture* texture) const{return m_impl->Sampler(texture);}
 
+bool RenderAssets::HasBakedReflections()const{return m_impl&&m_impl->ReflectionCount>0;}
+void RenderAssets::UpdateBakedLighting(Bazzalt::Scene& scene){
+    if(!m_impl)return;auto fingerprint=BakedLightingFingerprint(scene);filament::Texture* retired=nullptr;
+    if(fingerprint!=m_impl->BakedFingerprint){
+        try{const auto limit=unsigned(filament::Texture::getMaxTextureSize(m_impl->Engine,filament::Texture::Sampler::SAMPLER_2D));auto atlas=BuildBakedLightingAtlas(scene,limit);m_impl->ReflectionCount=atlas.ReflectionCount;auto width=std::max(m_impl->ProbeTextureWidth,atlas.Width);auto rows=unsigned((atlas.Pixels.size()/4+width-1)/width);unsigned height=width!=m_impl->ProbeTextureWidth?1:m_impl->ProbeTextureHeight;while(height<rows)height*=2;
+            if(width!=m_impl->ProbeTextureWidth||height!=m_impl->ProbeTextureHeight){auto* texture=filament::Texture::Builder().width(width).height(height).levels(1).format(filament::Texture::InternalFormat::RGBA32F).build(m_impl->Engine);if(!texture)throw std::runtime_error("Cannot allocate baked lighting atlas");retired=m_impl->ProbeTexture;m_impl->ProbeTexture=texture;m_impl->ProbeTextureWidth=width;m_impl->ProbeTextureHeight=height;}
+            atlas.Pixels.resize(std::size_t(width)*rows*4,0);m_impl->ProbeCount=(atlas.Pixels[0]+atlas.Pixels[1]+atlas.Pixels[2])>0?1.f:0.f;auto* owned=new std::vector<float>(std::move(atlas.Pixels));m_impl->ProbeTexture->setImage(m_impl->Engine,0,0,0,width,rows,filament::Texture::PixelBufferDescriptor(owned->data(),owned->size()*sizeof(float),filament::Texture::Format::RGBA,filament::Texture::Type::FLOAT,[](void*,std::size_t,void* p){delete static_cast<std::vector<float>*>(p);},owned));m_impl->BakedError.clear();
+            if(atlas.SpatialFallback)Console::Warning("Baked lighting cluster-list budget exceeded; using exact global lookup. Reduce influence overlap for better performance.","Lighting");
+        }catch(const std::exception& error){m_impl->ProbeCount=0;m_impl->ReflectionCount=0;if(m_impl->BakedError!=error.what()){m_impl->BakedError=error.what();Console::Error(m_impl->BakedError,"Lighting");}}
+        m_impl->BakedFingerprint=fingerprint;
+    }
+    std::unordered_set<filament::MaterialInstance*> seen;
+    m_impl->Scene.forEach([&](utils::Entity e){auto& manager=m_impl->Engine.getRenderableManager();auto instance=manager.getInstance(e);if(!instance)return;for(std::size_t i=0;i<manager.getPrimitiveCount(instance);++i){auto* value=const_cast<filament::MaterialInstance*>(manager.getMaterialInstanceAt(instance,i));if(seen.insert(value).second)m_impl->BindProbes(value);}});
+    // Refresh prototypes as well as live instances before retiring a resized atlas.
+    if(m_impl->PrimitiveMaterial)m_impl->BindProbes(m_impl->PrimitiveMaterial->getDefaultInstance());for(const auto& [id,material]:m_impl->Materials)m_impl->BindProbes(material->getDefaultInstance());
+    if(retired)m_impl->Engine.destroy(retired);
+}
+
 void RenderAssets::Shutdown() {
     if (!m_impl) return;
     EndLODView();ResetLODMaterials();
@@ -1076,7 +1119,7 @@ void RenderAssets::Shutdown() {
     m_impl->PendingTextures.clear();m_impl->TextureReads.clear();
     while (!m_impl->Instances.empty()) DestroyMesh(m_impl->Instances.begin()->first);
     while(!m_impl->TextureSurfaces.empty())m_impl->RetireSurface(m_impl->TextureSurfaces.begin()->first);
-    m_impl->Engine.destroy(m_impl->WhiteTexture);m_impl->Engine.destroy(m_impl->BlackTexture);
+    m_impl->Engine.destroy(m_impl->ProbeTexture);m_impl->Engine.destroy(m_impl->WhiteTexture);m_impl->Engine.destroy(m_impl->BlackTexture);
     m_impl->Models.clear();
     m_impl->GeometryCache.clear();
     for (const auto& [id, texture] : m_impl->Textures) m_impl->Engine.destroy(texture);

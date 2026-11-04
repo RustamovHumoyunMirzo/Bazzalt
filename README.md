@@ -10,6 +10,11 @@ BAZZALT is an editor-first C++20 game engine in active alpha development. It
 combines a native runtime with a PySide6 editor and Hub while keeping low-level
 engine lifetime, rendering, importing, and persistence away from game code.
 
+Baked lighting includes diffuse probes, UV lightmaps, HDR reflection captures,
+an editor Lighting tool, baked/mixed light modes,
+static geometry participation and matching C++/Lua controls. See the
+[baked lighting guide](docs/public/0.8.0/manual/baked-lighting/en.html).
+
 See [what is new in 0.8.0](docs/public/0.8.0/whats-new/en.html).
 
 > **Alpha status:** core workflows are functional, but APIs and file formats may

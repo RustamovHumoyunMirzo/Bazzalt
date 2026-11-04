@@ -16,7 +16,7 @@
 #include "Rendering/LODVisibility.h"
 #include "Bazzalt/SceneEnvironment.h"
 
-namespace filament {
+namespace filament {class IndirectLight;
 class Engine;
 class Renderer;
 class Scene;
@@ -81,6 +81,7 @@ public:
     std::unordered_map<std::string,double> GetStatistics() const;
     void SetEditorStatisticsText(std::string text,bool visible){m_statisticsText=std::move(text);m_statisticsVisible=visible;}
     void RenderCameraView(filament::View* view,std::uint64_t viewport=0,bool applyLOD=true);
+    void SynchronizeBakedLighting(Bazzalt::Scene& scene);
     void SetGuiScene(Bazzalt::Scene* scene);
     void ClearGuiResources();
     filament::Texture* GetCameraTexture(UUID id) const;
@@ -142,6 +143,8 @@ private:
     filament::Renderer* m_renderer = nullptr;
     filament::Scene* m_scene = nullptr;
     filament::Skybox* m_targetClearSky=nullptr;
+    filament::IndirectLight* m_bakedReflectionLight=nullptr;
+    filament::Texture* m_bakedReflectionBlack=nullptr;
     filament::SwapChain* m_captureSwapChain=nullptr;
     std::vector<filament::View*> m_activeViews;
     std::uint32_t m_presentationWidth = 1280;

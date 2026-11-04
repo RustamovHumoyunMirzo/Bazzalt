@@ -650,7 +650,7 @@ void RenderBackend::SetEnvironment(const SceneEnvironment& value) {
     m_scene->setSkybox(value.SkyboxVisible?m_environment->Sky:nullptr);
     m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});
 }
-bool RenderBackend::HasEnvironmentLighting() const{return m_scene&&m_scene->getIndirectLight()!=nullptr;}
+bool RenderBackend::HasEnvironmentLighting() const{return m_scene&&m_scene->getIndirectLight()!=nullptr&&m_scene->getIndirectLight()!=m_bakedReflectionLight;}
 bool RenderBackend::HasEnvironmentSkybox() const{return m_scene&&m_scene->getSkybox()!=nullptr;}
 std::unordered_map<std::string,double> RenderBackend::GetStatistics() const{
     std::unordered_map<std::string,double> result{{"material_time",m_materialTime},{"guide_uploads",double(m_guideUploads)},{"light_uploads",double(m_lightUploads)},{"renderables",0},{"render_primitives",0},{"viewports",double(m_viewports.size())},{"captures",double(m_cameraOutputs.size())},{"gui_batches",m_guiRenderer?double(m_guiRenderer->GetBatchCount()):0}};
@@ -686,6 +686,16 @@ void RenderBackend::BeginImpostors(filament::View* view,bool editor){
 }
 std::optional<Mat4> RenderBackend::GetEditorCameraWorld() const{for(const auto& [_,view]:m_viewports)if(view->Kind==ViewportKind::Scene&&view->View&&view->View->hasCamera()){Mat4 matrix;const auto native=view->View->getCamera().getModelMatrix();for(int c=0;c<4;++c)for(int r=0;r<4;++r)matrix(r,c)=float(native[c][r]);return matrix;}return {};}
 bool RenderBackend::IsEditorLODHidden(UUID id){for(auto& [key,view]:m_viewports)if(view->Kind==ViewportKind::Scene)return GetLODHidden(view->View).contains(id);return false;}
+void RenderBackend::SynchronizeBakedLighting(Bazzalt::Scene& scene){
+    if(!m_engine||!m_assets||!m_scene)return;
+    m_assets->UpdateBakedLighting(scene);
+    if(m_assets->HasBakedReflections()&&!m_scene->getIndirectLight()){
+        if(!m_bakedReflectionLight){m_bakedReflectionBlack=filament::Texture::Builder().width(16).height(16).levels(5).sampler(filament::Texture::Sampler::SAMPLER_CUBEMAP).format(filament::Texture::InternalFormat::RGBA8).build(*m_engine);
+            for(unsigned mip=0,size=16;size;mip++,size/=2){auto* bytes=new std::vector<std::uint8_t>(size*size*4*6,0);m_bakedReflectionBlack->setImage(*m_engine,mip,0,0,0,size,size,6,filament::Texture::PixelBufferDescriptor(bytes->data(),bytes->size(),filament::Texture::Format::RGBA,filament::Texture::Type::UBYTE,[](void*,std::size_t,void* p){delete static_cast<std::vector<std::uint8_t>*>(p);},bytes));}
+            filament::math::float3 black[9]{};m_bakedReflectionLight=filament::IndirectLight::Builder().reflections(m_bakedReflectionBlack).irradiance(3,black).intensity(1).build(*m_engine);
+        }m_scene->setIndirectLight(m_bakedReflectionLight);
+    }else if(!m_assets->HasBakedReflections()&&m_scene->getIndirectLight()==m_bakedReflectionLight)m_scene->setIndirectLight(nullptr);
+}
 void RenderBackend::RenderCameraView(filament::View* view,std::uint64_t viewport,bool applyLOD){
     if(!view)return;
     if(applyLOD){m_currentLODHidden=&GetLODHidden(view);auto found=m_lodViews.find(view);m_currentLODState=found==m_lodViews.end()?nullptr:&found->second;m_assets->BeginLODView(*m_currentLODHidden,GetLODMasks());}
@@ -734,6 +744,7 @@ void RenderBackend::Render(double materialTime) {
     if(m_guiScene&&m_guiScene->HasSystem<CameraSystem>())m_guiScene->GetSystem<CameraSystem>().Synchronize(*m_guiScene);
     m_assets->ResetLODMaterials();
     m_assets->SynchronizeTextures();
+    if(m_guiScene)SynchronizeBakedLighting(*m_guiScene);
     if(m_guiScene)m_assets->SynchronizeAnimation(*m_guiScene);
     if(!m_graphics)m_graphics=std::make_unique<GraphicsRenderer>(*this);
     m_graphics->BeginFrame();
@@ -914,6 +925,7 @@ void RenderBackend::Shutdown() {
     m_cameraOutputs.clear();
     if(m_captureSwapChain){m_engine->destroy(m_captureSwapChain);m_captureSwapChain=nullptr;}
     m_scene->setSkybox(nullptr);m_scene->setIndirectLight(nullptr);
+    if(m_bakedReflectionLight){m_engine->destroy(m_bakedReflectionLight);m_bakedReflectionLight=nullptr;}if(m_bakedReflectionBlack){m_engine->destroy(m_bakedReflectionBlack);m_bakedReflectionBlack=nullptr;}
     if(m_targetClearSky){m_engine->destroy(m_targetClearSky);m_targetClearSky=nullptr;}
     if(m_environment){if(m_environment->Sky)m_engine->destroy(m_environment->Sky);if(m_environment->Light)m_engine->destroy(m_environment->Light);if(m_environment->SkyTexture)m_engine->destroy(m_environment->SkyTexture);if(m_environment->Reflections)m_engine->destroy(m_environment->Reflections);m_environment.reset();}
     while (!m_viewports.empty()) DestroyViewport(m_viewports.begin()->first);

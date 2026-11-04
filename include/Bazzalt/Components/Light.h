@@ -6,9 +6,11 @@
 namespace Bazzalt {
 
 enum class LightType { Directional, Sun, Point, Spot };
+enum class LightMode { Realtime, Baked, Mixed };
 
 struct Light : Component {
     LightType Type = LightType::Point;
+    LightMode Mode = LightMode::Realtime;
     Vec3 Color{1.0f};
     // Lux for directional/sun lights, lumens for point/spot lights.
     float Intensity = 1000.0f;

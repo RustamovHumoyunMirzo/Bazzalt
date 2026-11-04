@@ -7,6 +7,7 @@ namespace Bazzalt::Runtime {
 // One effective parameter contract for renderer, guides, and editor inspection.
 inline Light SanitizeLight(Light light) {
     const auto finite=[](float value,float fallback){return std::isfinite(value)?value:fallback;};
+    if(static_cast<int>(light.Mode)<0||static_cast<int>(light.Mode)>2)light.Mode=LightMode::Realtime;
     if(static_cast<int>(light.Type)<0||static_cast<int>(light.Type)>3)light.Type=LightType::Point;
     light.Color={std::max(0.0f,finite(light.Color.X,1)),std::max(0.0f,finite(light.Color.Y,1)),std::max(0.0f,finite(light.Color.Z,1))};
     light.Intensity=std::max(0.0f,finite(light.Intensity,0));

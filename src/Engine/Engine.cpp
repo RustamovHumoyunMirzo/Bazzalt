@@ -1,3 +1,5 @@
+#include "Bazzalt/Components/LightProbe.h"
+#include "Bazzalt/Components/ReflectionProbe.h"
 #include "Bazzalt/Components/Impostor.h"
 #include "Prefab/PrefabAccess.h"
 #include "Network/NetworkModuleApi.h"
@@ -263,6 +265,18 @@ for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id
         }
     }
     for(auto h:m_scene->GetRegistry().view<AudioListener>()){auto e=m_scene->GetEntity(static_cast<Entity::Id>(h));if(!e.GetComponent<AudioListener>().IsEnabled()||m_editorHidden.contains(e.GetUUID()))continue;auto p=e.GetWorldTransform().Position;icons.push_back({p.X,p.Y,p.Z,false,2});}
+    if(m_editorIconsVisible)for(auto h:m_scene->GetRegistry().view<LightProbe>()){
+        auto e=m_scene->GetEntity(static_cast<Entity::Id>(h));const auto& probe=e.GetComponent<LightProbe>();if(!probe.Enabled||!probe.IsValid()||m_editorHidden.contains(e.GetUUID()))continue;
+        const auto p=e.GetWorldMatrix().TransformPoint({});const Vec4 color=probe.Baked?Vec4{.25f,.85f,1,1}:Vec4{1,.7f,.2f,1};
+        for(auto axis:{Vec3{.12f,0,0},Vec3{0,.12f,0},Vec3{0,0,.12f}})line(p-axis,p+axis,color);
+        if(std::find(m_selectedObjects.begin(),m_selectedObjects.end(),e.GetUUID())!=m_selectedObjects.end())for(int plane=0;plane<3;++plane)for(int i=0;i<48;++i){auto point=[&](int n){float a=2*Pi*n/48;Vec3 v{std::cos(a)*probe.Radius,std::sin(a)*probe.Radius,0};return p+(plane==0?v:plane==1?Vec3{v.X,0,v.Y}:Vec3{0,v.X,v.Y});};line(point(i),point(i+1),color);}
+    }
+    if(m_editorIconsVisible)for(auto h:m_scene->GetRegistry().view<ReflectionProbe>()){
+        auto e=m_scene->GetEntity(static_cast<Entity::Id>(h));const auto& p=e.GetComponent<ReflectionProbe>();if(!p.Enabled||m_editorHidden.contains(e.GetUUID()))continue;auto center=e.GetWorldMatrix().TransformPoint({});Vec4 color{.75f,.4f,1,1};for(auto axis:{Vec3{.15f,0,0},Vec3{0,.15f,0},Vec3{0,0,.15f}})line(center-axis,center+axis,color);
+        if(std::find(m_selectedObjects.begin(),m_selectedObjects.end(),e.GetUUID())==m_selectedObjects.end())continue;
+        if(p.BoxProjection){for(unsigned corner=0;corner<8;++corner)for(unsigned axis=0;axis<3;++axis)if(!(corner&(1u<<axis))){auto point=[&](unsigned mask){return center+Vec3{mask&1?p.BoxSize.X:-p.BoxSize.X,mask&2?p.BoxSize.Y:-p.BoxSize.Y,mask&4?p.BoxSize.Z:-p.BoxSize.Z};};line(point(corner),point(corner|(1u<<axis)),color);}}
+        for(int plane=0;plane<3;++plane)for(int i=0;i<48;++i){auto point=[&](int n){float a=2*Pi*n/48;Vec3 v{std::cos(a)*p.Radius,std::sin(a)*p.Radius,0};return center+(plane==0?v:plane==1?Vec3{v.X,0,v.Y}:Vec3{0,v.X,v.Y});};line(point(i),point(i+1),color);}
+    }
     m_renderBackend->SetEditorIcons(m_editorIconsVisible?icons:std::vector<RenderBackend::EditorIcon>{});
     if(m_editorIconsVisible){bool synchronized=false;for(auto selected:m_selectedObjects){auto entity=m_scene->GetEntity(selected);if(!entity||m_editorHidden.contains(selected)||(!entity.HasComponent<Rigidbody>()&&!entity.HasComponent<ShapeCollider>()&&!entity.HasComponent<MeshCollider>()&&!entity.HasComponent<Joint>()&&!entity.HasComponent<DistanceJoint>()&&!entity.HasComponent<HingeJoint>()&&!entity.HasComponent<SliderJoint>()&&!entity.HasComponent<BallAndSocketJoint>()&&!entity.HasComponent<FixedJoint>()&&!entity.HasComponent<Cloth>()&&!entity.HasComponent<Rope>()&&!entity.HasComponent<Vehicle>()&&!entity.HasComponent<VehicleWheel>()&&!entity.HasComponent<VehicleAntiRollBar>()))continue;try{if(!synchronized){PhysicsModule().Synchronize(*m_scene);synchronized=true;}for(const auto& p:PhysicsModule().Guides(*m_scene,selected))guides.push_back({p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9],true});}catch(const std::exception& error){if(m_lastError!=error.what()){m_lastError=error.what();Console::Warning(m_lastError,"Physics");}}}}
     if(!m_editorIconsVisible)guides.clear();

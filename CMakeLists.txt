@@ -136,7 +136,7 @@ function(bazzalt_embed_post_process name symbol)
                 --output "${_binary}" "${_source}"
         COMMAND "${CMAKE_COMMAND}" -DINPUT=${_binary} -DOUTPUT=${_header}
                 -DSYMBOL=${symbol} -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedBinary.cmake"
-        DEPENDS "${_source}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedBinary.cmake"
+        DEPENDS "${_source}" "${CMAKE_CURRENT_SOURCE_DIR}/runtime/resources/shaders/baked_lighting.glsl" "${CMAKE_CURRENT_SOURCE_DIR}/runtime/resources/shaders/baked_reflections.glsl" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedBinary.cmake"
         VERBATIM
         COMMENT "Compiling and embedding ${name}.mat"
     )
@@ -157,6 +157,8 @@ function(bazzalt_embed_binary source symbol output_name)
     set(BAZZALT_EMBEDDED_HEADERS ${BAZZALT_EMBEDDED_HEADERS} "${_header}" PARENT_SCOPE)
 endfunction()
 
+bazzalt_embed_binary(runtime/resources/shaders/baked_lighting.glsl BakedLightingSource baked_lighting_source)
+bazzalt_embed_binary(runtime/resources/shaders/baked_reflections.glsl BakedReflectionSource baked_reflection_source)
 bazzalt_embed_post_process(gaussian_blur GaussianBlurFilamat)
 bazzalt_embed_post_process(vignette VignetteFilamat)
 bazzalt_embed_post_process(editor_gizmo EditorGizmoFilamat)
@@ -720,6 +722,11 @@ endif()
 
 
 if(BUILD_TESTING)
+    add_executable(BazzaltLightingTests tests/LightingTests.cpp)
+    target_include_directories(BazzaltLightingTests PRIVATE src)
+    target_link_libraries(BazzaltLightingTests PRIVATE Bazzalt Filament::Filament)
+    bazzalt_enable_test_assertions(BazzaltLightingTests)
+    add_test(NAME BazzaltLightingTests COMMAND BazzaltLightingTests)
     add_executable(BazzaltWorldStreamingTests tests/WorldStreamingTests.cpp)
     target_include_directories(BazzaltWorldStreamingTests PRIVATE src)
     target_link_libraries(BazzaltWorldStreamingTests PRIVATE Bazzalt)

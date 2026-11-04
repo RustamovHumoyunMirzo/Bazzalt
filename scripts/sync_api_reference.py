@@ -291,6 +291,13 @@ def supplement(language, name, record, types):
 
 
 OVERVIEWS = {
+    'Lighting': 'Scene-based diffuse probe, UV lightmap and HDR reflection capture baking and sampling. BeginBake snapshots static contributors and schedules detached CPU tracing. CreateProbeGrid and Clear mutate the scene on its owning thread. Runtime material support and transport limits are documented in the baked-lighting guide.',
+    'Lightmap': 'Static non-overlapping triangle-chart irradiance atlas. Resolution and Padding configure the next bake; BakedResolution, BakedPadding, ChartGrid, Geometry, Texels and TransformSignature describe the saved result. Moving the receiver invalidates its lighting until rebaked. Direct payload edits require Lighting.Invalidate.',
+    'ReflectionProbe': 'World-oriented HDR cubemap capture with GGX roughness mips. Radius and BlendDistance control influence; BoxSize is world-space half extents for BoxProjection. Resolution configures the next bake; CapturePosition and BakedResolution describe saved Radiance. Moving a probe disables stale captures. Enabled is inherited.',
+    'LightProbe': 'Scene-owned world-space, three-band cosine-convolved irradiance. Radius is world meters; Intensity scales a baked sample. Four strongest overlapping probes are interpolated per fragment by lit materials. Coefficients remain world-oriented when the entity rotates.',
+    'LightBakeSettings': 'Validated offline diffuse transport settings. Samples is 16..16384, Bounces 0..4, MaxTriangles 1..4000000. RayBias is positive and less than MaxDistance. AmbientRadiance is an explicit constant linear sky input; DefaultAlbedo is linear RGB in [0,1].',
+    'LightBakeHandle': 'Copyable asynchronous bake result. Poll GetStatus, GetProgress and GetError; Cancel abandons work without altering existing data. Apply validates the unchanged source snapshot and runs on the thread that began the bake. Destruction does not implicitly cancel.',
+
     'Animation': 'Engine-thread animation service. Controls Animator playback, numeric parameters/triggers, layers, IK and copied poses/events. Pure Blend/Additive, FK, IK and Retarget operations are renderer independent. See the animation guides for spaces, errors, root motion and physics ownership.',
     'Animator': 'Serialized model/controller playback settings. Model defaults to the owning ModelInstance. AnimatePhysics selects fixed stepping; RootMotion controls extraction/transform/kinematic movement. Dynamic bone rigidbodies retain physics ownership.',
     'IKConstraint': 'Serializable helper-entity IK constraint. AnimatorEntity, Target and PoleTarget are scene entity UUIDs; root/tip are zero-based bone indices. GroundRaycast uses the active physics world. Multiple helpers can drive one Animator.',

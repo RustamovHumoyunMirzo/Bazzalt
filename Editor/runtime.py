@@ -71,6 +71,12 @@ class RuntimeService(QObject):
     def AssetDependencies(self, identity) -> dict:
         return dict(self._host.asset_dependencies(str(identity))) if self._host and hasattr(self._host,"asset_dependencies") else {}
 
+    def LightingCommand(self, command, *args):
+        allowed={'begin_lighting_bake','lighting_bake_info','apply_lighting_bake','cancel_lighting_bake','clear_lighting_bake','create_light_probe_grid','create_reflection_probe','add_lightmaps'}
+        if command not in allowed or self._host is None or not hasattr(self._host,command):
+            raise RuntimeError('Native lighting baker is unavailable; rebuild the editor runtime.')
+        return getattr(self._host,command)(*args)
+
     def ProfileCommand(self, command, *args):
         callback = getattr(getattr(self, '_profiler_module', None), command, None)
         if callback is None:

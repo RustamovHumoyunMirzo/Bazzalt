@@ -387,7 +387,7 @@ class EditorController(QObject):
             section.EnabledChanged.connect(lambda enabled,c=component:self._SetComponentEnabled(unique,c,enabled))
             fields=[dict(value.get("component_data",{}).get(component,{})) for value in details]
             for name in set.intersection(*(set(value) for value in fields)) if fields else ():
-                values=[value[name] for value in fields];section.AddField(name,QLabel(str(values[0]) if all(v==values[0] for v in values) else "â€” Mixed â€”"))
+                values=[value[name] for value in fields];section.AddField(name,QLabel(str(values[0]) if all(v==values[0] for v in values) else "— Mixed —"))
         self.Window.Scene.Surface.SetSelection(center);self._UpdateGizmo()
 
     def _SetComponentEnabled(self,entities:list[str],component:str,enabled:bool)->None:
@@ -621,7 +621,7 @@ class EditorController(QObject):
         try:data=InspectEnvironment(path,info)
         except (OSError,ValueError) as error:self._MaterialError(error);return
         section=self.Window.Properties.AddComponentSection("asset.environment",tr("environment.asset"),removable=False)
-        section.AddField(tr("environment.resolution"),QLabel(f'{data["width"]} Ã— {data["height"]}'))
+        section.AddField(tr("environment.resolution"),QLabel(f'{data["width"]} × {data["height"]}'))
         section.AddField(tr("environment.ibl_status"),QLabel(tr("environment.ready" if data["ibl"].is_file() or path.suffix.lower()==".ktx" else "environment.missing")))
         settings=data["settings"]
         resolution=EnumInput();resolution.SetOptions([(str(value),str(value)) for value in (32,64,128,256,512,1024)]);resolution.SetValue(settings.get("Resolution","128"))
@@ -645,7 +645,7 @@ class EditorController(QObject):
         tr=self.Window.Localization.Translate;data=self.Runtime.TextureAssetInfo(path)
         if not data:self.Window.Console.AddMessage(self.Runtime.LastError(),ConsoleLevel.Error);return
         section=self.Window.Properties.AddComponentSection("asset.texture",tr("texture.title"),removable=False)
-        options={"Samples":(("1Ã—",1),("2Ã—",2),("4Ã—",4),("8Ã—",8)),"Color Format":(("RGBA8",0),("RGBA16F",1),("RGBA32F",2)),"Depth Format":((tr("texture.depth.none"),0),("Depth16",1),("Depth24",2),("Depth32F",3)),"Filter":tuple((tr("texture.filter."+key),index) for index,key in enumerate(("point","linear","trilinear"))),"Wrap":tuple((tr("texture.wrap."+key),index) for index,key in enumerate(("clamp","repeat","mirror")))}
+        options={"Samples":(("1×",1),("2×",2),("4×",4),("8×",8)),"Color Format":(("RGBA8",0),("RGBA16F",1),("RGBA32F",2)),"Depth Format":((tr("texture.depth.none"),0),("Depth16",1),("Depth24",2),("Depth32F",3)),"Filter":tuple((tr("texture.filter."+key),index) for index,key in enumerate(("point","linear","trilinear"))),"Wrap":tuple((tr("texture.wrap."+key),index) for index,key in enumerate(("clamp","repeat","mirror")))}
         def commit(name,value):
             updated=dict(data);updated[name]=value
             if not updated["Mipmaps"]:updated["Mip Levels"]=0
@@ -914,6 +914,15 @@ class EditorController(QObject):
                 tr=self.Window.Localization.Translate
                 options=((tr("gui.mode.viewport"),0),(tr("gui.mode.camera_bound"),1),(tr("gui.mode.spatial"),2)) if name=="Mode" else ((tr("gui.scale.constant"),0),(tr("gui.scale.responsive"),1))
                 editor=EnumInput();editor.SetOptions(options);editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
+            if component in ("Lightmap","Reflection Probe") and name=="Resolution":
+                sizes=(16,32,64,128,256,512,1024,2048,4096) if component=="Lightmap" else (4,8,16,32,64,128,256)
+                editor=EnumInput();editor.SetOptions(tuple((str(size),size) for size in sizes));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
+            if component in ("Light Probe","Lightmap","Reflection Probe") and name=="Baked":
+                label=QLabel(self.Window.Localization.Translate('lighting.baked_yes' if value else 'lighting.baked_no'));return label
+            if component in ("Lightmap","Reflection Probe") and name in ("Baked Resolution","Chart Count","Texel Count"):
+                return QLabel(str(value))
+            if component=="Light" and name=="Mode":
+                tr=self.Window.Localization.Translate;editor=EnumInput();editor.SetOptions(tuple((tr('lighting.mode.'+key),index) for index,key in enumerate(('realtime','baked','mixed'))));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
             if component=="Light" and name=="Type":
                 editor=EnumInput();editor.SetOptions((("Directional",0),("Sun",1),("Point",2),("Spot",3)));editor.SetValue(value);editor.currentIndexChanged.connect(lambda _=0:self._CommitLightType(entity_id,editor.GetValue()));return editor
             if component=="Camera" and name=="Projection":

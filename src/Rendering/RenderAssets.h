@@ -46,6 +46,8 @@ public:
     void DestroyPrimitive(Handle handle) { DestroyMesh(handle); }
     [[nodiscard]] bool PreparePostProcessEffect(const CustomPostProcessEffect& effect);
     void Update();
+    void UpdateBakedLighting(Bazzalt::Scene& scene);
+    bool HasBakedReflections() const;
     void SetEditorOwner(Handle handle,UUID owner);
     struct EditorMeshGeometry { UUID Owner;Mat4 World;std::shared_ptr<const ModelGeometry> Geometry; };
     [[nodiscard]] std::vector<EditorMeshGeometry> GetEditorMeshes() const;

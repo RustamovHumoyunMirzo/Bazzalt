@@ -326,7 +326,7 @@ void LightSystem::OnUpdate(Scene& scene, float) {
         Entity entity = scene.GetEntity(static_cast<Entity::Id>(handle));
         const UUID id = entity.GetUUID();
         const auto light = SanitizeLight(view.get<Light>(handle));
-        if (!light.IsEnabled()) continue;
+        if (!light.IsEnabled() || light.Mode==LightMode::Baked) continue;
         alive.insert(id);
         const LightType type = SafeLightType(light.Type);
         const Vec3 color = SafeVector(light.Color, {1,1,1});

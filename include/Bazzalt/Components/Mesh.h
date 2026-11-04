@@ -21,6 +21,7 @@ struct Mesh : Component {
     std::vector<UUID> Materials;
     std::uint8_t LayerMask = 0xff;
     bool Visible = true;
+    bool ContributeGI = false; // Static geometry included in the offline lighting snapshot.
     bool CastShadows = true;
     bool ReceiveShadows = true;
     void SetMaterial(Material material) { MaterialAsset=material.GetAssetUUID(); }

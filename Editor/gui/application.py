@@ -119,6 +119,7 @@ class Editor(QMainWindow):
         self.MenuBar.PreferencesRequested.connect(self.OpenPreferences)
         self.MenuBar.ProjectSettingsRequested.connect(self.OpenProjectSettings)
         self.MenuBar.ProfilerRequested.connect(self.OpenProfiler)
+        self.MenuBar.LightingRequested.connect(self.OpenLighting)
         self.MenuBar.GlobalSubsystemsRequested.connect(self.OpenGlobalSubsystems)
         self.MenuBar.MaximizeViewportRequested.connect(self.SetViewportMaximized)
         self.Docking.maximize_requested.connect(self.TogglePanelMaximized)
@@ -214,6 +215,11 @@ class Editor(QMainWindow):
         previous=self.Runtime.ProjectInfo().get("name")
         if ProjectSettingsDialog(self).exec() and previous!=self.Runtime.ProjectInfo().get("name"):
             self.RequestRestart()
+
+    def OpenLighting(self)->None:
+        from .lighting import LightingDialog
+        if getattr(self,'_lighting_dialog',None) is None:self._lighting_dialog=LightingDialog(self)
+        self._lighting_dialog.show();self._lighting_dialog.raise_()
 
     def OpenProfiler(self)->None:
         from .profiler import ProfilerDialog

@@ -206,6 +206,20 @@ int main() {
         }
     }
 
+    // Failed component serialization must not truncate an existing scene.
+    {
+        Runtime::Engine atomic;
+        auto path=directory/"atomic.bscene";
+        assert(atomic.SaveScene(path));
+        std::ifstream original(path,std::ios::binary);std::string expected((std::istreambuf_iterator<char>(original)),{});original.close();
+        atomic.GetScene().CreateEntity("Throws").AddComponent<Health>();
+        atomic.GetSceneSerializer().GetComponents().Register<Health>("Test.Throws",1,
+            [](const Health&,PropertyMap&){throw std::runtime_error("intentional serialization failure");},
+            [](Health&,const PropertyMap&,std::uint32_t){return true;});
+        assert(!atomic.SaveScene(path));
+        std::ifstream current(path,std::ios::binary);std::string actual((std::istreambuf_iterator<char>(current)),{});current.close();assert(actual==expected);
+        for(const auto& entry:std::filesystem::directory_iterator(directory))assert(entry.path().filename().native().find(std::filesystem::path(".pending-").native())==std::filesystem::path::string_type::npos);
+    }
     std::filesystem::remove_all(directory);
     return 0;
 }
