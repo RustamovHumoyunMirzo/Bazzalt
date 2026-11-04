@@ -13,3 +13,12 @@ A pool change cannot guarantee capacity. If another job has no steps and the
 same annotation, rerun the failed jobs after GitHub recovers; inspect annotations
 before treating a cancellation as a source failure. Do not use continue-on-error,
 remove architecture coverage or increase build timeouts to mask allocation failures.
+
+The ARM macOS 26 pool also rejected a job before acquiring a runner. A pool
+change is a mitigation, not a guarantee. retry-macos-allocation.yml adds bounded
+recovery on completion: only the latest master push/manual run, at most three
+attempts, and only when every unsuccessful job has no steps, runner_id 0 and
+GitHub's specific hosted-runner acquisition annotation. Real failures, manual
+cancellations and superseded commits are not retried. Successful jobs are retained.
+The privileged recovery job checks out only trusted master code, never a PR ref or
+an uploaded artifact, and has only contents:read and actions:write permissions.
