@@ -366,7 +366,8 @@ class RuntimeService(QObject):
     def PhysicsAuthoringData(self,entity_id: str) -> dict:
         return dict(self._host.physics_authoring_data(entity_id)) if self._host is not None and hasattr(self._host,'physics_authoring_data') else {}
 
-    def AnimationRetargetMap(self,entity,source):return list(self._host.animation_retarget_map(str(entity),str(source))) if self._host else []
+    def AnimationClipSource(self,entity,clip):return self._host.animation_clip_source(str(entity),str(clip)) if self._host else ""
+    def AnimationRetargetMap(self,entity,source,humanoid=False):return list(self._host.animation_retarget_map(str(entity),str(source),bool(humanoid))) if self._host else []
     def PreviewAnimationController(self,entity,source,delta,parameters,reset=False):return dict(self._host.animation_preview_controller(str(entity),str(source),float(delta),parameters,bool(reset))) if self._host else {}
     def AnimationInfo(self,entity):
         return dict(self._host.animation_info(str(entity))) if self._host else {}

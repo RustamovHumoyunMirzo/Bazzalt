@@ -35,6 +35,7 @@ static std::vector&lt;BoneTransform&gt; Additive(const std::vector&lt;BoneTransf
 static bool SolveIK(const Skeleton&amp;,std::vector&lt;BoneTransform&gt;&amp; pose,const IKSettings&amp;);
 static std::vector&lt;BoneTransform&gt; Retarget(const Skeleton&amp; source,const std::vector&lt;BoneTransform&gt;&amp; pose,const Skeleton&amp; target,const RetargetSettings&amp;);
 static RetargetSettings MapByName(const Skeleton&amp; source,const Skeleton&amp; target,float translationScale=1);
+static RetargetSettings MapHumanoid(const Skeleton&amp; source,const HumanoidAvatar&amp; sourceAvatar,const Skeleton&amp; target,const HumanoidAvatar&amp; targetAvatar,float translationScale=1);
 static void Play(Entity,const std::string&amp; state=&quot;&quot;,float fadeSeconds=0);
 static void Rebind(Entity);
 static void Stop(Entity);

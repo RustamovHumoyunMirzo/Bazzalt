@@ -577,6 +577,7 @@ public:
         if(!model){m_animationRig.reset();m_animationModel={};}
         result["bones"]=bones;result["clips"]=clips;return result;
     }
+    std::string AnimationClipSource(const std::string& id,const std::string& name){AnimationInfo(id);if(!m_animationRig)throw std::invalid_argument("Select an animation model");auto index=m_animationRig->FindClip(name);if(index<0)throw std::invalid_argument("Unknown imported clip");return m_animationRig->Clips[index].ToSource();}
     void BeginAnimationPreview(const std::string& id){
         if(IsPlaying())throw std::logic_error("Stop Play before animation preview");auto e=RequireEntity(id);if(m_animationPreviewOwner!=id){EndAnimationPreview();auto info=AnimationInfo(id);UUID model;UUID::TryParse(py::cast<std::string>(info["model"]),model);if(!model)throw std::invalid_argument("Select an imported model root");m_animationPreviewOwner=id;if(auto* c=e.TryGetComponent<Animator>())m_animationOriginal=*c;std::vector<Entity> pending{e};while(!pending.empty()){auto object=pending.back();pending.pop_back();m_animationTransforms[object.GetUUID()]=object.GetComponent<Transform>();auto children=object.GetChildren();pending.insert(pending.end(),children.begin(),children.end());}if(!e.HasComponent<Animator>())e.AddComponent<Animator>();auto& a=e.GetComponent<Animator>();a.Enabled=true;a.Model=model;a.Controller={};a.RootMotion=RootMotionMode::Disabled;Animation::Rebind(e);}
     }
@@ -584,7 +585,7 @@ public:
         AnimationController controller;controller.Entry="Preview";AnimationState state;state.Name="Preview";state.Clip=clip;state.Loop=false;controller.States.push_back(state);Animation::SetController(e,controller);Animation::Pause(e);Animation::SetTime(e,time);
     }
 
-    py::list AnimationRetargetMap(const std::string& id,const std::string& source){auto info=AnimationInfo(id);if(!m_animationRig)throw std::invalid_argument("Select a target model");UUID asset;if(!UUID::TryParse(source,asset))throw std::invalid_argument("Invalid source model");auto rig=AnimationRig::Load(asset);auto mapping=Animation::MapByName(rig->Rig,m_animationRig->Rig);py::list result;for(auto& bone:mapping.Bones){py::dict row;row["source"]=bone.Source;row["target"]=bone.Target;row["copyTranslation"]=bone.CopyTranslation;result.append(row);}return result;}
+    py::list AnimationRetargetMap(const std::string& id,const std::string& source,bool humanoid=false){auto info=AnimationInfo(id);if(!m_animationRig)throw std::invalid_argument("Select a target model");UUID asset;if(!UUID::TryParse(source,asset))throw std::invalid_argument("Invalid source model");auto rig=AnimationRig::Load(asset);auto mapping=humanoid?Animation::MapHumanoid(rig->Rig,HumanoidAvatar::Detect(rig->Rig),m_animationRig->Rig,HumanoidAvatar::Detect(m_animationRig->Rig)):Animation::MapByName(rig->Rig,m_animationRig->Rig);py::list result;for(auto& bone:mapping.Bones){py::dict row;row["source"]=bone.Source;row["target"]=bone.Target;row["copyTranslation"]=bone.CopyTranslation;result.append(row);}return result;}
     py::dict PreviewAnimationController(const std::string& id,const std::string& source,float delta,const py::dict& parameters,bool reset){BeginAnimationPreview(id);auto e=RequireEntity(id);if(reset){Animation::SetController(e,AnimationController::FromSource(source));Animation::Play(e);}for(auto item:parameters)Animation::SetParameter(e,py::cast<std::string>(item.first),py::cast<float>(item.second));Animation::Evaluate(e,delta);auto status=Animation::GetStatus(e);py::dict out;out["state"]=status.State;out["time"]=status.Time;out["weight"]=status.TransitionWeight;return out;}
     py::list ComponentTypes() const {
         py::list result;
@@ -991,8 +992,9 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("add_component", &Bazzalt::EditorBridge::EditorHost::AddComponent)
         .def("remove_component", &Bazzalt::EditorBridge::EditorHost::RemoveComponent)
         .def("set_component_enabled", &Bazzalt::EditorBridge::EditorHost::SetComponentEnabled)
-        .def("animation_retarget_map", &Bazzalt::EditorBridge::EditorHost::AnimationRetargetMap)
+        .def("animation_retarget_map", &Bazzalt::EditorBridge::EditorHost::AnimationRetargetMap,py::arg("id"),py::arg("source"),py::arg("humanoid")=false)
         .def("animation_preview_controller", &Bazzalt::EditorBridge::EditorHost::PreviewAnimationController)
+        .def("animation_clip_source", &Bazzalt::EditorBridge::EditorHost::AnimationClipSource)
         .def("animation_info", &Bazzalt::EditorBridge::EditorHost::AnimationInfo)
         .def("animation_preview", &Bazzalt::EditorBridge::EditorHost::PreviewAnimation)
         .def("animation_end_preview", &Bazzalt::EditorBridge::EditorHost::EndAnimationPreview)

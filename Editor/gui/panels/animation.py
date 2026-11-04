@@ -39,7 +39,7 @@ class Timeline(QWidget):
             track=tracks[row]
             y=36+row*23
             if y>self.height():break
-            index=track['bone'];name=bones[index]['name'] if index<len(bones) else str(index);channel=self.Panel.Tr(('animation.position','animation.rotation','animation.scale')[track['channel']]);p.setPen(QColor(theme.text));p.drawText(QRectF(6,y-10,148,20),Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter,p.fontMetrics().elidedText(name+' Â· '+channel,Qt.TextElideMode.ElideRight,148));p.setPen(QColor(theme.accent));p.setBrush(QColor(theme.accent))
+            index=track['bone'];name=bones[index]['name'] if index<len(bones) else str(index);channel=self.Panel.Tr(('animation.position','animation.rotation','animation.scale','animation.weights')[track['channel']]);p.setPen(QColor(theme.text));p.drawText(QRectF(6,y-10,148,20),Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter,p.fontMetrics().elidedText(name+' Â· '+channel,Qt.TextElideMode.ElideRight,148));p.setPen(QColor(theme.accent));p.setBrush(QColor(theme.accent))
             keys=track['keys'];begin=bisect.bisect_left(keys,0);end=bisect.bisect_right(keys,(self.width()-left)/scale);stride=max(1,(end-begin)//max(1,int(width)*2))
             for time in keys[begin:end:stride]:
                 x=left+time*scale
@@ -58,7 +58,7 @@ class AnimationPanel(QWidget):
         layout=QVBoxLayout(self);layout.setContentsMargins(6,6,6,6);bar=QHBoxLayout();layout.addLayout(bar);self.Title=QLabel();self.Title.setMinimumWidth(0);self.Title.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Preferred);bar.addWidget(self.Title,1)
         self.Play=self.Button('animation.play',self.Toggle);self.Stop=self.Button('animation.stop',self.EndPreview);self.AddState=self.Button('animation.add_state',self.NewState);self.AddTransition=self.Button('animation.add_transition',self.NewTransition);self.Delete=self.Button('animation.delete',self.DeleteSelected)
         for button in (self.Play,self.Stop,self.AddState,self.AddTransition,self.Delete):bar.addWidget(button)
-        self.Tabs=QTabWidget();layout.addWidget(self.Tabs,1);self.ClipPage=QWidget();self.GraphPage=QWidget();self.Tabs.addTab(self.ClipPage,self.Tr('animation.clips'));self.Tabs.addTab(self.GraphPage,self.Tr('animation.controller'))
+        self.Tabs=QTabWidget();layout.addWidget(self.Tabs,1);self.ClipPage=QWidget();self.GraphPage=QWidget();self.Tabs.addTab(self.ClipPage,self.Tr('animation.clips'));self.Tabs.addTab(self.GraphPage,self.Tr('animation.controller'));self.Author=ClipEditor(self);self.Tabs.addTab(self.Author,self.Tr('animation.authored_clips'))
         clipLayout=QHBoxLayout(self.ClipPage);split=QSplitter();clipLayout.addWidget(split);left=QWidget();ll=QVBoxLayout(left);ll.setContentsMargins(0,0,0,0);self.Clips=QListWidget();self.Bones=QTreeWidget();self.Bones.setHeaderHidden(True);ll.addWidget(self.Clips);ll.addWidget(self.Bones);split.addWidget(left);right=QWidget();rl=QVBoxLayout(right);self.Timeline=Timeline(self);timelineScroll=QScrollArea();timelineScroll.setWidgetResizable(True);timelineScroll.setWidget(self.Timeline);rl.addWidget(timelineScroll,1);timebar=QGridLayout();rl.addLayout(timebar);self.Time=FloatInput(0,86400,0,3);self.Speed=FloatInput(0,10,1);self.Zoom=FloatInput(.25,10,1)
         for column,(key,field) in enumerate((('time',self.Time),('speed',self.Speed),('zoom',self.Zoom))):
             field.setMaximumWidth(88);timebar.addWidget(QLabel(self.Tr('animation.'+key)),0,column);timebar.addWidget(field,1,column)
@@ -70,7 +70,7 @@ class AnimationPanel(QWidget):
         b=QToolButton();b.setText(self.Tr(key));b.setToolTip(self.Tr(key));b.clicked.connect(callback);return b
     def Retranslate(self,*_):
         for widget,key in ((self.Play,'play'),(self.Stop,'stop'),(self.AddState,'add_state'),(self.AddTransition,'add_transition'),(self.Delete,'delete')):widget.setText(self.Tr('animation.'+key))
-        self.Tabs.setTabText(0,self.Tr('animation.clips'));self.Tabs.setTabText(1,self.Tr('animation.controller'));self.Title.setText(self.Path.name if self.Path else self.Tr('animation.select_model'));self.Rebuild();self.UpdateToolbarIcons()
+        self.Tabs.setTabText(0,self.Tr('animation.clips'));self.Tabs.setTabText(1,self.Tr('animation.controller'));self.Tabs.setTabText(2,self.Tr('animation.authored_clips'));self.Title.setText(self.Path.name if self.Path else self.Tr('animation.select_model'));self.Rebuild();self.UpdateToolbarIcons()
     def UpdateToolbarIcons(self):
         theme=self.Themes.GetTheme();name='light' if theme.background=='#d4d4d4' else 'dark'
         for button,standard in ((self.Play,QStyle.StandardPixmap.SP_MediaPlay),(self.Stop,QStyle.StandardPixmap.SP_MediaStop),(self.Delete,QStyle.StandardPixmap.SP_TrashIcon)):
@@ -148,6 +148,7 @@ class AnimationPanel(QWidget):
         except (ValueError,KeyError,TypeError) as error:self.Error.setText(str(error));return
         if before!=after:self.History.push(Change(self,before,after))
     def Rebuild(self):
+        self.Author.Refresh()
         self._updating=True;self.Scene.blockSignals(True);self.Scene.clear();self.Items={};self.Edges=[]
         theme=self.Themes.GetTheme();self.Scene.setBackgroundBrush(QColor(theme.input_background))
         if self.Graph:
@@ -190,11 +191,11 @@ class AnimationPanel(QWidget):
         selected=self.Scene.selectedItems();self.Selected=selected[0].Name if selected else self.Selected;state=next((s for s in self.Graph['states'] if s['name']==self.Selected),None)
         source=AssetPickerInput(self.Tr('properties.select_project_asset'),accepted_extensions={'.glb','.gltf'});source.AssetResolver=getattr(self.Runtime,'ResolveAssetRecord',None);source.ConfigureAssets(list(self.AssetProvider()));source.SetValue(self.Graph.get('sourceModel',''));source.PickRequested.connect(source.OpenProjectPicker);source.ValueChanged.connect(lambda v:self.Edit(lambda g:g.__setitem__('sourceModel',v or '00000000-0000-0000-0000-000000000000')));self.Form.addRow(self.Tr('animation.retarget_source'),source)
         scale=FloatInput(.000001,1000,self.Graph.get('translationScale',1));scale.valueChanged.connect(lambda v:self.Edit(lambda g:g.__setitem__('translationScale',v)));self.Form.addRow(self.Tr('animation.retarget_scale'),scale)
-        def AutoMap():
+        def AutoMap(humanoid=False):
             try:
-                mapping=self.Runtime.AnimationRetargetMap(self.Entity,self.Graph.get('sourceModel',''));self.Edit(lambda g:g.__setitem__('retarget',mapping))
+                mapping=self.Runtime.AnimationRetargetMap(self.Entity,self.Graph.get('sourceModel',''),humanoid);self.Edit(lambda g:g.__setitem__('retarget',mapping))
             except (ValueError,RuntimeError,AttributeError) as error:self.Error.setText(str(error))
-        self.Form.addRow(self.Button('animation.auto_map',AutoMap))
+        self.Form.addRow(self.Button('animation.auto_map',lambda:AutoMap(False)));self.Form.addRow(self.Button('animation.humanoid_map',lambda:AutoMap(True)))
         mapping=self.Graph.get('retarget',[])
         if mapping:
             table=QTableWidget(len(mapping),3);table.setHorizontalHeaderLabels([self.Tr('animation.source_bone'),self.Tr('animation.target_bone'),self.Tr('animation.copy_translation')]);table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -253,3 +254,110 @@ class AnimationPanel(QWidget):
             for row,condition in enumerate(t.get('conditions',[])):
                 parameter=QLineEdit(condition['parameter']);parameter.editingFinished.connect(lambda e=parameter,i=index,r=row:self.Edit(lambda g:g['transitions'][i]['conditions'][r].__setitem__('parameter',e.text())));self.Form.addRow(self.Tr('animation.parameter'),parameter);comparison=EnumInput();comparison.SetOptions([(text,i) for i,text in enumerate(('>','<','==','!='))]);comparison.SetValue(condition.get('comparison',0));comparison.currentIndexChanged.connect(lambda _,e=comparison,i=index,r=row:self.Edit(lambda g:g['transitions'][i]['conditions'][r].__setitem__('comparison',e.GetValue())));self.Form.addRow(self.Tr('animation.comparison'),comparison);value=FloatInput(value=condition.get('value',0));value.valueChanged.connect(lambda v,i=index,r=row:self.Edit(lambda g:g['transitions'][i]['conditions'][r].__setitem__('value',v)));self.Form.addRow(self.Tr('animation.value'),value)
             add=self.Button('animation.add_condition',lambda _,i=index:self.Edit(lambda g:g['transitions'][i].setdefault('conditions',[]).append(dict(parameter='Speed',comparison=0,value=.5))));self.Form.addRow(add);remove=self.Button('animation.remove_transition',lambda _,i=index:self.Edit(lambda g:g['transitions'].pop(i)));self.Form.addRow(remove)
+
+
+
+
+class ClipEditor(QWidget):
+    """Controller-owned clip overrides, edited through the controller undo transaction."""
+    def __init__(self,panel):
+        super().__init__();self.Panel=panel;self._updating=False;self.SelectedClip='';self.SelectedTrack=0;self._built=False
+    def EnsureBuilt(self):
+        if self._built:return
+        self._built=True;panel=self.Panel
+        layout=QVBoxLayout(self);bar=QHBoxLayout();layout.addLayout(bar);self.Choices=EnumInput();self.Choices.currentIndexChanged.connect(self.RefreshFields);bar.addWidget(self.Choices,1)
+        for key,callback in (('copy_clip',self.CopyImported),('new_clip',self.New),('delete',self.Delete)) :bar.addWidget(panel.Button('animation.'+key,callback))
+        form=QFormLayout();layout.addLayout(form);self.Name=QLineEdit();self.Name.editingFinished.connect(self.Rename);self.Duration=FloatInput(0,86400,1);self.Duration.valueChanged.connect(lambda v:self.Edit(lambda c:c.__setitem__('duration',v)));form.addRow(panel.Tr('animation.name'),self.Name);form.addRow(panel.Tr('animation.duration'),self.Duration)
+        row=QHBoxLayout();layout.addLayout(row);self.Tracks=EnumInput();self.Tracks.currentIndexChanged.connect(self.RefreshKeys);row.addWidget(self.Tracks,1);row.addWidget(panel.Button('animation.add_track',self.AddTrack));row.addWidget(panel.Button('animation.remove_track',lambda:self.Edit(lambda c:c['tracks'].pop(self.Tracks.currentIndex())) if self.Tracks.currentIndex()>=0 else None))
+        trackForm=QFormLayout();layout.addLayout(trackForm);self.Bone=FloatInput(0,4095,0,0);self.Target=FloatInput(0,255,0,0);self.Channel=EnumInput();self.Channel.SetOptions([(panel.Tr('animation.'+k),i) for i,k in enumerate(('position','rotation','scale','weights'))]);self.Interpolation=EnumInput();self.Interpolation.SetOptions([(panel.Tr('animation.'+k),i) for i,k in enumerate(('step','linear','cubic'))]);
+        for key,widget in (('bone',self.Bone),('channel',self.Channel),('morph_target',self.Target),('interpolation',self.Interpolation)):trackForm.addRow(panel.Tr('animation.'+key),widget)
+        self.Bone.valueChanged.connect(lambda v:self.TrackEdit('bone',int(v)));self.Target.valueChanged.connect(lambda v:self.TrackEdit('target',int(v)));self.Channel.currentIndexChanged.connect(lambda _:self.TrackEdit('channel',self.Channel.GetValue()));self.Interpolation.currentIndexChanged.connect(lambda _:self.TrackEdit('interpolation',self.Interpolation.GetValue()))
+        self.Keys=QTableWidget(0,13);self.Keys.setHorizontalHeaderLabels([panel.Tr('animation.time'),'X','Y','Z','W']+[panel.Tr('animation.in_tangent')+' '+x for x in 'XYZW']+[panel.Tr('animation.out_tangent')+' '+x for x in 'XYZW']);self.Keys.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents);self.Keys.cellChanged.connect(self.SaveKeys);layout.addWidget(self.Keys,1)
+        bar=QHBoxLayout();layout.addLayout(bar);bar.addWidget(panel.Button('animation.add_key',self.AddKey));bar.addWidget(panel.Button('animation.remove_key',lambda:self.Edit(lambda c:c['tracks'][self.Tracks.currentIndex()]['keys'].pop(self.Keys.currentRow())) if self.Keys.currentRow()>=0 else None))
+        self.Markers=QTableWidget(0,2);self.Markers.setHorizontalHeaderLabels([panel.Tr('animation.time'),panel.Tr('animation.marker')]);self.Markers.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch);self.Markers.cellChanged.connect(self.SaveMarkers);layout.addWidget(self.Markers)
+        bar=QHBoxLayout();layout.addLayout(bar);bar.addWidget(panel.Button('animation.add_marker',lambda:self.Edit(lambda c:c.setdefault('markers',[]).append(dict(time=0,name='Event')))));bar.addWidget(panel.Button('animation.remove_marker',lambda:self.Edit(lambda c:c['markers'].pop(self.Markers.currentRow())) if self.Markers.currentRow()>=0 else None));bar.addWidget(panel.Button('animation.preview_clip',self.Preview))
+    def showEvent(self,event):self.EnsureBuilt();self.Refresh();super().showEvent(event)
+    def Clip(self):
+        if not self._built:return None
+        return next((c for c in (self.Panel.Graph or {}).get('clips',[]) if c['name']==self.Choices.GetValue()),None)
+    def Refresh(self):
+        if not self._built:return
+        self._updating=True;value=self.SelectedClip or self.Choices.GetValue();self.Choices.SetOptions([(c['name'],c['name']) for c in (self.Panel.Graph or {}).get('clips',[])]);self.Choices.SetValue(value);self._updating=False;self.RefreshFields()
+    def RefreshFields(self,*_):
+        if self._updating:return
+        self._updating=True;c=self.Clip();self.SelectedClip=c['name'] if c else '';self.Name.setText(self.SelectedClip);self.Duration.setValue(c.get('duration',1) if c else 1);track=self.SelectedTrack;self.Tracks.SetOptions([(str(i)+' · '+str(t['bone'])+' / '+str(t['channel']),i) for i,t in enumerate(c.get('tracks',[]) if c else [])]);self.Tracks.SetValue(track);self.Markers.setRowCount(len(c.get('markers',[])) if c else 0)
+        for i,m in enumerate(c.get('markers',[]) if c else []):
+            self.Markers.setItem(i,0,QTableWidgetItem(str(m['time'])));self.Markers.setItem(i,1,QTableWidgetItem(m['name']))
+        self._updating=False;self.RefreshKeys()
+    def RefreshKeys(self,*_):
+        if self._updating:return
+        self._updating=True;c=self.Clip();index=self.Tracks.currentIndex();self.SelectedTrack=max(0,index);t=c['tracks'][index] if c and 0<=index<len(c['tracks']) else None;self.Keys.setRowCount(len(t['keys']) if t else 0)
+        if t:
+            self.Bone.setValue(t['bone']);self.Target.setValue(t.get('target',0));self.Channel.SetValue(t['channel']);self.Interpolation.SetValue(t.get('interpolation',1))
+            for i,k in enumerate(t['keys']):
+                for j,value in enumerate([k['time']]+k['value']+k.get('in',[0]*4)+k.get('out',[0]*4)):self.Keys.setItem(i,j,QTableWidgetItem(str(value)))
+        self._updating=False
+    def Edit(self,operation):
+        if self._updating or not self.Clip():return
+        name=self.Clip()['name'];self.Panel.Edit(lambda g:operation(next(c for c in g['clips'] if c['name']==name)))
+    def TrackEdit(self,key,value):
+        index=self.Tracks.currentIndex()
+        if index>=0:self.Edit(lambda c:c['tracks'][index].__setitem__(key,value))
+    def Rename(self):
+        if self._updating or not self.Clip():return
+        old=self.Clip()['name'];new=self.Name.text().strip();self.SelectedClip=new
+        def Rename(g):
+            next(c for c in g['clips'] if c['name']==old)['name']=new
+            for s in g['states']:
+                if s.get('clip')==old:s['clip']=new
+                for sample in s.get('samples',[]):
+                    if sample['clip']==old:sample['clip']=new
+        self.Panel.Edit(Rename)
+    def New(self):
+        if not self.Panel.Graph:return
+        self.EnsureBuilt()
+        names={c['name'] for c in self.Panel.Graph.get('clips',[])};name='Clip';i=1
+        while name in names:name='Clip '+str(i);i+=1
+        self.SelectedClip=name;self.Panel.Edit(lambda g:g.setdefault('clips',[]).append(dict(name=name,duration=1,tracks=[],markers=[])))
+    def CopyImported(self):
+        self.EnsureBuilt();info=self.Panel.Timeline.Info
+        if not self.Panel.Graph or not info.get('source'):return
+        clip=json.loads(info['source']);self.SelectedClip=clip['name']
+        def Copy(g):
+            g['clips']=[c for c in g.get('clips',[]) if c['name']!=clip['name']]+[clip]
+        self.Panel.Edit(Copy)
+    def Delete(self):
+        if self.Clip():self.Panel.Edit(lambda g:g.__setitem__('clips',[c for c in g['clips'] if c['name']!=self.SelectedClip]))
+    def AddTrack(self):
+        def Add(c):
+            used={(t['bone'],t['channel']) for t in c.get('tracks',[])};bone=0
+            while (bone,0) in used:bone+=1
+            c.setdefault('tracks',[]).append(dict(bone=bone,channel=0,interpolation=1,keys=[dict(time=0,value=[0,0,0,0])]))
+        self.Edit(Add)
+    def AddKey(self):
+        index=self.Tracks.currentIndex()
+        if index<0:return
+        def Add(c):
+            keys=c['tracks'][index]['keys'];time=keys[-1]['time']+.1
+            if time>c['duration']:c['duration']=time
+            key=copy.deepcopy(keys[-1]);key['time']=time;keys.append(key)
+        self.Edit(Add)
+    def SaveKeys(self,*_):
+        if self._updating:return
+        index=self.Tracks.currentIndex()
+        try:
+            keys=[]
+            for i in range(self.Keys.rowCount()):
+                values=[float(self.Keys.item(i,j).text()) for j in range(13)];keys.append(dict(time=values[0],value=values[1:5],**{'in':values[5:9],'out':values[9:13]}))
+            self.Edit(lambda c:c['tracks'][index].__setitem__('keys',keys))
+        except (ValueError,AttributeError) as error:self.Panel.Error.setText(str(error))
+    def SaveMarkers(self,*_):
+        if self._updating:return
+        try:
+            markers=[dict(time=float(self.Markers.item(i,0).text()),name=self.Markers.item(i,1).text()) for i in range(self.Markers.rowCount())];self.Edit(lambda c:c.__setitem__('markers',markers))
+        except (ValueError,AttributeError) as error:self.Panel.Error.setText(str(error))
+    def Preview(self):
+        if not self.Clip() or not self.Panel.Entity:return
+        c=self.Clip();graph=copy.deepcopy(self.Panel.Graph);graph['states']=[dict(name='Preview',clip=c['name'],loop=True)];graph['transitions']=[];graph['entry']='Preview'
+        try:self.Panel.Runtime.PreviewAnimationController(self.Panel.Entity,json.dumps(graph),0,{},True);self.Panel.ControllerPreview=True;self.Panel.Timer.start()
+        except (ValueError,RuntimeError) as error:self.Panel.Error.setText(str(error))

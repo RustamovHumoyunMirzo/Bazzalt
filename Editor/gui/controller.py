@@ -413,7 +413,7 @@ class EditorController(QObject):
         focus=QApplication.focusWidget()
         for name in ('ShaderGraph','VFXGraph','Animation'):
             graph=getattr(self.Window,name,None)
-            if name=='Animation' and graph and (not graph.Path or graph.Tabs.currentWidget() is not graph.GraphPage):continue
+            if name=='Animation' and graph and (not graph.Path or graph.Tabs.currentWidget() not in (graph.GraphPage,graph.Author)):continue
             if graph and isValid(graph) and focus and (graph is focus or graph.isAncestorOf(focus)):return graph
     def _GraphHasFocus(self):return self._FocusedGraph() is not None
 

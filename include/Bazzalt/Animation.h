@@ -5,8 +5,8 @@
 #include <vector>
 #include <memory>
 namespace Bazzalt {
-struct BoneTransform {Vec3 Position{};Quaternion Rotation{};Vec3 Scale{1};Mat4 GetMatrix()const{return Mat4::Transform(Position,Rotation,Scale);} };
-struct SkeletonBone {std::string Name;int Parent=-1;BoneTransform BindPose;unsigned SourceIndex=0;};
+struct BoneTransform {Vec3 Position{};Quaternion Rotation{};Vec3 Scale{1};std::vector<float> Weights;Mat4 GetMatrix()const{return Mat4::Transform(Position,Rotation,Scale);} };
+struct SkeletonBone {std::string Name;int Parent=-1;BoneTransform BindPose;unsigned SourceIndex=0;std::vector<std::string> MorphTargets;};
 struct BAZZALT_API Skeleton {
  std::vector<SkeletonBone> Bones;
  bool IsValid()const;
@@ -15,14 +15,16 @@ struct BAZZALT_API Skeleton {
  std::vector<Mat4> ForwardKinematics(const std::vector<BoneTransform>& pose)const;
 };
 enum class AnimationInterpolation {Step,Linear,CubicSpline};
-enum class AnimationChannel {Position,Rotation,Scale};
+enum class AnimationChannel {Position,Rotation,Scale,Weights};
 struct AnimationKey {float Time=0;Vec4 Value{},InTangent{},OutTangent{};};
-struct AnimationTrack {unsigned Bone=0;AnimationChannel Channel=AnimationChannel::Position;AnimationInterpolation Interpolation=AnimationInterpolation::Linear;std::vector<AnimationKey> Keys;};
+struct AnimationTrack {unsigned Bone=0;AnimationChannel Channel=AnimationChannel::Position;AnimationInterpolation Interpolation=AnimationInterpolation::Linear;std::vector<AnimationKey> Keys;unsigned Target=0;};
 struct AnimationMarker {float Time=0;std::string Name;};
 struct BAZZALT_API AnimationClip {
  std::string Name;float Duration=0;std::vector<AnimationTrack> Tracks;std::vector<AnimationMarker> Markers;
  bool IsValid(const Skeleton& skeleton)const;
  std::vector<BoneTransform> Sample(const Skeleton& skeleton,float time,bool loop=true)const;
+ static AnimationClip FromSource(const std::string& source);
+ std::string ToSource()const;
 };
 struct BAZZALT_API AnimationRig {
  Skeleton Rig;std::vector<AnimationClip> Clips;
@@ -37,9 +39,17 @@ struct AnimationCondition {std::string Parameter;AnimationComparison Comparison=
 struct AnimationTransition {std::string From,To;float Duration=.2f,ExitTime=-1;std::vector<AnimationCondition> Conditions;};
 struct RetargetBone {unsigned Source=0,Target=0;bool CopyTranslation=false;};
 struct RetargetSettings {float TranslationScale=1;std::vector<RetargetBone> Bones;};
+struct HumanoidJoint {std::string Name;unsigned Bone=0;};
+struct BAZZALT_API HumanoidAvatar {
+ std::vector<HumanoidJoint> Joints;
+ bool IsValid(const Skeleton&)const;
+ int FindBone(const std::string& semantic)const;
+ static HumanoidAvatar Detect(const Skeleton&);
+};
 struct BAZZALT_API AnimationController {
  UUID SourceModel{};float TranslationScale=1;std::vector<RetargetBone> RetargetMap;
  std::string Entry;std::vector<AnimationState> States;std::vector<AnimationTransition> Transitions;
+ std::vector<AnimationClip> Clips;
  bool IsValid()const;
  static AnimationController FromSource(const std::string& source);
  static AnimationController Load(UUID asset);
@@ -57,6 +67,7 @@ public:
  static bool SolveIK(const Skeleton&,std::vector<BoneTransform>& pose,const IKSettings&);
  static std::vector<BoneTransform> Retarget(const Skeleton& source,const std::vector<BoneTransform>& pose,const Skeleton& target,const RetargetSettings&);
  static RetargetSettings MapByName(const Skeleton& source,const Skeleton& target,float translationScale=1);
+ static RetargetSettings MapHumanoid(const Skeleton& source,const HumanoidAvatar& sourceAvatar,const Skeleton& target,const HumanoidAvatar& targetAvatar,float translationScale=1);
  static void Play(Entity,const std::string& state="",float fadeSeconds=0);
  static void Rebind(Entity);static void Stop(Entity);static void Pause(Entity);static void Resume(Entity);
  static void SetRig(Entity,const AnimationRig&);static std::shared_ptr<const AnimationRig> GetRig(Entity);

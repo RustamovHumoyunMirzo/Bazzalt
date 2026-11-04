@@ -1,4 +1,4 @@
-"""Version-one animation controllers. Model clips remain imported, read-only source data."""
+"""Animation controllers with immutable imported clips and editable clip overrides."""
 import json,math,uuid
 from pathlib import Path
 from .materials import _Write
@@ -8,6 +8,13 @@ def NewController():
 
 def Validate(data):
     if not isinstance(data,dict) or type(data.get('version')) is not int or data['version']!=1:raise ValueError('Unsupported animation controller version')
+    clips=data.get('clips',[])
+    if not isinstance(clips,list) or len(clips)>1024:raise ValueError('Invalid authored clip count')
+    names=set()
+    for clip in clips:
+        ValidateClip(clip)
+        if clip['name'] in names:raise ValueError('Duplicate authored clip')
+        names.add(clip['name'])
     states=data.get('states');transitions=data.get('transitions',[])
     if not isinstance(states,list) or not 1<=len(states)<=256 or not isinstance(transitions,list) or len(transitions)>1024:raise ValueError('Invalid animation graph size')
     names=set()
@@ -53,10 +60,43 @@ def Validate(data):
 
 def Load(path):
     raw=Path(path).read_bytes()
-    if len(raw)>1024*1024:raise ValueError('Animation controller exceeds 1 MiB')
+    if len(raw)>16*1024*1024:raise ValueError('Animation controller exceeds 16 MiB')
     return Validate(json.loads(raw))
 def Save(path,data):
     Validate(data);path=Path(path);source=json.dumps(data,ensure_ascii=False,indent=2)+'\n'
-    if len(source.encode('utf-8'))>1024*1024:raise ValueError('Animation controller exceeds 1 MiB')
+    if len(source.encode('utf-8'))>16*1024*1024:raise ValueError('Animation controller exceeds 16 MiB')
     if path.exists() and path.read_text(encoding='utf-8')==source:return False
     _Write(path,source);return True
+
+
+def ValidateClip(clip):
+    if not isinstance(clip,dict) or not isinstance(clip.get('name'),str) or not 1<=len(clip['name'])<=128:raise ValueError('Invalid clip name')
+    def Number(v,low=-1e30,high=1e30):
+        if type(v) not in (int,float) or not math.isfinite(v) or not low<=v<=high:raise ValueError('Invalid clip number')
+    duration=clip.get('duration',0);Number(duration,0,86400)
+    tracks=clip.get('tracks',[]);markers=clip.get('markers',[])
+    if not isinstance(tracks,list) or len(tracks)>16384 or not isinstance(markers,list) or len(markers)>4096:raise ValueError('Invalid clip size')
+    used=set();count=0
+    for track in tracks:
+        for name,limit in (('bone',4096),('channel',4),('interpolation',3),('target',256)):
+            value=track.get(name,1 if name=='interpolation' else 0)
+            if type(value) is not int or not 0<=value<limit:raise ValueError('Invalid clip track')
+        identity=(track.get('bone',0),track.get('channel',0),track.get('target',0) if track.get('channel',0)==3 else 0)
+        if identity in used:raise ValueError('Duplicate clip channel')
+        used.add(identity);previous=-1;keys=track.get('keys',[])
+        if not isinstance(keys,list) or not keys:raise ValueError('Track needs keys')
+        count+=len(keys)
+        if count>1000000:raise ValueError('Clip key budget exceeded')
+        for key in keys:
+            time=key.get('time');Number(time,0,duration)
+            if time<=previous:raise ValueError('Keys must be strictly increasing')
+            previous=time
+            for field in ('value','in','out'):
+                value=key.get(field,[0,0,0,0])
+                if not isinstance(value,list) or len(value)!=4:raise ValueError('Key needs four values')
+                for v in value:Number(v)
+            if identity[1]==1 and sum(v*v for v in key['value'])<1e-12:raise ValueError('Rotation quaternion cannot be zero')
+    for marker in markers:
+        Number(marker.get('time'),0,duration)
+        if not isinstance(marker.get('name'),str) or not 1<=len(marker['name'])<=256:raise ValueError('Invalid marker')
+    return clip

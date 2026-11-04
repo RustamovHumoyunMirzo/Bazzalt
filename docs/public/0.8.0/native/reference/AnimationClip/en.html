@@ -36,6 +36,8 @@ std::vector&lt;AnimationTrack&gt; Tracks;
 std::vector&lt;AnimationMarker&gt; Markers;
 bool IsValid(const Skeleton&amp; skeleton)const;
 std::vector&lt;BoneTransform&gt; Sample(const Skeleton&amp; skeleton,float time,bool loop=true)const;
+static AnimationClip FromSource(const std::string&amp; source);
+std::string ToSource()const;
 };</code></pre>
 <!-- API-SOURCE-END --></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../AnimationChannel/en.html"><small>Previous</small>AnimationChannel</a>
