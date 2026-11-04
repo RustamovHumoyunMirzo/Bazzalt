@@ -30,6 +30,12 @@ function Behavior:OnCreate()
     assert(B.SceneLoadHandle.new():IsDone())
     assert(B.Graphics.IsInstancingEnabled())
     B.Graphics.SetInstancingEnabled(false);assert(not B.Graphics.IsInstancingEnabled());B.Graphics.SetInstancingEnabled(true)
+    local source=B.StreamingSource.new();source.DistanceScale=2;assert(source:IsValid())
+    self.Entity:AddComponent('StreamingSource');self.Entity:SetComponent('StreamingSource',source);assert(self.Entity:GetComponent('StreamingSource').DistanceScale==2);self.Entity:RemoveComponent('StreamingSource')
+    self.Entity:AddComponent('WorldCell');assert(self.Entity:GetComponent('WorldCell'):IsValid());self.Entity:RemoveComponent('WorldCell')
+    local grid=B.StreamingGrid.new();assert(not grid:IsValid());assert(not B.SceneManager.RegisterStreamingGrid(grid))
+    B.SceneManager.SetStreamingSource(self.Entity:GetUUID(),B.Vec3.new(0,0,0));assert(B.SceneManager.RemoveStreamingSource(self.Entity:GetUUID()));B.SceneManager.ClearStreamingPosition()
+    assert(type(B.SceneManager.GetStreamingCells())=='table' and type(B.SceneManager.GetStreamingEvents())=='table');assert(B.SceneManager.GetStreamingStatistics().PendingLoads==0)
     local cell=B.StreamingCell.new();assert(cell.UnloadDistance>cell.LoadDistance)
     local transform=self.Entity:GetComponent("Transform");transform.Position.X=77;self.Entity:SetComponent("Transform",transform)
 end
@@ -43,7 +49,7 @@ function Behavior:OnUpdate()
 end
 function Behavior:OnDestroy()
     local e=Bazzalt.SceneManager.GetActiveScene():FindEntityByName("Keep me")
-    local t=e:GetComponent("Transform");t.Position.Z=55;e:SetComponent("Transform",t)
+    local t=e:GetComponent("Transform");t.Position.Z=t.Position.Z+55;e:SetComponent("Transform",t)
 end
 return Behavior)";}
     Runtime::Engine engine;
@@ -71,12 +77,12 @@ return Behavior)";}
     Transform offset;offset.Position={100,0,0};auto loaded=SceneManager::LoadWorldCellAsync(asset->Id,offset);wait(loaded);
     auto root=engine.GetScene().GetEntity(loaded.GetRootUUID());assert(root);auto inCell=engine.GetScene().GetEntity(UUID{11,2});assert(inCell);assert(std::abs(inCell.GetWorldTransform().Position.X-103)<.001f);assert(engine.GetScene().GetEntity(UUID{11,1}).GetComponent<Marker>().Value==3);
     auto duplicate=SceneManager::LoadWorldCellAsync(asset->Id,offset);assert(duplicate.GetRootUUID()==loaded.GetRootUUID());assert(engine.GetScene().GetEntityCount()==5);
-    permanent.SetParent(root,true);assert(SceneManager::UnloadWorldCell(asset->Id));tick();assert(loaded.GetStatus()==AsyncLoadStatus::Unloaded);assert(engine.GetScene().GetEntity(permanentId));assert(!engine.GetScene().GetEntity(UUID{11,1}));
+    permanent.SetParent(root,true);assert(SceneManager::UnloadWorldCell(asset->Id));assert(loaded.GetStatus()==AsyncLoadStatus::Unloading);assert(!loaded.SetActivationAllowed(true));wait(loaded);assert(loaded.GetStatus()==AsyncLoadStatus::Unloaded);assert(engine.GetScene().GetEntity(permanentId));assert(!engine.GetScene().GetEntity(UUID{11,1}));
     engine.GetScene().CreateEntity(UUID{11,1},"Conflict");auto conflict=SceneManager::LoadWorldCellAsync(asset->Id);for(int i=0;i<5000&&!conflict.IsDone();++i)tick();assert(conflict.GetStatus()==AsyncLoadStatus::Failed);assert(engine.GetScene().GetEntity(UUID{11,1}).GetComponent<Name>().Value=="Conflict");engine.GetScene().DestroyEntity(engine.GetScene().GetEntity(UUID{11,1}));
     StreamingCell cell;cell.SceneAsset=asset->Id;cell.Offset=offset;cell.LoadDistance=10;cell.UnloadDistance=20;assert(SceneManager::RegisterStreamingCell(cell));assert(!SceneManager::RegisterStreamingCell(cell));
     SceneManager::SetStreamingPosition({100,0,0});for(int i=0;i<5000&&!engine.GetScene().GetEntity(UUID{11,2});++i)tick();assert(engine.GetScene().GetEntity(UUID{11,2}));SceneManager::SetStreamingPosition({121,0,0});for(int i=0;i<100&&engine.GetScene().GetEntity(UUID{11,2});++i)tick();assert(!engine.GetScene().GetEntity(UUID{11,2}));assert(SceneManager::UnregisterStreamingCell(asset->Id));
     auto badAsset=AssetManager::GetAsset(directory/"Assets"/"bad.bscene");assert(badAsset);auto rollback=SceneManager::LoadWorldCellAsync(badAsset->Id);for(int i=0;i<5000&&!rollback.IsDone();++i)tick();assert(rollback.GetStatus()==AsyncLoadStatus::Failed);assert(!engine.GetScene().GetEntity(UUID{13,1}));assert(engine.GetScene().GetEntityCount()==2);
-    assert(engine.StartScripts());auto scriptedAsset=AssetManager::GetAsset(directory/"Assets"/"scripted.bscene");assert(scriptedAsset);auto runningCell=SceneManager::LoadWorldCellAsync(scriptedAsset->Id);wait(runningCell);auto behaviorEntity=engine.GetScene().GetEntity(UUID{15,1});assert(behaviorEntity.GetComponent<Transform>().Position.X==5);assert(behaviorEntity.GetComponent<Transform>().Position.Y>0);assert(SceneManager::UnloadWorldCell(scriptedAsset->Id));tick();assert(engine.GetScene().GetEntity(permanentId).GetComponent<Transform>().Position.Z==55);engine.StopScripts();
+    auto scriptedAsset=AssetManager::GetAsset(directory/"Assets"/"scripted.bscene");assert(scriptedAsset);auto runningCell=SceneManager::LoadWorldCellAsync(scriptedAsset->Id);wait(runningCell);assert(engine.StartScripts());tick();auto behaviorEntity=engine.GetScene().GetEntity(UUID{15,1});assert(behaviorEntity.GetComponent<Transform>().Position.X==5);assert(behaviorEntity.GetComponent<Transform>().Position.Y>0);assert(SceneManager::UnloadWorldCell(scriptedAsset->Id));wait(runningCell);assert(engine.GetScene().GetEntity(permanentId).GetComponent<Transform>().Position.Z==55);engine.StopScripts();assert(engine.GetScene().GetEntity(permanentId).GetComponent<Transform>().Position.Z==55);assert(engine.StartScripts());runningCell=SceneManager::LoadWorldCellAsync(scriptedAsset->Id);wait(runningCell);assert(SceneManager::UnloadWorldCell(scriptedAsset->Id));wait(runningCell);engine.StopScripts();assert(engine.GetScene().GetEntity(permanentId).GetComponent<Transform>().Position.Z==110);
     cancellation=SceneManager::LoadSceneAsync(directory/"Assets"/"cancel.bscene");wait(cancellation);assert(cancellation.GetStatus()==AsyncLoadStatus::Cancelled);assert(engine.GetScene().GetUUID()==originalScene);
     auto request=SceneManager::LoadSceneAsync(directory/"Assets"/"replacement.bscene",false);for(int i=0;i<5000&&request.GetStatus()!=AsyncLoadStatus::Ready;++i)tick();assert(request.GetStatus()==AsyncLoadStatus::Ready);for(int i=0;i<5;++i)tick();assert(engine.GetScene().GetUUID()==originalScene);assert(request.SetActivationAllowed(true));wait(request);assert(engine.GetScene().GetUUID()==replacement.GetUUID());assert(!engine.GetScene().GetEntity(permanentId));assert(engine.GetScene().FindEntityByName("Replacement"));
     auto invalid=SceneManager::LoadSceneAsync(directory/"missing.bscene");for(int i=0;i<5000&&!invalid.IsDone();++i)tick();assert(invalid.GetStatus()==AsyncLoadStatus::Failed);assert(engine.GetScene().GetUUID()==replacement.GetUUID());auto script=AssetManager::GetAsset(directory/"Assets"/"streaming.lua");assert(script&&script->State==AssetState::Ready);

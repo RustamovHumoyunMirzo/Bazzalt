@@ -855,6 +855,7 @@ class EditorController(QObject):
                 if value and value not in {row[1] for row in options}:options.append((value,value))
                 editor.SetOptions(options);editor.SetValue(value);editor.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
             except (RuntimeError,ValueError):pass
+        if component=="World Cell" and name=="Scene Asset":return self._AssetPicker(value,{".bscene"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
         if component=="Animator" and name in {"Model","Controller"}:return self._AssetPicker(value,{".glb",".gltf"} if name=="Model" else {".banim"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
         if component=="Animator" and name=="Root Motion":
             editor=EnumInput();editor.SetOptions([(self.Window.Localization.Translate('animation.root_'+key),i) for i,key in enumerate(('disabled','extract','transform','physics'))]);editor.SetValue(int(value));editor.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor

@@ -32,6 +32,14 @@ bool SceneManager::UnloadWorldCell(UUID id){Detail::RequireSubsystemService(Deta
 bool SceneManager::RegisterStreamingCell(const StreamingCell& cell){Detail::RequireSubsystemService(Detail::SubsystemService::Scene,"SceneManager.RegisterStreamingCell");auto* engine=ActiveEngine();return engine&&engine->m_streaming->RegisterCell(cell);}
 bool SceneManager::UnregisterStreamingCell(UUID id){Detail::RequireSubsystemService(Detail::SubsystemService::Scene,"SceneManager.UnregisterStreamingCell");auto* engine=ActiveEngine();return engine&&engine->m_streaming->UnregisterCell(id);}
 void SceneManager::SetStreamingPosition(Vec3 position){Detail::RequireSubsystemService(Detail::SubsystemService::Scene,"SceneManager.SetStreamingPosition");auto* engine=ActiveEngine();if(engine)engine->m_streaming->SetPosition(position);}
+void SceneManager::ClearStreamingPosition(){auto* e=ActiveEngine();if(e)e->m_streaming->ClearPosition();}
+void SceneManager::SetStreamingSource(UUID id,Vec3 p,float scale){Detail::RequireSubsystemService(Detail::SubsystemService::Scene,"SceneManager.SetStreamingSource");auto* e=ActiveEngine();if(e)e->m_streaming->SetSource(id,p,scale);}
+bool SceneManager::RemoveStreamingSource(UUID id){auto* e=ActiveEngine();return e&&e->m_streaming->RemoveSource(id);}
+bool SceneManager::RegisterStreamingGrid(const StreamingGrid& grid){Detail::RequireSubsystemService(Detail::SubsystemService::Scene,"SceneManager.RegisterStreamingGrid");auto* e=ActiveEngine();return e&&e->m_streaming->RegisterGrid(grid);}
+std::vector<StreamingCellInfo> SceneManager::GetStreamingCells(){auto* e=ActiveEngine();return e?e->m_streaming->GetCells():std::vector<StreamingCellInfo>{};}
+std::vector<StreamingEvent> SceneManager::GetStreamingEvents(){auto* e=ActiveEngine();return e?e->m_streaming->GetEvents():std::vector<StreamingEvent>{};}
+StreamingStatistics SceneManager::GetStreamingStatistics(){auto* e=ActiveEngine();return e?e->m_streaming->GetStatistics():StreamingStatistics{};}
+bool SceneManager::RetryStreamingCell(UUID id){auto* e=ActiveEngine();return e&&e->m_streaming->RetryCell(id);}
 StreamingSettings SceneManager::GetStreamingSettings(){auto* engine=ActiveEngine();return engine?engine->m_streaming->GetSettings():StreamingSettings{};}
 void SceneManager::SetStreamingSettings(const StreamingSettings& settings){auto* engine=ActiveEngine();if(engine)engine->m_streaming->SetSettings(settings);}
 

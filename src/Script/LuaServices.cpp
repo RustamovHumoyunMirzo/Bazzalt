@@ -26,7 +26,7 @@ void BindLuaServices(sol::table api){
     }
     api.create_named("Jobs")["GetWorkerCount"]=&Jobs::GetWorkerCount;
 
-    BindLuaPrefabs(api);BindLuaNetworkSave(api);BindLuaStreaming(api);BindLuaScene(api);BindLuaAssets(api);BindLuaConsole(api);
+    BindLuaPrefabs(api);BindLuaNetworkSave(api);BindLuaScene(api);BindLuaStreaming(api);BindLuaAssets(api);BindLuaConsole(api);
     BindLuaAudio(api);BindLuaPhysics(api);BindLuaVehicles(api);BindLuaLOD(api);BindLuaVFX(api);BindLuaAnimation(api);
     BindLuaApplicationEvents(api);
     {auto type=api.create_named("Time");

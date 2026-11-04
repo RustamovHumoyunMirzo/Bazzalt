@@ -9,6 +9,10 @@
 #include "Bazzalt/Jobs.h"
 #include "Bazzalt/Profiler.h"
 #include "Bazzalt/Console.h"
+#include "Runtime/StreamingFields.h"
+#include <set>
+#include <tuple>
+#include <limits>
 #include "Bazzalt/Components/ScriptComponent.h"
 #include <algorithm>
 #include <atomic>
@@ -25,14 +29,16 @@ bool Terminal(AsyncLoadStatus status) {
 }
 struct Operation {
     std::atomic<AsyncLoadStatus> Status{AsyncLoadStatus::Queued};
-    std::atomic<bool> Cancelled{false};
+    std::atomic<bool> Cancelled{false},Working{false};
     std::atomic<float> Progress{0};
     mutable std::mutex Mutex;
     std::string Error;
+    void FinishCancel(){auto status=Status.load();while(!Terminal(status)&&status!=AsyncLoadStatus::Unloading&&!Status.compare_exchange_weak(status,AsyncLoadStatus::Cancelled)){} }
     void Fail(std::string error) {
-        {std::lock_guard lock(Mutex);Error=std::move(error);}
-        Status=Cancelled?AsyncLoadStatus::Cancelled:AsyncLoadStatus::Failed;
+        std::lock_guard lock(Mutex);if(Status==AsyncLoadStatus::Unloading||Status==AsyncLoadStatus::Unloaded)return;Error=std::move(error);
+        if(Cancelled)FinishCancel();else Status=AsyncLoadStatus::Failed;
     }
+
 };
 struct Budget {
     std::atomic<std::size_t> Used{0}, Limit{256u*1024u*1024u};
@@ -79,7 +85,9 @@ struct StreamingRuntime::Impl {
         std::filesystem::path Path;
         UUID Asset;
         Transform Offset;
-        bool Additive=false,Unload=false,Prefab=false,PendingScripts=false;
+        bool Additive=false,Unload=false,UnloadStarted=false,Prefab=false,PendingScripts=false,Reported=false;
+        AsyncLoadStatus LastReported=AsyncLoadStatus::Queued;
+        std::string Failure;
         std::shared_ptr<SceneLoadState> State=std::make_shared<SceneLoadState>();
         std::unique_ptr<Scene> Staging;
         std::vector<UUID> Owned;
@@ -92,6 +100,20 @@ struct StreamingRuntime::Impl {
     std::vector<std::shared_ptr<Cell>> Cells;
     std::unordered_map<UUID,StreamingCell> Registered;
     std::unordered_map<UUID,SceneLoadHandle> Automatic;
+    std::unordered_map<UUID,StreamingCell> Definitions;
+    struct Source {Vec3 Position;float Scale=1;};
+    std::unordered_map<UUID,Source> Sources;
+    std::vector<Source> CurrentSources;
+    std::unordered_map<UUID,std::chrono::steady_clock::time_point> RetryAfter;
+    std::unordered_map<UUID,std::shared_ptr<SceneLoadState>> LastStates;
+    std::vector<StreamingEvent> Events;
+    std::set<UUID> InvalidDefinitions;
+    void SynchronizeDefinitions();
+    void EvaluateCells(StreamingRuntime&);
+    float Distance(const StreamingCell&)const;
+    void Publish(Cell&);
+    bool Drain(Cell&,std::size_t&,std::chrono::steady_clock::time_point);
+    std::size_t ResidentSlots()const{std::size_t count=0;for(auto& cell:Cells)if(cell->Additive&&!cell->Prefab&&!Terminal(cell->State->Status))++count;else if(cell->Additive&&!cell->Prefab&&cell->State->Status==AsyncLoadStatus::Complete)++count;return count;}
     Vec3 Position{};
     bool HasPosition=false,Replacing=false,Resetting=false;
     explicit Impl(Engine& engine):Host(engine){}
@@ -141,6 +163,7 @@ struct StreamingRuntime::Impl {
         if(!lua.empty()) {cell.Lua=std::make_unique<LuaRuntime>();if(!cell.Lua->Configure(std::move(lua),error)||!cell.Lua->Start(error))throw std::runtime_error(error);}
     }
 };
+#include "Runtime/WorldStreaming.inl"
 StreamingRuntime::StreamingRuntime(Engine& host):m_impl(std::make_unique<Impl>(host)){}
 StreamingRuntime::~StreamingRuntime(){Reset();}
 ResourceLoadHandle StreamingRuntime::RequestAsset(UUID id) {
@@ -154,35 +177,38 @@ ResourceLoadHandle StreamingRuntime::RequestAsset(UUID id) {
 SceneLoadHandle StreamingRuntime::RequestScene(UUID asset,bool additive,bool activation,const Transform& offset) {
     auto info=m_impl->Host.FindAsset(asset);
     if(!info||info->State!=AssetState::Ready||info->SourcePath.extension()!=".bscene") {
-        auto state=std::make_shared<SceneLoadState>();state->Fail("Scene asset is not present or imported");return SceneLoadHandle(state);
+        auto state=std::make_shared<SceneLoadState>();state->Fail("Scene asset is not present or imported");if(additive&&asset)m_impl->LastStates[asset]=state;return SceneLoadHandle(state);
     }
     return RequestScene(info->CachePath,additive,activation,offset,asset);
 }
 SceneLoadHandle StreamingRuntime::RequestScene(const std::filesystem::path& path,bool additive,bool activation,const Transform& offset,UUID asset) {
     auto& impl=*m_impl;
     if(impl.Resetting){auto state=std::make_shared<SceneLoadState>();state->Fail("Scene is changing");return SceneLoadHandle(state);}
+    if(additive&&asset)for(auto& old:impl.Cells)if(old->Additive&&old->Asset==asset&&(old->Unload||old->UnloadStarted)&&old->State->Status!=AsyncLoadStatus::Unloaded)return SceneLoadHandle(old->State);
     // One resident request per cell asset. Never duplicate entity UUIDs on repeated calls.
     if(additive&&asset)for(auto& old:impl.Cells)if(old->Additive&&old->Asset==asset&&!old->Unload&&!old->State->Cancelled&&(!Terminal(old->State->Status)||old->State->Status==AsyncLoadStatus::Complete))return SceneLoadHandle(old->State);
     auto cell=std::make_shared<Impl::Cell>();auto& state=*cell->State;
     if(path.empty()||path.extension()!=".bscene")state.Fail("Scene path must use .bscene");
+    else if(additive&&impl.ResidentSlots()>=impl.Settings.MaxResidentCells)state.Fail("Streaming resident cell limit reached");
     else if(impl.Pending()>=impl.Settings.MaxPendingLoads)state.Fail("Streaming request queue is full");
     else {
         cell->Path=path;cell->Asset=asset;cell->Additive=additive;cell->Offset=offset;state.Activation=activation;
         if(!std::isfinite(offset.Position.X)||!std::isfinite(offset.Position.Y)||!std::isfinite(offset.Position.Z)||!std::isfinite(offset.Scale.X)||!std::isfinite(offset.Scale.Y)||!std::isfinite(offset.Scale.Z)||offset.Scale.X==0||offset.Scale.Y==0||offset.Scale.Z==0||!std::isfinite(offset.Rotation.X)||!std::isfinite(offset.Rotation.Y)||!std::isfinite(offset.Rotation.Z)||!std::isfinite(offset.Rotation.W)||offset.Rotation.LengthSquared()<Epsilon)state.Fail("Invalid world cell offset");
-        else impl.Cells.push_back(cell);
+        else {impl.Cells.push_back(cell);if(additive&&asset)impl.LastStates[asset]=cell->State;}
     }
     return SceneLoadHandle(cell->State);
 }
 bool StreamingRuntime::UnloadCell(UUID asset) {
-    for(auto& cell:m_impl->Cells)if(cell->Additive&&cell->Asset==asset&&(!Terminal(cell->State->Status)||cell->State->Status==AsyncLoadStatus::Complete)){
-        cell->Unload=true;return true;
+    for(auto& cell:m_impl->Cells)if(cell->Additive&&cell->Asset==asset&&(cell->State->Status==AsyncLoadStatus::Unloading||!Terminal(cell->State->Status)||cell->State->Status==AsyncLoadStatus::Complete)){
+        cell->Unload=true;cell->State->Cancelled=true;cell->State->Status=AsyncLoadStatus::Unloading;return true;
     }
     return false;
 }
 bool StreamingRuntime::RegisterCell(const StreamingCell& cell) {
     if(m_impl->Resetting)return false;
+    if(!ValidCell(cell))return false;
     const auto asset=m_impl->Host.FindAsset(cell.SceneAsset);
-    if(!asset||asset->State!=AssetState::Ready||asset->SourcePath.extension()!=".bscene"||!std::isfinite(cell.Offset.Position.X)||!std::isfinite(cell.Offset.Position.Y)||!std::isfinite(cell.Offset.Position.Z)||!cell.SceneAsset||!std::isfinite(cell.LoadDistance)||!std::isfinite(cell.UnloadDistance)||cell.LoadDistance<0||cell.UnloadDistance<=cell.LoadDistance||m_impl->Registered.size()>=1024)return false;
+    if(!asset||asset->State!=AssetState::Ready||asset->SourcePath.extension()!=".bscene"||!std::isfinite(cell.Offset.Position.X)||!std::isfinite(cell.Offset.Position.Y)||!std::isfinite(cell.Offset.Position.Z)||!cell.SceneAsset||!std::isfinite(cell.LoadDistance)||!std::isfinite(cell.UnloadDistance)||cell.LoadDistance<0||cell.UnloadDistance<=cell.LoadDistance||m_impl->Registered.size()>=4096)return false;
     if(m_impl->Registered.contains(cell.SceneAsset))return false;
     m_impl->Registered.emplace(cell.SceneAsset,cell);return true;
 }
@@ -190,7 +216,7 @@ bool StreamingRuntime::UnregisterCell(UUID asset){UnloadCell(asset);m_impl->Auto
 void StreamingRuntime::SetPosition(Vec3 position){if(!std::isfinite(position.X)||!std::isfinite(position.Y)||!std::isfinite(position.Z))throw std::invalid_argument("Streaming position must be finite");m_impl->Position=position;m_impl->HasPosition=true;}
 StreamingSettings StreamingRuntime::GetSettings() const{return m_impl->Settings;}
 void StreamingRuntime::SetSettings(const StreamingSettings& settings) {
-    if(!std::isfinite(settings.MainThreadBudgetMilliseconds)||settings.MainThreadBudgetMilliseconds<=0||settings.MainThreadBudgetMilliseconds>100||!settings.EntitiesPerTick||settings.EntitiesPerTick>100000||!settings.MaxConcurrentLoads||settings.MaxConcurrentLoads>32||!settings.MaxPendingLoads||settings.MaxPendingLoads>1024||settings.ResourceBudgetBytes<1024*1024)
+    if(!std::isfinite(settings.MainThreadBudgetMilliseconds)||settings.MainThreadBudgetMilliseconds<=0||settings.MainThreadBudgetMilliseconds>100||!settings.EntitiesPerTick||settings.EntitiesPerTick>100000||!settings.MaxConcurrentLoads||settings.MaxConcurrentLoads>32||!settings.MaxPendingLoads||settings.MaxPendingLoads>1024||settings.ResourceBudgetBytes<1024*1024||!settings.MaxResidentCells||settings.MaxResidentCells>4096||!std::isfinite(settings.RetryDelaySeconds)||settings.RetryDelaySeconds<.1f||settings.RetryDelaySeconds>3600)
         throw std::invalid_argument("Invalid streaming settings");
     m_impl->Settings=settings;m_impl->Memory->Limit=settings.ResourceBudgetBytes;
 }
@@ -203,7 +229,7 @@ void StreamingRuntime::Reset() {
     for(auto& cell:cells){cell->State->Cancelled=true;impl.Release(*cell);if(cell->State->Status==AsyncLoadStatus::Complete)cell->State->Status=AsyncLoadStatus::Unloaded;else cell->State->Status=AsyncLoadStatus::Cancelled;}
     impl.Cells.clear();
     for(auto& resource:impl.Resources){if(!Terminal(resource->Status)){resource->Cancelled=true;resource->Status=AsyncLoadStatus::Cancelled;}}
-    impl.Resources.clear();impl.Registered.clear();impl.Automatic.clear();impl.HasPosition=false;
+    impl.Resources.clear();impl.Registered.clear();impl.Definitions.clear();impl.Automatic.clear();impl.Sources.clear();impl.CurrentSources.clear();impl.LastStates.clear();impl.RetryAfter.clear();impl.Events.clear();impl.InvalidDefinitions.clear();impl.HasPosition=false;
 }
 void StreamingRuntime::AdoptHierarchy(Entity root){
     if(!root||root.GetScene()!=&m_impl->Host.GetScene())return;
@@ -224,29 +250,24 @@ bool StreamingRuntime::PrepareReload(const std::vector<ScriptBinding>& bindings,
 void StreamingRuntime::CancelReload(){for(auto& cell:m_impl->Cells){cell->ReloadNative.reset();cell->ReloadLua.reset();}}
 void StreamingRuntime::CommitReload(){for(auto& cell:m_impl->Cells){if(cell->ReloadNative){cell->Native->DiscardForReload();cell->Native=std::move(cell->ReloadNative);cell->Native->ActivateReload(false);}if(cell->ReloadLua){cell->Lua->DiscardForReload();cell->Lua=std::move(cell->ReloadLua);}}}
 void StreamingRuntime::NotifyReload(){for(auto& cell:m_impl->Cells){if(cell->Native)cell->Native->NotifyReload();if(cell->Lua)cell->Lua->ActivateReload();}}
-void StreamingRuntime::StopScripts(){const auto cells=m_impl->Cells;for(auto& cell:cells)m_impl->Stop(*cell);}
+std::unordered_set<UUID> StreamingRuntime::GetScriptOwnedEntities()const{std::unordered_set<UUID> owned;for(auto& cell:m_impl->Cells)if(cell->Additive)owned.insert(cell->Owned.begin(),cell->Owned.end());return owned;}
+bool StreamingRuntime::StartScripts(){const auto cells=m_impl->Cells;for(auto& cell:cells)if(cell->State->Status==AsyncLoadStatus::Complete&&cell->PendingScripts){try{m_impl->StartCellScripts(*cell);cell->PendingScripts=false;}catch(const std::exception& error){m_impl->Host.m_lastError=error.what();return false;}}return true;}
+void StreamingRuntime::StopScripts(){const auto cells=m_impl->Cells;for(auto& cell:cells){m_impl->Stop(*cell);cell->PendingScripts=cell->State->Status==AsyncLoadStatus::Complete&&!cell->Unload;}}
 bool StreamingRuntime::IsReplacingScene() const{return m_impl->Replacing;}
 bool StreamingRuntime::HasPendingScene() const{for(auto& cell:m_impl->Cells)if(!cell->Additive&&!Terminal(cell->State->Status))return true;return false;}
 void StreamingRuntime::Pump() {
     ProfileScope scope("Streaming.Pump");auto& impl=*m_impl;
-    if(impl.HasPosition){
-        std::vector<std::pair<float,UUID>> order;
-        for(auto& [id,cell]:impl.Registered)order.emplace_back((impl.Position-cell.Offset.Position).Length(),id);
-        std::sort(order.begin(),order.end());
-        for(auto [distance,id]:order){auto& cell=impl.Registered.at(id);auto current=impl.Automatic.find(id);
-            if(current!=impl.Automatic.end()&&distance>cell.UnloadDistance){UnloadCell(id);impl.Automatic.erase(current);}
-            else if(current==impl.Automatic.end()&&distance<=cell.LoadDistance&&impl.Pending()<impl.Settings.MaxPendingLoads)
-                impl.Automatic.emplace(id,RequestScene(id,true,true,cell.Offset));
-        }
-    }
+    impl.Events.clear();impl.SynchronizeDefinitions();impl.EvaluateCells(*this);
+    for(auto& cell:impl.Cells)impl.Publish(*cell);
     std::size_t running=0;
-    for(auto& resource:impl.Resources)if(resource->Status==AsyncLoadStatus::Loading)++running;
-    for(auto& cell:impl.Cells)if(cell->State->Status==AsyncLoadStatus::Loading)++running;
+    for(auto& resource:impl.Resources)if(resource->Working)++running;
+    for(auto& cell:impl.Cells)if(cell->State->Working)++running;
     for(auto& resource:impl.Resources) {
-        if(resource->Cancelled){resource->Status=AsyncLoadStatus::Cancelled;continue;}
+        if(resource->Cancelled){resource->FinishCancel();continue;}
         if(resource->Status!=AsyncLoadStatus::Queued||running>=impl.Settings.MaxConcurrentLoads)continue;
-        resource->Status=AsyncLoadStatus::Loading;++running;auto budget=impl.Memory;
+        resource->Status=AsyncLoadStatus::Loading;resource->Working=true;++running;auto budget=impl.Memory;
         Jobs::Schedule([resource,budget]{
+            struct Done{Operation& Value;~Done(){Value.Working=false;}} done{*resource};
             try {
                 ProfileScope job("Streaming.ReadAsset");
                 const auto size=FileSize(resource->Path,budget->Limit.load());
@@ -254,9 +275,9 @@ void StreamingRuntime::Pump() {
                 std::ifstream file(resource->Path,std::ios::binary);if(!file)throw std::runtime_error("Could not open streaming resource");
                 std::size_t offset=0;
                 while(offset<size&&!resource->Cancelled){const auto count=std::min<std::size_t>(1024*1024,bytes->Data.size()-offset);file.read(reinterpret_cast<char*>(bytes->Data.data()+offset),static_cast<std::streamsize>(count));if(!file)throw std::runtime_error("Streaming resource changed or could not be read");offset+=count;resource->Progress=size?float(double(offset)/double(size)):1;}
-                if(resource->Cancelled){resource->Status=AsyncLoadStatus::Cancelled;return;}
+                if(resource->Cancelled){resource->FinishCancel();return;}
                 if(file.peek()!=std::char_traits<char>::eof())throw std::runtime_error("Streaming resource changed while reading");
-                {std::lock_guard lock(resource->Mutex);if(resource->Cancelled){resource->Status=AsyncLoadStatus::Cancelled;return;}resource->Data={bytes,&bytes->Data};resource->Progress=1;resource->Status=AsyncLoadStatus::Complete;}
+                {std::lock_guard lock(resource->Mutex);if(resource->Cancelled){resource->FinishCancel();return;}resource->Data={bytes,&bytes->Data};resource->Progress=1;resource->Status=AsyncLoadStatus::Complete;}
             }catch(const std::exception& error){resource->Fail(error.what());}catch(...){resource->Fail("Resource loading failed");}
         });
     }
@@ -264,39 +285,40 @@ void StreamingRuntime::Pump() {
         auto state=cell->State;
         if(state->Cancelled||cell->Unload)continue;
         if(state->Status!=AsyncLoadStatus::Queued||running>=impl.Settings.MaxConcurrentLoads)continue;
-        state->Status=AsyncLoadStatus::Loading;++running;auto path=cell->Path;auto budget=impl.Memory;
+        state->Status=AsyncLoadStatus::Loading;state->Working=true;impl.Publish(*cell);++running;auto path=cell->Path;auto budget=impl.Memory;
         Jobs::Schedule([state,path,budget]{
+            struct Done{Operation& Value;~Done(){Value.Working=false;}} done{*state};
             try{
                 auto memory=std::make_shared<Reservation>(budget,static_cast<std::size_t>(FileSize(path,64u*1024u*1024u)));
                 auto document=std::make_shared<PreparedScene>();std::string error;
                 if(!PrepareScene(path,*document,error))throw std::runtime_error(error);
-                if(state->Cancelled){state->Status=AsyncLoadStatus::Cancelled;return;}
-                {std::lock_guard lock(state->Mutex);if(state->Cancelled){state->Status=AsyncLoadStatus::Cancelled;return;}state->SceneId=document->Id;state->Prepared=std::move(document);state->Memory=std::move(memory);state->Progress=.5f;state->Status=AsyncLoadStatus::Ready;}
+                if(state->Cancelled){state->FinishCancel();return;}
+                {std::lock_guard lock(state->Mutex);if(state->Cancelled){state->FinishCancel();return;}state->SceneId=document->Id;state->Prepared=std::move(document);state->Memory=std::move(memory);state->Progress=.5f;state->Status=AsyncLoadStatus::Ready;}
             }catch(const std::exception& error){state->Fail(error.what());}catch(...){state->Fail("Scene loading failed");}
         });
     }
-    const auto deadline=std::chrono::steady_clock::now()+std::chrono::duration<double,std::milli>(impl.Settings.MainThreadBudgetMilliseconds);
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double,std::milli>(impl.Settings.MainThreadBudgetMilliseconds));
     std::size_t remaining=impl.Settings.EntitiesPerTick;
     // Keep the request list stable across scene replacement and script callbacks.
     const auto cells=impl.Cells;
     for(auto& cell:cells){auto& state=*cell->State;
         if(cell->Additive&&state.Status==AsyncLoadStatus::Complete&&state.Root&&!impl.Host.GetScene().GetEntity(state.Root))cell->Unload=true;
-        if(cell->Unload||state.Cancelled){impl.Release(*cell);state.Status=cell->Unload?AsyncLoadStatus::Unloaded:AsyncLoadStatus::Cancelled;continue;}
+        if(cell->Unload||state.Cancelled){impl.Drain(*cell,remaining,deadline);impl.Publish(*cell);continue;}
         if(cell->Prefab&&cell->PendingScripts){
             if(!impl.Host.m_scriptsRunning)continue;
             try{impl.StartCellScripts(*cell);cell->PendingScripts=false;}catch(...){impl.Stop(*cell);if(auto root=impl.Host.GetScene().GetEntity(state.Root))impl.Host.GetScene().DestroyEntity(root);state.Status=AsyncLoadStatus::Failed;Console::Error("Could not initialize prefab scripts","Prefab");continue;}
         }
-        auto status=state.Status.load();if(status!=AsyncLoadStatus::Ready&&status!=AsyncLoadStatus::Activating)continue;
+        impl.Publish(*cell);auto status=state.Status.load();if(status!=AsyncLoadStatus::Ready&&status!=AsyncLoadStatus::Activating)continue;
         if(!state.Activation||!remaining||std::chrono::steady_clock::now()>=deadline)continue;
         try {
             if(status==AsyncLoadStatus::Ready){
-                state.Status=AsyncLoadStatus::Activating;
+                {std::lock_guard lock(state.Mutex);if(!state.Activation||state.Cancelled)continue;state.Status=AsyncLoadStatus::Activating;}impl.Publish(*cell);
                 if(cell->Additive){
                     auto& scene=impl.Host.GetScene();
                     for(auto& record:state.Prepared->Entities)if(scene.GetEntity(record.Id))throw std::runtime_error("World cell entity UUID conflicts with an existing entity");
                     auto root=scene.CreateEntity("Streamed world cell");
                     {std::lock_guard lock(state.Mutex);state.Root=root.GetUUID();}
-                    root.AddOrReplaceComponent<Transform>(cell->Offset);
+                    root.AddOrReplaceComponent<Transform>(cell->Offset);--remaining;
                 }else{
                     ApplicationEventsAccess::Emit({ApplicationEventType::OnLoad});
                     ApplicationEvent loading{ApplicationEventType::OnSceneLoad};auto text=cell->Path.generic_u8string();loading.ScenePath.assign(reinterpret_cast<const char*>(text.data()),text.size());ApplicationEventsAccess::Emit(loading);
@@ -317,23 +339,24 @@ void StreamingRuntime::Pump() {
                 }
                 ++cell->Applied;--remaining;state.Progress=.5f+.5f*float(cell->Applied)/float(std::max<std::size_t>(1,records.size()));
             }
-            if(state.Cancelled){impl.Release(*cell);state.Status=AsyncLoadStatus::Cancelled;continue;}
+            if(state.Cancelled){impl.Drain(*cell,remaining,deadline);impl.Publish(*cell);continue;}
             if(cell->Applied!=records.size()||cell->Created!=records.size())continue;
             {std::lock_guard lock(state.Mutex);if(!state.Cancelled)state.Committing=true;}
-            if(state.Cancelled){impl.Release(*cell);state.Status=AsyncLoadStatus::Cancelled;continue;}
-            if(cell->Additive){impl.StartCellScripts(*cell);state.Prepared.reset();state.Memory.reset();state.Progress=1;state.Status=AsyncLoadStatus::Complete;}
+            if(state.Cancelled){impl.Drain(*cell,remaining,deadline);impl.Publish(*cell);continue;}
+            if(cell->Additive){impl.StartCellScripts(*cell);cell->PendingScripts=!impl.Host.m_scriptsRunning;if(state.Cancelled||cell->Unload){impl.Drain(*cell,remaining,deadline);continue;}state.Prepared.reset();state.Memory.reset();state.Progress=1;state.Status=AsyncLoadStatus::Complete;}
             else {
                 const bool play=impl.Host.m_scriptsRunning;
                 // Stop old-cell behavior before replacing its owning scene.
                 for(auto& other:cells)if(other!=cell){other->State->Cancelled=true;impl.Release(*other);other->State->Status=AsyncLoadStatus::Cancelled;}
-                impl.Cells.clear();impl.Automatic.clear();impl.Registered.clear();impl.HasPosition=false;
+                impl.Cells.clear();impl.Automatic.clear();impl.Registered.clear();impl.Definitions.clear();impl.Sources.clear();impl.CurrentSources.clear();impl.LastStates.clear();impl.RetryAfter.clear();impl.HasPosition=false;
                 impl.Replacing=true;
                 try{impl.Host.SetScene(std::move(cell->Staging));if(play&&!impl.Host.StartScripts(false))throw std::runtime_error(impl.Host.GetLastError());}
                 catch(...){impl.Replacing=false;throw;}
                 impl.Replacing=false;state.Prepared.reset();state.Memory.reset();state.Progress=1;state.Status=AsyncLoadStatus::Complete;return;
             }
-        }catch(const std::exception& error){impl.Release(*cell);state.Fail(error.what());Console::Error(error.what(),"Streaming");}
+        }catch(const std::exception& error){if(cell->Additive&&(!cell->Owned.empty()||state.Root)){cell->Failure=error.what();{std::lock_guard lock(state.Mutex);state.Error=cell->Failure;}state.Cancelled=true;impl.Drain(*cell,remaining,deadline);}else{impl.Release(*cell);state.Fail(error.what());Console::Error(error.what(),"Streaming");}}
     }
+    for(auto& cell:cells)impl.Publish(*cell);
     std::erase_if(impl.Resources,[](auto& state){return Terminal(state->Status);});
     std::erase_if(impl.Cells,[](auto& cell){auto status=cell->State->Status.load();return Terminal(status)&&status!=AsyncLoadStatus::Complete;});
 }
@@ -358,6 +381,7 @@ float SceneLoadHandle::GetProgress()const{return m_state?m_state->Progress.load(
 std::string SceneLoadHandle::GetError()const{return Error(m_state);}
 UUID SceneLoadHandle::GetSceneUUID()const{if(!m_state)return {};std::lock_guard lock(m_state->Mutex);return m_state->SceneId;}
 UUID SceneLoadHandle::GetRootUUID()const{if(!m_state)return {};std::lock_guard lock(m_state->Mutex);return m_state->Root;}
-bool SceneLoadHandle::Cancel()const{if(!m_state)return false;std::lock_guard lock(m_state->Mutex);if(Runtime::Terminal(m_state->Status)||m_state->Committing)return false;m_state->Cancelled=true;return true;}
-bool SceneLoadHandle::SetActivationAllowed(bool allowed)const{if(!m_state||IsDone()||GetStatus()==AsyncLoadStatus::Activating)return false;m_state->Activation=allowed;return true;}
+bool SceneLoadHandle::Cancel()const{if(!m_state)return false;std::lock_guard lock(m_state->Mutex);if(Runtime::Terminal(m_state->Status)||m_state->Status==AsyncLoadStatus::Unloading||m_state->Committing)return false;m_state->Cancelled=true;return true;}
+bool StreamingGrid::IsValid()const{return Runtime::ValidGrid(*this);}
+bool SceneLoadHandle::SetActivationAllowed(bool allowed)const{if(!m_state)return false;std::lock_guard lock(m_state->Mutex);auto status=GetStatus();if(Runtime::Terminal(status)||status==AsyncLoadStatus::Activating||status==AsyncLoadStatus::Unloading||m_state->Cancelled)return false;m_state->Activation=allowed;return true;}
 }

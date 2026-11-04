@@ -1593,5 +1593,13 @@
   "animation.marker": "Marker",
   "animation.add_marker": "Add Marker",
   "animation.remove_marker": "Remove Marker",
-  "animation.preview_clip": "Preview Clip"
+  "animation.preview_clip": "Preview Clip",
+  "component.world_cell": "World Cell",
+  "component.streaming_source": "Streaming Source",
+  "property.scene_asset": "Scene Asset",
+  "property.half_extents": "Half Extents",
+  "property.load_distance": "Load Distance",
+  "property.unload_distance": "Unload Distance",
+  "property.always_loaded": "Always Loaded",
+  "property.distance_scale": "Distance Scale"
 }

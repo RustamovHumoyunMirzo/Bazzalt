@@ -4,6 +4,7 @@
 // Compiler-independent IDs for engine components shared with gameplay DLLs.
 // User-defined types use EnTT's ordinary type hash within the script toolchain.
 namespace Bazzalt {
+struct WorldCell;struct StreamingSource;
 struct Animator;struct IKConstraint;
 struct Camera; struct GaussianBlur; struct Hierarchy; struct Identity;
 struct Light; struct Mesh; struct ModelInstance; struct ModelNode; struct Name;
@@ -18,6 +19,8 @@ struct GuiButton;struct GuiTextInput;struct CameraRenderTarget;
         constexpr operator id_type() const noexcept { return value(); } \
     };
 namespace entt {
+BAZZALT_COMPONENT_ID(WorldCell)
+BAZZALT_COMPONENT_ID(StreamingSource)
 BAZZALT_COMPONENT_ID(Animator)
 BAZZALT_COMPONENT_ID(IKConstraint)
 BAZZALT_COMPONENT_ID(Camera)

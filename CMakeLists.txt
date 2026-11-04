@@ -720,6 +720,11 @@ endif()
 
 
 if(BUILD_TESTING)
+    add_executable(BazzaltWorldStreamingTests tests/WorldStreamingTests.cpp)
+    target_include_directories(BazzaltWorldStreamingTests PRIVATE src)
+    target_link_libraries(BazzaltWorldStreamingTests PRIVATE Bazzalt)
+    bazzalt_enable_test_assertions(BazzaltWorldStreamingTests)
+    add_test(NAME BazzaltWorldStreamingTests COMMAND BazzaltWorldStreamingTests)
     add_executable(BazzaltStreamingTests tests/StreamingTests.cpp)
     target_link_libraries(BazzaltStreamingTests PRIVATE Bazzalt Filament::Filament)
     target_include_directories(BazzaltStreamingTests PRIVATE src)

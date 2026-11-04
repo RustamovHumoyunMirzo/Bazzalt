@@ -432,6 +432,7 @@ void Engine::RequestClose()
 
 bool Engine::ConfigureScripts(std::vector<ScriptBinding> bindings){
     if(m_scriptsRunning){m_lastError="Cannot configure scripts while playing";return false;}
+    const auto streamedOwners=m_streaming->GetScriptOwnedEntities();std::erase_if(bindings,[&](const ScriptBinding& binding){UUID id;return UUID::TryParse(binding.Entity,id)&&streamedOwners.contains(id);});
     m_subsystemModules.clear();
     for(const auto& binding:bindings)if(binding.Entity.starts_with("@subsystem:")){UUID id;if(!UUID::TryParse(binding.Entity.substr(11),id)){m_lastError="Invalid subsystem asset binding";return false;}m_subsystemModules[id]=binding.Module;}
     std::erase_if(bindings,[](const auto& binding){return binding.Entity.starts_with("@subsystem:");});
@@ -495,7 +496,9 @@ bool Engine::StartScripts(bool resetTime){
     }
     if(!m_luaConfigured){
         std::vector<ScriptBinding> bindings,native;
+        const auto streamed=m_streaming->GetScriptOwnedEntities();
         for(auto handle:m_scene->GetRegistry().view<ScriptComponents>()){
+            if(streamed.contains(m_scene->GetEntity(static_cast<Entity::Id>(handle)).GetUUID()))continue;
             const auto& scripts=m_scene->GetRegistry().get<ScriptComponents>(handle);if(!scripts.IsEnabled())continue;
             for(const auto& script:scripts.Values){
                 auto path=std::filesystem::u8path(script.Source);
@@ -525,7 +528,7 @@ bool Engine::StartScripts(bool resetTime){
     try{ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforePhysicsInit});ApplicationEventsAccess::ThrowIfFailed();PhysicsModule().Start(*m_scene);ApplicationAccess::SetPhysicsReady(true);ApplicationEventsAccess::Emit({ApplicationEventType::OnPhysicsInit});ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterPhysicsInit});ApplicationAccess::SetServicesReady(true);ApplicationAccess::SetSceneReady(true);ApplicationEventsAccess::CompleteInitialization(m_scene->GetUUID().ToString(),m_editorHost);}catch(const std::exception& error){m_lastError=error.what();m_audioRuntime->Stop();ReleasePhysicsScene(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationAccess::SetAudioReady(false);ApplicationAccess::SetServicesReady(false);return false;}
     if(!m_scriptRuntime->Start(m_lastError)){m_audioRuntime->Stop();PhysicsModule().Stop(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationAccess::SetAudioReady(false);ApplicationAccess::SetServicesReady(false);return false;}
     if(!m_luaRuntime->Start(m_lastError)){m_scriptRuntime->Stop();m_audioRuntime->Stop();PhysicsModule().Stop(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationAccess::SetAudioReady(false);ApplicationAccess::SetServicesReady(false);return false;}
-    m_scriptsRunning=true;ApplicationEventsAccess::Emit({ApplicationEventType::OnPlay});return true;
+    m_scriptsRunning=true;if(!m_streaming->StartScripts()){StopScripts();return false;}ApplicationEventsAccess::Emit({ApplicationEventType::OnPlay});return true;
 }
 void Engine::StopScripts(){m_streaming->StopScripts();if(m_scriptsRunning){ApplicationEventsAccess::Emit({ApplicationEventType::OnStop});m_scriptsRunning=false;}m_luaRuntime->Stop();m_scriptRuntime->Stop();ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforePhysicsShutdown});ReleasePhysicsScene(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterPhysicsShutdown});m_audioRuntime->Stop();ApplicationAccess::SetAudioReady(false);if(m_scene->HasSystem<ParticleSystem>()){m_scene->RemoveSystem<ParticleSystem>();m_scene->AddSystem<ParticleSystem>();}if(m_scene->HasSystem<AnimationSystem>()){m_scene->RemoveSystem<AnimationSystem>();m_scene->AddSystem<AnimationSystem>();}GraphicsAccess::CancelFrame();ResetRuntimeMaterials();ResetRuntimeTextures();}
 

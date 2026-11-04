@@ -26,6 +26,14 @@ public:
     static bool RegisterStreamingCell(const StreamingCell& cell);
     static bool UnregisterStreamingCell(UUID assetId);
     static void SetStreamingPosition(Vec3 position);
+    static void ClearStreamingPosition();
+    static void SetStreamingSource(UUID source,Vec3 position,float distanceScale=1);
+    static bool RemoveStreamingSource(UUID source);
+    static bool RegisterStreamingGrid(const StreamingGrid& grid);
+    static std::vector<StreamingCellInfo> GetStreamingCells();
+    static std::vector<StreamingEvent> GetStreamingEvents();
+    static StreamingStatistics GetStreamingStatistics();
+    static bool RetryStreamingCell(UUID assetId);
     static StreamingSettings GetStreamingSettings();
     static void SetStreamingSettings(const StreamingSettings& settings);
     [[nodiscard]] static Scene* GetActiveScene();

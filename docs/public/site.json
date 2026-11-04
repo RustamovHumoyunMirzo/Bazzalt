@@ -19,6 +19,7 @@
         "menus",
         "assets",
         "scenes",
+        "world-streaming",
         "camera-materials",
         "audio",
         "physics",
@@ -51,6 +52,7 @@
         "basics",
         "behaviors",
         "entities",
+        "streaming",
         "materials",
         "graphics",
         "audio",
@@ -70,6 +72,7 @@
       "order": [
         "basics",
         "api",
+        "streaming",
         "graphics",
         "audio",
         "physics",

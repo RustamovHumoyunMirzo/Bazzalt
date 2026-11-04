@@ -72,7 +72,7 @@ void AssetDatabase::ScanDependencies(UUID id){
                             ((component=="Bazzalt.ModelInstance"||component=="Bazzalt.ModelNode")&&key=="ModelAsset")||
                             ((component=="Bazzalt.Frame"||component=="Bazzalt.GuiElement")&&key=="Stylesheet")||
                             ((component=="Bazzalt.GuiText"||component=="Bazzalt.GuiTextInput")&&key=="Font")||
-                            (component=="Bazzalt.Animator"&&(key=="Model"||key=="Controller"))||(component=="Bazzalt.ParticleEmitter"&&(key=="Graph"||key=="MaterialOverride"))||(component=="Bazzalt.Impostor"&&key=="Atlas")||(component=="Bazzalt.AudioSource"&&key=="Clip")||(component=="Bazzalt.AudioListener"&&key=="MixerAsset");
+                            (component=="Bazzalt.WorldCell"&&key=="SceneAsset")||(component=="Bazzalt.Animator"&&(key=="Model"||key=="Controller"))||(component=="Bazzalt.ParticleEmitter"&&(key=="Graph"||key=="MaterialOverride"))||(component=="Bazzalt.Impostor"&&key=="Atlas")||(component=="Bazzalt.AudioSource"&&key=="Clip")||(component=="Bazzalt.AudioListener"&&key=="MixerAsset");
                         const bool camera=component=="Bazzalt.Camera"&&(key=="RenderTarget"||key=="Post.Material"||(key.starts_with("Post.Materials.")&&key.ends_with(".Asset"))||(key.starts_with("Post.Custom.")&&(key.ends_with(".Shader")||key.ends_with(".Texture"))));
                         const bool prefab=component=="Bazzalt.PrefabInstance"&&key=="Asset";
                         const bool image=component=="Bazzalt.GuiImage"&&key=="Texture";
