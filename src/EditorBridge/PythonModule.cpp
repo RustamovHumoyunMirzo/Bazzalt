@@ -145,7 +145,7 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
 class EditorHost final {
 public:
     EditorHost() : m_engine(std::make_unique<Runtime::Engine>()) { m_engine->SetEditorHost(true);m_loadedScenes.push_back({{},nullptr});Runtime::ConsoleAccess::Acquire(); }
-    ~EditorHost() { Stop(); ClearLoadedScenes(); m_engine->Shutdown(); CleanupSnapshot();Runtime::ConsoleAccess::Release(); }
+    ~EditorHost() { EndAnimationPreview();Stop(); ClearLoadedScenes(); m_engine->Shutdown(); CleanupSnapshot();Runtime::ConsoleAccess::Release(); }
     py::object ConsoleSnapshot(std::uint64_t revision){
         auto snapshot=Runtime::ConsoleAccess::Snapshot(revision);if(!snapshot)return py::none();
         py::dict result;result["revision"]=snapshot->Revision;py::list messages;
@@ -209,7 +209,7 @@ public:
         if(!m_engine->RefreshTextureAsset(asset->SourcePath)){m_bridgeError=m_engine->GetLastError();return false;}return true;
     }
 
-    bool LoadProject(const std::string& path) {
+    bool LoadProject(const std::string& path) {EndAnimationPreview();
         Stop();m_bridgeError.clear();bool result=false;
         try { result=m_engine->LoadProject(std::filesystem::u8path(path),true); }
         catch(const std::filesystem::filesystem_error& error){m_bridgeError="Filesystem error while loading the project: "+std::string(error.what());return false;}
@@ -225,7 +225,7 @@ public:
         }
         return result;
     }
-    bool LoadScene(const std::string& path) { Stop(); const bool ok=m_engine->LoadScene(std::filesystem::u8path(path));if(ok){m_scenePath=std::filesystem::weakly_canonical(std::filesystem::u8path(path));ClearLoadedScenes();m_loadedScenes.push_back({m_scenePath,nullptr});m_activeScene=0;AcquireSceneLock(m_loadedScenes[0]);}return ok; }
+    bool LoadScene(const std::string& path) { EndAnimationPreview();Stop(); const bool ok=m_engine->LoadScene(std::filesystem::u8path(path));if(ok){m_scenePath=std::filesystem::weakly_canonical(std::filesystem::u8path(path));ClearLoadedScenes();m_loadedScenes.push_back({m_scenePath,nullptr});m_activeScene=0;AcquireSceneLock(m_loadedScenes[0]);}return ok; }
     bool LoadSceneAdditive(const std::string& value) {
         const auto path=std::filesystem::weakly_canonical(std::filesystem::u8path(value));
         for(const auto& loaded:m_loadedScenes)if(!loaded.Path.empty()&&std::filesystem::weakly_canonical(loaded.Path)==path)return true;
@@ -249,7 +249,7 @@ public:
         m_loadedScenes.erase(m_loadedScenes.begin()+static_cast<std::ptrdiff_t>(*target));
         if(*target<m_activeScene)--m_activeScene;return true;
     }
-    bool SaveScene(const std::string& path) { bool ok=true;for(auto& loaded:m_loadedScenes)ReleaseSceneLock(loaded);ok=m_engine->SaveScene(std::filesystem::u8path(path));if(ok){m_scenePath=std::filesystem::u8path(path);if(m_activeScene<m_loadedScenes.size())m_loadedScenes[m_activeScene].Path=m_scenePath;for(std::size_t i=0;i<m_loadedScenes.size()&&ok;++i)if(i!=m_activeScene&&!m_loadedScenes[i].Path.empty())ok=m_engine->SaveSceneAsset(*m_loadedScenes[i].Data,m_loadedScenes[i].Path);}for(auto& loaded:m_loadedScenes)AcquireSceneLock(loaded);return ok; }
+    bool SaveScene(const std::string& path) { EndAnimationPreview();bool ok=true;for(auto& loaded:m_loadedScenes)ReleaseSceneLock(loaded);ok=m_engine->SaveScene(std::filesystem::u8path(path));if(ok){m_scenePath=std::filesystem::u8path(path);if(m_activeScene<m_loadedScenes.size())m_loadedScenes[m_activeScene].Path=m_scenePath;for(std::size_t i=0;i<m_loadedScenes.size()&&ok;++i)if(i!=m_activeScene&&!m_loadedScenes[i].Path.empty())ok=m_engine->SaveSceneAsset(*m_loadedScenes[i].Data,m_loadedScenes[i].Path);}for(auto& loaded:m_loadedScenes)AcquireSceneLock(loaded);return ok; }
     void NewScene() { Stop(); m_engine->CreateScene();m_scenePath.clear();ClearLoadedScenes();m_loadedScenes.push_back({{},nullptr});m_activeScene=0; }
     bool RenameLoadedScene(const std::string& idOrPath,const std::string& requestedName) {
         const auto found=FindLoadedScene(idOrPath);if(!found)return false;auto& loaded=m_loadedScenes[*found];if(loaded.Path.empty())return false;
@@ -561,9 +561,34 @@ public:
         else return GuiDispatch(entity,type,[enabled]<class T>(Entity e){if(e.HasComponent<T>())e.SetComponentEnabled<T>(enabled);});
         return true;
     }
+
+    std::string m_animationPreviewOwner;std::optional<Animator> m_animationOriginal;std::map<UUID,Transform> m_animationTransforms;std::shared_ptr<const AnimationRig> m_animationRig;UUID m_animationModel;
+    void EndAnimationPreview(){
+        if(m_animationPreviewOwner.empty())return;
+        auto [scene,owner]=FindEntity(m_animationPreviewOwner);
+        if(owner&&owner.HasComponent<Animator>()){try{Animation::Stop(owner);}catch(const std::exception&){}if(m_animationOriginal)owner.GetComponent<Animator>()=*m_animationOriginal;try{Animation::Rebind(owner);}catch(const std::exception&){}if(!m_animationOriginal)owner.RemoveComponent<Animator>();}
+        if(scene)for(auto& [id,transform]:m_animationTransforms){auto object=scene->GetEntity(id);if(object)object.GetComponent<Transform>()=transform;}
+        m_animationPreviewOwner.clear();m_animationTransforms.clear();m_animationOriginal.reset();
+    }
+    py::dict AnimationInfo(const std::string& id){
+        Entity e=RequireEntity(id);UUID model;if(auto* a=e.TryGetComponent<Animator>())model=a->Model;if(!model)if(auto* m=e.TryGetComponent<ModelInstance>())model=m->ModelAsset;if(!model)if(auto* mesh=e.TryGetComponent<Mesh>())model=mesh->MeshAsset;
+        py::dict result;result["model"]=model.ToString();py::list clips,bones;
+        if(model){m_animationRig=AnimationRig::Load(model);m_animationModel=model;const auto& rig=*m_animationRig;for(unsigned i=0;i<rig.Rig.Bones.size();++i){auto& b=rig.Rig.Bones[i];py::dict row;row["index"]=i;row["name"]=b.Name;row["parent"]=b.Parent;bones.append(row);}for(auto& c:rig.Clips){py::dict row;row["name"]=c.Name;row["duration"]=c.Duration;py::list tracks;for(auto& track:c.Tracks){py::dict t;t["bone"]=track.Bone;t["channel"]=int(track.Channel);py::list keys;for(auto& k:track.Keys)keys.append(k.Time);t["keys"]=keys;tracks.append(t);}row["tracks"]=tracks;clips.append(row);}}
+        if(!model){m_animationRig.reset();m_animationModel={};}
+        result["bones"]=bones;result["clips"]=clips;return result;
+    }
+    void BeginAnimationPreview(const std::string& id){
+        if(IsPlaying())throw std::logic_error("Stop Play before animation preview");auto e=RequireEntity(id);if(m_animationPreviewOwner!=id){EndAnimationPreview();auto info=AnimationInfo(id);UUID model;UUID::TryParse(py::cast<std::string>(info["model"]),model);if(!model)throw std::invalid_argument("Select an imported model root");m_animationPreviewOwner=id;if(auto* c=e.TryGetComponent<Animator>())m_animationOriginal=*c;std::vector<Entity> pending{e};while(!pending.empty()){auto object=pending.back();pending.pop_back();m_animationTransforms[object.GetUUID()]=object.GetComponent<Transform>();auto children=object.GetChildren();pending.insert(pending.end(),children.begin(),children.end());}if(!e.HasComponent<Animator>())e.AddComponent<Animator>();auto& a=e.GetComponent<Animator>();a.Enabled=true;a.Model=model;a.Controller={};a.RootMotion=RootMotionMode::Disabled;Animation::Rebind(e);}
+    }
+    void PreviewAnimation(const std::string& id,const std::string& clip,float time){BeginAnimationPreview(id);auto e=RequireEntity(id);
+        AnimationController controller;controller.Entry="Preview";AnimationState state;state.Name="Preview";state.Clip=clip;state.Loop=false;controller.States.push_back(state);Animation::SetController(e,controller);Animation::Pause(e);Animation::SetTime(e,time);
+    }
+
+    py::list AnimationRetargetMap(const std::string& id,const std::string& source){auto info=AnimationInfo(id);if(!m_animationRig)throw std::invalid_argument("Select a target model");UUID asset;if(!UUID::TryParse(source,asset))throw std::invalid_argument("Invalid source model");auto rig=AnimationRig::Load(asset);auto mapping=Animation::MapByName(rig->Rig,m_animationRig->Rig);py::list result;for(auto& bone:mapping.Bones){py::dict row;row["source"]=bone.Source;row["target"]=bone.Target;row["copyTranslation"]=bone.CopyTranslation;result.append(row);}return result;}
+    py::dict PreviewAnimationController(const std::string& id,const std::string& source,float delta,const py::dict& parameters,bool reset){BeginAnimationPreview(id);auto e=RequireEntity(id);if(reset){Animation::SetController(e,AnimationController::FromSource(source));Animation::Play(e);}for(auto item:parameters)Animation::SetParameter(e,py::cast<std::string>(item.first),py::cast<float>(item.second));Animation::Evaluate(e,delta);auto status=Animation::GetStatus(e);py::dict out;out["state"]=status.State;out["time"]=status.Time;out["weight"]=status.TransitionWeight;return out;}
     py::list ComponentTypes() const {
         py::list result;
-        result.append("Particle Emitter");result.append("HLOD");result.append("LOD Transition");result.append("Impostor");result.append("LOD");result.append("Rigidbody");result.append("Shape Collider");result.append("Mesh Collider");result.append("Joint");result.append("Distance Joint");result.append("Hinge Joint");result.append("Slider Joint");result.append("Ball And Socket Joint");result.append("Fixed Joint");result.append("Cloth");result.append("Rope");result.append("Vehicle");result.append("Vehicle Wheel");result.append("Wheel Suspension");result.append("Wheel Tire");result.append("Wheel Brake");result.append("Wheel Steering");result.append("Vehicle Engine");result.append("Vehicle Transmission");result.append("Vehicle Differential");result.append("Vehicle Anti Roll Bar");result.append("Vehicle Aerodynamics");result.append("Audio Source");result.append("Audio Listener");
+        result.append("IK Constraint");result.append("Animator");result.append("Particle Emitter");result.append("HLOD");result.append("LOD Transition");result.append("Impostor");result.append("LOD");result.append("Rigidbody");result.append("Shape Collider");result.append("Mesh Collider");result.append("Joint");result.append("Distance Joint");result.append("Hinge Joint");result.append("Slider Joint");result.append("Ball And Socket Joint");result.append("Fixed Joint");result.append("Cloth");result.append("Rope");result.append("Vehicle");result.append("Vehicle Wheel");result.append("Wheel Suspension");result.append("Wheel Tire");result.append("Wheel Brake");result.append("Wheel Steering");result.append("Vehicle Engine");result.append("Vehicle Transmission");result.append("Vehicle Differential");result.append("Vehicle Anti Roll Bar");result.append("Vehicle Aerodynamics");result.append("Audio Source");result.append("Audio Listener");
         for (const char* name : {"Camera", "Light", "Mesh", "Primitive Object", "Scene Query Bounds", "Gaussian Blur", "Vignette"})
             result.append(name);
         for(auto name:GuiNames)result.append(name);
@@ -604,21 +629,21 @@ public:
         if(data.contains("show_sun"))value.ShowSun=data["show_sun"].cast<bool>();
         return SceneAt(*index).SetEnvironment(value);
     }
-    py::dict CaptureScenes(){
+    py::dict CaptureScenes(){EndAnimationPreview();
         py::dict result;for(std::size_t i=0;i<m_loadedScenes.size();++i){auto path=std::filesystem::temp_directory_path()/("bazzalt-history-"+UUID::Generate().ToString()+".bscene");if(!m_engine->SaveSceneAsset(SceneAt(i),path))throw std::runtime_error("Could not snapshot loaded scene");std::ifstream file(path,std::ios::binary);std::string text((std::istreambuf_iterator<char>(file)),{});file.close();std::error_code ignored;std::filesystem::remove(path,ignored);result[py::str(SceneAt(i).GetUUID().ToString())]=py::str(text);}return result;
     }
-    bool RestoreScenes(const py::dict& snapshots){
+    bool RestoreScenes(const py::dict& snapshots){EndAnimationPreview();
         if(m_playing||snapshots.size()!=m_loadedScenes.size())return false;std::vector<std::unique_ptr<Scene>> staged;
         for(std::size_t i=0;i<m_loadedScenes.size();++i){auto id=SceneAt(i).GetUUID();auto key=py::str(id.ToString());if(!snapshots.contains(key))return false;auto text=snapshots[key].cast<std::string>();if(text.size()>64u*1024u*1024u)return false;auto path=std::filesystem::temp_directory_path()/("bazzalt-history-"+UUID::Generate().ToString()+".bscene");{std::ofstream file(path,std::ios::binary);file.write(text.data(),text.size());if(!file)return false;}auto value=m_engine->LoadSceneAsset(path);std::error_code ignored;std::filesystem::remove(path,ignored);if(!value||value->GetUUID()!=id)return false;staged.push_back(std::move(value));}
         for(std::size_t i=0;i<staged.size();++i)if(i==m_activeScene)m_engine->SetScene(std::move(staged[i]));else m_loadedScenes[i].Data=std::move(staged[i]);return true;
     }
-    py::bytes CaptureScene() {
+    py::bytes CaptureScene() {EndAnimationPreview();
         const auto path=std::filesystem::temp_directory_path()/("bazzalt-history-"+UUID::Generate().ToString()+".bscene");
         if(!m_engine->SaveScene(path))return {};
         std::ifstream stream(path,std::ios::binary);std::string data((std::istreambuf_iterator<char>(stream)),{});
         std::error_code error;std::filesystem::remove(path,error);return py::bytes(data);
     }
-    bool RestoreScene(const py::bytes& snapshot) {
+    bool RestoreScene(const py::bytes& snapshot) {EndAnimationPreview();
         const std::string data=snapshot;
         if(data.empty())return false;
         const auto path=std::filesystem::temp_directory_path()/("bazzalt-history-"+UUID::Generate().ToString()+".bscene");
@@ -632,7 +657,7 @@ public:
             const auto mode=value.cast<int>();if(mode<0||mode>7)return false;
         }
         Entity entity=RequireEntity(id);
-        if(type=="Particle Emitter"||type=="HLOD"||type=="LOD Transition"||type=="Impostor")return SetAdvancedLODProperty(entity,type,property,value);
+        if(type=="IK Constraint"||type=="Animator"||type=="Particle Emitter"||type=="HLOD"||type=="LOD Transition"||type=="Impostor")return SetAdvancedLODProperty(entity,type,property,value);
         if(type=="LOD")return SetLODProperty(entity,property,value);
         if(type=="Rigidbody"||type=="Shape Collider"||type=="Mesh Collider"||type=="Joint"||type=="Distance Joint"||type=="Hinge Joint"||type=="Slider Joint"||type=="Ball And Socket Joint"||type=="Fixed Joint"||type=="Cloth"||type=="Rope"||type=="Vehicle"||type=="Vehicle Wheel"||type=="Wheel Suspension"||type=="Wheel Tire"||type=="Wheel Brake"||type=="Wheel Steering"||type=="Vehicle Engine"||type=="Vehicle Transmission"||type=="Vehicle Differential"||type=="Vehicle Anti Roll Bar"||type=="Vehicle Aerodynamics")return SetPhysicsProperty(entity,type,property,value);
         if(type=="Audio Source"||type=="Audio Listener")return SetAudioProperty(entity,type,property,value);
@@ -712,7 +737,7 @@ public:
         m_engine->SetEditorCamera(id, eye[0], eye[1], eye[2], target[0], target[1], target[2]);
     }
 
-    bool Play(bool headless=false) {
+    bool Play(bool headless=false) {EndAnimationPreview();
         if (m_playing) return true;
         CleanupSnapshot();
         m_snapshot = std::filesystem::temp_directory_path() /
@@ -881,6 +906,7 @@ void BindShaderPreview(py::module_&);void BindVFXPreview(py::module_&); }
 PYBIND11_MODULE(_bazzalt_runtime, module) {
     Bazzalt::EditorBridge::BindShaderPreview(module);
     Bazzalt::EditorBridge::BindVFXPreview(module);
+    module.def("validate_animation_controller",[](const std::string& source){return Bazzalt::AnimationController::FromSource(source).IsValid();});
     Bazzalt::EditorBridge::BindEditorLua(module);
     module.def("begin_profile_capture", []{Bazzalt::Profiler::BeginCapture();});
     module.def("end_profile_capture", &Bazzalt::Profiler::EndCapture);
@@ -965,6 +991,11 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("add_component", &Bazzalt::EditorBridge::EditorHost::AddComponent)
         .def("remove_component", &Bazzalt::EditorBridge::EditorHost::RemoveComponent)
         .def("set_component_enabled", &Bazzalt::EditorBridge::EditorHost::SetComponentEnabled)
+        .def("animation_retarget_map", &Bazzalt::EditorBridge::EditorHost::AnimationRetargetMap)
+        .def("animation_preview_controller", &Bazzalt::EditorBridge::EditorHost::PreviewAnimationController)
+        .def("animation_info", &Bazzalt::EditorBridge::EditorHost::AnimationInfo)
+        .def("animation_preview", &Bazzalt::EditorBridge::EditorHost::PreviewAnimation)
+        .def("animation_end_preview", &Bazzalt::EditorBridge::EditorHost::EndAnimationPreview)
         .def("component_types", &Bazzalt::EditorBridge::EditorHost::ComponentTypes)
         .def("scene_info", &Bazzalt::EditorBridge::EditorHost::SceneInfo)
         .def("console_snapshot", &Bazzalt::EditorBridge::EditorHost::ConsoleSnapshot)

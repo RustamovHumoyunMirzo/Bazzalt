@@ -13,15 +13,17 @@ class SceneCommand:
 
 class SceneHistory(QObject):
     Changed=Signal()
+    BeforeChange=Signal()
     def __init__(self,runtime,parent=None,limit:int=100,byte_limit:int=128*1024*1024)->None:
         super().__init__(parent);self.Runtime=runtime;self.Limit=limit;self.ByteLimit=byte_limit;self._undo=[];self._redo=[];self._pending=None;self._restoring=False
         self.LastRestoreStructural=True;self.LastCommitSceneChanged=False;self._files={}
     def Begin(self,label:str)->None:
-        if self._pending is None and not self._restoring:self._pending=(label,self.Runtime.CaptureScene(),"scene",())
+        if self._pending is None and not self._restoring:self.BeforeChange.emit();self._pending=(label,self.Runtime.CaptureScene(),"scene",())
     def BeginScenes(self,label:str)->None:
-        if self._pending is None and not self._restoring:self._pending=(label,self.Runtime.CaptureScenes(),"scenes",())
+        if self._pending is None and not self._restoring:self.BeforeChange.emit();self._pending=(label,self.Runtime.CaptureScenes(),"scenes",())
     def BeginTransforms(self,label:str,entities)->None:
         if self._pending is not None or self._restoring:return
+        self.BeforeChange.emit()
         entities=tuple(dict.fromkeys(entities));before=self.Runtime.CaptureTransforms(entities)
         if before:self._pending=(label,before,"transforms",entities)
         else:self.Begin(label)

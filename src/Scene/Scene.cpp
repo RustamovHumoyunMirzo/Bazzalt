@@ -11,6 +11,7 @@
 #include "Bazzalt/AssetManager.h"
 #include "Bazzalt/Components/Mesh.h"
 #include "Bazzalt/Components/ModelInstance.h"
+#include "Bazzalt/Systems/AnimationSystem.h"
 #include "Bazzalt/Components/ModelNode.h"
 
 namespace Bazzalt {
@@ -19,6 +20,7 @@ Scene::Scene() {
     RetainGameplayModule();
     CreateRootEntity();
     AddSystem<Runtime::GuiSystem>();
+    AddSystem<AnimationSystem>();
 }
 
 void Scene::RetainGameplayModule() {

@@ -2,12 +2,14 @@
 #include "Bazzalt/Serialization.h"
 #include "Rendering/AdvancedLODFields.h"
 #include "VFX/ParticleFields.h"
+#include "Animation/AnimationFields.h"
 #include <sstream>
 #include <iomanip>
 namespace Bazzalt::Runtime {
 namespace {
 template<class T> void Encode(PropertyMap& p,const std::string& name,const T& v){
- if constexpr(std::is_same_v<T,UUID>)p[name]=v.ToString();
+ if constexpr(std::is_same_v<T,std::string>)p[name]=v;
+ else if constexpr(std::is_same_v<T,UUID>)p[name]=v.ToString();
  else if constexpr(std::is_same_v<T,std::vector<UUID>>){p[name+".Count"]=std::to_string(v.size());for(std::size_t i=0;i<v.size();++i)p[name+"."+std::to_string(i)]=v[i].ToString();}
  else if constexpr(std::is_same_v<T,Vec2>){Encode(p,name+".X",v.X);Encode(p,name+".Y",v.Y);}
  else if constexpr(std::is_same_v<T,Vec3>){Encode(p,name+".X",v.X);Encode(p,name+".Y",v.Y);Encode(p,name+".Z",v.Z);}
@@ -22,7 +24,8 @@ template<class T> bool Decode(const PropertyMap& p,const std::string& name,T& v)
  else if constexpr(std::is_same_v<T,Vec3>)return Decode(p,name+".X",v.X)&&Decode(p,name+".Y",v.Y)&&Decode(p,name+".Z",v.Z);
  else if constexpr(std::is_same_v<T,Vec4>)return Decode(p,name+".X",v.X)&&Decode(p,name+".Y",v.Y)&&Decode(p,name+".Z",v.Z)&&Decode(p,name+".W",v.W);
  else {auto it=p.find(name);if(it==p.end())return false;
-  if constexpr(std::is_same_v<T,UUID>)return UUID::TryParse(it->second,v);
+  if constexpr(std::is_same_v<T,std::string>){if(it->second.size()>256)return false;v=it->second;return true;}
+  else if constexpr(std::is_same_v<T,UUID>)return UUID::TryParse(it->second,v);
   else if constexpr(std::is_same_v<T,bool>){if(it->second!="true"&&it->second!="false")return false;v=it->second=="true";return true;}
   else if constexpr(std::is_enum_v<T>){int value;if(!Decode(p,name,value))return false;v=static_cast<T>(value);return true;}
   else {std::istringstream in(it->second);in.imbue(std::locale::classic());if constexpr(std::is_same_v<T,std::uint8_t>){unsigned value;if(!(in>>value)||value>255)return false;v=std::uint8_t(value);}else if(!(in>>v))return false;return in.peek()==std::char_traits<char>::eof();}
@@ -31,7 +34,8 @@ template<class T> bool Decode(const PropertyMap& p,const std::string& name,T& v)
 }
 void RegisterAdvancedLODComponents(ComponentSerializationRegistry& registry){
 #define REGISTER(Type,Visit) registry.Register<Type>("Bazzalt." #Type,1,[](const Type& value,PropertyMap& p){Visit(value,[&](const char* name,const auto& field){Encode(p,name,field);});},[](Type& output,const PropertyMap& p,std::uint32_t version){if(version!=1)return false;Type value;bool valid=true;Visit(value,[&](const char* name,auto& field){if constexpr(std::is_same_v<Type,ParticleEmitter>){if(std::string(name)=="Backend"&&!p.contains(name))return;}valid&=Decode(p,name,field);});if(!valid||!value.IsValid())return false;output=std::move(value);return true;});
- REGISTER(HLOD,VisitHLOD) REGISTER(LODTransition,VisitLODTransition) REGISTER(Impostor,VisitImpostor) REGISTER(ParticleEmitter,VisitParticleEmitter)
+ REGISTER(IKConstraint,VisitIKConstraint) REGISTER(Animator,VisitAnimator) REGISTER(HLOD,VisitHLOD) REGISTER(LODTransition,VisitLODTransition) REGISTER(Impostor,VisitImpostor) REGISTER(ParticleEmitter,VisitParticleEmitter)
 #undef REGISTER
+ registry.RegisterEntityReference("Bazzalt.IKConstraint","AnimatorEntity");registry.RegisterEntityReference("Bazzalt.IKConstraint","Target");registry.RegisterEntityReference("Bazzalt.IKConstraint","PoleTarget");
 }
 }

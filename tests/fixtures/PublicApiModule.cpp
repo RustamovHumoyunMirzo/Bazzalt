@@ -1,3 +1,7 @@
+#include <Bazzalt/Systems/AnimationSystem.h>
+#include <Bazzalt/Animation.h>
+#include <Bazzalt/Components/Animator.h>
+#include <Bazzalt/Components/IKConstraint.h>
 #include <Bazzalt/Asset.h>
 #include <Bazzalt/AssetManager.h>
 #include <Bazzalt/Component.h>
@@ -43,6 +47,11 @@ public:
         Bazzalt::Console::Info("C++ module connected", "Native Script");
         auto* scene = Bazzalt::SceneManager::GetActiveScene();
         if (!scene || Cube != GetEntity()) throw std::runtime_error("Not the host scene/entity");
+        Cube.AddComponent<Bazzalt::Animator>();
+        if(Bazzalt::Animation::GetRig(Cube))throw std::runtime_error("Unexpected primitive animation rig");
+        Cube.RemoveComponent<Bazzalt::Animator>();
+        Bazzalt::Skeleton skeleton;Bazzalt::SkeletonBone bone;bone.Name="Root";skeleton.Bones.push_back(bone);
+        if(skeleton.ForwardKinematics(skeleton.GetBindPose()).size()!=1)throw std::runtime_error("Animation public API failed");
         scene->AddSystem<ScriptSystem>();
         auto hud=scene->CreateEntity("Module HUD");hud.AddComponent<Bazzalt::Frame>();
         auto button=scene->CreateEntity("Module Button");button.SetParent(hud,false);button.AddComponent<Bazzalt::RectTransform>();button.AddComponent<Bazzalt::Rectangle>();button.AddComponent<Bazzalt::GuiButton>();

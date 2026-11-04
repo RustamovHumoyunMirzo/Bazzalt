@@ -62,6 +62,10 @@ class EditorController(QObject):
         self.LuaAssets.Finished.connect(self._LuaImportFinished);self.LuaAssets.Failed.connect(self._LuaImportFailed)
         self.MaterialCompiler=MaterialCompiler(runtime);self._material_check=0.0;self._material_error=""
         window.AudioMixer.AssetProvider=self._ProjectAssets
+        window.Animation.AssetProvider=self._ProjectAssets
+        window.Animation.AssetChanged.connect(self._GraphChanged)
+        window.Animation.History.canUndoChanged.connect(self._HistoryChanged)
+        window.Animation.History.canRedoChanged.connect(self._HistoryChanged)
         window.VFXGraph.AssetProvider=self._ProjectAssets
         window.VFXGraph.AssetChanged.connect(self._GraphChanged)
         window.VFXGraph.History.canUndoChanged.connect(self._HistoryChanged)
@@ -79,6 +83,7 @@ class EditorController(QObject):
         self._asset_picker_records=None
         self._material_scenes=None
         self.History=SceneHistory(runtime,self)
+        self.History.BeforeChange.connect(window.Animation.EndPreview)
         from ..hot_reload import HotReloadController
         self.HotReload=HotReloadController(self)
         window.MenuBar.ReloadScriptsRequested.connect(self.HotReload.Reload)
@@ -207,6 +212,7 @@ class EditorController(QObject):
         return self.SaveScene()
 
     def SaveScene(self) -> bool:
+        self.Window.Animation.EndPreview()
         if self.ScriptAttachments and not self._SyncLuaScripts():return False
         if self.ScenePath:
             if self.Runtime.SaveScene(self.ScenePath): self.SetDirty(False);return True
@@ -290,6 +296,7 @@ class EditorController(QObject):
         try:self.Window.Properties.Clear()
         finally:self._updating_inspector = False
         self.SelectedEntity = next_entity
+        self.Window.Animation.SetEntity(next_entity)
         self.SelectedEntities=[next_entity] if next_entity else []
         self.Window.Properties.AddComponentButton.setVisible(bool(next_entity))
         if not self.SelectedEntity:
@@ -404,8 +411,9 @@ class EditorController(QObject):
 
     def _FocusedGraph(self):
         focus=QApplication.focusWidget()
-        for name in ('ShaderGraph','VFXGraph'):
+        for name in ('ShaderGraph','VFXGraph','Animation'):
             graph=getattr(self.Window,name,None)
+            if name=='Animation' and graph and (not graph.Path or graph.Tabs.currentWidget() is not graph.GraphPage):continue
             if graph and isValid(graph) and focus and (graph is focus or graph.isAncestorOf(focus)):return graph
     def _GraphHasFocus(self):return self._FocusedGraph() is not None
 
@@ -823,6 +831,33 @@ class EditorController(QObject):
         return self.Window.Resources.Icon(f"icons/{filename}") if filename else None
 
     def _ComponentEditor(self, entity_id: str, component: str, name: str, value):  # type: ignore[no-untyped-def]
+        if component=="IK Constraint" and name=="Solver":
+            editor=EnumInput();editor.SetOptions([(self.Window.Localization.Translate('animation.ik_'+key),i) for i,key in enumerate(('two_bone','ccd','fabrik'))]);editor.SetValue(value);editor.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
+        if component=="IK Constraint" and name in {"Animator Entity","Target","Pole Target"}:
+            entities={str(row['uuid']):row for row in self.Runtime.Entities() if name!='Animator Entity' or 'Animator' in self.Runtime.EntityDetails(str(row['uuid'])).get('components',[])}
+            editor=ObjectPickerInput(validator=lambda v:str(v) in entities);editor.SetValue(value if value in entities else None,entities.get(value,{}).get('name',''))
+            def Assign(v):editor.Display.setText(entities.get(str(v),{}).get('name',''));self._CommitComponent(entity_id,component,name,v or ZERO)
+            editor.ValueChanged.connect(Assign)
+            def Pick():
+                dialog=QDialog(editor);dialog.setWindowTitle(self.Window.Localization.Translate('animation.pick_entity'));layout=QVBoxLayout(dialog);items=QListWidget();layout.addWidget(items)
+                for identity,row in entities.items():item=QListWidgetItem(row.get('name',''));item.setData(Qt.ItemDataRole.UserRole,identity);items.addItem(item)
+                items.itemDoubleClicked.connect(lambda item:(editor.SetValue(item.data(Qt.ItemDataRole.UserRole)),dialog.accept()));dialog.exec();dialog.deleteLater()
+            editor.PickRequested.connect(Pick);return editor
+        if component in {"Animator","IK Constraint"} and name in {"Root Bone","Tip Bone"}:
+            try:
+                owner=entity_id if component=='Animator' else self.Runtime.EntityDetails(entity_id).get('component_data',{}).get('IK Constraint',{}).get('Animator Entity','');bones=self.Runtime.AnimationInfo(owner).get('bones',[]) if owner else []
+                if bones:
+                    editor=EnumInput();editor.SetOptions([(str(bone['index'])+' · '+bone['name'],bone['index']) for bone in bones]);editor.SetValue(value);editor.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
+            except (ValueError,RuntimeError):pass
+        if component=="Animator" and name=="Default Clip":
+            try:
+                clips=self.Runtime.AnimationInfo(entity_id).get('clips',[]);editor=EnumInput();options=[(self.Window.Localization.Translate('animation.first_clip'),'')]+[(clip['name'],clip['name']) for clip in clips]
+                if value and value not in {row[1] for row in options}:options.append((value,value))
+                editor.SetOptions(options);editor.SetValue(value);editor.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
+            except (RuntimeError,ValueError):pass
+        if component=="Animator" and name in {"Model","Controller"}:return self._AssetPicker(value,{".glb",".gltf"} if name=="Model" else {".banim"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
+        if component=="Animator" and name=="Root Motion":
+            editor=EnumInput();editor.SetOptions([(self.Window.Localization.Translate('animation.root_'+key),i) for i,key in enumerate(('disabled','extract','transform','physics'))]);editor.SetValue(int(value));editor.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
         if component=="Particle Emitter" and name in {"Graph","Material Override"}:return self._AssetPicker(value,{".vfx"} if name=="Graph" else {".matinst"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
         if component=="Particle Emitter" and name=="Backend":
             editor=EnumInput();editor.SetOptions([(self.Window.Localization.Translate("vfx.backend."+key),index) for index,key in enumerate(('automatic','cpu','gpu'))]);editor.SetValue(value);editor.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
@@ -1138,6 +1173,10 @@ class EditorController(QObject):
         if path.suffix.lower()==".bprefab":self.Prefabs.Instantiate(path,"")
         elif path.suffix.lower()==".bscene":self.LoadSceneAdditive(path)
         elif path.suffix.lower()==".bmixer":self.OpenAudioMixer(path)
+        elif path.suffix.lower()==".banim":
+            if self.Window.Animation.Open(path):
+                if not self.Window.Docking.is_panel_open("animation"):self.Window.Docking.dock("animation","center",relative_to="asset_browser")
+                self.Window.Docking.activate_panel("animation")
         elif path.suffix.lower()==".vfx":self.OpenVFXGraph(path)
         elif path.suffix.lower()==".shadg":self.OpenShaderGraph(path)
         elif path.suffix.lower() in AUDIO_EXTENSIONS:
@@ -1156,7 +1195,7 @@ class EditorController(QObject):
         if self.Window.ShaderGraph.Path==Path(path):self.Window.ShaderGraph.Unlock()
     def _GraphChanged(self,path):
         browser=self.Window.AssetBrowser;item=browser.Browser.currentItem();selected=Path(item.data(Qt.ItemDataRole.UserRole)) if item else None
-        if Path(path).suffix.lower()==".vfx":self.Runtime.RefreshAsset(path)
+        if Path(path).suffix.lower() in {".vfx",".banim"}:self.Runtime.RefreshAsset(path)
         else:self.Runtime.RefreshAssets()
         converted=bool(selected and not selected.exists() and selected.with_suffix('.shad')==Path(path) or selected and not selected.exists() and selected.with_suffix('.shadg')==Path(path))
         browser.Refresh(path if converted else None)
@@ -1421,6 +1460,7 @@ class EditorController(QObject):
             if entity_id==self.SelectedEntity:self.SelectEntity(entity_id,force=True)
 
     def Play(self) -> None:
+        self.Window.Animation.EndPreview()
         if self.Runtime.IsPlaying():return
         if self.HotReload.Worker is not None:
             self._ScriptValidationFailed(self.Window.Localization.Translate("scripting.reload_busy"));self.Window.Toolbar.SetPlayState(PlayState.Stopped);return

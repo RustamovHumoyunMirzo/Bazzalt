@@ -1,4 +1,11 @@
 #include "Bazzalt/Jobs.h"
+#include "Bazzalt/Animation.h"
+#include "Bazzalt/Components/Animator.h"
+#include "Bazzalt/Components/ModelNode.h"
+#include "Bazzalt/Components/ModelInstance.h"
+#include "Bazzalt/Scene.h"
+#include <gltfio/Animator.h>
+#include <gltfio/FilamentInstance.h>
 #include "Bazzalt/Profiler.h"
 #include "Bazzalt/Console.h"
 #include <atomic>
@@ -228,7 +235,7 @@ struct RenderAssets::Impl {
         struct Original { utils::Entity Entity;std::size_t Primitive;filament::MaterialInstance* Material; };
         Kind Type = Kind::Gltf;
         UUID Asset{};
-        UUID EditorOwner{};
+        UUID EditorOwner{},ModelOwner{};
         std::vector<UUID> Materials;
         filament::gltfio::FilamentAsset* Gltf = nullptr;
         std::shared_ptr<filament::gltfio::FilamentAsset> GltfOwner;
@@ -241,7 +248,7 @@ struct RenderAssets::Impl {
         std::shared_ptr<PrimitiveBuffers> SharedBuffers;
         std::shared_ptr<filament::MaterialInstance> SharedColor;
         std::vector<filament::MaterialInstance*> MaterialInstances;
-        Mat4 LastTransform;bool TransformReady=false,FlagsReady=false,ColorReady=false;
+        Mat4 LastTransform;bool TransformReady=false,FlagsReady=false,ColorReady=false,SkinReady=false;
         std::uint8_t LastLayer=0;bool LastCast=false,LastReceive=false;Vec4 LastColor{};
         bool AddedToScene = false;
         bool DebugWireframeAdded = false;
@@ -595,6 +602,16 @@ bool RenderAssets::PreparePostProcessEffect(const CustomPostProcessEffect& effec
     return true;
 }
 
+
+void RenderAssets::SynchronizeAnimation(Bazzalt::Scene& scene){
+ if(!m_impl)return;auto& transforms=m_impl->Engine.getTransformManager();auto& renderables=m_impl->Engine.getRenderableManager();std::unordered_set<filament::gltfio::FilamentAsset*> updated;
+ for(auto& [_,resource]:m_impl->Instances){if(!resource.Gltf||!resource.ModelOwner||!updated.insert(resource.Gltf).second)continue;auto* native=resource.Gltf->getInstance();if(!native||!native->getSkinCount())continue;auto owner=scene.GetEntity(resource.ModelOwner);if(!owner)continue;
+ std::vector<Entity> pending=owner.GetChildren();bool applied=false,changed=!resource.SkinReady;while(!pending.empty()){auto object=pending.back();pending.pop_back();if(object.HasComponent<ModelInstance>())continue;if(auto* node=object.TryGetComponent<ModelNode>();node&&node->ModelAsset==resource.Asset){auto entity=SourceNode(*resource.Gltf,node->SourceIndex);auto instance=transforms.getInstance(entity);if(instance){if(transforms.getParent(instance)){transforms.setParent(instance,{});changed=true;}auto world=ToFilamentMatrix(object.GetWorldMatrix());if(transforms.getTransform(instance)!=world){transforms.setTransform(instance,world);changed=true;}applied=true;}}auto children=object.GetChildren();pending.insert(pending.end(),children.begin(),children.end());}
+ if(!applied&&owner.HasComponent<Animator>()){changed=true;auto rig=Animation::GetRig(owner);auto pose=Animation::GetPose(owner);if(rig&&!pose.empty()){auto matrices=rig->Rig.ForwardKinematics(pose);for(unsigned i=0;i<matrices.size();++i){auto entity=SourceNode(*resource.Gltf,rig->Rig.Bones[i].SourceIndex);auto instance=transforms.getInstance(entity);if(instance){transforms.setParent(instance,{});transforms.setTransform(instance,ToFilamentMatrix(owner.GetWorldMatrix()*matrices[i]));}}applied=true;}}
+ if(applied&&changed){resource.SkinReady=true;native->getAnimator()->updateBoneMatrices();for(std::size_t i=0;i<resource.Gltf->getEntityCount();++i){auto instance=renderables.getInstance(resource.Gltf->getEntities()[i]);if(instance)renderables.setCulling(instance,false);}}
+ }
+}
+
 RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component) {
     return CreateMesh(component, {});
 }
@@ -605,7 +622,7 @@ RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component, UUID modelI
     if (!asset || asset->State != AssetState::Ready) return InvalidHandle;
 
     Impl::Instance instance;
-    instance.Asset = component.MeshAsset; instance.Materials = component.Materials;
+    instance.Asset = component.MeshAsset; instance.Materials = component.Materials;instance.ModelOwner=modelInstance?modelInstance:requester;
     const std::string extension = LowerExtension(asset->SourcePath);
     if (extension == ".gltf" || extension == ".glb") {
         if (!m_impl->GltfLoader || !m_impl->GltfTextures) return InvalidHandle;
@@ -700,6 +717,7 @@ RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component, UUID modelI
                 }, storage});
             }
             if (!resources.loadResources(loaded)) return InvalidHandle;
+            loaded->getInstance()->getAnimator();
             loaded->releaseSourceData();
             }
             if (shared) m_impl->Models.insert_or_assign(modelInstance, Impl::CachedModel{component.MeshAsset,asset->CachePath,instance.GltfOwner});
@@ -846,7 +864,7 @@ void RenderAssets::Update() {
         for(auto it=m_impl->Uploads.begin();it!=m_impl->Uploads.end();){
             auto& upload=*it->second;
             if(upload.Owner.use_count()==1&&upload.LastRequest+2<m_impl->Tick){it=m_impl->Uploads.erase(it);continue;}
-            if(upload.Loader){upload.Loader->asyncUpdateLoad();if(upload.Loader->asyncGetLoadProgress()>=1){upload.Owner->releaseSourceData();upload.Loader.reset();upload.Textures.reset();upload.Complete=true;upload.Prepared.reset();}}
+            if(upload.Loader){upload.Loader->asyncUpdateLoad();if(upload.Loader->asyncGetLoadProgress()>=1){upload.Owner->getInstance()->getAnimator();upload.Owner->releaseSourceData();upload.Loader.reset();upload.Textures.reset();upload.Complete=true;upload.Prepared.reset();}}
             ++it;
         }
         std::size_t cached=0;for(auto& [id,p]:m_impl->Preparations)if(p.Data->Status==1)cached+=p.Data->Size;

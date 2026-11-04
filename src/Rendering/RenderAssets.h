@@ -16,6 +16,7 @@
 #include "Bazzalt/PostProcessing.h"
 #include "Bazzalt/Math.h"
 
+namespace Bazzalt { class Scene; }
 namespace filament { class Engine; class Scene; class MaterialInstance; class Texture; class RenderTarget; }
 
 namespace Bazzalt::Runtime {
@@ -29,6 +30,7 @@ public:
     static constexpr Handle InvalidHandle = 0;
     static constexpr Handle PendingHandle = ~Handle(0);
     void SetAsynchronousLoading(bool enabled);
+    void SynchronizeAnimation(Bazzalt::Scene&);
 
     RenderAssets(filament::Engine& engine, filament::Scene& scene);
     ~RenderAssets();

@@ -726,6 +726,7 @@ void RenderBackend::Render(double materialTime) {
     if(m_guiScene&&m_guiScene->HasSystem<CameraSystem>())m_guiScene->GetSystem<CameraSystem>().Synchronize(*m_guiScene);
     m_assets->ResetLODMaterials();
     m_assets->SynchronizeTextures();
+    if(m_guiScene)m_assets->SynchronizeAnimation(*m_guiScene);
     if(!m_graphics)m_graphics=std::make_unique<GraphicsRenderer>(*this);
     m_graphics->BeginFrame();
     struct GraphicsFrameScope {GraphicsRenderer& Renderer;RenderAssets& Assets;~GraphicsFrameScope(){Renderer.EndFrame();Assets.ResetLODMaterials();}} graphicsFrame{*m_graphics,*m_assets};

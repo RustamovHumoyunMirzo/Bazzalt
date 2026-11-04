@@ -34,6 +34,11 @@ class ContentFilterTests(unittest.TestCase):
             for name in ('Effect.vfx','Module.vfx','Model.bin'):self.assertTrue((root/'Assets'/name).exists())
             self.assertFalse((root/'Assets/Unused.bin').exists())
 
+    def test_animation_controller_retains_retarget_source(self):
+        import json
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);self.Fixture(root);index=root/'.bazzalt/CookedAssets.yaml';data=yaml.safe_load(index.read_text());source=root/'Assets/Move.banim';source.write_text(json.dumps({'version':1,'sourceModel':'model','states':[]}));cache=root/'.bazzalt/Cache/controller/current.banim';cache.parent.mkdir(parents=True);cache.write_bytes(source.read_bytes());data['Assets'].append(dict(UUID='controller',Source='Assets/Move.banim',Cache=cache.relative_to(root).as_posix(),Importer='Bazzalt.AnimationController'));index.write_text(yaml.safe_dump(data));(root/'Assets/Main.bscene').write_text('Controller: controller\n');settings=copy.deepcopy(DEFAULTS['packaging']);settings['include_assets']='Assets/Main.bscene';FilterCooked(root,settings);self.assertTrue((root/'Assets/Model.bin').is_file());self.assertTrue(source.is_file());self.assertFalse((root/'Assets/Unused.bin').exists())
+
     def test_application_entry_is_retained_and_cannot_be_excluded(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);self.Fixture(root)
