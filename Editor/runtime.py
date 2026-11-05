@@ -91,6 +91,11 @@ class RuntimeService(QObject):
         if self._host is not None: return self._host.last_error()
         return f"Native editor runtime could not be loaded: {_NATIVE_LOAD_ERROR or 'module not found'}"
 
+    def SetSceneFileLocksSuspended(self, suspended: bool) -> None:
+        if self._host is None or not hasattr(self._host, "set_scene_file_locks_suspended"):
+            raise RuntimeError("Rebuild the native editor bridge to enable Git worktree updates")
+        self._host.set_scene_file_locks_suspended(bool(suspended))
+
     def LoadProject(self, path: str | Path) -> bool:
         self.ProjectChanging.emit()
         try:loaded=self._host is not None and self._host.load_project(str(path))

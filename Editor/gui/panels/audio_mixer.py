@@ -57,6 +57,16 @@ class AudioMixerPanel(QWidget):
         except (OSError,AttributeError):return None
     def _ResetPicker(self):
         blocker=QSignalBlocker(self.Picker);self.Picker.ConfigureAssets(self.AssetProvider());self.Picker.SetValue(self.Identity or None,self.Path.stem if self.Path else None);del blocker
+    def ResetDocument(self):
+        self.SaveTimer.stop()
+        self.LevelTimer.stop()
+        self.Pending=False
+        self.Identity=''
+        self.Path=None
+        self.Stamp=None
+        self._SetAssetEnabled(False)
+        self._ResetPicker()
+
     def Open(self,identity):
         if not self.Flush():self._ResetPicker();self.RefreshMixerList();return False
         if not identity:

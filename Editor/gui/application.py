@@ -119,6 +119,7 @@ class Editor(QMainWindow):
         self.MenuBar.PreferencesRequested.connect(self.OpenPreferences)
         self.MenuBar.ProjectSettingsRequested.connect(self.OpenProjectSettings)
         self.MenuBar.ProfilerRequested.connect(self.OpenProfiler)
+        self.MenuBar.VersionControlRequested.connect(self.OpenVersionControl)
         self.MenuBar.LightingRequested.connect(self.OpenLighting)
         self.MenuBar.GlobalSubsystemsRequested.connect(self.OpenGlobalSubsystems)
         self.MenuBar.MaximizeViewportRequested.connect(self.SetViewportMaximized)
@@ -220,6 +221,15 @@ class Editor(QMainWindow):
         from .lighting import LightingDialog
         if getattr(self,'_lighting_dialog',None) is None:self._lighting_dialog=LightingDialog(self)
         self._lighting_dialog.show();self._lighting_dialog.raise_()
+
+    def OpenVersionControl(self) -> None:
+        if not self.Runtime.ProjectInfo().get("project_path"):
+            return
+        from .version_control import VersionControlDialog
+        if getattr(self, "_version_control_dialog", None) is None:
+            self._version_control_dialog = VersionControlDialog(self)
+        self._version_control_dialog.show()
+        self._version_control_dialog.raise_()
 
     def OpenProfiler(self)->None:
         from .profiler import ProfilerDialog
@@ -478,6 +488,12 @@ class Editor(QMainWindow):
             except (OSError,ValueError):pass
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        version_control = getattr(self, "_version_control_dialog", None)
+        if version_control is not None and version_control.Busy:
+            version_control.show()
+            version_control.raise_()
+            event.ignore()
+            return
         if self.GameBuild.IsRunning():
             QMessageBox.information(self,self.Localization.Translate('menu.build'),self.Localization.Translate('build.close_wait'));event.ignore();return
         if not self.Animation.Flush():
@@ -517,6 +533,8 @@ class Editor(QMainWindow):
         # ownership now, before another editor can initialize its own runtime.
         self.EditorTools.Shutdown()
         self.Extensions.Shutdown()
+        if version_control is not None:
+            version_control.Shutdown()
         self.Runtime.Release()
         application=QApplication.instance()
         if application is not None:application.removeEventFilter(self.CursorPolicy)

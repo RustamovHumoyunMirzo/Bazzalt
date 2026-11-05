@@ -223,6 +223,17 @@ class ShaderGraphPanel(QWidget):
             category=self.Palette.topLevelItem(i)
             for j in range(category.childCount()):category.child(j).setHidden(text.casefold() not in category.child(j).text(0).casefold())
             category.setHidden(all(category.child(j).isHidden() for j in range(category.childCount())));category.setExpanded(bool(text.strip()))
+    def ResetDocument(self):
+        self.Path=None
+        self.Graph=self.Model.NewGraph()
+        self.SavedGraph=copy.deepcopy(self.Graph)
+        self.Stamp=None
+        self.PreviewTimer.stop()
+        self.Watch()
+        self.History.clear()
+        self.Rebuild()
+        self.Title.clear()
+
     def Open(self,path,force=False):
         if self.Pin.isChecked() and self.Path and not force:return False
         if not self.Flush():return False

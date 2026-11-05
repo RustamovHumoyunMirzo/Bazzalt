@@ -125,6 +125,15 @@ class AnimationPanel(QWidget):
         blocker=QSignalBlocker(self.Time);self.Time.setValue(0);del blocker;self.Timeline.Time=0;self.Timeline.update()
         try:self.Runtime.EndAnimationPreview()
         except (RuntimeError,ValueError):pass
+    def ResetDocument(self):
+        self.EndPreview()
+        self.Path=None
+        self.Graph=None
+        self.Entity=''
+        self.History.clear()
+        self.Rebuild()
+        self.Title.clear()
+
     def Open(self,path):
         self.EndPreview()
         try:self.Graph=Data.Load(path);self.Path=Path(path);self.History.clear();self.Rebuild();self.Title.setText(self.Path.name);self.Tabs.setCurrentWidget(self.GraphPage);self.Error.clear();return True

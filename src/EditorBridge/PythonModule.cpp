@@ -215,6 +215,14 @@ public:
         if(!m_engine->RefreshTextureAsset(asset->SourcePath)){m_bridgeError=m_engine->GetLastError();return false;}return true;
     }
 
+    void SetSceneFileLocksSuspended(bool suspended) {
+        if (suspended && m_playing) throw std::runtime_error("Stop Play before changing the worktree");
+        m_sceneLocksSuspended = suspended;
+        for (auto& scene : m_loadedScenes) {
+            if (suspended) ReleaseSceneLock(scene);
+            else AcquireSceneLock(scene);
+        }
+    }
     bool LoadProject(const std::string& path) {EndAnimationPreview();
         Stop();m_bridgeError.clear();bool result=false;
         try { result=m_engine->LoadProject(std::filesystem::u8path(path),true); }
@@ -867,7 +875,7 @@ private:
     Scene& SceneFor(LoadedScene& loaded){return &loaded==&m_loadedScenes[m_activeScene]?m_engine->GetScene():*loaded.Data;}
     Scene& SceneAt(std::size_t index){return index==m_activeScene?m_engine->GetScene():*m_loadedScenes[index].Data;}
     std::optional<std::size_t> FindLoadedScene(const std::string& id){const auto requested=std::filesystem::u8path(id);for(std::size_t i=0;i<m_loadedScenes.size();++i)if(SceneAt(i).GetUUID().ToString()==id||(!m_loadedScenes[i].Path.empty()&&std::filesystem::weakly_canonical(m_loadedScenes[i].Path)==std::filesystem::weakly_canonical(requested)))return i;return std::nullopt;}
-    void AcquireSceneLock(LoadedScene& loaded){if(loaded.Path.empty()||!std::filesystem::exists(loaded.Path))return;
+    void AcquireSceneLock(LoadedScene& loaded){if(m_sceneLocksSuspended||loaded.Path.empty()||!std::filesystem::exists(loaded.Path))return;
 #ifdef _WIN32
         if(loaded.Lock==INVALID_HANDLE_VALUE)loaded.Lock=CreateFileW(loaded.Path.c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
 #else
@@ -907,6 +915,7 @@ private:
     std::map<UUID,std::array<float,2>> m_meterLevels;
     std::vector<LoadedScene> m_loadedScenes;
     std::size_t m_activeScene = 0;
+    bool m_sceneLocksSuspended = false;
     bool m_playing = false;
     std::string m_previewCamera;
     bool m_gameFocused=false;
@@ -957,6 +966,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("rename_loaded_scene", &Bazzalt::EditorBridge::EditorHost::RenameLoadedScene)
         .def("is_scene_loaded", &Bazzalt::EditorBridge::EditorHost::IsSceneLoaded)
         .def("save_scene", &Bazzalt::EditorBridge::EditorHost::SaveScene)
+        .def("set_scene_file_locks_suspended", &Bazzalt::EditorBridge::EditorHost::SetSceneFileLocksSuspended)
         .def("new_scene", &Bazzalt::EditorBridge::EditorHost::NewScene)
         .def("last_error", &Bazzalt::EditorBridge::EditorHost::LastError)
         .def("project_directory", &Bazzalt::EditorBridge::EditorHost::ProjectDirectory)
