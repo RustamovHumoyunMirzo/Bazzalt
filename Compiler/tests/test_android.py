@@ -8,7 +8,8 @@ from unittest.mock import patch
 from xml.etree import ElementTree
 
 from Compiler.android_tools import Discover, HostTag, Validate as ValidateTools, NDK_VERSION
-from Compiler.android_build import Manifest, Resources, Signing, StageModules
+from Compiler.android_build import Manifest, Resources, Signing, StageModules, ValidateLibraries
+from types import SimpleNamespace
 from Compiler.settings import DEFAULTS, Merge, Validate, ApplyPreset
 
 
@@ -85,6 +86,22 @@ class AndroidTests(unittest.TestCase):
             self.assertTrue(all(name.startswith('libasset_') and name.endswith('.so') for name in mapping.values()))
             self.assertEqual(mapping,StageModules(cooked,libraries,'arm64'))
             with self.assertRaisesRegex(ValueError,'architecture'):StageModules(cooked,libraries,'x64')
+
+    def test_native_library_sdk_and_page_alignment_checks(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);(root/'meta').mkdir();libraries=root/'libraries';libraries.mkdir()
+            (root/'meta/system_libs.json').write_text(json.dumps({'libc.so':'21','libamidi.so':'29'}))
+            header=bytearray(20);header[:4]=b'\x7fELF';header[5]=1;header[16:18]=(3).to_bytes(2,'little')
+            (libraries/'libtest.so').write_bytes(header)
+            tools=SimpleNamespace(Ndk=root,Compiler=root/'clang++')
+            with patch('Compiler.android_build.Run') as run:
+                run.return_value.stdout='LOAD 0x0000 0x4000\n (NEEDED) Shared library: [libc.so]'
+                ValidateLibraries(libraries,tools,26)
+                run.return_value.stdout='LOAD 0x0000 0x4000\n (NEEDED) Shared library: [libamidi.so]'
+                with self.assertRaisesRegex(ValueError,'minimum SDK'):ValidateLibraries(libraries,tools,26)
+                ValidateLibraries(libraries,tools,29)
+                run.return_value.stdout='LOAD 0x0000 0x1000'
+                with self.assertRaisesRegex(ValueError,'16 KiB'):ValidateLibraries(libraries,tools,26)
 
 
 if __name__=='__main__':unittest.main()

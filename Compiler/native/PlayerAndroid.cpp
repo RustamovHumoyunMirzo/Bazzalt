@@ -12,7 +12,7 @@
 
 using namespace Bazzalt::Game;
 
-extern "C" int SDL_main(int, char**) {
+extern "C" __attribute__((visibility("default"))) int SDL_main(int, char**) {
     SDL_Window* window = nullptr;
     try {
         const auto executable = Bazzalt::Runtime::AndroidPlatform::NativeLibrary("libmain.so");

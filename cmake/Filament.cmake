@@ -55,7 +55,9 @@ function(bazzalt_configure_filament ROOT)
         geometry ibl-lite zstd
     )
     if(ANDROID)
-        list(REMOVE_ITEM _filament_libraries bluegl matp imageio-lite)
+        # Android omits the desktop gltfio JIT wrapper. Bazzalt supplies its own
+        # material provider and links gltfio_core plus filamat directly.
+        list(REMOVE_ITEM _filament_libraries bluegl matp gltfio)
     endif()
     if(APPLE)
         # The native macOS SDK uses Metal; a Metal-only source install has no Vulkan loader archive.

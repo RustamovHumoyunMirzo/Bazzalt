@@ -108,9 +108,12 @@ public final class Platform {
     private static SharedPreferences Saves() { return context.getSharedPreferences("Bazzalt.SaveGame", Context.MODE_PRIVATE); }
     private static String SaveKey(String path) {
         // Relative app-private paths remain stable across updates and exclude other apps' files.
-        String root = context.getFilesDir().getParentFile().getAbsolutePath() + "/";
-        if (!path.startsWith(root) || path.contains("/../")) throw new IllegalArgumentException("Invalid save path");
-        return path.substring(root.length());
+        try {
+            String root = context.getFilesDir().getParentFile().getCanonicalPath() + "/";
+            String canonical = new File(path).getCanonicalPath();
+            if (!canonical.startsWith(root) || path.contains("/../")) throw new IllegalArgumentException("Invalid save path");
+            return canonical.substring(root.length());
+        } catch(java.io.IOException error) { throw new IllegalStateException("Could not resolve save storage",error); }
     }
     public static synchronized byte[] ReadSave(String path) {
         String encoded = Saves().getString(SaveKey(path), null);

@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import tempfile
 import uuid
@@ -21,7 +22,6 @@ def Digest(path):
 
 def StageModules(cooked,libraries,architecture):
     from .build import Architecture
-    import re
     dependencies=set()
     index=cooked/'ext/runtime.json'
     if index.is_file():
@@ -42,6 +42,24 @@ def StageModules(cooked,libraries,architecture):
         if not target.exists():shutil.copy2(file,target)
         mapping[relative]=name
     return mapping
+
+
+def ValidateLibraries(libraries,tools,minimum_api):
+    """Reject missing/too-new dependencies and incompatible 16 KiB load segments."""
+    system=json.loads((tools.Ndk/'meta/system_libs.json').read_text(encoding='utf-8'))
+    available={file.name for file in libraries.glob('*.so')}
+    available.update(name for name,api in system.items() if int(api)<=minimum_api)
+    readelf=tools.Compiler.parent/('llvm-readelf.exe' if os.name=='nt' else 'llvm-readelf')
+    for library in libraries.glob('*.so'):
+        with library.open('rb') as file:header=file.read(20)
+        if len(header)<20 or header[:4]!=b'\x7fELF' or header[5]!=1 or int.from_bytes(header[16:18],'little')!=3:
+            raise ValueError('Invalid Android shared library: '+library.name)
+        output=Run([readelf,'-lW','-d',library]).stdout
+        missing=set(re.findall(r'\(NEEDED\).*Shared library: \[(.*?)\]',output))-available
+        if missing:raise ValueError(library.name+' requires unavailable libraries at the minimum SDK: '+', '.join(sorted(missing)))
+        loads=[line.split() for line in output.splitlines() if line.strip().startswith('LOAD ')]
+        if not loads or any(int(fields[-1],16)<16384 for fields in loads):
+            raise ValueError(library.name+' must be rebuilt with 16 KiB ELF page alignment')
 
 
 def Manifest(settings, configuration, split=False):
@@ -246,6 +264,7 @@ def BuildAndroid(project, runtime, cooker, settings, configuration, launch, canc
                 strip=tools.Compiler.parent/('llvm-strip.exe' if os.name=='nt' else 'llvm-strip')
                 for library in libraries.glob('*.so'):
                     check();Run([strip,'--strip-unneeded',library])
+            ValidateLibraries(libraries,tools,profile['min_sdk'])
             payload = work / 'payload'
             payload.mkdir()
             security = SecurityContext(settings, KeyFor(settings))

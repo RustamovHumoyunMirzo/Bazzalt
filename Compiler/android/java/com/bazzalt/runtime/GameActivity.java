@@ -5,7 +5,7 @@ import java.io.File;
 import org.libsdl.app.SDLActivity;
 
 public final class GameActivity extends SDLActivity {
-    private static GameActivity instance;
+    private static volatile GameActivity instance;
     private static volatile boolean skipped;
     private android.view.View intro;
     public static void ShowIntro(boolean enabled, int size, boolean allowSkip) {
@@ -13,6 +13,7 @@ public final class GameActivity extends SDLActivity {
         if(activity==null)return;
         skipped=false;
         activity.runOnUiThread(() -> {
+            if(instance!=activity||activity.isFinishing()||activity.isDestroyed()||mLayout==null)return;
             android.widget.LinearLayout panel=new android.widget.LinearLayout(activity);
             panel.setOrientation(android.widget.LinearLayout.VERTICAL);
             panel.setGravity(android.view.Gravity.CENTER);
@@ -36,12 +37,16 @@ public final class GameActivity extends SDLActivity {
     public static boolean IntroSkipped(){return skipped;}
     public static void FinishIntro(){
         GameActivity activity=instance;
-        if(activity!=null)activity.runOnUiThread(() -> {if(activity.intro!=null){mLayout.removeView(activity.intro);activity.intro=null;}});
+        if(activity!=null)activity.runOnUiThread(() -> {
+            if(instance!=activity||activity.isDestroyed()||mLayout==null)return;
+            if(activity.intro!=null){mLayout.removeView(activity.intro);activity.intro=null;}
+        });
     }
     @Override protected String[] getLibraries() { return new String[]{"SDL3", "Bazzalt", "main"}; }
     @Override protected void onCreate(Bundle state) {
         String id = getIntent().getStringExtra("content");
         if (id == null || !id.matches("[a-f0-9]{32}")) {
+            super.onCreate(state);
             startActivity(new android.content.Intent(this, BootstrapActivity.class));
             finish();
             return;

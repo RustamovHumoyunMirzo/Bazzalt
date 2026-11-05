@@ -31,6 +31,9 @@ def Stage(build,output,architecture,root=None,platform=None):
         triple='aarch64-linux-android' if architecture=='arm64' else 'x86_64-linux-android'
         shutil.copy2(ndk/'toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib'/triple/'libc++_shared.so',native/'libc++_shared.so')
         names.append('libc++_shared.so')
+        from Compiler.android_build import ValidateLibraries
+        from types import SimpleNamespace
+        ValidateLibraries(native,SimpleNamespace(Ndk=ndk,Compiler=ndk/'toolchains/llvm/prebuilt/linux-x86_64/bin/clang++'),26)
         shutil.copytree(root/'deps/SDL3/android-project/app/src/main/java',output/'android/java',dirs_exist_ok=True)
     if platform=="macos":names=["BazzaltPlayer","libbazzalt_player.dylib","libBazzalt.dylib","libbazzalt_lua.dylib","libbazzalt_gui.dylib","libbazzalt_physics.dylib","libbazzalt_network.dylib","libbazzalt_crypto.dylib"]+sorted(p.name for p in native.glob("libbazzalt_lua.*.dylib"))
     if platform=="linux":

@@ -8,7 +8,8 @@ import unittest
 import zipfile
 
 from Compiler.android_tools import Validate
-from Compiler.android_build import Package, Signing
+from Compiler.android_build import Package, Signing, ValidateLibraries
+from Compiler.build import Run
 from Compiler.settings import Merge, DEFAULTS
 
 
@@ -27,6 +28,10 @@ class AndroidSdkTests(unittest.TestCase):
             shutil.copytree(repository/'deps/SDL3/android-project/app/src/main/java',runtime/'android/java')
             payload=root/'payload';payload.mkdir();(payload/'game.json').write_text('{}')
             libraries=root/'libraries';libraries.mkdir()
+            probe=root/'probe.cpp';probe.write_text('extern "C" int BazzaltAndroidProbe(){return 1;}')
+            Run([tools.Compiler,'--target='+tools.Triple+'26','--sysroot='+str(tools.Sysroot),'-shared','-fPIC',
+                 '-nostdlib++','-Wl,-z,max-page-size=16384',probe,'-o',libraries/'libprobe.so'])
+            ValidateLibraries(libraries,tools,26)
             for mode in ('apk','split_apk','obb','external_data'):
                 with self.subTest(mode=mode):
                     profile['delivery']=mode

@@ -70,3 +70,59 @@ jobs:
         with:
           name: android-runtime-${{ matrix.architecture }}
           path: dist/releases/*
+
+  game-integration:
+    needs: runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/build/.ccache
+      CCACHE_MAXSIZE: 2G
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: android-runtime-x64
+          path: dist/android-artifact
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: build/.ccache
+          key: android-smoke-host-${{ github.run_id }}
+          restore-keys: linux-x64-objects-
+      - name: Prepare host cooker and Android emulator tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang ccache libc++-dev libc++abi-dev ninja-build pkg-config libssl-dev libx11-dev libx11-xcb-dev libxcb1-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev libgl1-mesa-dev libvulkan-dev libwayland-dev wayland-protocols libdecor-0-dev
+          python -m pip install -r requirements-build.txt
+          for dependency in entt rapidyaml filament sdl3 lua sol2 miniaudio jolt yojimbo freetype text_shaping; do sh "scripts/get_${dependency}.sh"; done
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DBAZZALT_BUILD_EDITOR_BRIDGE=OFF -DBUILD_TESTING=OFF
+          cmake --build build --parallel 2 --target BazzaltCooker BazzaltGui
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;29.0.14206865" "platforms;android-36" "build-tools;36.0.0" "emulator" "system-images;android-35;google_apis;x86_64"
+          python -c "from pathlib import Path; import zipfile; zipfile.ZipFile(next(Path('dist/android-artifact').glob('*.zip'))).extractall('dist/android-sdk')"
+      - name: Test native GLES and Vulkan games on Android
+        run: |
+          sudo chmod 666 /dev/kvm
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n BazzaltCi -k "system-images;android-35;google_apis;x86_64" --device pixel_5
+          "$ANDROID_HOME/emulator/emulator" -avd BazzaltCi -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect -feature Vulkan -memory 3072 -cores 2 > dist/emulator.log 2>&1 &
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          adb wait-for-device
+          for attempt in $(seq 1 180); do
+            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then break; fi
+            sleep 2
+          done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          python scripts/test_android_game.py --runtime dist/android-sdk/RuntimeTemplates/android-x64 --cooker build/Editor/BazzaltCooker
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: android-integration-logs
+          path: |
+            dist/android-integration/*.png
+            dist/android-integration/*.txt
+            dist/emulator.log
