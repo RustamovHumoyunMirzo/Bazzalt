@@ -65,9 +65,12 @@ class CompiledResourcesTests(unittest.TestCase):
         from PySide6.QtCore import Qt
         theme=ThemeManager(self.App);bar=EditorMenuBar(theme,LocalizationManager(ResourceManager()))
         bar.resize(900,28);bar.show();self.App.processEvents()
-        self.assertIs(bar.cornerWidget(Qt.Corner.TopLeftCorner),bar.BrandLabel)
-        if sys.platform=='darwin':self.assertTrue(bar.BrandLabel.isHidden())
-        else:self.assertGreaterEqual(bar.actionGeometry(bar.FileMenu.menuAction()).left(),bar.BrandLabel.geometry().right())
+        if sys.platform=='darwin':
+            self.assertIsNone(bar.cornerWidget(Qt.Corner.TopLeftCorner))
+            self.assertTrue(bar.BrandLabel.isHidden())
+        else:
+            self.assertIs(bar.cornerWidget(Qt.Corner.TopLeftCorner),bar.BrandLabel)
+            self.assertGreaterEqual(bar.actionGeometry(bar.FileMenu.menuAction()).left(),bar.BrandLabel.geometry().right())
         for color in ('#202020','#eeeeee'):
             for pixmap in (LogoIcon(color).pixmap(128,128),WordmarkPixmap(color)):
                 image=pixmap.toImage();pixels=[image.pixelColor(x,y) for y in range(image.height()) for x in range(image.width()) if image.pixelColor(x,y).alpha()==255]
