@@ -1,3 +1,5 @@
+import os
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import sys
 from pathlib import Path
 from PySide6.QtCore import QByteArray, QRectF, Qt

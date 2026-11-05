@@ -13,6 +13,10 @@ jobs:
   runtime:
     runs-on: ubuntu-24.04
     timeout-minutes: 180
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/build/.ccache-android
+      CCACHE_MAXSIZE: 1G
+      CCACHE_COMPILERCHECK: content
     strategy:
       fail-fast: false
       matrix:
@@ -29,7 +33,7 @@ jobs:
       - name: Install host tools and Android SDK
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang libc++-dev libc++abi-dev ninja-build libgl1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libvulkan-dev
+          sudo apt-get install -y clang ccache libc++-dev libc++abi-dev ninja-build libgl1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libvulkan-dev
           python -m pip install -r requirements-build.txt PySide6==6.10.2
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;29.0.14206865" "platforms;android-36" "build-tools;36.0.0"
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -56,9 +60,15 @@ jobs:
             deps/filament-android
             deps/openssl-android
           key: ${{ steps.dependencies.outputs.cache-primary-key }}
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: objects
+        with:
+          path: build/.ccache-android
+          key: android-runtime-objects-${{ matrix.abi }}-${{ github.run_id }}
+          restore-keys: android-runtime-objects-${{ matrix.abi }}-
       - name: Cross compile shared runtime
         run: |
-          cmake -S . -B build/android -G Ninja -DCMAKE_BUILD_TYPE=Release \
+          cmake -S . -B build/android -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/29.0.14206865/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=${{ matrix.abi }} -DANDROID_PLATFORM=android-26 -DANDROID_STL=c++_shared \
             -DBAZZALT_FILAMENT_DIR="$PWD/deps/filament-android/${{ matrix.abi }}" \
@@ -69,6 +79,11 @@ jobs:
             -DBAZZALT_BUILD_EDITOR_BRIDGE=OFF -DBUILD_TESTING=OFF
           cmake --build build/android --parallel 2
           python scripts/package_android.py --architecture ${{ matrix.architecture }}
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: always() && steps.objects.outcome == 'success'
+        with:
+          path: build/.ccache-android
+          key: ${{ steps.objects.outputs.cache-primary-key }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: android-runtime-${{ matrix.architecture }}
@@ -100,7 +115,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang ccache libc++-dev libc++abi-dev ninja-build pkg-config libssl-dev libx11-dev libx11-xcb-dev libxcb1-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev libgl1-mesa-dev libvulkan-dev libwayland-dev wayland-protocols libdecor-0-dev
-          python -m pip install -r requirements-build.txt
+          python -m pip install -r requirements-build.txt PySide6==6.10.2
           for dependency in entt rapidyaml filament sdl3 lua sol2 miniaudio jolt yojimbo freetype text_shaping; do sh "scripts/get_${dependency}.sh"; done
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DBAZZALT_BUILD_EDITOR_BRIDGE=OFF -DBUILD_TESTING=OFF
           cmake --build build --parallel 2 --target BazzaltCooker BazzaltGui
