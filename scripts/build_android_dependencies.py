@@ -1,6 +1,7 @@
 """Pinned Android renderer/crypto builds. Heavy compilation belongs on CI."""
 import argparse
 import os
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -24,6 +25,14 @@ def Build(abi, ndk):
         raise ValueError('Build Android dependencies on GitHub Actions and download the SDK artifact')
     root = Path(__file__).resolve().parents[1]
     ndk = Path(ndk).resolve()
+    destination=root/'deps/filament-android'/abi
+    crypto=root/'deps/openssl-android'/abi
+    marker=destination/'.bazzalt-android-sdk.json'
+    identity=dict(filament=FILAMENT_COMMIT,openssl=OPENSSL_COMMIT,ndk='29.0.14206865')
+    if marker.is_file() and json.loads(marker.read_text())==identity:
+        if (destination/'include/filament/Engine.h').is_file() and (destination/'bin/matc').is_file() and list(crypto.rglob('libcrypto.a')):
+            print('Using cached pinned Android dependencies for '+abi)
+            return
     work = root / 'build/android-bootstrap'
     work.mkdir(parents=True, exist_ok=True)
     source = work / 'filament-source'
@@ -70,6 +79,10 @@ def Build(abi, ndk):
         '-D__ANDROID_API__=26', 'no-shared', 'no-tests', 'no-apps', '-fPIC', '--prefix=' + str(crypto), cwd=crypto_build, env=environment)
     Run('make', '-j2', cwd=crypto_build, env=environment)
     Run('make', 'install_sw', cwd=crypto_build, env=environment)
+    (destination/'licenses').mkdir(exist_ok=True)
+    shutil.copy2(source/'LICENSE',destination/'licenses/Filament.txt')
+    shutil.copy2(openssl/'LICENSE.txt',destination/'licenses/OpenSSL.txt')
+    marker.write_text(json.dumps(identity),encoding='utf-8')
 
 
 if __name__ == '__main__':

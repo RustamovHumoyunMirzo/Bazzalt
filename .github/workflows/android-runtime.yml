@@ -32,13 +32,13 @@ jobs:
           sudo apt-get install -y clang libc++-dev libc++abi-dev ninja-build libgl1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libvulkan-dev
           python -m pip install -r requirements-build.txt PySide6==6.10.2
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;29.0.14206865" "platforms;android-36" "build-tools;36.0.0"
-      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: dependencies
         with:
           path: |
             deps/filament-android
             deps/openssl-android
-            build/android-bootstrap
-          key: android-dependencies-r29-filament177-rtti-${{ matrix.abi }}-v1
+          key: android-dependencies-r29-filament177-rtti-${{ matrix.abi }}-${{ hashFiles('scripts/build_android_dependencies.py') }}
       - name: Fetch pinned engine sources
         run: |
           for dependency in entt rapidyaml sdl3 lua sol2 miniaudio jolt yojimbo freetype text_shaping; do sh "scripts/get_${dependency}.sh"; done
@@ -49,6 +49,13 @@ jobs:
       - name: Build pinned Android dependencies on CI
         run: |
           python scripts/build_android_dependencies.py --abi "${{ matrix.abi }}" --ndk "$ANDROID_HOME/ndk/29.0.14206865"
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: steps.dependencies.outputs.cache-hit != 'true'
+        with:
+          path: |
+            deps/filament-android
+            deps/openssl-android
+          key: ${{ steps.dependencies.outputs.cache-primary-key }}
       - name: Cross compile shared runtime
         run: |
           cmake -S . -B build/android -G Ninja -DCMAKE_BUILD_TYPE=Release \

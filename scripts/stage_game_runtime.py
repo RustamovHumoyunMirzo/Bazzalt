@@ -73,8 +73,8 @@ def Stage(build,output,architecture,root=None,platform=None):
     for source,name in ((root/'LICENSE','Bazzalt.txt'),(root/'deps/lua/README','Lua.txt'),(root/'deps/sol2/LICENSE.txt','Sol2.txt'),(root/'deps/filament/LICENSE','Filament.txt'),(root/'deps/SDL3/LICENSE.txt','SDL3.txt')):
         if source.is_file():shutil.copy2(source,licenses/name)
     if platform=='android':
-        shutil.copy2(root/'build/android-bootstrap/openssl-source/LICENSE.txt',licenses/'OpenSSL.txt')
-        shutil.copy2(root/'build/android-bootstrap/filament-source/LICENSE',licenses/'Filament.txt')
+        shutil.copy2(root/'deps/filament-android'/abi/'licenses/OpenSSL.txt',licenses/'OpenSSL.txt')
+        shutil.copy2(root/'deps/filament-android'/abi/'licenses/Filament.txt',licenses/'Filament.txt')
         shutil.copy2(ndk/'toolchains/llvm/prebuilt/linux-x86_64/NOTICE',licenses/'Android-libcxx-NOTICE.txt')
     versions=json.loads((root/'releases/versions.json').read_text())
     metadata=dict(android_ndk='29.0.14206865',minimum_api=26,backends=['opengles','vulkan']) if platform=='android' else {}

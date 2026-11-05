@@ -195,6 +195,9 @@ def BuildAndroid(project, runtime, cooker, settings, configuration, launch, canc
             cooked = work / 'Cooked'
             cooked.mkdir()
             Emit('scripts', 'Compiling Android game scripts', architecture=arch)
+            from .extensions import LockedItems,MaterializeAssets
+            extension_items=LockedItems(project,'android',arch)
+            if extension_items:MaterializeAssets(project,extension_items)
             bindings = CompileScripts(project, runtime, arch, cache / configuration.title() / ('android-' + arch), configuration=configuration)
             for binding in bindings:
                 binding['properties'] = {key: ('true' if value is True else 'false' if value is False else ','.join(map(str, value)) if isinstance(value, list) else str(value)) for key, value in binding['properties'].items()}
