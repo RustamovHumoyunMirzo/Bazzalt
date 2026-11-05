@@ -133,7 +133,7 @@ public final class Platform {
         return existed;
     }
     public static synchronized String[] SaveFiles(String directory) {
-        String prefix = SaveKey(directory + "/");
+        String prefix = SaveKey(directory) + "/";
         ArrayList<String> names = new ArrayList<>();
         for (String key : Saves().getAll().keySet()) {
             if (key.startsWith(prefix) && key.indexOf('/', prefix.length()) == -1) names.add(key.substring(prefix.length()));

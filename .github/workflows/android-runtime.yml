@@ -63,6 +63,9 @@ jobs:
             -DANDROID_ABI=${{ matrix.abi }} -DANDROID_PLATFORM=android-26 -DANDROID_STL=c++_shared \
             -DBAZZALT_FILAMENT_DIR="$PWD/deps/filament-android/${{ matrix.abi }}" \
             -DOPENSSL_ROOT_DIR="$PWD/deps/openssl-android/${{ matrix.abi }}" \
+            -DOPENSSL_INCLUDE_DIR="$PWD/deps/openssl-android/${{ matrix.abi }}/include" \
+            -DOPENSSL_CRYPTO_LIBRARY="$PWD/deps/openssl-android/${{ matrix.abi }}/lib/libcrypto.a" \
+            -DOPENSSL_SSL_LIBRARY="$PWD/deps/openssl-android/${{ matrix.abi }}/lib/libssl.a" \
             -DBAZZALT_BUILD_EDITOR_BRIDGE=OFF -DBUILD_TESTING=OFF
           cmake --build build/android --parallel 2
           python scripts/package_android.py --architecture ${{ matrix.architecture }}
