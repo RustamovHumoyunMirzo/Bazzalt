@@ -159,6 +159,7 @@ static void TestStylesheetsAndFonts(){
             button.GetComponent<GuiText>().Enabled=false;gui.Interactions.clear();
             filament::math::double4 sceneColor{0,0,0,1};
             const auto drawCss=[&](const std::string& rules){
+                std::cout<<"GPU CSS: "<<rules<<std::endl;
                 write(css,rules);assert(engine.RefreshAssets());renderer.PrepareOverlay(scene,{500,200});auto* input=renderer.GetSceneInputTarget();clear->setRenderTarget(input);
                 assert(presenter.beginFrame(swap));renderer.RenderSpatialEffects();presenter.setClearOptions({.clearColor=sceneColor,.clear=true});presenter.render(clear);clear->setRenderTarget(nullptr);renderer.RenderOverlay(scene,{500,200});
                 ready=false;presenter.readPixels(0,0,500,200,filament::Texture::PixelBufferDescriptor(pixels.data(),pixels.size(),filament::Texture::Format::RGBA,filament::Texture::Type::UBYTE,[](void*,std::size_t,void* user){static_cast<std::atomic<bool>*>(user)->store(true);},&ready));presenter.endFrame();graphics.flushAndWait();assert(ready);
@@ -275,11 +276,12 @@ int main(){
             auto cameraEntity=scene.CreateEntity("Display");cameraEntity.GetComponent<Transform>().Position={0,0,3};cameraEntity.AddComponent<Camera>().PostProcessing.Enabled=false;
             auto spatial=scene.CreateEntity("Spatial feed");auto& spatialFrame=spatial.AddComponent<Frame>();spatialFrame.Mode=FrameMode::Spatial;spatialFrame.ReferenceSize={64,64};spatialFrame.PixelsPerUnit=64;
             auto image=scene.CreateEntity("Texture image");image.SetParent(spatial,false);image.AddComponent<RectTransform>().Size={64,64};image.AddComponent<GuiImage>().SetTexture(texture);
-            auto& cameras=scene.AddSystem<Runtime::CameraSystem>(backend);cameras.Synchronize(scene);
-            auto handle=backend.GetAssets().CreatePrimitive(object.GetComponent<PrimitiveObject>());backend.GetAssets().UpdatePrimitive(handle,object.GetWorldMatrix(),object.GetComponent<PrimitiveObject>());
+            auto& cameras=scene.AddSystem<Runtime::CameraSystem>(backend);std::cout<<"Texture capture: synchronize"<<std::endl;cameras.Synchronize(scene);
+            std::cout<<"Texture capture: create primitive"<<std::endl;auto handle=backend.GetAssets().CreatePrimitive(object.GetComponent<PrimitiveObject>());backend.GetAssets().UpdatePrimitive(handle,object.GetWorldMatrix(),object.GetComponent<PrimitiveObject>());
             auto& engine=backend.GetEngine();auto& renderer=backend.GetRenderer();auto* swap=engine.createSwapChain(64u,64u,filament::SwapChain::CONFIG_READABLE);
             auto* idle=backend.GetAssets().GetGuiTexture(texture.GetAssetUUID());assert(idle&&idle->getWidth()==64&&idle->getLevels()==7);
-            backend.Render();engine.flushAndWait();assert(backend.GetCameraTexture(feed.GetUUID())->getFormat()==filament::Texture::InternalFormat::RGBA16F);
+            // The override hides a cached base material; first render grows the lighting atlas.
+            std::cout<<"Texture capture: render"<<std::endl;backend.Render();std::cout<<"Texture capture: flush"<<std::endl;engine.flushAndWait();assert(backend.GetCameraTexture(feed.GetUUID())->getFormat()==filament::Texture::InternalFormat::RGBA16F);
             const auto read=[&]{engine.flushAndWait();filament::View* display=nullptr;for(auto* view:backend.GetActiveViews())if(!view->getRenderTarget())display=view;assert(display);display->setViewport({0,0,64,64});std::vector<std::uint8_t> pixels(64*64*4);std::atomic<bool> ready=false;assert(renderer.beginFrame(swap));renderer.render(display);renderer.readPixels(0,0,64,64,filament::Texture::PixelBufferDescriptor(pixels.data(),pixels.size(),filament::Texture::Format::RGBA,filament::Texture::Type::UBYTE,[](void*,std::size_t,void* user){static_cast<std::atomic<bool>*>(user)->store(true);},&ready));renderer.endFrame();engine.flushAndWait();assert(ready);return pixels;};
             auto pixels=read();const auto center=(32*64+32)*4;assert(pixels[center]>200&&pixels[center+1]<20); // Ordinary Texture field on a spatial image and a material.
             for(const auto samples:{4,1}){

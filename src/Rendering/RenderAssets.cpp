@@ -349,12 +349,14 @@ struct RenderAssets::Impl {
     unsigned ProbeTextureWidth=10,ProbeTextureHeight=64,ReflectionCount=0;
     std::string BakedError;
     std::unordered_set<const filament::Material*> ProbeMaterials;
+    std::unordered_map<const filament::Material*,std::unordered_set<filament::MaterialInstance*>> ProbeBindings;
     void BindProbes(filament::MaterialInstance* value){
         if(!value)return;const auto* material=value->getMaterial();if(!material->hasParameter("bazzaltLightingData")||!material->hasParameter("bazzaltLightingEnabled"))return;
         if(!ProbeMaterials.contains(material)){
         std::vector<filament::Material::ParameterInfo> fields(material->getParameterCount());material->getParameters(fields.data(),fields.size());bool sampler=false,count=false;
         for(const auto& p:fields){if(p.isSubpass||p.count>1)continue;if(std::string_view(p.name)=="bazzaltLightingData")sampler=p.isSampler&&p.samplerType==filament::Material::SamplerType::SAMPLER_2D;if(std::string_view(p.name)=="bazzaltLightingEnabled")count=!p.isSampler&&p.type==filament::Material::ParameterType::FLOAT;}
         if(!sampler||!count)return;ProbeMaterials.insert(material);}
+        ProbeBindings[material].insert(value);
         value->setParameter("bazzaltLightingData",ProbeTexture,filament::TextureSampler(filament::TextureSampler::MinFilter::NEAREST,filament::TextureSampler::MagFilter::NEAREST));value->setParameter("bazzaltLightingEnabled",ProbeCount);
     }
 
@@ -1105,6 +1107,18 @@ void RenderAssets::UpdateBakedLighting(Bazzalt::Scene& scene){
     }
     std::unordered_set<filament::MaterialInstance*> seen;
     m_impl->Scene.forEach([&](utils::Entity e){auto& manager=m_impl->Engine.getRenderableManager();auto instance=manager.getInstance(e);if(!instance)return;for(std::size_t i=0;i<manager.getPrimitiveCount(instance);++i){auto* value=const_cast<filament::MaterialInstance*>(manager.getMaterialInstanceAt(instance,i));if(seen.insert(value).second)m_impl->BindProbes(value);}});
+    // Filament commits inactive material instances too. Base materials hidden by
+    // overrides, cached shared materials and off-scene GUI/graphics instances can
+    // still hold the previous atlas, so scene enumeration alone is insufficient.
+    for(auto material=m_impl->ProbeBindings.begin();material!=m_impl->ProbeBindings.end();){
+        if(!m_impl->Engine.isValid(material->first)){material=m_impl->ProbeBindings.erase(material);continue;}
+        for(auto instance=material->second.begin();instance!=material->second.end();){
+            if(!m_impl->Engine.isValid(material->first,*instance)){instance=material->second.erase(instance);continue;}
+            (*instance)->setParameter("bazzaltLightingData",m_impl->ProbeTexture,filament::TextureSampler(filament::TextureSampler::MinFilter::NEAREST,filament::TextureSampler::MagFilter::NEAREST));
+            (*instance)->setParameter("bazzaltLightingEnabled",m_impl->ProbeCount);++instance;
+        }
+        ++material;
+    }
     // Refresh prototypes as well as live instances before retiring a resized atlas.
     if(m_impl->PrimitiveMaterial)m_impl->BindProbes(m_impl->PrimitiveMaterial->getDefaultInstance());for(const auto& [id,material]:m_impl->Materials)m_impl->BindProbes(material->getDefaultInstance());
     if(retired)m_impl->Engine.destroy(retired);

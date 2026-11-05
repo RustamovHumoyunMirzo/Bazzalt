@@ -117,7 +117,10 @@ class EditorMenuBar(QMenuBar):
         self.BrandLabel.setContentsMargins(10,0,10,0)
         self.BrandLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.BrandLabel.setFixedWidth(40)
-        self.setCornerWidget(self.BrandLabel,Qt.Corner.TopLeftCorner)
+        # Cocoa owns the native menu strip; client-side corner widgets belong
+        # only to the in-window Windows/Linux menu bar.
+        if sys.platform!="darwin":
+            self.setCornerWidget(self.BrandLabel,Qt.Corner.TopLeftCorner)
         self.BrandLabel.setVisible(sys.platform!="darwin")
         self._UpdateBrandIcon()
         theme_manager.ThemeChanged.connect(lambda _:self._UpdateBrandIcon())
