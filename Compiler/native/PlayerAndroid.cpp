@@ -39,6 +39,7 @@ extern "C" int SDL_main(int, char**) {
             VerifyExtracted(verified, data);
         } else Require(Text(config["format"]) == "loose", "Unsupported package format");
 
+        Bazzalt::Runtime::AndroidPlatform::SetAssetDirectory(data);
         const auto intro=config["intro"];
         const bool brand=Text(intro["enabled"])=="true";
         const int duration=std::stoi(Text(intro["duration_ms"]));
@@ -131,9 +132,11 @@ extern "C" int SDL_main(int, char**) {
                 }
             }
             else if (active && surfaceReady) engine.Update();
+            else if(playing&&Bazzalt::Application::GetRunInBackground())engine.Update(false);
             else engine.ResetFrameClock();
             const int rate = Bazzalt::Runtime::ApplicationAccess::GetEffectiveFrameRate();
-            std::this_thread::sleep_until(started + std::chrono::duration<double>(1.0 / (active ? (rate > 0 ? rate : 120) : 20)));
+            if(active&&rate>0)std::this_thread::sleep_until(started+std::chrono::duration<double>(1.0/rate));
+            else if(!active)std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
         engine.BeginShutdown(); engine.Shutdown(true);
         SDL_DestroyWindow(window); window = nullptr;

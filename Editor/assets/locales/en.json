@@ -635,7 +635,7 @@
   "menu.build": "Build",
   "build.settings": "Build Settings...",
   "build.build": "Build",
-  "build.launch": "Build and Launch",
+  "build.launch": "Build Release and Launch",
   "build.section.production": "Production",
   "build.section.target": "Target",
   "build.section.window": "Windowing",
@@ -1790,5 +1790,9 @@
   "build.field.signing_keystore": "Release signing keystore",
   "build.field.signing_alias": "Signing key alias",
   "build.field.store_password_environment": "Store password environment variable",
-  "build.field.key_password_environment": "Key password environment variable"
+  "build.field.key_password_environment": "Key password environment variable",
+  "build.icon_filter.windows": "Windows icons (*.ico)",
+  "build.icon_filter.macos": "macOS icons (*.icns)",
+  "build.icon_filter.linux": "PNG images (*.png)",
+  "build.icon_filter.android": "512 x 512 PNG images (*.png)"
 }

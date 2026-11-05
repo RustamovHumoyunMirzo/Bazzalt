@@ -22,11 +22,22 @@ import javax.crypto.spec.GCMParameterSpec;
 public final class Platform {
     private static Context context;
     private static File content;
+    private static String assetDirectory;
+    private static org.json.JSONObject nativeModules;
     private Platform() {}
 
     public static synchronized void Initialize(Context app, File directory) {
         context = app.getApplicationContext();
         content = directory;
+        try (java.io.InputStream input=context.getAssets().open("delivery.json")) {
+            java.io.ByteArrayOutputStream output=new java.io.ByteArrayOutputStream();
+            byte[] buffer=new byte[8192];int count;
+            while((count=input.read(buffer))!=-1){
+                if(output.size()+count>8388608)throw new IllegalStateException("Content inventory exceeds limits");
+                output.write(buffer,0,count);
+            }
+            nativeModules=new org.json.JSONObject(Utf8(output.toByteArray())).optJSONObject("native_modules");
+        } catch(Exception error){throw new IllegalStateException("Could not read native module inventory",error);}
     }
 
     public static String Utf8(byte[] bytes) { return new String(bytes, StandardCharsets.UTF_8); }
@@ -40,6 +51,14 @@ public final class Platform {
         File library = new File(context.getApplicationInfo().nativeLibraryDir, name);
         if (!library.isFile()) throw new IllegalStateException("Native library is missing: " + name);
         return library.getAbsolutePath();
+    }
+    public static void SetAssetDirectory(String path) throws Exception { assetDirectory=new File(path).getCanonicalPath()+"/"; }
+    public static String NativeModule(String path) throws Exception {
+        String canonical=new File(path).getCanonicalPath();
+        if(assetDirectory==null||!canonical.startsWith(assetDirectory)||nativeModules==null)
+            throw new IllegalArgumentException("Native module is outside game content");
+        String library=nativeModules.optString(canonical.substring(assetDirectory.length()),"");
+        return NativeLibrary(library);
     }
 
     // Keystore keys are non-exportable. Wrapped content keys live in no-backup files, never preferences.

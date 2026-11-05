@@ -19,6 +19,31 @@ def Digest(path):
         return hashlib.file_digest(file, 'sha256').hexdigest()
 
 
+def StageModules(cooked,libraries,architecture):
+    from .build import Architecture
+    import re
+    dependencies=set()
+    index=cooked/'ext/runtime.json'
+    if index.is_file():
+        dependencies={(Path('ext')/name).as_posix() for name in json.loads(index.read_text(encoding='utf-8')).get('NativeLibraries',[])}
+    for relative in dependencies:
+        if not relative.endswith('.so'):raise ValueError('Android native dependencies must use unversioned libNAME.so libraries')
+    mapping={}
+    for file in sorted(cooked.rglob('*.so')):
+        relative=file.relative_to(cooked).as_posix()
+        with file.open('rb') as binary:magic=binary.read(4)
+        if magic!=b'\x7fELF' or Architecture(file)!=architecture:raise ValueError('Android native module architecture mismatch: '+relative)
+        if relative in dependencies:
+            name=file.name
+            if not re.fullmatch(r'lib[A-Za-z0-9_.-]+\.so',name):raise ValueError('Android native dependencies require libNAME.so filenames')
+        else:name='libasset_'+hashlib.sha256(relative.encode('utf-8')).hexdigest()+'.so'
+        target=libraries/name
+        if target.exists() and Digest(target)!=Digest(file):raise ValueError('Conflicting Android native library: '+name)
+        if not target.exists():shutil.copy2(file,target)
+        mapping[relative]=name
+    return mapping
+
+
 def Manifest(settings, configuration, split=False):
     profile = settings['platforms']['android']
     package = profile['application_id']
@@ -105,7 +130,7 @@ def Package(tools, settings, configuration, work, output, payload, libraries, ru
     Run([tools.Java, '-Dfile.encoding=UTF-8', '-cp', tools.BuildTools / 'lib/d8.jar', 'com.android.tools.r8.D8', '--lib', tools.Jar,
          '--min-api', str(profile['min_sdk']), '--output', dex, classes_jar])
     mode = profile['delivery']
-    delivery = dict(id=uuid.uuid4().hex, mode=mode, files=[])
+    delivery = dict(id=uuid.uuid4().hex, mode=mode, files=[], native_modules=settings.get('_native_modules',{}))
     for file in sorted(payload.rglob('*')):
         check()
         if file.is_file():
@@ -216,11 +241,11 @@ def BuildAndroid(project, runtime, cooker, settings, configuration, launch, canc
             libraries = work / 'libraries' 
             libraries.mkdir()
             for name in files: shutil.copy2(runtime / name, libraries / name)
-            for file in cooked.rglob('*.so'):
-                name = file.name if file.name.startswith('lib') else 'lib' + file.name
-                target = libraries / name
-                if target.exists(): raise ValueError('Android native module name collision: ' + name)
-                shutil.copy2(file, target)
+            settings['_native_modules']=StageModules(cooked,libraries,arch)
+            if configuration=='release':
+                strip=tools.Compiler.parent/('llvm-strip.exe' if os.name=='nt' else 'llvm-strip')
+                for library in libraries.glob('*.so'):
+                    check();Run([strip,'--strip-unneeded',library])
             payload = work / 'payload'
             payload.mkdir()
             security = SecurityContext(settings, KeyFor(settings))

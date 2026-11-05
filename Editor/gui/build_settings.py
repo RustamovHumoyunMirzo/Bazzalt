@@ -79,7 +79,7 @@ class BuildSettingsDialog(QDialog):
         if key in ('license','description','include_assets','exclude_assets'):field=QPlainTextEdit(str(value));field.setMaximumHeight(90);return field
         return QLineEdit(str(value))
     def _BrowsePath(self,field,key,platform=None):
-        filters={'windows':'Windows icons (*.ico)','macos':'macOS icons (*.icns)','linux':'PNG images (*.png)','android':'512 x 512 PNG images (*.png)'}
+        filters={name:self.Tr('build.icon_filter.'+name) for name in ('windows','linux','macos','android')}
         file_filter=filters.get(platform,'') if key=='icon' else ''
         value=QFileDialog.getOpenFileName(self,self.Tr('remote.browse'),field.text(),file_filter)[0] if key in ('toolchain','icon','signing_keystore') else QFileDialog.getExistingDirectory(self,self.Tr('remote.browse'),field.text())
         if value:field.setText(value)

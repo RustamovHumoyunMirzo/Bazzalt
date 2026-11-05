@@ -8,7 +8,7 @@ from unittest.mock import patch
 from xml.etree import ElementTree
 
 from Compiler.android_tools import Discover, HostTag, Validate as ValidateTools, NDK_VERSION
-from Compiler.android_build import Manifest, Resources, Signing
+from Compiler.android_build import Manifest, Resources, Signing, StageModules
 from Compiler.settings import DEFAULTS, Merge, Validate, ApplyPreset
 
 
@@ -73,6 +73,18 @@ class AndroidTests(unittest.TestCase):
             for density,size in (('mdpi',48),('hdpi',72),('xhdpi',96),('xxhdpi',144),('xxxhdpi',192)):
                 with Image.open(root/'res'/('mipmap-'+density)/'ic_launcher.png') as image:
                     self.assertEqual(image.size,(size,size))
+
+    def test_native_module_mapping_handles_duplicate_and_unicode_names(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);cooked=root/'Cooked';libraries=root/'libraries';libraries.mkdir()
+            header=bytearray(20);header[:4]=b'\x7fELF';header[4]=2;header[5]=1;header[18:20]=(183).to_bytes(2,'little')
+            for relative in ('ext/first/main.so','ext/second/main.so','Scripts/Игрок.so'):
+                file=cooked/relative;file.parent.mkdir(parents=True,exist_ok=True);file.write_bytes(header)
+            mapping=StageModules(cooked,libraries,'arm64')
+            self.assertEqual(len(set(mapping.values())),3)
+            self.assertTrue(all(name.startswith('libasset_') and name.endswith('.so') for name in mapping.values()))
+            self.assertEqual(mapping,StageModules(cooked,libraries,'arm64'))
+            with self.assertRaisesRegex(ValueError,'architecture'):StageModules(cooked,libraries,'x64')
 
 
 if __name__=='__main__':unittest.main()

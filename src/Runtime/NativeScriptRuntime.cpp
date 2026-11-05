@@ -89,8 +89,7 @@ bool NativeScriptRuntime::Start(std::string& error,bool application,bool reloadi
 #else
         auto module=binding.Module;
 #ifdef __ANDROID__
-        auto name=binding.Module.filename().string();
-        module=AndroidPlatform::NativeLibrary(name.starts_with("lib")?name:"lib"+name);
+        module=AndroidPlatform::NativeModule(binding.Module);
 #endif
         instance.Library=dlopen(module.c_str(),RTLD_NOW|RTLD_LOCAL);auto entry=instance.Library?reinterpret_cast<GetScriptModuleApi>(dlsym(instance.Library,"BazzaltGetScriptModuleV1")):nullptr;
 #endif

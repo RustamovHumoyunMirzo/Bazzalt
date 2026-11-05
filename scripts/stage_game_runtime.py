@@ -77,7 +77,7 @@ def Stage(build,output,architecture,root=None,platform=None):
         shutil.copy2(root/'deps/filament-android'/abi/'licenses/Filament.txt',licenses/'Filament.txt')
         shutil.copy2(ndk/'toolchains/llvm/prebuilt/linux-x86_64/NOTICE',licenses/'Android-libcxx-NOTICE.txt')
     versions=json.loads((root/'releases/versions.json').read_text())
-    metadata=dict(android_ndk='29.0.14206865',minimum_api=26,backends=['opengles','vulkan']) if platform=='android' else {}
+    metadata=dict(android_runtime_abi=1,android_ndk='29.0.14206865',minimum_api=26,backends=['opengles','vulkan']) if platform=='android' else {}
     (output/'runtime.json').write_text(json.dumps(dict(format_version=1,game_format_version=3,core_version=versions['core'],platform=platform,architecture=architecture,files=names,**metadata),indent=2),encoding='utf-8')
     return output
 if __name__=='__main__':

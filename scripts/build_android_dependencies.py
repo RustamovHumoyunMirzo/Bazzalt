@@ -50,7 +50,7 @@ def Build(abi, ndk):
     destination = root / 'deps/filament-android' / abi
     Run('cmake', '-S', source, '-B', target, *common,
         '-DCMAKE_TOOLCHAIN_FILE=' + str(ndk / 'build/cmake/android.toolchain.cmake'), '-DANDROID_ABI=' + abi,
-        '-DANDROID_PLATFORM=android-26', '-DANDROID_STL=c++_shared', '-DFILAMENT_ANDROID_PLATFORM_API_LEVEL=26',
+        '-DANDROID_PLATFORM=android-26', '-DANDROID_STL=c++_shared', '-DEGL=ON', '-DFILAMENT_ANDROID_PLATFORM_API_LEVEL=26',
         '-DIMPORT_EXECUTABLES_DIR=' + exports, '-DDIST_DIR=' + arch, '-DDIST_ARCH=' + arch,
         '-DCMAKE_INSTALL_PREFIX=' + str(destination), '-DFILAMENT_SUPPORTS_VULKAN=ON', '-DFILAMENT_SUPPORTS_OPENGL=ON',
         '-DFILAMENT_SUPPORTS_METAL=OFF', '-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384')

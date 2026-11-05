@@ -81,7 +81,7 @@ void ExtensionAccess::Configure(const std::filesystem::path& projectRoot){
 #else
                     auto dependency=*it;
 #ifdef __ANDROID__
-                    dependency=AndroidPlatform::NativeLibrary(it->filename().string());
+                    dependency=AndroidPlatform::NativeModule(*it);
 #endif
                     auto library=dlopen(dependency.c_str(),RTLD_NOW|RTLD_GLOBAL);if(library)Libraries.emplace_back(library,[](void* value){dlclose(value);});
 #endif
@@ -104,7 +104,7 @@ void ExtensionAccess::Configure(const std::filesystem::path& projectRoot){
 #else
             auto nativePath=path;
 #ifdef __ANDROID__
-            nativePath=AndroidPlatform::NativeLibrary(path.filename().string());
+            nativePath=AndroidPlatform::NativeModule(path);
 #endif
             auto library=dlopen(nativePath.c_str(),RTLD_NOW|RTLD_LOCAL);if(!library)throw std::runtime_error(dlerror());lease={library,[](void* p){dlclose(p);}};auto get=reinterpret_cast<const ExtensionModuleApi*(*)()>(dlsym(library,"BazzaltGetExtensionModuleV1"));
 #endif

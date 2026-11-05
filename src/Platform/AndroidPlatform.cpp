@@ -16,7 +16,11 @@ public:
             if (VM->AttachCurrentThread(&Env, nullptr) != JNI_OK) throw std::runtime_error("Could not attach Android worker thread");
             Attached = true;
         }
-        if (!Env || Env->PushLocalFrame(32) != JNI_OK) throw std::runtime_error("Android JNI local frame allocation failed");
+        if (!Env || Env->PushLocalFrame(32) != JNI_OK) {
+            if(Env&&Env->ExceptionCheck())Env->ExceptionClear();
+            if(Attached)VM->DetachCurrentThread();
+            throw std::runtime_error("Android JNI local frame allocation failed");
+        }
     }
     ~Environment() { Env->PopLocalFrame(nullptr); if (Attached) VM->DetachCurrentThread(); }
     void Check() {
@@ -34,7 +38,9 @@ public:
     jstring Text(const std::string& value) {
         // Paths originate in Android's private directories. Java decodes standard UTF-8 explicitly.
         auto bytes = Env->NewByteArray(static_cast<jsize>(value.size()));
+        Check();
         Env->SetByteArrayRegion(bytes, 0, static_cast<jsize>(value.size()), reinterpret_cast<const jbyte*>(value.data()));
+        Check();
         auto result = static_cast<jstring>(Env->CallStaticObjectMethod(Platform, Method("Utf8", "([B)Ljava/lang/String;"), bytes));
         Check();
         return result;
@@ -100,10 +106,22 @@ std::filesystem::path NativeLibrary(const std::string& name) {
     e.Check();
     return std::filesystem::u8path(e.String(result));
 }
+void SetAssetDirectory(const std::filesystem::path& path) {
+    Environment e;
+    e.Env->CallStaticVoidMethod(Platform,e.Method("SetAssetDirectory","(Ljava/lang/String;)V"),e.Text(Key(path)));
+    e.Check();
+}
+std::filesystem::path NativeModule(const std::filesystem::path& path) {
+    Environment e;
+    auto result=static_cast<jstring>(e.Env->CallStaticObjectMethod(Platform,e.Method("NativeModule","(Ljava/lang/String;)Ljava/lang/String;"),e.Text(Key(path))));
+    e.Check();return std::filesystem::u8path(e.String(result));
+}
 std::vector<unsigned char> ProtectKey(const std::string& id, const std::vector<unsigned char>& seed) {
     Environment e;
     auto bytes = e.Env->NewByteArray(static_cast<jsize>(seed.size()));
+    e.Check();
     e.Env->SetByteArrayRegion(bytes, 0, static_cast<jsize>(seed.size()), reinterpret_cast<const jbyte*>(seed.data()));
+    e.Check();
     auto result = static_cast<jbyteArray>(e.Env->CallStaticObjectMethod(Platform, e.Method("ProtectKey", "(Ljava/lang/String;[B)[B"), e.Text(id), bytes));
     e.Check();
     return e.Data(result);
@@ -118,7 +136,9 @@ std::optional<std::vector<unsigned char>> ReadSave(const std::filesystem::path& 
 void WriteSave(const std::filesystem::path& path, const std::vector<unsigned char>& bytes) {
     Environment e;
     auto data = e.Env->NewByteArray(static_cast<jsize>(bytes.size()));
+    e.Check();
     e.Env->SetByteArrayRegion(data, 0, static_cast<jsize>(bytes.size()), reinterpret_cast<const jbyte*>(bytes.data()));
+    e.Check();
     e.Env->CallStaticVoidMethod(Platform, e.Method("WriteSave", "(Ljava/lang/String;[B)V"), e.Text(Key(path)), data);
     e.Check();
 }

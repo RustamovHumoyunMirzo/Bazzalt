@@ -66,7 +66,16 @@ std::filesystem::path Directory(const std::string& profile){
     Owner();Name(profile);auto& state=State();
     if(state.Root.empty()){
         if(!state.TestRoot.empty())state.Root=state.TestRoot;
-        else {auto* text=SDL_GetPrefPath("BazzaltGames",state.Project.ToString().c_str());if(!text)throw StorageError(SaveError::IOError,"Could not resolve the OS save directory");state.Root=std::filesystem::u8path(text);SDL_free(text);state.Root/=state.Editor?"EditorPreview":"Player";state.Root/="Saves";}
+        else {
+            auto* text=SDL_GetPrefPath("BazzaltGames",state.Project.ToString().c_str());
+            if(!text)throw StorageError(SaveError::IOError,"Could not resolve the OS save directory");
+            state.Root=std::filesystem::u8path(text);SDL_free(text);
+#ifdef __ANDROID__
+            // SDL returns the application files directory and ignores org/app on Android.
+            state.Root/=state.Project.ToString();
+#endif
+            state.Root/=state.Editor?"EditorPreview":"Player";state.Root/="Saves";
+        }
         std::filesystem::create_directories(state.Root);state.Root=std::filesystem::canonical(state.Root);
     }
     auto directory=state.Root/("profile_"+Identifier(profile));std::filesystem::create_directories(directory);
