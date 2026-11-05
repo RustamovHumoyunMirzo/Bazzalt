@@ -41,7 +41,7 @@ jobs:
           key: android-dependencies-r29-filament177-rtti-${{ matrix.abi }}-v1
       - name: Fetch pinned engine sources
         run: |
-          for dependency in entt rapidyaml sdl3 stb_image lua sol2 miniaudio jolt yojimbo freetype text_shaping; do sh "scripts/get_${dependency}.sh"; done
+          for dependency in entt rapidyaml sdl3 lua sol2 miniaudio jolt yojimbo freetype text_shaping; do sh "scripts/get_${dependency}.sh"; done
       - name: Validate Android settings and real APK tooling
         env:
           BAZZALT_ANDROID_SDK_TESTS: '1'

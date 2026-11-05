@@ -96,13 +96,13 @@ def Package(tools, settings, configuration, work, output, payload, libraries, ru
     # javac argument files avoid Windows command-line limits and preserve Unicode paths.
     arguments = work / 'java.args'
     arguments.write_text('\n'.join('"' + str(p.resolve()).replace('\\', '/').replace('"', '\\"') + '"' for p in sources), encoding='utf-8')
-    Run([tools.Javac, '-encoding', 'UTF-8', '--release', '8', '-classpath', tools.Jar, '-d', classes, '@' + str(arguments)])
+    Run([tools.Javac, '-J-Dfile.encoding=UTF-8', '-encoding', 'UTF-8', '--release', '8', '-classpath', tools.Jar, '-d', classes, '@' + str(arguments)])
     classes_jar = work / 'classes.jar'
     with zipfile.ZipFile(classes_jar, 'w', zipfile.ZIP_DEFLATED) as archive:
         for file in classes.rglob('*.class'): archive.write(file, file.relative_to(classes).as_posix())
     dex = work / 'dex'
     dex.mkdir()
-    Run([tools.Java, '-cp', tools.BuildTools / 'lib/d8.jar', 'com.android.tools.r8.D8', '--lib', tools.Jar,
+    Run([tools.Java, '-Dfile.encoding=UTF-8', '-cp', tools.BuildTools / 'lib/d8.jar', 'com.android.tools.r8.D8', '--lib', tools.Jar,
          '--min-api', str(profile['min_sdk']), '--output', dex, classes_jar])
     mode = profile['delivery']
     delivery = dict(id=uuid.uuid4().hex, mode=mode, files=[])
@@ -120,7 +120,9 @@ def Package(tools, settings, configuration, work, output, payload, libraries, ru
         with zipfile.ZipFile(output / delivery['archive'], 'w', zipfile.ZIP_STORED, allowZip64=True) as archive:
             for file in payload.rglob('*'):
                 if file.is_file(): archive.write(file, file.relative_to(payload).as_posix())
-    (base_assets / 'delivery.json').write_text(json.dumps(delivery), encoding='utf-8')
+    inventory=json.dumps(delivery).encode('utf-8')
+    if len(delivery['files'])>100000 or len(inventory)>8388608:raise ValueError('Android content inventory exceeds launcher limits')
+    (base_assets/'delivery.json').write_bytes(inventory)
     apks = []
     for split in ([False, True] if mode == 'split_apk' else [False]):
         check()
@@ -141,8 +143,8 @@ def Package(tools, settings, configuration, work, output, payload, libraries, ru
         aligned = work / ('split-aligned.apk' if split else 'base-aligned.apk')
         Run([tools.BuildTools / ('zipalign' + suffix), '-P', '16', '-f', '4', unsigned, aligned])
         target = output / ('content.apk' if split else 'base.apk')
-        Run([tools.Java, '-jar', tools.BuildTools / 'lib/apksigner.jar', 'sign', *signing, '--out', target, aligned])
-        Run([tools.Java, '-jar', tools.BuildTools / 'lib/apksigner.jar', 'verify', '--verbose', target])
+        Run([tools.Java, '-Dfile.encoding=UTF-8', '-jar', tools.BuildTools / 'lib/apksigner.jar', 'sign', *signing, '--out', target, aligned])
+        Run([tools.Java, '-Dfile.encoding=UTF-8', '-jar', tools.BuildTools / 'lib/apksigner.jar', 'verify', '--verbose', target])
         apks.append(target)
     return apks, delivery
 
