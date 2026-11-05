@@ -92,13 +92,14 @@ def ValidateRuntime(runtime,architecture,platform="windows"):
     if manifest.get('core_version')!=core_version:raise ValueError('Runtime template does not match this compiler/core version')
     if manifest.get('platform','windows')!=platform:raise ValueError('Runtime platform mismatch')
     required=['BazzaltPlayer.exe','Bazzalt.dll','bazzalt_lua.dll','bazzalt_gui.dll','bazzalt_physics.dll','bazzalt_network.dll','bazzalt_crypto.dll'] if platform=='windows' else ['BazzaltPlayer','libbazzalt_player.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so','libbazzalt_physics.so','libbazzalt_network.so','libbazzalt_crypto.so']
+    if platform=='android':required=['libmain.so','libSDL3.so','libc++_shared.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so','libbazzalt_physics.so','libbazzalt_network.so','libbazzalt_crypto.so']
     if platform=='macos':required=['BazzaltPlayer','libbazzalt_player.dylib','libBazzalt.dylib','libbazzalt_lua.dylib','libbazzalt_gui.dylib','libbazzalt_physics.dylib','libbazzalt_network.dylib','libbazzalt_crypto.dylib']
     files=manifest.get('files',required)
     if not set(required)<=set(files):raise ValueError('Incomplete runtime template')
     for name in files:
         if Path(name).name!=name or (platform=='windows' and Path(name).suffix.lower() not in {'.exe','.dll'}):raise ValueError('Unsafe runtime manifest')
         with (runtime/name).open('rb') as binary:magic=binary.read(4)
-        if (platform=='linux' and magic!=b'\x7fELF') or (platform=='windows' and magic[:2]!=b'MZ'):raise ValueError('Runtime binary platform mismatch: '+name)
+        if (platform in ('linux','android') and magic!=b'\x7fELF') or (platform=='windows' and magic[:2]!=b'MZ'):raise ValueError('Runtime binary platform mismatch: '+name)
         if platform=='macos':
             from .macos import Architectures
             if architecture not in Architectures(runtime/name):raise ValueError('Runtime Mach-O architecture mismatch: '+name)
@@ -113,7 +114,7 @@ def KeyFor(settings):
         if len(key)!=32:raise ValueError('Set the configured key environment variable to 64 hex characters before building')
         return key
     return os.urandom(32)
-def CompileScripts(project,runtime,architecture,cache,compiler_path=''):
+def CompileScripts(project,runtime,architecture,cache,compiler_path='',configuration='release'):
     from Editor.scripting import ScriptCompiler,ScriptAttachments
     import yaml
     class GameScriptCompiler(ScriptCompiler):
@@ -135,7 +136,7 @@ def CompileScripts(project,runtime,architecture,cache,compiler_path=''):
             base=Path(os.environ.get('LOCALAPPDATA',Path.home()/'AppData/Local'))/'BAZZALT/data/Tools/llvm/bin/clang++.exe'
             candidates=(base,Path(os.environ.get('APPDATA',Path.home()/'AppData/Roaming'))/'BAZZALT/data/Tools/llvm/bin/clang++.exe',Path(__file__).resolve().parents[1]/'toolchain/llvm/bin/clang++.exe')
             return next((path for path in candidates if path.is_file()),None)
-    compiler=GameScriptCompiler(project.parent,app_root=runtime,tools={'sdk_path':str(runtime/'ScriptSDK'),'compiler_path':compiler_path},architecture=architecture)
+    compiler=GameScriptCompiler(project.parent,app_root=runtime,tools={'sdk_path':str(runtime/'ScriptSDK'),'compiler_path':compiler_path,'configuration':configuration},architecture=architecture)
     compiler.cache=cache/'Scripts';compiler.state_file=compiler.cache/'build-state.json'
     attachments=ScriptAttachments(project.parent);sources=attachments.UsedSources()
     # Native attachments saved in scenes are authoritative when no legacy
@@ -175,7 +176,7 @@ def CompileScripts(project,runtime,architecture,cache,compiler_path=''):
     result=compiler.Build([p for p in sources if Path(p).suffix.lower()!='.lua'])
     if not result.success:raise ValueError('\n'.join(d.message for d in result.diagnostics))
     return [binding for binding in attachments.RuntimeBindings(result.outputs) if Path(binding['module']).suffix.lower() in {'.dll','.so','.dylib'}]
-def CookShaders(cooked,cooker,check=lambda:None):
+def CookShaders(cooked,cooker,check=lambda:None,platform='desktop'):
     import yaml
     from Editor.materials import MaterialCompiler
     records=yaml.safe_load((cooked/'.bazzalt/CookedAssets.yaml').read_text(encoding='utf-8'))['Assets']
@@ -186,7 +187,7 @@ def CookShaders(cooked,cooker,check=lambda:None):
         def _Tool(self,name):
             path=cooker.parent/'filament'/(name+('.exe' if os.name=='nt' else ''))
             return path if path.is_file() else super()._Tool(name)
-    compiler=ShaderCompiler(Assets(),app_root=cooker.parent)
+    compiler=ShaderCompiler(Assets(),app_root=cooker.parent);compiler.TargetPlatform=platform
     for record in records:
         check()
         if Path(record['Source']).suffix.lower() in {'.mat','.shad','.shadg','.bshader'}:compiler.CompileShader(record['UUID'])
@@ -216,14 +217,18 @@ def Publish(staged,output,owner):
         if backup.exists():RenameWithRetry(backup,output)
         raise
     if backup.exists():shutil.rmtree(backup)
-def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
+def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None,configuration='release'):
     from .cross import Active,Resolve,WslCommand
     from bazzalt.platforms import HostPlatform
-    settings=Validate(Load(project));profile=settings['platforms'][settings['target']['platform']]
+    if configuration not in ('release','debug'):raise ValueError('Unknown build configuration')
+    settings=Validate(Load(project));settings['configuration']=configuration;profile=settings['platforms'][settings['target']['platform']]
+    if settings['target']['platform']=='android':
+        from .android_build import BuildAndroid
+        return BuildAndroid(project,runtime,cooker,settings,configuration,launch,cancel)
     options=Resolve(settings,runtime)
     if options and options['method']=='wsl':
         if launch:raise ValueError('Build and Launch is unavailable for cross-platform output')
-        process=subprocess.Popen(WslCommand(project,profile),stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
+        process=subprocess.Popen([*WslCommand(project,profile),'--configuration',configuration],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
         output=None;forward_stop=threading.Event()
         def forward_cancel():
             while not forward_stop.wait(.05):
@@ -251,10 +256,10 @@ def Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
     from .cross import CanExecute
     if launch and not CanExecute(settings['target']['platform'],settings['target']['architecture']):raise ValueError('Build and Launch requires a native target; cross output can be copied to its target machine')
     token=Active.set(options)
-    try:return _Build(project,runtime,cooker,launch,compiler_path or (profile.get('toolchain','') if options is None else ''),cancel=cancel)
+    try:return _Build(project,runtime,cooker,launch,compiler_path or (profile.get('toolchain','') if options is None else ''),cancel=cancel,configuration=configuration)
     finally:Active.reset(token)
 
-def _Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
+def _Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None,configuration='release'):
     project=Path(project).resolve();settings=Effective(Validate(Load(project)));arch=settings['target']['architecture']
     if not project.is_file() or project.suffix!='.bproject':raise ValueError('Select a valid project file')
     from bazzalt.platforms import TargetError
@@ -264,7 +269,7 @@ def _Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
     runtime,files=ValidateRuntime(runtime,arch,platform)
     from bazzalt.platforms import HostPlatform
     cooker=ValidateCooker(cooker,HostPlatform())
-    with BuildLock(project.parent) as cache, BuildWorkspace(cache/(arch if platform=='windows' else platform+'-'+arch)) as work:
+    with BuildLock(project.parent) as cache, BuildWorkspace(cache/configuration.title()/(arch if platform=='windows' else platform+'-'+arch)) as work:
         check=lambda:CheckCancelled(cancel)
         check()
         cooked=work/'Cooked';cooked.mkdir()
@@ -272,7 +277,7 @@ def _Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
         from .extensions import LockedItems,MaterializeAssets
         extension_items=LockedItems(project,platform,arch)
         if extension_items:MaterializeAssets(project,extension_items)
-        bindings=CompileScripts(project,runtime,arch,cache/arch,compiler_path)
+        bindings=CompileScripts(project,runtime,arch,cache/configuration.title()/arch,compiler_path,configuration)
         check()
         for binding in bindings:
             binding['properties']={key:('true' if value is True else 'false' if value is False else ','.join(map(str,value)) if isinstance(value,list) else str(value)) for key,value in binding['properties'].items()}
@@ -296,7 +301,7 @@ def _Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
         forbidden={'.py','.pyc','.pyd','.cpp','.hpp','.h','.cc','.cxx','.lua'}
         for path in cooked.rglob('*'):
             if path.is_file() and path.suffix.lower() in forbidden:raise ValueError('Source file leaked into cooked content: '+str(path))
-        destination=project.parent/'bin';destination.mkdir(exist_ok=True)
+        destination=project.parent/'bin'/configuration.title();destination.mkdir(parents=True,exist_ok=True)
         name=settings['production']['name'];output=destination/f'{name}-{platform}-{arch}'
         with tempfile.TemporaryDirectory(prefix='.bazzalt-build-',dir=destination) as temp:
             publication=Path(temp)/(name+'.app' if platform=='macos' else 'Game')
@@ -309,6 +314,8 @@ def _Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
             if platform=='macos':root=publication/'Contents/Resources'
             from .pe_resources import Apply
             if platform=='windows':Apply(root/(name+suffix),settings['production'])
+            from .icons import Stage as StageIcon
+            StageIcon(code_root,settings,project)
             from .security import SecurityContext
             if platform=='macos':macos.SignLibraries(cooked,settings['platforms']['macos'])
             security=SecurityContext(settings,KeyFor(settings));packages=[];content_hashes={}
@@ -317,7 +324,7 @@ def _Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
                 packages=[p.name for p in Pack(cooked,root,settings['packaging']['chunk_mb'],security.PackageKey,hashes=content_hashes,check=check,portable=platform!='windows')]
             else:shutil.copytree(cooked,root/'Data')
             if settings['packaging']['decoy_kb']:(root/'padding.bin').write_bytes(os.urandom(settings['packaging']['decoy_kb']*1024))
-            game=dict(format_version=3,format=settings['packaging']['format'],production=settings['production'],window=settings['window'],intro=settings['intro'],packages=packages,**{k:settings['security'][k] for k in ('encryption','key_storage','key_environment')})
+            game=dict(format_version=3,configuration=configuration,format=settings['packaging']['format'],production=settings['production'],window=settings['window'],intro=settings['intro'],packages=packages,**{k:settings['security'][k] for k in ('encryption','key_storage','key_environment')})
             (root/'game.json').write_text(json.dumps(game,ensure_ascii=False,indent=2),encoding='utf-8')
             (root/'LICENSE.txt').write_text(settings['production']['license'],encoding='utf-8')
             if (runtime/'licenses').is_dir():shutil.copytree(runtime/'licenses',root/'licenses')
@@ -354,7 +361,7 @@ def _Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None):
                 if launch:
                     # The game outlives the disposable cook workspace. Keep one
                     # compiler-owned launch image rather than one per build.
-                    launch_output=cache/(arch if platform=='windows' else platform+'-'+arch)/('Launch.app' if platform=='macos' else 'Launch')
+                    launch_output=cache/configuration.title()/(arch if platform=='windows' else platform+'-'+arch)/('Launch.app' if platform=='macos' else 'Launch')
                     Publish(publication,launch_output,owner);launch_path=launch_output/('Contents/MacOS' if platform=='macos' else '')/(name+suffix)
             else:
                 check();Emit('publish','Publishing verified game output')
@@ -399,6 +406,7 @@ def ReadControls(cancelled,stop):
 def main():
     parser=argparse.ArgumentParser(description='Build game content using a prebuilt Bazzalt runtime')
     parser.add_argument('--project',type=Path);parser.add_argument('--runtime',type=Path);parser.add_argument('--cooker',type=Path);parser.add_argument('--launch',action='store_true');parser.add_argument('--script-compiler',default='');parser.add_argument('--generate-key',action='store_true',help='Print a fresh 256-bit key; treat stdout as secret')
+    parser.add_argument('--configuration',choices=('release','debug'),default='release')
     parser.add_argument('--remote-architecture',choices=('x64','x86','arm64'));parser.add_argument('--remote-info',action='store_true');parser.add_argument('--remote-request',type=Path)
     args=parser.parse_args()
     if args.remote_info:
@@ -413,7 +421,7 @@ def main():
         if args.remote_request:
             from .remote_worker import Execute
             Execute(args.remote_request,cancelled.is_set)
-        else:Build(args.project,args.runtime,args.cooker,args.launch,args.script_compiler,cancel=cancelled.is_set)
+        else:Build(args.project,args.runtime,args.cooker,args.launch,args.script_compiler,cancel=cancelled.is_set,configuration=args.configuration)
         return 0
     except BuildCancelled as error:Emit('cancelled',str(error));return 2
     except Exception as error:Emit('error',str(error));return 1

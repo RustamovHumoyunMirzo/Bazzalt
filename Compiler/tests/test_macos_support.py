@@ -23,7 +23,7 @@ def MachO(cpu=0x0100000c,signature=b'signature'):
 class MacSupportTests(unittest.TestCase):
     def test_independent_platform_profiles_and_migration(self):
         old=copy.deepcopy(DEFAULTS);old['version']=1;old['target']['architecture']='x86';old['window']['backend']='vulkan'
-        value=Merge(old);self.assertEqual(value['version'],2);self.assertEqual(value['platforms']['windows']['architecture'],'x86');self.assertEqual(value['platforms']['windows']['backend'],'vulkan')
+        value=Merge(old);self.assertEqual(value['version'],3);self.assertEqual(value['platforms']['windows']['architecture'],'x86');self.assertEqual(value['platforms']['windows']['backend'],'vulkan')
         value['target']['platform']='macos';value['platforms']['macos'].update(architecture='arm64',backend='metal',key_storage='keychain')
         result=Effective(Validate(value));self.assertEqual(result['target']['architecture'],'arm64');self.assertEqual(result['window']['backend'],'metal');self.assertEqual(result['security']['key_storage'],'keychain')
         self.assertEqual(result['platforms']['windows']['architecture'],'x86')

@@ -72,3 +72,40 @@ def ApplyPortable(executable,production):
     temporary=executable.with_suffix('.resource.tmp');binary.write(str(temporary),config)
     if not temporary.is_file():raise ValueError('Could not write Windows production resources')
     temporary.replace(executable)
+
+
+def ApplyIcon(executable, icon):
+    import os
+    from pathlib import Path
+    from .icons import Validate
+    data=Validate(icon,'windows').read_bytes();count=struct.unpack_from('<H',data,4)[0]
+    group=data[:6];images=[]
+    for index in range(count):
+        entry=data[6+16*index:22+16*index];size,offset=struct.unpack_from('<II',entry,8)
+        images.append(data[offset:offset+size]);group+=entry[:12]+struct.pack('<H',index+1)
+    if os.name!='nt':
+        import lief
+        binary=lief.PE.parse(str(executable));root=binary.resources if binary.has_resources else lief.PE.ResourceDirectory()
+        for kind,values in ((3,images),(14,[group])):
+            for child in list(root.childs):
+                if child.id==kind:root.delete_child(kind)
+            directory=lief.PE.ResourceDirectory(kind)
+            for index,payload in enumerate(values,1):
+                name=lief.PE.ResourceDirectory(index);leaf=lief.PE.ResourceData(list(payload));leaf.id=0x409;name.add_child(leaf);directory.add_child(name)
+            root.add_child(directory)
+        binary.set_resources(root);config=lief.PE.Builder.config_t();config.resources=True;config.overlay=True
+        temporary=Path(str(executable)+'.icon.tmp');binary.write(str(temporary),config);temporary.replace(executable);return
+    api=ctypes.WinDLL('kernel32',use_last_error=True)
+    api.BeginUpdateResourceW.argtypes=[wintypes.LPCWSTR,wintypes.BOOL];api.BeginUpdateResourceW.restype=wintypes.HANDLE
+    api.UpdateResourceW.argtypes=[wintypes.HANDLE,ctypes.c_void_p,ctypes.c_void_p,wintypes.WORD,ctypes.c_void_p,wintypes.DWORD];api.UpdateResourceW.restype=wintypes.BOOL
+    api.EndUpdateResourceW.argtypes=[wintypes.HANDLE,wintypes.BOOL];api.EndUpdateResourceW.restype=wintypes.BOOL
+    handle=api.BeginUpdateResourceW(str(executable),False)
+    if not handle:raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        for kind,values in ((3,images),(14,[group])):
+            for index,payload in enumerate(values,1):
+                buffer=ctypes.create_string_buffer(payload)
+                if not api.UpdateResourceW(handle,ctypes.c_void_p(kind),ctypes.c_void_p(index),0x409,buffer,len(payload)):raise ctypes.WinError(ctypes.get_last_error())
+    except Exception:
+        api.EndUpdateResourceW(handle,True);raise
+    if not api.EndUpdateResourceW(handle,False):raise ctypes.WinError(ctypes.get_last_error())

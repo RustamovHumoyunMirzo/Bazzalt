@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Open Window &gt; Profiler, start a capture, reproduce a slow interaction, then stop recording. The window stays modeless. Its minimize button is disabled so the child window cannot become inaccessible.">
+  <title>Profiler | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Editor manual / Profiler</nav>
+      <article class="doc"><h1>Profiler</h1><p>Open Window &gt; Profiler, start a capture, reproduce a slow interaction, then stop recording. The window stays modeless. Its minimize button is disabled so the child window cannot become inaccessible.</p><h2 id="results">CPU frame graph</h2><p>Select a frame bar to inspect scopes overlapping that frame, including worker threads. All captured scopes restores the complete recording. The table groups scopes by name: calls, total milliseconds and maximum milliseconds. Nested totals overlap; adding them does not give frame time. CPU scopes measure elapsed time, including waits, rather than CPU utilization.</p><h2 id="timeline">Thread timeline</h2><p>Each thread has its own lane and nested scopes have separate rows. Hover a bar for its name and duration. Ctrl + wheel zooms horizontally. Scroll to explore the recording. Tiny bars share pixels at low zoom; all original samples remain in the table and exported trace. Only instrumented scopes appear.</p><h2 id="system">GPU and system graphs</h2><p>During recording the window samples counters every 250 milliseconds, retaining the latest 240 observations. Choose a metric to graph GPU frame time, backend CPU time, resident process memory, primitive geometry cache bytes, entities, components, renderables, render primitives or GUI batches. The table shows the latest counters.</p><p>GPU timing is asynchronous. Pending or unsupported results show Unavailable. Multi-viewport swapchain changes can reset history: GPU observations are not correlated to the selected CPU frame. Render primitive counts describe resources, not executed draw calls.</p><p>Resident memory includes Python, Qt and the native engine. Current residency is available on Windows and Linux; other platforms may report it unavailable. Geometry cache bytes are tracked resources, not total GPU memory. These views do not provide allocation call stacks, leak attribution or per-draw GPU timing. Use an external graphics debugger for draw-by-draw inspection.</p><h2 id="export">Export and capture lifetime</h2><p>Export Trace saves CPU trace-event JSON for Perfetto or Chrome trace viewers, with timestamps and thread identifiers. System graph history is not included in the CPU export. Captures hold at most 100000 completed scopes; later samples are dropped. Keep recordings short. Starting again replaces the recording. Closing stops capture and polling. Normal editing does not copy profiler buffers or poll this window.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../preferences/en.html"><small>Previous</small>Editor preferences</a>
+<a class="next" href="../remote-builds/en.html"><small>Next</small>SSH build workers</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#results">CPU frame graph</a><a class="toc-link" href="#timeline">Thread timeline</a><a class="toc-link" href="#system">GPU and system graphs</a><a class="toc-link" href="#export">Export and capture lifetime</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

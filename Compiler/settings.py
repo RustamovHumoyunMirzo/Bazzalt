@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 
 DEFAULTS={
-    'version':2,'production':{'name':'Game','company':'','version':'1.0.0','copyright':'','license':'','description':''},
+    'version':3,'production':{'name':'Game','company':'','version':'1.0.0','copyright':'','license':'','description':''},
     'target':{'platform':'windows','architecture':'x64','startup_scene':'','runtime_directory':'','build_method':'automatic'},
     'window':{'title':'Game','width':1280,'height':720,'resizable':True,'mode':'windowed','backend':'automatic','display_server':'automatic'},
     'intro':{'enabled':True,'duration_ms':2000,'logo_size':144,'allow_skip':False},
@@ -19,6 +19,11 @@ PLATFORM_DEFAULTS={
 }
 
 PLATFORM_DEFAULTS['linux']['display_server']='automatic'
+for _profile in PLATFORM_DEFAULTS.values():_profile['icon']=''
+PLATFORM_DEFAULTS['android']={'architecture':'arm64','runtime_directory':'','backend':'automatic','key_storage':'android_keystore','icon':'',
+    'sdk_path':'','ndk_path':'','minimum_ndk':'29.0.14206865','build_tools':'36.0.0','min_sdk':26,'target_sdk':36,'compile_sdk':36,
+    'application_id':'com.example.game','version_code':1,'delivery':'apk','orientation':'landscape','signing_keystore':'','signing_alias':'',
+    'store_password_environment':'BAZZALT_ANDROID_STORE_PASSWORD','key_password_environment':'BAZZALT_ANDROID_KEY_PASSWORD'}
 for _profile in PLATFORM_DEFAULTS.values():_profile.update(build_method='automatic',toolchain='',sysroot='',wsl_distribution='',wsl_compiler='',wsl_runtime='')
 
 def Effective(value):
@@ -37,7 +42,7 @@ PRESETS={
 def PathFor(project):return Path(project).parent/'BuildSettings.json'
 def Merge(value):
     result=copy.deepcopy(DEFAULTS)
-    if not isinstance(value,dict) or type(value.get('version',1)) is not int or value.get('version',1) not in (1,2):raise ValueError('Unsupported build settings version')
+    if not isinstance(value,dict) or type(value.get('version',1)) is not int or value.get('version',1) not in (1,2,3):raise ValueError('Unsupported build settings version')
     for section,fields in value.items():
         if section in result and isinstance(result[section],dict) and not isinstance(fields,dict):raise ValueError('Invalid build settings section: '+section)
         if section=='security' and any(key not in result['security'] for key in fields):raise ValueError('Unsupported security setting; update the compiler or correct the profile')
@@ -71,14 +76,24 @@ def Validate(value):
         if not isinstance(field,str) or '\0' in field or len(field)>65535:raise ValueError('Invalid production metadata: '+key)
     version=value['production']['version']
     if not re.fullmatch(r'\d+(?:\.\d+){1,3}',version) or any(int(part)>65535 for part in version.split('.')):raise ValueError('Product version must contain 2 to 4 numeric parts between 0 and 65535')
-    choices={'target':{'platform':('windows','linux','macos'),'architecture':('x64','x86','arm64')},'window':{'mode':('windowed','maximized','borderless','fullscreen'),'backend':('automatic','vulkan','opengl','metal'),'display_server':('automatic','x11','wayland')},'packaging':{'format':('loose','pak')},'security':{'preset':tuple(PRESETS)+('custom',),'encryption':('none','aes-256-gcm'),'key_storage':('embedded','file','environment','dpapi_user','keychain')}}
+    choices={'target':{'platform':('windows','linux','macos','android'),'architecture':('x64','x86','arm64')},'window':{'mode':('windowed','maximized','borderless','fullscreen'),'backend':('automatic','vulkan','opengl','opengles','metal'),'display_server':('automatic','x11','wayland')},'packaging':{'format':('loose','pak')},'security':{'preset':tuple(PRESETS)+('custom',),'encryption':('none','aes-256-gcm'),'key_storage':('embedded','file','environment','dpapi_user','keychain','android_keystore')}}
     for name,profile in value['platforms'].items():
         for key,default in PLATFORM_DEFAULTS[name].items():
             if type(profile[key]) is not type(default) or isinstance(profile[key],str) and ('\0' in profile[key] or len(profile[key])>4096):raise ValueError('Invalid platform field: '+name+'.'+key)
-        if profile['build_method'] not in ('automatic','native','content_only','zig','mingw','wsl'):raise ValueError('Unknown build method')
-        if profile['architecture'] not in (('x64','arm64') if name=='macos' else ('x64','x86','arm64')):raise ValueError('Unsupported '+name+' architecture')
-        if profile['backend'] not in (('automatic','metal') if name=='macos' else ('automatic','vulkan','opengl')):raise ValueError('Unsupported '+name+' backend')
-        if profile['key_storage'] not in ('embedded','file','environment',*(['dpapi_user'] if name=='windows' else ['keychain'] if name=='macos' else [])):raise ValueError('Unsupported '+name+' key storage')
+        if profile['build_method'] not in ('automatic','native','content_only','zig','mingw','wsl','android_ndk'):raise ValueError('Unknown build method')
+        if profile['architecture'] not in (('x64','arm64') if name in ('macos','android') else ('x64','x86','arm64')):raise ValueError('Unsupported '+name+' architecture')
+        if profile['backend'] not in (('automatic','metal') if name=='macos' else ('automatic','vulkan','opengles') if name=='android' else ('automatic','vulkan','opengl')):raise ValueError('Unsupported '+name+' backend')
+        if profile['key_storage'] not in (('android_keystore',) if name=='android' else ('embedded','file','environment',*(['dpapi_user'] if name=='windows' else ['keychain'] if name=='macos' else []))):raise ValueError('Unsupported '+name+' key storage')
+    android=value['platforms']['android']
+    if not re.fullmatch(r'[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+',android['application_id']):raise ValueError('Invalid Android application ID')
+    if not 26<=android['min_sdk']<=android['target_sdk']<=android['compile_sdk']<=36:raise ValueError('Android SDK levels must satisfy 26 <= minimum <= target <= compile <= 36')
+    if not 1<=android['version_code']<=2100000000:raise ValueError('Invalid Android version code')
+    if android['delivery'] not in ('apk','split_apk','obb','external_data'):raise ValueError('Unknown Android content delivery method')
+    if android['orientation'] not in ('landscape','portrait','sensor'):raise ValueError('Unknown Android orientation')
+    from .android_tools import Version
+    Version(android['minimum_ndk']);Version(android['build_tools'])
+    for key in ('store_password_environment','key_password_environment'):
+        if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,100}',android[key]):raise ValueError('Invalid Android signing password environment variable')
     if value['platforms']['windows']['architecture']=='arm64' and value['platforms']['windows']['backend']=='opengl':raise ValueError('Windows ARM64 requires Vulkan or Automatic rendering')
     linux=value['platforms']['linux']
     if linux['display_server'] not in ('automatic','x11','wayland'):raise ValueError('Unknown Linux display server')
@@ -109,7 +124,7 @@ def Save(project,value):
 def ApplyPreset(value,preset):
     value=Merge(value);settings=PRESETS[preset];value['security'].update({k:v for k,v in settings.items() if k in value['security']});value['security']['preset']=preset
     selected=value['target']['platform']
-    if 'platforms' in value:value['platforms'][selected]['key_storage']=settings['key_storage']
+    if 'platforms' in value:value['platforms'][selected]['key_storage']='android_keystore' if selected=='android' else settings['key_storage']
     value['packaging'].update({k:v for k,v in settings.items() if k in value['packaging']})
     if settings['encryption']!='none':value['packaging']['format']='pak'
-    return value
+    return Effective(value)

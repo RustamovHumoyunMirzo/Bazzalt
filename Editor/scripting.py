@@ -176,8 +176,10 @@ class ScriptCompiler:
                 native=item['Manifest']['Native'];extension_hash+=item['Digest'].encode()
                 if native.get('Scope','Runtime')!='Runtime':continue
                 extension_includes.extend(item['Root']/p for p in native.get('IncludeDirs',[]))
-                for folder in native.get('LibDirsWin' if target_platform=='windows' else 'LibDirsMac' if target_platform=='macos' else 'LibDirsLinux',[]):
+                for folder in native.get('LibDirsWin' if target_platform=='windows' else 'LibDirsMac' if target_platform=='macos' else 'LibDirsAndroid' if target_platform=='android' else 'LibDirsLinux',[]):
                     for pattern in (('*.lib','*.dll.a','*.a') if target_platform=='windows' else ('*.so','*.so.*','*.dylib','*.a')):extension_libraries.extend((item['Root']/folder).glob(pattern))
+        configuration=(Active.get() or {}).get("configuration",self.Tools.get("configuration","release"))
+        compiler_identity+=configuration.encode()
         sdk_digest=hashlib.sha256(headers+library.read_bytes()+compiler_identity+extension_hash+json.dumps(Active.get(),sort_keys=True).encode()).digest()
         for descriptor in descriptors:
             wrapper_source=self._Wrapper(descriptor)
@@ -189,6 +191,7 @@ class ScriptCompiler:
             wrapper=self.cache/f"{descriptor.name}-{digest[:12]}.module.cpp"
             wrapper.write_text(wrapper_source,encoding="utf-8")
             command=[str(compiler),"-std=c++20","-shared","-fvisibility=hidden",f"-I{sdk/'include'}",str(wrapper),str(library),"-o",str(output)]
+            command.extend(["-g","-O0","-DBAZZALT_DEBUG=1"] if configuration=="debug" else ["-O2","-DNDEBUG"])
             command.extend('-I'+str(path) for path in extension_includes);command.extend(map(str,extension_libraries))
             from Compiler.cross import Active,Configure
             if Active.get():command=Configure(command,Active.get())

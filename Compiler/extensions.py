@@ -103,7 +103,7 @@ def BuildExtensionPackage(source,destination,runtime,platform,architecture,compi
             output=Path('compiled')/key/(name+('.blua' if path.suffix=='.lua' else '.dll' if platform=='windows' else '.dylib' if platform=='macos' else '.so'))
             if path.suffix=='.lua':CompileLua(path,root/output,runtime)
             else:
-                native=manifest['Native'];includes=[root/p for p in native.get('IncludeDirs',[])];libdirs=[root/p for p in native.get('LibDirsWin' if platform=='windows' else 'LibDirsMac' if platform=='macos' else 'LibDirsLinux',[])]
+                native=manifest['Native'];includes=[root/p for p in native.get('IncludeDirs',[])];libdirs=[root/p for p in native.get('LibDirsWin' if platform=='windows' else 'LibDirsMac' if platform=='macos' else 'LibDirsAndroid' if platform=='android' else 'LibDirsLinux',[])]
                 if script.get('Scope')=='Editor':libdirs.extend(root/p for p in native.get('EditorLibDirsWin' if platform=='windows' else 'EditorLibDirsMac' if platform=='macos' else 'EditorLibDirsLinux',[]))
                 compile_source=path
                 if component:
@@ -180,7 +180,7 @@ def RuntimeIndex(items,destination,platform,architecture,*,editor=False,runtime=
             names.add(name)
             relative=Path(identity)/(Path('compiled')/target/(key+('.blua' if language=='lua' else '.dll' if platform=='windows' else '.dylib' if platform=='macos' else '.so')));out=destination/relative;out.parent.mkdir(parents=True,exist_ok=True)
             if language=='cpp' and runtime is not None and (not compiled or compiled.get('EngineVersion')!=EngineVersion()):
-                native=manifest['Native'];includes=[item['Root']/p for p in native.get('IncludeDirs',[])];libdirs=[item['Root']/p for p in native.get('LibDirsWin' if platform=='windows' else 'LibDirsMac' if platform=='macos' else 'LibDirsLinux',[])]
+                native=manifest['Native'];includes=[item['Root']/p for p in native.get('IncludeDirs',[])];libdirs=[item['Root']/p for p in native.get('LibDirsWin' if platform=='windows' else 'LibDirsMac' if platform=='macos' else 'LibDirsAndroid' if platform=='android' else 'LibDirsLinux',[])]
                 CompileNative(Local(item['Root'],path),out,runtime,architecture,compiler_path,includes,libdirs,list(dict.fromkeys(p for d in libdirs for pattern in (('*.lib',) if platform=='windows' else ('*.so','*.so.*','*.dylib','*.a')) for p in d.glob(pattern))))
             else:
                 if not compiled:raise ExtensionError('Extension '+identity+' has no compiled '+target+' module: '+key)
@@ -190,7 +190,7 @@ def RuntimeIndex(items,destination,platform,architecture,*,editor=False,runtime=
             modules.append({'Name':name,'Path':relative.as_posix(),'Language':language,'Owner':identity,'Public':bool(script.get('Public'))})
         native=manifest['Native']
         if native.get('Enabled') and (editor or native.get('Scope','Runtime')=='Runtime'):
-            bins=list(native.get('BinDirsWin' if platform=='windows' else 'BinDirsMac' if platform=='macos' else 'BinDirsLinux',[]))
+            bins=list(native.get('BinDirsWin' if platform=='windows' else 'BinDirsMac' if platform=='macos' else 'BinDirsAndroid' if platform=='android' else 'BinDirsLinux',[]))
             if editor:bins.extend(native.get('EditorBinDirsWin' if platform=='windows' else 'EditorBinDirsMac' if platform=='macos' else 'EditorBinDirsLinux',[]))
             for directory in bins:
                 for source in Local(item['Root'],directory,directory=True).rglob('*'):

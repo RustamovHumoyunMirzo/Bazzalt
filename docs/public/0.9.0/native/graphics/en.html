@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Use #include &lt;Bazzalt/Graphics.h&gt; to draw vertices directly in the active scene. A vertex describes a point, its surface normal, texture coordinates and color. Indices are zero-based numbers selecting vertices; each group of three indices forms a triangle. This API owns no engine loop, native window or renderer object. It works in the editor during Play and in built games.">
+  <title>Drawing geometry with Graphics | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / C++ / Drawing geometry with Graphics</nav>
+      <article class="doc"><h1>Drawing geometry with Graphics</h1>
+<p>Use <code>#include &lt;Bazzalt/Graphics.h&gt;</code> to draw vertices directly in the active scene. A vertex describes a point, its surface normal, texture coordinates and color. Indices are zero-based numbers selecting vertices; each group of three indices forms a triangle. This API owns no engine loop, native window or renderer object. It works in the editor during Play and in built games.</p>
+<h2 id="first-triangle">Draw a triangle</h2>
+<pre><code>auto mesh = Bazzalt::Graphics::CreateMesh({
+    {{-1,-1,-3}, {0,0,1}, {0,0}, {0,1,0,1}},
+    {{ 1,-1,-3}, {0,0,1}, {1,0}, {0,1,0,1}},
+    {{ 0, 1,-3}, {0,0,1}, {.5f,1}, {0,1,0,1}}
+}, {0,1,2});
+// In your behavior's OnUpdate callback:
+Bazzalt::Graphics::DrawMesh(mesh);</code></pre>
+<p>Keep the mesh in a behavior field and create it once in <code>OnCreate</code>. Submit it every frame in <code>OnUpdate</code>. The default material is unlit and uses vertex colors. Draws are depth tested in the world; they are not editor gizmos or UI overlays.</p>
+<h2 id="meshes">Reusable and transient geometry</h2>
+<p><code>GraphicsMesh</code> is a shared handle. <code>SetGeometry</code> atomically replaces its vertices, indices and topology. Submitted draws retain the old geometry snapshot if you change or destroy the handle afterward. <code>Destroy</code> invalidates all handle copies. Unused GPU resources are released automatically. Use <code>DrawVertices</code>, <code>DrawLine</code> and <code>DrawTriangle</code> for transient work; reusable meshes avoid repeated uploads.</p>
+<p>Supported topologies are Points, Lines, LineStrip, Triangles and TriangleStrip. Empty indices generate a sequential index buffer. Normals must be nonzero. Positions, normals, UVs, colors and model matrices must be finite. Model transforms are affine matrices such as translation, rotation and scale.</p>
+<h2 id="materials">Materials and draw options</h2>
+<pre><code>auto material = Bazzalt::Material::Create(Bazzalt::ShaderPreset::StandardLit);
+material.SetColor("baseColor", {1,.3f,.1f,1});
+Bazzalt::GraphicsDrawOptions options;
+options.CastShadows = true;
+options.Camera = cameraEntity.GetUUID(); // zero draws to every camera
+Bazzalt::Graphics::DrawMesh(mesh, material,
+    Bazzalt::Mat4::Translation({0,2,0}), options);</code></pre>
+<p>Surface materials can use positions, tangent frames generated from normals, UV0/UV1 and vertex colors. The shader decides which attributes it actually uses; a custom material need not multiply vertex color. Material render-state overrides control depth testing, writing, culling and blending. Priority is 0–7; layers are a seven-bit mask, 0–127. Geometry is not automatically selectable or included in physics/scene queries.</p>
+<h2 id="events">Frame and camera callbacks</h2>
+<p>Subscribe with <code>Graphics::OnBeforeCamera(callback, ownerEntity)</code> or <code>Subscribe(type, callback, ownerEntity)</code>, and retain the returned subscription if you want to call <code>Unsubscribe</code> early. Passing an owner expires the listener when that entity disappears. Native script destruction, Lua VM teardown and scene transitions also clean up their listener scopes. Failed listeners are disabled and reported to the console.</p>
+<table><thead><tr><th>Event</th><th>When it runs</th></tr></thead><tbody>
+<tr><td>OnBeginFrame</td><td>Once before camera preparation. Drawing is allowed.</td></tr>
+<tr><td>OnCameraResize</td><td>First appearance or changed camera/view dimensions.</td></tr>
+<tr><td>OnBeforeCamera</td><td>Camera preparation, before GPU passes begin. Drawing is allowed and automatically scoped to this camera/view.</td></tr>
+<tr><td>OnBeforeDraw</td><td>Each matching submission during preparation. Notification only.</td></tr>
+<tr><td>OnAfterDraw</td><td>After a rendered camera view has consumed its submissions; this is not a GPU fence.</td></tr>
+<tr><td>OnAfterCamera</td><td>After a rendered camera view.</td></tr>
+<tr><td>OnEndFrame</td><td>End of the frame attempt; transient submissions are cleared.</td></tr></tbody></table>
+<p><code>GraphicsEvent</code> contains scene/camera UUIDs, viewport identity, frame number, pixel dimensions, editor-camera flag, View, Projection and ViewProjection matrices, and draw index/count. After-render callbacks and resize callbacks must not submit or clear geometry. Callbacks do not own the application loop. All Graphics operations use the engine thread.</p>
+<h2 id="two-dimensions">Drawing in two dimensions</h2>
+<p>An orthographic camera maps a flat XY drawing into the scene without perspective shrinkage. Alternatively, use the camera callback matrices to unproject screen points. For pixel coordinates with a top-left origin:</p>
+<pre><code>auto inverse = event.ViewProjection.Inverse();
+auto world = inverse.TransformPoint({
+    2.0f * pixelX / event.Width - 1.0f,
+    1.0f - 2.0f * pixelY / event.Height, 0.0f});</code></pre>
+<p>Build your vertices from those world points inside OnBeforeCamera. This also works for split views and camera captures. Depth and material rules still apply. Use the GUI system for layout, text editing and interactive widgets.</p>
+<h2 id="limits">Validation and limits</h2>
+<p>Meshes are limited to 262,144 vertices and 1,048,576 indices. A frame accepts 4,096 draw submissions and at most 128 MiB of unique uploaded geometry. Violations throw descriptive exceptions rather than passing malformed buffers to the driver. Camera-texture samplers in shared world materials follow the existing capture-history rules for feedback safety.</p>
+<p>See the <a href="../reference/Graphics/en.html">Graphics reference</a>, <a href="../reference/GraphicsMesh/en.html">mesh reference</a> and <a href="../materials/en.html">material guide</a>.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../materials/en.html"><small>Previous</small>Runtime materials</a>
+<a class="next" href="../audio/en.html"><small>Next</small>C++ audio</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#first-triangle">Draw a triangle</a><a class="toc-link" href="#meshes">Reusable and transient geometry</a><a class="toc-link" href="#materials">Materials and draw options</a><a class="toc-link" href="#events">Frame and camera callbacks</a><a class="toc-link" href="#two-dimensions">Drawing in two dimensions</a><a class="toc-link" href="#limits">Validation and limits</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

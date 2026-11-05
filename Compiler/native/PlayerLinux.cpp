@@ -74,7 +74,13 @@ extern "C" __attribute__((visibility("default"))) int BazzaltRunLinuxPlayer(int 
 #ifdef __APPLE__
         flags|=SDL_WINDOW_METAL|SDL_WINDOW_HIGH_PIXEL_DENSITY;
 #endif
-        if(Text(settings["resizable"])=="true")flags|=SDL_WINDOW_RESIZABLE;if(mode=="borderless")flags|=SDL_WINDOW_BORDERLESS;window=SDL_CreateWindow(Text(settings["title"]).c_str(),width,height,flags);Require(window,SDL_GetError());SDL_SetWindowPosition(window,SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED);if(mode=="maximized")SDL_MaximizeWindow(window);if(mode=="fullscreen")Require(SDL_SetWindowFullscreen(window,true),SDL_GetError());
+        if(Text(settings["resizable"])=="true")flags|=SDL_WINDOW_RESIZABLE;if(mode=="borderless")flags|=SDL_WINDOW_BORDERLESS;window=SDL_CreateWindow(Text(settings["title"]).c_str(),width,height,flags);Require(window,SDL_GetError());
+        if(settings.has_child("icon")){
+            auto iconPath=folder/SafePath(Text(settings["icon"]));
+            auto* image=SDL_LoadBMP(iconPath.c_str());Require(image,SDL_GetError());
+            SDL_SetWindowIcon(window,image);SDL_DestroySurface(image);
+        }
+        SDL_SetWindowPosition(window,SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED);if(mode=="maximized")SDL_MaximizeWindow(window);if(mode=="fullscreen")Require(SDL_SetWindowFullscreen(window,true),SDL_GetError());
         auto intro=config["intro"];const bool brand=Text(intro["enabled"])=="true",allowSkip=Text(intro["allow_skip"])=="true";int duration=std::stoi(Text(intro["duration_ms"])),logo=std::stoi(Text(intro["logo_size"]));Require(duration>=0&&duration<=30000&&logo>=48&&logo<=512,"Invalid intro settings");Cover cover;cover.Create(window,brand,logo);Require(SDL_ShowWindow(window),SDL_GetError());cover.Paint(width,height);auto started=std::chrono::steady_clock::now();
 #ifndef __APPLE__
         const bool wayland=std::string(SDL_GetCurrentVideoDriver())=="wayland";

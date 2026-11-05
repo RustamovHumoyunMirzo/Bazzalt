@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A world cell is a scene file representing one region of a larger world. Streaming loads nearby regions and removes distant ones while the persistent scene keeps running. A streaming source is usually the player or a camera that tells the engine which regions matter.">
+  <title>World and scene streaming | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Editor manual / World and scene streaming</nav>
+      <article class="doc"><h1>World and scene streaming</h1><p>A world cell is a scene file representing one region of a larger world. Streaming loads nearby regions and removes distant ones while the persistent scene keeps running. A streaming source is usually the player or a camera that tells the engine which regions matter.</p><h2 id="setup">Create a streaming world</h2><ol><li>Create separate scene assets for your regions. Each must have its own entity UUIDs. Use prefabs for repeated scenery inside the regions.</li><li>In the persistent scene, create an empty entity for each region and add <strong>World Cell</strong>.</li><li>Choose the region's scene in <strong>Scene Asset</strong>. Place the definition entity at the region's world offset. The cell's scene-root entities are parented under this offset.</li><li>Set <strong>Half Extents</strong> to half the local region dimensions. For a 256-by-128-by-256 region, use 128, 64, 128.</li><li>Choose a <strong>Load Distance</strong> measured from the region's edge and a larger <strong>Unload Distance</strong>. For example, 100 and 150 avoid repeatedly loading at a boundary.</li><li>Add <strong>Streaming Source</strong> to the player or camera. Leave Distance Scale at 1 initially. Enter Play and move the source.</li></ol><h2 id="behavior">How residency works</h2><p>All enabled sources contribute. One nearby player can keep a region loaded even when another player moves away. Always Loaded keeps essential regions resident without a source. Priority selects which waiting regions enter the queue first; it does not evict existing residents. Disabled sources stop contributing; disabled or removed cell definitions retire their automatically loaded regions.</p><p>Authoring components work during Play and standalone gameplay. In edit mode they remain configuration data. The active scene keeps its environment and physics settings. Camera selection and Game output behavior are unchanged: streaming does not create a fallback camera.</p><h2 id="safety">Loading and unloading</h2><p>File IO and scene parsing run on workers. Components, scripts, audio, physics and rendering integrate on engine-owned frame boundaries. A cell is ready for gameplay only after Complete. Unloading stops its scripts and removes entities over several frames within the streaming budget. Objects from outside the cell that were parented under it are detached and preserved.</p><p>Do not use one scene asset for several different cells. Conflicting entity UUIDs fail safely, and duplicate authored definitions are rejected. Deleting a region file reports a streaming error rather than silently spawning an empty substitute. Failed automatic loads can retry; inspect them through the C++/Lua streaming API.</p><h2 id="scripts">Programming and budgets</h2><p>C++ and Lua can register cells or regular grids, maintain multiple named sources, request manual loads, poll handles, inspect residency and events, and configure budgets. See <a href="../../native/streaming/en.html">C++ streaming</a> or <a href="../../lua/streaming/en.html">Lua streaming</a>. Main-thread time limits are soft around user callbacks. Save-game state is separate from residency: runtime changes inside a cell are not automatically written back to its scene asset.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../scenes/en.html"><small>Previous</small>Multiple scenes and saving</a>
+<a class="next" href="../camera-materials/en.html"><small>Next</small>Camera material passes</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#setup">Create a streaming world</a><a class="toc-link" href="#behavior">How residency works</a><a class="toc-link" href="#safety">Loading and unloading</a><a class="toc-link" href="#scripts">Programming and budgets</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

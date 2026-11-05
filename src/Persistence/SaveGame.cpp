@@ -1,4 +1,5 @@
 #include "Bazzalt/SaveGame.h"
+#include "Platform/AndroidPlatform.h"
 #include "Persistence/SaveAccess.h"
 #include "Bazzalt/Jobs.h"
 #include "Bazzalt/Profiler.h"
@@ -87,7 +88,17 @@ struct Lock {
     ~Lock(){if(Handle>=0){flock(Handle,LOCK_UN);close(Handle);}}
 #endif
 };
-ByteBuffer ReadFile(const std::filesystem::path& path){RejectLink(path);std::error_code error;auto size=std::filesystem::file_size(path,error);if(error){if(!std::filesystem::exists(path))throw StorageError(SaveError::NotFound,"Save slot does not exist");throw StorageError(SaveError::IOError,"Could not inspect save slot");}if(size>MaxFile)throw StorageError(SaveError::Corrupt,"Save file exceeds its size limit");std::ifstream file(path,std::ios::binary);if(!file)throw StorageError(SaveError::IOError,"Could not read save slot");ByteBuffer data(static_cast<std::size_t>(size));file.read(reinterpret_cast<char*>(data.data()),static_cast<std::streamsize>(data.size()));if(!file||file.peek()!=std::char_traits<char>::eof())throw StorageError(SaveError::IOError,"Save slot changed while reading");return data;}
+ByteBuffer ReadFile(const std::filesystem::path& path){
+#ifdef __ANDROID__
+    const auto name=path.filename().string();
+    if(name.ends_with(".bsave")||name.ends_with(".bsave.bak")){
+        auto data=Runtime::AndroidPlatform::ReadSave(path);
+        if(!data)throw StorageError(SaveError::NotFound,"Save slot does not exist");
+        if(data->size()>MaxFile)throw StorageError(SaveError::Corrupt,"Save slot exceeds its size limit");
+        return *data;
+    }
+#endif
+    RejectLink(path);std::error_code error;auto size=std::filesystem::file_size(path,error);if(error){if(!std::filesystem::exists(path))throw StorageError(SaveError::NotFound,"Save slot does not exist");throw StorageError(SaveError::IOError,"Could not inspect save slot");}if(size>MaxFile)throw StorageError(SaveError::Corrupt,"Save file exceeds its size limit");std::ifstream file(path,std::ios::binary);if(!file)throw StorageError(SaveError::IOError,"Could not read save slot");ByteBuffer data(static_cast<std::size_t>(size));file.read(reinterpret_cast<char*>(data.data()),static_cast<std::streamsize>(data.size()));if(!file||file.peek()!=std::char_traits<char>::eof())throw StorageError(SaveError::IOError,"Save slot changed while reading");return data;}
 std::filesystem::path Temporary(const std::filesystem::path& target){Crypto();std::uint64_t random;randombytes_buf(&random,sizeof(random));auto path=target;path+=".tmp-"+std::to_string(random);return path;}
 void WriteFile(const std::filesystem::path& path,const ByteBuffer& data){
 #if defined(_WIN32)
@@ -100,7 +111,10 @@ void WriteFile(const std::filesystem::path& path,const ByteBuffer& data){
     if(!good){std::error_code ignored;std::filesystem::remove(path,ignored);throw StorageError(SaveError::IOError,"Could not durably write save temporary file");}
 }
 void Replace(const std::filesystem::path& source,const std::filesystem::path& destination){
-#if defined(_WIN32)
+#if defined(__ANDROID__)
+    Runtime::AndroidPlatform::WriteSave(destination,ReadFile(source));
+    std::filesystem::remove(source);
+#elif defined(_WIN32)
     if(!MoveFileExW(source.c_str(),destination.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH))throw StorageError(SaveError::IOError,"Could not atomically replace save file");
 #else
     if(rename(source.c_str(),destination.c_str())!=0)throw StorageError(SaveError::IOError,"Could not atomically replace save file");
@@ -135,7 +149,16 @@ SaveLoadResult LoadLocked(const std::filesystem::path& path,const std::string& s
     }
 }
 SaveLoadResult Failure(SaveError code,const std::string& error){SaveLoadResult result;result.Code=code;result.Error=error;return result;}
-std::set<std::string> Names(const std::filesystem::path& directory){std::set<std::string> names;unsigned visited=0;for(auto& entry:std::filesystem::directory_iterator(directory)){if(++visited>4096)throw StorageError(SaveError::QuotaExceeded,"Too many files in save profile");const auto u8=entry.path().filename().u8string();std::string name(reinterpret_cast<const char*>(u8.data()),u8.size());if(!name.starts_with("slot_"))continue;std::size_t suffix=0;if(name.ends_with(".bsave"))suffix=6;else if(name.ends_with(".bsave.bak"))suffix=10;else continue;auto slot=name.substr(5,name.size()-5-suffix);try{Name(slot);names.insert(slot);}catch(const StorageError&){}if(names.size()>256)throw StorageError(SaveError::QuotaExceeded,"Save profile exceeds 256 slots");}return names;}
+std::set<std::string> Names(const std::filesystem::path& directory){std::vector<std::string> files;
+#ifdef __ANDROID__
+    files=Runtime::AndroidPlatform::SaveFiles(directory);
+#else
+    for(const auto& entry:std::filesystem::directory_iterator(directory)){
+        auto text=entry.path().filename().u8string();
+        files.emplace_back(reinterpret_cast<const char*>(text.data()),text.size());
+    }
+#endif
+    std::set<std::string> names;unsigned visited=0;for(const auto& name:files){if(++visited>4096)throw StorageError(SaveError::QuotaExceeded,"Too many files in save profile");if(!name.starts_with("slot_"))continue;std::size_t suffix=0;if(name.ends_with(".bsave"))suffix=6;else if(name.ends_with(".bsave.bak"))suffix=10;else continue;auto slot=name.substr(5,name.size()-5-suffix);try{Name(slot);names.insert(slot);}catch(const StorageError&){}if(names.size()>256)throw StorageError(SaveError::QuotaExceeded,"Save profile exceeds 256 slots");}return names;}
 ByteBuffer EncodeFile(const SaveDocument& document,const SaveOptions& options,const std::string& binding,std::uint64_t generation,SaveSlotInfo& info,std::optional<std::uint64_t> timestamp={}){
     auto payload=SaveGame::Encode(document);BinaryWriter header(2048);const bool encrypted=!options.EncryptionKey.empty();
     info.Title=options.Title;info.SchemaVersion=document.SchemaVersion;info.Generation=generation;info.SavedAtUnixMilliseconds=static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());if(timestamp)info.SavedAtUnixMilliseconds=*timestamp;info.Encrypted=encrypted;
@@ -193,8 +216,46 @@ SaveLoadResult SaveGame::Load(const std::string& slot,const SaveOptions& options
 SaveHandle SaveGame::SaveAsync(const std::string& slot,SaveDocument document,SaveOptions options,const std::string& profile){auto operation=Queue(slot,options,profile);operation->Write=true;operation->Encoded=Encode(document);State().Queue.push_back(operation);SaveHandle result;result.m_state=std::move(operation);return result;}
 SaveHandle SaveGame::LoadAsync(const std::string& slot,SaveOptions options,const std::string& profile){auto operation=Queue(slot,options,profile);State().Queue.push_back(operation);SaveHandle result;result.m_state=std::move(operation);return result;}
 void SaveGame::Flush(){Owner();auto& state=State();while(state.Active||!state.Queue.empty()){StartNext();auto operation=state.Active;{std::unique_lock lock(operation->Mutex);operation->Done.wait(lock,[&]{auto status=operation->Status.load();return status==SaveOperationStatus::Complete||status==SaveOperationStatus::Cancelled||status==SaveOperationStatus::Failed;});}state.ActiveJob.Wait();state.ActiveJob={};state.Active.reset();}}
-SaveResult SaveGame::Delete(const std::string& slot,const std::string& profile){Owner();Flush();try{auto path=Path(Directory(profile),slot);auto lockPath=path;lockPath+=".lock";Lock lock(lockPath);bool removed=false;for(auto suffix:{"",".bak"}){auto file=path;file+=suffix;RejectLink(file);removed=std::filesystem::remove(file)||removed;}SyncDirectory(path.parent_path());SaveResult result;result.Success=true;result.Committed=removed;result.Info.Slot=Identifier(slot);return result;}catch(const StorageError& error){return Failure(error.Code,error.what());}catch(const std::exception& error){return Failure(SaveError::IOError,error.what());}}
-std::vector<SaveSlotInfo> SaveGame::ListSlots(const std::string& profile){Owner();Flush();auto directory=Directory(profile);std::vector<SaveSlotInfo> result;for(auto& slot:Names(directory)){auto path=Path(directory,slot);if(!std::filesystem::exists(path))path+=".bak";SaveSlotInfo info;info.Slot=slot;try{RejectLink(path);std::ifstream file(path,std::ios::binary);ByteBuffer prefix(14);file.read(reinterpret_cast<char*>(prefix.data()),14);if(!file)throw std::runtime_error("Truncated save header");BinaryReader reader(prefix);if(reader.ReadUInt64()!=Magic||reader.ReadUInt16()!=1)throw std::runtime_error("Unsupported save header");auto size=reader.ReadUInt32();if(size>2048)throw std::runtime_error("Invalid save metadata length");ByteBuffer header(size);file.read(reinterpret_cast<char*>(header.data()),size);if(!file)throw std::runtime_error("Truncated save metadata");info=ReadHeader(header,slot).Info;info.SizeBytes=std::filesystem::file_size(path);}catch(const std::exception& error){info.Error=error.what();}result.push_back(std::move(info));}return result;}
+SaveResult SaveGame::Delete(const std::string& slot,const std::string& profile){Owner();Flush();try{auto path=Path(Directory(profile),slot);auto lockPath=path;lockPath+=".lock";Lock lock(lockPath);bool removed=false;for(auto suffix:{"",".bak"}){auto file=path;file+=suffix;RejectLink(file);
+#ifdef __ANDROID__
+removed=Runtime::AndroidPlatform::RemoveSave(file)||removed;
+#else
+removed=std::filesystem::remove(file)||removed;
+#endif
+}SyncDirectory(path.parent_path());SaveResult result;result.Success=true;result.Committed=removed;result.Info.Slot=Identifier(slot);return result;}catch(const StorageError& error){return Failure(error.Code,error.what());}catch(const std::exception& error){return Failure(SaveError::IOError,error.what());}}
+std::vector<SaveSlotInfo> SaveGame::ListSlots(const std::string& profile){
+    Owner();Flush();auto directory=Directory(profile);std::vector<SaveSlotInfo> result;
+    for(const auto& slot:Names(directory)){
+        SaveSlotInfo info;info.Slot=slot;
+        try{
+            ByteBuffer data;
+#ifdef __ANDROID__
+            try{data=ReadFile(Path(directory,slot));}
+            catch(const StorageError& error){if(error.Code!=SaveError::NotFound)throw;auto backup=Path(directory,slot);backup+=".bak";data=ReadFile(backup);}
+            const auto fileSize=data.size();
+#else
+            auto path=Path(directory,slot);if(!std::filesystem::exists(path))path+=".bak";
+            RejectLink(path);const auto fileSize=std::filesystem::file_size(path);
+            std::ifstream file(path,std::ios::binary);data.resize(14);file.read(reinterpret_cast<char*>(data.data()),14);
+            if(!file)throw std::runtime_error("Truncated save header");
+            BinaryReader prefix(data);prefix.ReadUInt64();prefix.ReadUInt16();auto metadataSize=prefix.ReadUInt32();
+            if(metadataSize>2048||fileSize<14+metadataSize)throw std::runtime_error("Invalid save metadata length");
+            data.resize(14+metadataSize);file.read(reinterpret_cast<char*>(data.data()+14),metadataSize);
+            if(!file)throw std::runtime_error("Truncated save metadata");
+#endif
+            if(data.size()<14)throw std::runtime_error("Truncated save header");
+            BinaryReader reader(data);
+            if(reader.ReadUInt64()!=Magic||reader.ReadUInt16()!=1)throw std::runtime_error("Unsupported save header");
+            auto size=reader.ReadUInt32();
+            if(size>2048||size>data.size()-14)throw std::runtime_error("Invalid save metadata length");
+            ByteBuffer header(data.begin()+14,data.begin()+14+size);
+            info=ReadHeader(header,slot).Info;info.SizeBytes=fileSize;
+        }catch(const std::exception& error){info.Error=error.what();}
+        result.push_back(std::move(info));
+    }
+    return result;
+}
+
 SaveOperationStatus SaveHandle::GetStatus()const{return m_state?m_state->Status.load():SaveOperationStatus::Failed;}
 bool SaveHandle::IsDone()const{auto status=GetStatus();return status==SaveOperationStatus::Complete||status==SaveOperationStatus::Failed||status==SaveOperationStatus::Cancelled;}
 float SaveHandle::GetProgress()const{return m_state?m_state->Progress.load():0;}

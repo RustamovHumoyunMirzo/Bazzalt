@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Lua uses the same native skeleton, clips, controller, IK and physics integration as C++. Global services use dot calls; rig, skeleton, controller and clip objects use colon calls. Entity components are copies: write modified settings back with SetComponent.">
+  <title>Animation in Lua | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Lua / Animation in Lua</nav>
+      <article class="doc"><h1>Animation in Lua</h1><p>Lua uses the same native skeleton, clips, controller, IK and physics integration as C++. Global services use dot calls; rig, skeleton, controller and clip objects use colon calls. Entity components are copies: write modified settings back with SetComponent.</p>
+<h2 id="example">Animate a character</h2><pre><code>local B = Bazzalt
+function Behavior:OnCreate()
+    local animator = self.Entity:AddComponent("Animator")
+    animator.Controller = B.UUID.Parse("YOUR-CONTROLLER-UUID")
+    animator.AnimatePhysics = true
+    self.Entity:SetComponent("Animator", animator)
+    B.Animation.Play(self.Entity, "Walk", 0.2)
+end
+function Behavior:OnUpdate()
+    B.Animation.SetParameter(self.Entity, "Speed", self.Speed)
+    local status = B.Animation.GetStatus(self.Entity)
+    for _, event in ipairs(B.Animation.GetEvents(self.Entity)) do
+        if event.Name == "Footstep" then
+            -- Play a sound or another authored response.
+        end
+    end
+end</code></pre>
+<h2 id="ik">Pose math and IK</h2><pre><code>local rig = Bazzalt.Animation.GetRig(entity)
+if rig then
+    local pose = Bazzalt.Animation.GetPose(entity)
+    local settings = Bazzalt.IKSettings.new()
+    settings.Solver = Bazzalt.IKSolver.FABRIK
+    settings.Root = 3; settings.Tip = 7 -- zero-based bone indices
+    settings.Target = Bazzalt.Vec3.new(0.5, 1.0, 0.2)
+    local solved, reached = Bazzalt.Animation.SolveIK(rig.Rig, pose, settings)
+    Bazzalt.Animation.SetPose(entity, solved)
+end</code></pre><p>Lua pose/clip/skeleton lists use ordinary one-based table indexing, but stored Bone, Parent, Root, Tip, Source, Target and Clip index fields remain zero-based to match C++ and imported models. SolveIK returns the modified pose table followed by a convergence boolean; it does not mutate a supplied Lua table in place. GetRig returns nil without a rig.</p>
+<h2 id="operations">Available operations</h2><p>Animation exposes Play, Stop, Pause, Resume, Rebind, SetRig, GetRig, SetController, SetParameter, GetParameter, SetTrigger, SetTime, Evaluate, SetLayer, RemoveLayer, SetIK, RemoveIK, GetPose, SetPose, GetStatus, GetEvents, Blend, Additive, SolveIK, Retarget and MapByName. Optional arguments mirror C++ defaults. Invalid operations raise Lua errors. GetStatus includes State, Time, NormalizedTime, TransitionWeight, Playing, RootDelta and RootRotation. Event snapshots contain Name, State and Clip.</p><p>AnimationRig.Load resolves a model UUID. AnimationController.Load and FromSource load or build controller definitions. Skeleton, SkeletonBone, BoneTransform, AnimationClip, AnimationTrack, AnimationKey, AnimationMarker, AnimationState, AnimationBlendSample, AnimationTransition, AnimationCondition, RetargetBone, RetargetSettings and IKSettings support procedural data construction. RootMotionMode, IKSolver, AnimationChannel, AnimationInterpolation, AnimationBlendType and AnimationComparison are enums.</p><p>Animator and IKConstraint support the normal entity component operations and enable/disable state. For persistent IK helpers, pick AnimatorEntity, Target and PoleTarget UUIDs in the scene; GroundRaycast can place feet against the physics world. Read the animation manual for authoring, coordinate spaces, retargeting and resource limits. The C++ guide defines the shared operation contracts; the Lua reference lists every binding.</p><h2 id="authoring">Authored clips, morphs and humanoids</h2><p>BoneTransform.Weights holds local morph weights in target order. AnimationChannel.Weights uses AnimationTrack.Target and the X component of each key/tangent. Blend, Additive, Sample, Retarget, SetPose and GetPose preserve these values. Quaternion channels still use XYZW. SkeletonBone.MorphTargets holds optional names, with the same count as its bind weights.</p><p>AnimationClip.FromSource parses bounded version-one JSON; ToSource writes a portable round trip including cubic tangents and named markers. AnimationController.Clips is an authored clip catalog: names override imported clips or add new ones, without changing the shared source rig. The selected source skeleton must validate every clip. Controller files can be up to 16 MiB; each authored clip accepts at most one million keys.</p><p>HumanoidAvatar.Joints contains HumanoidJoint entries (Name semantic, Bone index). Detect recognizes standard humanoid aliases; IsValid checks unique bindings and known parent ancestry. FindBone returns -1 for an unmapped semantic. Animation.MapHumanoid(source, sourceAvatar, target, targetAvatar, translationScale) returns a RetargetSettings mapping. Profiles can be partial, but must share at least one semantic. Review detected profiles; arbitrary names need explicit joints. Supported semantics include Hips, Spine, Chest, UpperChest, Neck, Head, left/right Shoulder, UpperArm, LowerArm, Hand, UpperLeg, LowerLeg, Foot, Toes, and Thumb/Index/Middle/Ring/Little Proximal/Intermediate/Distal.</p><p>Markers at time zero fire once when playback enters a state. Blend-tree markers come from the strongest weighted sample, with ties resolved by sample order, so blended footsteps do not duplicate. Times follow normalized blend phase. Non-looping states stop and report Completed, including blend states.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../vfx/en.html"><small>Previous</small>VFX in Lua</a>
+<a class="next" href="../developer-console/en.html"><small>Next</small>Developer console and CVars in Lua</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Animate a character</a><a class="toc-link" href="#ik">Pose math and IK</a><a class="toc-link" href="#operations">Available operations</a><a class="toc-link" href="#authoring">Authored clips, morphs and humanoids</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

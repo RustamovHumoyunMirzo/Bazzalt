@@ -62,7 +62,7 @@ class GameBuildTests(unittest.TestCase):
             project=Path(folder)/'Game.bproject';editor=QWidget();editor.Runtime=Mock();editor.Runtime.ProjectInfo.return_value={'project_path':str(project)};editor.Localization=LocalizationManager(ResourceManager())
             dialog=BuildSettingsDialog(editor)
             try:
-                self.assertEqual(set(dialog.PlatformGroups),{'windows','linux','macos'})
+                self.assertEqual(set(dialog.PlatformGroups),{'windows','linux','macos','android'})
                 mac=dialog.PlatformControls[('macos','backend')];self.assertEqual([mac.itemData(i) for i in range(mac.count())],['automatic','metal'])
                 architecture=dialog.PlatformControls[('macos','architecture')];architecture.setCurrentIndex(architecture.findData('arm64'))
                 windows=dialog.PlatformControls[('windows','architecture')];windows.setCurrentIndex(windows.findData('x86'))

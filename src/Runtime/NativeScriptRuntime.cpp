@@ -1,3 +1,4 @@
+#include "Platform/AndroidPlatform.h"
 #include "Runtime/JobAccess.h"
 #include "Runtime/NativeScriptRuntime.h"
 #include "Runtime/GraphicsAccess.h"
@@ -86,7 +87,12 @@ bool NativeScriptRuntime::Start(std::string& error,bool application,bool reloadi
 #ifdef _WIN32
         instance.Library=LoadLibraryExW(binding.Module.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);auto entry=instance.Library?reinterpret_cast<GetScriptModuleApi>(GetProcAddress(instance.Library,"BazzaltGetScriptModuleV1")):nullptr;
 #else
-        instance.Library=dlopen(binding.Module.c_str(),RTLD_NOW|RTLD_LOCAL);auto entry=instance.Library?reinterpret_cast<GetScriptModuleApi>(dlsym(instance.Library,"BazzaltGetScriptModuleV1")):nullptr;
+        auto module=binding.Module;
+#ifdef __ANDROID__
+        auto name=binding.Module.filename().string();
+        module=AndroidPlatform::NativeLibrary(name.starts_with("lib")?name:"lib"+name);
+#endif
+        instance.Library=dlopen(module.c_str(),RTLD_NOW|RTLD_LOCAL);auto entry=instance.Library?reinterpret_cast<GetScriptModuleApi>(dlsym(instance.Library,"BazzaltGetScriptModuleV1")):nullptr;
 #endif
         if(instance.Library) instance.Lease=std::shared_ptr<void>(instance.Library,[](void* library){
 #ifdef _WIN32

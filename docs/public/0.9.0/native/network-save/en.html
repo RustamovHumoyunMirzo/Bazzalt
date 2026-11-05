@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Networking connects game processes. SaveGame stores player progress in the current user&#x27;s application-data directory. These APIs are available to C++ and Lua scripts; the engine owns their initialization, frame servicing and shutdown.">
+  <title>Networking and player saves | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / C++ / Networking and player saves</nav>
+      <article class="doc"><h1>Networking and player saves</h1>
+<p>Networking connects game processes. SaveGame stores player progress in the current user's application-data directory. These APIs are available to C++ and Lua scripts; the engine owns their initialization, frame servicing and shutdown.</p>
+<h2 id="transport">Authenticated client/server transport</h2>
+<p>Include Bazzalt/Network.h. CreateServer binds a numeric IPv4 or IPv6 address. CreateClient creates a local endpoint. Settings control protocol version, connection limit, send rate, timeout and bounded event queues. Project UUID and protocol version isolate incompatible games. Endpoint handles are copyable; retain a handle for as long as the endpoint is needed.</p>
+<pre><code>auto server = Bazzalt::Network::CreateServer("127.0.0.1:40000");
+auto id = Bazzalt::Network::CreateClientId();
+auto token = server.CreateConnectionToken(id, {server.GetAddress()});
+auto client = Bazzalt::Network::CreateClient();
+client.Connect(id, token);</code></pre>
+<p>This example runs both endpoints in one process. For production, issue the bearer token on a trusted server and deliver it through an authenticated matchmaking service. Never ship the server's private key in a client. Tokens last 30 seconds. An ID identifies a connection, not an authenticated player account. Internet hosting still requires an accessible UDP endpoint; relay, discovery and matchmaking services are application responsibilities.</p>
+<h2 id="messages">Messages, backpressure and ownership</h2>
+<p>PollEvent returns Connected, Disconnected, Message or Error. Message includes Peer, Channel, MessageType and binary Data. Reliable is ordered and retransmitted, with payloads up to 65,536 bytes. Unreliable is unordered, with payloads up to 900 bytes. Message types are 1–65,535. Send returns false when disconnected or its send queue is full: defer or replace pending state rather than busy waiting. Broadcast returns the number accepted. DisconnectPeer disconnects one connection; Stop closes an endpoint; StopAll closes all endpoints.</p>
+<pre><code>while (auto event = server.PollEvent()) {
+    if (event-&gt;Type == Bazzalt::NetworkEventType::Message) {
+        Bazzalt::BinaryReader reader(event-&gt;Data);
+        // Validate type, bounds, sender authority and complete consumption.
+    }
+}</code></pre>
+<p>BinaryWriter and BinaryReader encode fixed-width little-endian integers, finite floats, strings, bytes, vectors, quaternions and UUIDs without compiler-layout dependencies. Readers reject truncation and invalid values. They do not validate gameplay authority. GetStatistics reports RTT, loss, bandwidth and packet counters. All endpoint operations run on the engine thread. Transport uses real time and continues while game time is paused.</p>
+<p>There are at most 64 connections per server, 16 live endpoints and 512 MiB reserved transport memory per application. Event queues have configurable byte/count limits. Unreliable overflow drops events and increments statistics; reliable receive overflow disconnects the offending connection and reports an error. This is a transport framework, with no implicit entity replication, arbitrary remote method execution, prediction or rollback.</p>
+<h2 id="documents">Typed save documents</h2>
+<p>Include Bazzalt/SaveGame.h. SaveDocument holds named SaveValue fields: null, boolean, signed 64-bit integer, double, string, math values, UUID, bytes, arrays and objects. SaveGame does not serialize an entire scene or pointers. Store stable game identifiers and reconstruct gameplay state explicitly.</p>
+<pre><code>Bazzalt::SaveDocument progress;
+progress.SchemaVersion = 1;
+progress.Set("coins", 25);
+progress.Set("position", Bazzalt::Vec3{1, 2, 3});
+auto handle = Bazzalt::SaveGame::SaveAsync("autosave", progress);
+// Later, on the engine thread:
+if (handle.IsDone() &amp;&amp; !handle.GetResult().Success) {
+    // Display or log handle.GetResult().Error.
+}
+auto loaded = Bazzalt::SaveGame::Load("autosave");
+if (loaded.Success) { auto coins = loaded.Document-&gt;Get("coins"); }</code></pre>
+<p>Slot and profile names allow 1–64 ASCII letters, digits, underscores and hyphens. Identifiers are normalized to lowercase for consistent Windows/Linux/macOS behavior. Visible titles allow Unicode. Files use native Unicode paths. The stable project UUID selects an OS-specific application-data root through SDL; editor play uses a separate EditorPreview directory. Game saves use Player. Neither writes into project Assets or authored scene files.</p>
+<h2 id="transactions">Transactions, recovery and concurrency</h2>
+<p>Save writes a same-directory temporary file, flushes it, preserves a validated previous generation and atomically replaces the slot. An OS lock coordinates concurrent processes. ExpectedGeneration optionally rejects stale overwrites with Conflict. Load can recover a valid backup after truncation or accidental corruption, marking RecoveredFromBackup. Unsupported versions, missing keys and authentication failures never silently fall back. Committed distinguishes a completed replacement from a subsequent durability error.</p>
+<p>Async saves encode and validate a bounded snapshot on the caller thread; disk IO runs on workers. They snapshot the document and execute in submission order. Poll SaveHandle status, progress and result; cancellation succeeds only before commit starts. The engine pumps the queue and flushes it after shutdown callbacks. Flush waits only for save operations. Synchronous Save, Load, Delete and ListSlots flush earlier queued operations first. Submissions must run on the engine thread. At most eight requests may wait; each encoded document is limited to 16 MiB, 100,000 values, nesting depth 32, strings 1 MiB and keys 256 bytes. Profiles allow 256 slots.</p>
+<p>ListSlots returns display metadata without fully authenticating or decoding payloads; trust it only after Load. Save/Load/Delete return structured errors. Invalid use of constructors, codec limits, directory enumeration and asynchronous submission can throw. GetResult returns NotReady until completion. SaveResult includes Success, Code, Error, Info, RecoveredFromBackup and Committed.</p>
+<h2 id="encryption">Encryption and schema evolution</h2>
+<p>Unencrypted saves have a CRC32 checksum for accidental corruption. This does not prevent cheating. Setting SaveOptions.EncryptionKey to exactly 32 bytes enables XChaCha20-Poly1305 authenticated encryption, including metadata and project/profile/slot binding. CreateEncryptionKey generates random bytes; persist that key using your platform key store or trusted service. Do not regenerate it for every save or embed a universal production secret. Lost keys cannot recover encrypted saves. A local user controlling the process can still alter gameplay.</p>
+<p>Plaintext backups are re-encoded when upgrading a slot to encryption. Rotating an already encrypted slot requires loading with its old key and explicitly migrating to a new slot/key. SaveDocument.Migrate runs your callback transactionally on the caller thread: false or an exception leaves the original document unchanged. Downgrades are rejected. Encode and Decode allow explicit export/import of bounded document bytes, without silently executing scripts.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../hot-reload/en.html"><small>Previous</small>C++ hot reload state</a>
+<a class="next" href="../physics-replay/en.html"><small>Next</small>C++ deterministic physics and replay</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#transport">Authenticated client/server transport</a><a class="toc-link" href="#messages">Messages, backpressure and ownership</a><a class="toc-link" href="#documents">Typed save documents</a><a class="toc-link" href="#transactions">Transactions, recovery and concurrency</a><a class="toc-link" href="#encryption">Encryption and schema evolution</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

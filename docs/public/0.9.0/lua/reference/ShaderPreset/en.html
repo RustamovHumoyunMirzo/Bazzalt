@@ -1,0 +1,68 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Precompiled built-in surface shader choices: lit/unlit, opaque/transparent. Transparent alpha needs a transparent preset.">
+  <title>ShaderPreset | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / Lua API reference / ShaderPreset</nav>
+      <article class="doc"><h1>ShaderPreset</h1>
+<p class="lead">Precompiled built-in surface shader choices: lit/unlit, opaque/transparent. Transparent alpha needs a transparent preset.</p>
+<p><strong>Underlying public header:</strong> <code>Bazzalt/Shader.h</code>.</p>
+<p>Read signatures together with the behavior notes below. The <a href="../en.html">reference introduction</a> explains arguments, return values, value copies, and errors.</p>
+<p>In call notation, <code>argument = default</code> describes an optional argument and its default; Lua does not use named arguments here. Supply the value positionally or omit it. The C++ declaration below is comparison data, not Lua syntax.</p>
+<p>This is an enum/static service, host-owned scene, or returned behavior table, not a constructible Lua value. Use the static service or the host-provided value.</p>
+<h2 id="StandardLit">StandardLit</h2>
+<pre><code>Bazzalt.ShaderPreset.StandardLit</code></pre>
+<p>Opaque lit PBR surface preset.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>StandardLit</code></pre></details>
+<h2 id="StandardLitTransparent">StandardLitTransparent</h2>
+<pre><code>Bazzalt.ShaderPreset.StandardLitTransparent</code></pre>
+<p>Lit surface with compiled transparent blending.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>StandardLitTransparent</code></pre></details>
+<h2 id="Unlit">Unlit</h2>
+<pre><code>Bazzalt.ShaderPreset.Unlit</code></pre>
+<p>Opaque surface not lit by scene lights.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>Unlit</code></pre></details>
+<h2 id="UnlitTransparent">UnlitTransparent</h2>
+<pre><code>Bazzalt.ShaderPreset.UnlitTransparent</code></pre>
+<p>Unlit surface with compiled transparent blending.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>UnlitTransparent</code></pre></details><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Lua members and signatures</h2>
+<p>Use <code>Bazzalt.ShaderPreset</code>. Each member below is actually registered in Lua. The adapter declarations are C++ binding notation, not Lua example code. <code>sol::property</code> exposes a field, <code>sol::overload</code> lists alternatives, <code>sol::optional</code> accepts an omitted/nil argument, and <code>std::make_tuple</code> returns multiple Lua values. <code>sol::as_table</code> returns a Lua table. Instance methods use <code>value:Method(...)</code>; service/static calls use <code>Bazzalt.ShaderPreset.Method(...)</code> unless a colon overload is explicitly registered. An engine exception becomes a Lua script error. See the examples and behavior notes above for usage.</p><h3 id="lua-Canvas">Canvas</h3><pre><code class="language-lua">value:Canvas()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>StandardLit, Unlit, StandardLitTransparent, UnlitTransparent, Canvas;</code></pre><pre><code>ShaderPreset::Canvas</code></pre></details><h3 id="lua-StandardLit">StandardLit</h3><pre><code class="language-lua">value:StandardLit()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>StandardLit, Unlit, StandardLitTransparent, UnlitTransparent, Canvas;</code></pre><pre><code>ShaderPreset::StandardLit</code></pre></details><h3 id="lua-StandardLitTransparent">StandardLitTransparent</h3><pre><code class="language-lua">value:StandardLitTransparent()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>StandardLit, Unlit, StandardLitTransparent, UnlitTransparent, Canvas;</code></pre><pre><code>ShaderPreset::StandardLitTransparent</code></pre></details><h3 id="lua-Unlit">Unlit</h3><pre><code class="language-lua">value:Unlit()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>StandardLit, Unlit, StandardLitTransparent, UnlitTransparent, Canvas;</code></pre><pre><code>ShaderPreset::Unlit</code></pre></details><h3 id="lua-UnlitTransparent">UnlitTransparent</h3><pre><code class="language-lua">value:UnlitTransparent()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>StandardLit, Unlit, StandardLitTransparent, UnlitTransparent, Canvas;</code></pre><pre><code>ShaderPreset::UnlitTransparent</code></pre></details><h3 id="lua-construction">Construction / enum values</h3><p>Global service table; do not construct an instance.</p><details><summary>Native declaration and binding adapter</summary><pre><code>api.create_named(&quot;ShaderPreset&quot;);</code></pre></details><p>Binding source: <code>src/Script/LuaAssets.cpp</code>. Inherited component operations use the Entity component APIs.</p>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../ShaderParameterType/en.html"><small>Previous</small>ShaderParameterType</a>
+<a class="next" href="../ShapeCollider/en.html"><small>Next</small>ShapeCollider</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#StandardLit">StandardLit</a><a class="toc-link" href="#StandardLitTransparent">StandardLitTransparent</a><a class="toc-link" href="#Unlit">Unlit</a><a class="toc-link" href="#UnlitTransparent">UnlitTransparent</a><a class="toc-link" href="#source-contract">Lua members and signatures</a><a class="toc-link sub" href="#lua-Canvas">Canvas</a><a class="toc-link sub" href="#lua-StandardLit">StandardLit</a><a class="toc-link sub" href="#lua-StandardLitTransparent">StandardLitTransparent</a><a class="toc-link sub" href="#lua-Unlit">Unlit</a><a class="toc-link sub" href="#lua-UnlitTransparent">UnlitTransparent</a><a class="toc-link sub" href="#lua-construction">Construction / enum values</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

@@ -114,7 +114,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,LPWSTR,int){
             Bazzalt::Runtime::ApplicationEventsAccess::Emit({Bazzalt::ApplicationEventType::OnBeforeWindowCreate});
             Bazzalt::Runtime::ApplicationEventsAccess::ThrowIfFailed();
             DisableProcessWindowsGhosting();auto settings=config["window"];auto width=std::stoi(Text(settings["width"])),height=std::stoi(Text(settings["height"]));Require(width>=320&&width<=16384&&height>=200&&height<=16384,"Invalid window size");
-            WNDCLASSW cls{};cls.hInstance=instance;cls.lpfnWndProc=WindowProcedure;cls.lpszClassName=L"BazzaltGameWindow";cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);cls.hbrBackground=static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));Require(RegisterClassW(&cls)!=0,"Could not register game window");
+            WNDCLASSW cls{};cls.hInstance=instance;cls.lpfnWndProc=WindowProcedure;cls.lpszClassName=L"BazzaltGameWindow";cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);cls.hIcon=LoadIconW(instance,MAKEINTRESOURCEW(1));cls.hbrBackground=static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));Require(RegisterClassW(&cls)!=0,"Could not register game window");
             const auto mode=Text(settings["mode"]);Require(mode=="windowed"||mode=="maximized"||mode=="borderless"||mode=="fullscreen","Unsupported window mode");
             DWORD style=(mode=="borderless"||mode=="fullscreen")?WS_POPUP:WS_OVERLAPPEDWINDOW;if(Text(settings["resizable"])!="true")style&=~(WS_THICKFRAME|WS_MAXIMIZEBOX);
             MONITORINFO monitor{};monitor.cbSize=sizeof(monitor);Require(GetMonitorInfoW(MonitorFromPoint(POINT{0,0},MONITOR_DEFAULTTOPRIMARY),&monitor),"Could not inspect primary display");

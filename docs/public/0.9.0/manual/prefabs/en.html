@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A prefab is a reusable entity hierarchy stored in a YAML .bprefab asset. Each instance receives its own entity UUIDs and components. Meshes, materials, audio and other referenced assets stay shared.">
+  <title>Prefab assets | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Editor manual / Prefab assets</nav>
+      <article class="doc"><h1>Prefab assets</h1><p>A prefab is a reusable entity hierarchy stored in a YAML .bprefab asset. Each instance receives its own entity UUIDs and components. Meshes, materials, audio and other referenced assets stay shared.</p>
+<h2 id="create">Create and place a prefab</h2><ol><li>Build an object and its children in Hierarchy. Add the components and scripts you want to reuse.</li><li>Drag its Hierarchy row into an Asset Browser directory, or choose Prefab → Create Prefab from Selection in its context menu.</li><li>The asset is created with .meta identity. Its original hierarchy becomes a linked instance, shown with a blue prefab icon.</li><li>Double-click the prefab asset to instantiate it in the active scene, or drag it onto a Hierarchy parent or scene header. Instances in inactive scenes remain editable without changing the active viewport.</li></ol><p>Editing an instance does not immediately edit the source asset. The Prefab inspector section shows its source and whether it has overrides.</p>
+<h2 id="overrides">Overrides and source updates</h2><p>Change a component property, name, hierarchy, or add/remove an object. These changes become instance overrides. Root placement is instance-specific: moving, rotating or scaling the instance root is preserved when updating or reverting and does not mark it overridden.</p><ul><li><strong>Apply Overrides to Asset:</strong> writes this instance into its source prefab, preserving the .meta UUID. Other loaded instances update using a three-way merge that keeps their own overrides.</li><li><strong>Revert Overrides:</strong> restores the latest source hierarchy and components while retaining the root placement and stable UUIDs of surviving source objects.</li><li><strong>Update from Asset:</strong> merges the latest imported source with this instance's overrides. Use this after editing the YAML source externally.</li><li><strong>Unpack Prefab:</strong> removes the source link while keeping all current entities and components.</li></ul><p>Prefab edits support scene and asset-file undo/redo. Commands snapshot every loaded scene, so applying across scenes can be undone together. The existing editor undo file-size and memory limits still apply. Source files edited externally are protected from being overwritten by an outdated undo command.</p>
+<h2 id="references">Identity, references and missing assets</h2><p>Source-local entity IDs are remapped when instantiated. Built-in joints, vehicle wheel references, LOD roots, camera-bound GUI references and typed script entity references point to the new instance. Asset UUIDs keep referring to shared assets. Prefabs cannot capture typed entity references outside the captured hierarchy: move the referenced object under the root or clear the reference first.</p><p>Custom serialized components declare their scalar UUID reference properties through ComponentSerializationRegistry.RegisterEntityReference(componentType, propertyPattern). A trailing * matches a property-key prefix. Emit reference arrays as separate indexed properties. Opaque strings and asset references are never guessed to be entity references.</p><p>Unknown component records are preserved. Scene files retain expanded entity data and an instance baseline, so a missing or failed prefab asset does not delete local objects. Unpack remains available; Apply/Revert/Update require a valid source. Reimporting or renaming an asset preserves its .meta UUID.</p>
+<p>For scripting, see the <a href="../../native/prefabs/en.html">C++ guide</a> and <a href="../../lua/prefabs/en.html">Lua guide</a>.</p><h2 id="runtime">Scripts, cooking and lifecycle</h2><p>Components are instantiated immediately. During gameplay, attached prefab scripts are initialized at the next safe frame boundary, then receive normal create/update/fixed/late/destroy callbacks. Physics, rendering and GUI use the same components as ordinary entities. A script initialization failure is logged and the failed spawned hierarchy is removed. Scripted instances must be in the active runtime scene.</p><p>The editor and game compiler discover native scripts inside prefab assets, even when no instance is placed in a scene. Cooking rewrites their source references to the compiled runtime modules; Lua sources use imported bytecode. Prefab and referenced-asset dependencies are retained by content filtering. Shipped games need no Python code for prefab instantiation.</p>
+<h2 id="limits">Current boundaries</h2><p>Prefab files are bounded to 16 MiB and 10,000 entities. Creating an asset captures a flattened hierarchy; nested prefab composition and variant inheritance are not part of this version. Unpack nested instances before capture, apply, update or revert; these operations reject nested links rather than silently discarding them. Refresh/Revert reconstruct the affected hierarchy: reacquire native Entity handles after these authoring operations, using UUIDs or EntityReference for long-lived references. Preserve component serialization callbacks as deterministic data transformations without external side effects.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../physics-replay/en.html"><small>Previous</small>Physics recording and replay</a>
+<a class="next" href="../preferences/en.html"><small>Next</small>Editor preferences</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#create">Create and place a prefab</a><a class="toc-link" href="#overrides">Overrides and source updates</a><a class="toc-link" href="#references">Identity, references and missing assets</a><a class="toc-link" href="#runtime">Scripts, cooking and lifecycle</a><a class="toc-link" href="#limits">Current boundaries</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

@@ -47,6 +47,8 @@ std::string Application::GetPlatform(){
     return "Windows";
 #elif defined(__APPLE__)
     return "macOS";
+#elif defined(__ANDROID__)
+    return "Android";
 #elif defined(__linux__)
     return "Linux";
 #else

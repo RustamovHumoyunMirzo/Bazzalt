@@ -17,6 +17,7 @@
 #include <cstring>
 #include <stdexcept>
 #include <ryml.hpp>
+#include "Platform/AndroidPlatform.h"
 
 namespace Bazzalt::Game {
 inline void Require(bool value,const char* error){if(!value)throw std::runtime_error(error);}
@@ -54,7 +55,9 @@ inline std::vector<unsigned char> DecryptEnvelope(const std::vector<unsigned cha
 #endif
 namespace Bazzalt::Game {
 inline std::filesystem::path GameDataFolder(const std::filesystem::path& executable){
-#ifdef __APPLE__
+#ifdef __ANDROID__
+    return Bazzalt::Runtime::AndroidPlatform::ContentDirectory();
+#elif defined(__APPLE__)
     return executable.parent_path().parent_path()/"Resources";
 #else
     return executable.parent_path();
@@ -78,6 +81,14 @@ inline std::vector<unsigned char> LoadRootKey(ryml::ConstNodeRef boot,const std:
     if(Text(boot["content_encrypted"])=="false"){Require(Text(boot["manifests_encrypted"])=="false"&&Text(boot["key_storage"])=="none","Invalid unencrypted bootstrap");return {};}
     Require(Text(boot["content_encrypted"])=="true","Invalid encryption flag");const auto method=Text(boot["key_storage"]);auto id=DecodeHex(Text(boot["build_id"]),16),salt=DecodeHex(Text(boot["salt"]),32);std::vector<unsigned char> master;WipeBytes wipe{master};
     if(method=="embedded"){std::ifstream file(SealPath(executable),std::ios::binary);file.seekg(std::streamoff(PlayerSealOffset(executable)+80));master.resize(32);Bytes(file,master.data(),32);}
+#ifdef __ANDROID__
+    else if(method=="android_keystore"){
+        std::ifstream file(SealPath(executable),std::ios::binary);
+        file.seekg(std::streamoff(PlayerSealOffset(executable)+80));
+        std::vector<unsigned char> seed(32);WipeBytes wipeSeed{seed};Bytes(file,seed.data(),32);
+        master=Bazzalt::Runtime::AndroidPlatform::ProtectKey(Text(boot["build_id"]),seed);
+    }
+#endif
     else if(method=="file"){auto data=Read(GameDataFolder(executable)/"game.key",32);Require(data.size()==32,"Invalid key file");master.assign(data.begin(),data.end());SecureZeroMemory(data.data(),data.size());}
     else if(method=="environment"){auto name=Text(boot["key_environment"]);Require(!name.empty()&&name.size()<=101&&name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")==std::string::npos,"Invalid key environment name");auto* value=std::getenv(name.c_str());Require(value&&std::strlen(value)==64,"Game key is unavailable");master=DecodeHex(value,32);}
 #ifdef __APPLE__

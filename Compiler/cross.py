@@ -32,6 +32,10 @@ def Detect(method,platform,architecture,override=''):
 
 def Resolve(settings,runtime):
     host=HostPlatform();target=settings['target'];platform=target['platform'];profile=settings['platforms'][platform];method=profile.get('build_method','automatic')
+    if platform=='android':
+        from .android_tools import Validate
+        tools=Validate(profile,target['architecture'],runtime)
+        return dict(method='android_ndk',compiler=str(tools.Compiler),platform='android',triple=tools.Triple+str(profile['min_sdk']),sysroot=str(tools.Sysroot),configuration=settings.get('configuration','release'))
     if settings['security']['key_storage']=='dpapi_user' and not CanExecute(platform,target['architecture']):raise ValueError('Account-scoped DPAPI protection requires this builder account and machine; use portable key delivery for cross builds')
     if method=='content_only':
         if platform=='macos' and host!='macos':raise ValueError('macOS application signing requires a Mac worker')
@@ -73,6 +77,7 @@ def Configure(command,options):
     result=[options['compiler']]
     if options['method']=='zig':result+=['c++','-target',options['triple']]
     result+=command[1:]
+    if options['method']=='android_ndk':result+=['--target='+options['triple'],'-stdlib=libc++','-nostdlib++','-lc++_shared','-Wl,-z,max-page-size=16384']
     if options.get('sysroot'):result+=['--sysroot='+options['sysroot']]
     if options['platform']=='windows':result+=['-Wl,--no-undefined']
     else:result+=['-fPIC','-Wl,--no-undefined','-Wl,-rpath,$ORIGIN']

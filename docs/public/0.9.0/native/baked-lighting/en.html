@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Include Bazzalt/Lighting.h and Bazzalt/Components/LightProbe.h. Lighting operates on a Scene; it does not expose graphics handles or require control of the engine loop. Normal gameplay can use data already saved in the scene without running a bake.">
+  <title>Baked lighting in C++ | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / C++ / Baked lighting in C++</nav>
+      <article class="doc"><h1>Baked lighting in C++</h1><p>Include Bazzalt/Lighting.h and Bazzalt/Components/LightProbe.h. Lighting operates on a Scene; it does not expose graphics handles or require control of the engine loop. Normal gameplay can use data already saved in the scene without running a bake.</p><h2 id="sample">Sample saved irradiance</h2><pre><code>#include &lt;Bazzalt/Lighting.h&gt;
+#include &lt;Bazzalt/Scene.h&gt;
+// scene is a Scene reference; position and normal are world-space.
+auto irradiance = Bazzalt::Lighting::Sample(scene, position, normal);</code></pre><p>The result is diffuse irradiance in linear RGB. A Lambertian outgoing diffuse color is albedo * irradiance / Pi. A matching Lightmap is sampled first; otherwise four diffuse probes are blended. No valid influence returns zero. Invalid or zero normals throw. The four strongest overlapping probes blend with squared radius falloff divided by squared distance; the result is clamped nonnegative.</p><h2 id="bake">Asynchronous authoring</h2><pre><code>auto probes = Bazzalt::Lighting::CreateProbeGrid(
+    scene, {-5, 1, -5}, {5, 5, 5}, 2, 2, 2, 15);
+Bazzalt::LightBakeSettings settings;
+settings.Samples = 512;
+settings.Bounces = 2;
+auto request = Bazzalt::Lighting::BeginBake(scene, settings);
+// Store request; poll in a later editor tool update on the same owning thread.
+if (request.GetStatus() == Bazzalt::LightBakeStatus::Complete) {
+    if (!request.Apply(scene)) {
+        auto error = request.GetError(); // source scene changed, for example
+    }
+}</code></pre><p>CreateProbeGrid validates all dimensions and the 65,536-probe resource budget before creating entities, with rollback on construction failure. BeginBake validates settings and builds a detached snapshot before scheduling work. Apply is transactional and belongs on the thread that created the request. It validates the source again; it does not save a file. Cancel is safe from another thread and does not clear existing scene data. Clear removes baked coefficients, preserving probes and lights. Handle destruction does not implicitly cancel work; call Cancel when a tool closes. Jobs retains detached data until its work exits.</p><h2 id="contracts">Settings and constraints</h2><p>Samples: 16–16384. Bounces: 0–4. MaxTriangles: 1–4000000, default 1000000. RayBias must be finite, positive and less than MaxDistance. AmbientRadiance is nonnegative linear radiance; DefaultAlbedo is linear RGB in [0,1]. Probes store nine real, world-space SH irradiance coefficients ordered constant, Y, Z, X, XY, YZ, 3Z²âˆ’1, XZ, X²âˆ’Y². They are already cosine-convolved. Baked, Radius and Intensity control runtime participation. Match C++ and Lua behavior; see the editor guide for material support and transport limitations.</p><h2 id="lightmaps">UV lightmaps</h2><p>Add a Lightmap component to static Primitive Object or Mesh entities, or select them and choose Add lightmaps to selection in Window &gt; Lighting. Resolution is a power of two from 16 to 4096. Padding is the gutter around each triangle chart. Increase resolution if the charts do not fit. Bake lighting writes a non-overlapping triangle-chart irradiance atlas. Runtime reconstructs chart coordinates from the baked world triangles, preserving the model’s original texture UV sets and material textures. This is non-directional diffuse lighting. A matching lightmap replaces probe diffuse at that surface; it is not added twice.</p><p>Moving a lightmapped entity invalidates its atlas until it returns to its baked transform or is rebaked. Animated/deformed geometry is unsuitable. Meshes need not have a pre-authored UV2 channel. Each triangle receives an equal-sized chart, so dense models need higher resolution or separate receivers. Disable the component to fall back to probes.</p><h2 id="reflections">Reflection captures</h2><p>Create a Reflection Probe in Window &gt; Lighting, or add the component to an entity. Position it in empty space. Resolution (4–256) controls each cubemap face. Radius limits influence; Intensity scales HDR radiance; Blend Distance feathers the edge into the scene environment. Box Projection uses Box Size as world-space half extents for local parallax correction. Bake lighting captures contributing static triangles, analytic lights and the cached HDR environment, then generates GGX-filtered roughness mip levels. Realtime lights appear in the capture as a frozen snapshot; rebake if they change.</p><p>The four strongest overlapping captures blend per fragment. Moving a capture disables its stale result until rebaked or restored. Disabling it removes its contribution. Native material BRDF, roughness, AO, clearcoat and environment fallback remain in use. A scene without an environment uses a black fallback, not an extra light.</p><h2 id="materials">Material support</h2><p>Built-in lit materials, original imported glTF PBR materials and cooked source surface shaders receive baked lighting. Imported textures and UV mappings are retained. Unlit materials and GUI overlays remain unlit. Source material compilation adds private engine parameters without adding them to the public material inspector. Existing precompiled opaque material packages must be rebuilt from source to participate; their bytecode cannot be safely rewritten.</p><h2 id="budgets">Budgets and data lifetime</h2><p>There is no 64-probe rendering cap. Up to 65,536 diffuse probes are supported as an explicit resource budget. A spatial lookup stores all overlapping influences; excessive overlap uses exact global lookup rather than silently dropping probes. The GPU atlas is bounded by hardware support and 4096×4096 RGBA32F texels. An oversized atlas reports an error and disables baked sampling. Split very large worlds into streamed cells.</p><p>MaxBakeTexels limits lightmap and reflection storage together (default 1,048,576, maximum 8,388,608). Lightmap Samples and Reflection Samples control integration quality independently of diffuse-probe samples. Baked vectors are stored losslessly as little-endian float32 data in YAML scene fields. Scene size is limited to 256 MiB; saves publish atomically, retaining the previous file on failure. Settings and results travel with scenes through cooking and streaming.</p><h2 id="extended-api">C++ controls</h2><pre><code>#include &lt;Bazzalt/Components/Lightmap.h&gt;
+#include &lt;Bazzalt/Components/ReflectionProbe.h&gt;
+auto&amp; map = entity.AddComponent&lt;Bazzalt::Lightmap&gt;();
+map.Resolution = 128;
+auto&amp; capture = probeEntity.AddComponent&lt;Bazzalt::ReflectionProbe&gt;();
+capture.Resolution = 32;
+settings.LightmapSamples = 16;
+settings.ReflectionSamples = 64;
+settings.MaxBakeTexels = 1048576;
+auto radiance = Bazzalt::Lighting::SampleReflection(scene, position, direction, 0.5f);</code></pre><p>All positions and directions are world-space. SampleReflection returns linear HDR RGB; roughness is [0,1]. Invalid vectors/settings throw. Lightmap and ReflectionProbe inherit Enabled. IsValid checks authoring values and payload consistency. BakedResolution records the result separately from the next-bake Resolution. Tools replacing Geometry, Texels or Radiance in place must call Lighting::Invalidate(scene) after editing; ordinary scalar changes and vector replacement are detected automatically. Apply and Clear invalidate caches themselves. Do not edit vectors concurrently with rendering or baking.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../streaming/en.html"><small>Previous</small>Asynchronous loading and world streaming</a>
+<a class="next" href="../materials/en.html"><small>Next</small>Runtime materials</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#sample">Sample saved irradiance</a><a class="toc-link" href="#bake">Asynchronous authoring</a><a class="toc-link" href="#contracts">Settings and constraints</a><a class="toc-link" href="#lightmaps">UV lightmaps</a><a class="toc-link" href="#reflections">Reflection captures</a><a class="toc-link" href="#materials">Material support</a><a class="toc-link" href="#budgets">Budgets and data lifetime</a><a class="toc-link" href="#extended-api">C++ controls</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

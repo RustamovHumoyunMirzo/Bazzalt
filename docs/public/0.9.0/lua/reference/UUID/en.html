@@ -1,0 +1,119 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="128-bit stable identifier. Zero represents the scene root but is not a valid nonzero asset identifier. A UUID does not own an entity or asset.">
+  <title>UUID | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / Lua API reference / UUID</nav>
+      <article class="doc"><h1>UUID</h1>
+<p class="lead">128-bit stable identifier. Zero represents the scene root but is not a valid nonzero asset identifier. A UUID does not own an entity or asset.</p>
+<p><strong>Underlying public header:</strong> <code>Bazzalt/UUID.h</code>.</p>
+<p>Read signatures together with the behavior notes below. The <a href="../en.html">reference introduction</a> explains arguments, return values, value copies, and errors.</p>
+<p>In call notation, <code>argument = default</code> describes an optional argument and its default; Lua does not use named arguments here. Supply the value positionally or omit it. The C++ declaration below is comparison data, not Lua syntax.</p>
+<h2 id="construction">Construction</h2><pre><code>Bazzalt.UUID.new()
+Bazzalt.UUID.new(high, low)</code></pre><p>Each line is an accepted construction form. The argument names stand for values you supply; an empty call uses default values. Plain data types construct with their declared default fields.</p>
+<h2 id="example">Example</h2><p>Gameplay snippets run inside a behavior callback or helper. Variables such as scene, camera, savedText and assetUUID are existing values, not automatically declared global variables.</p><pre><code>local valid, id = Bazzalt.UUID.TryParse(savedText)
+if valid then
+    -- Resolve through Scene or AssetManager.
+end</code></pre>
+<h2 id="Generate">Generate</h2>
+<pre><code>Bazzalt.UUID.Generate()</code></pre>
+<p>Returns a random version-4-style nonzero UUID. It does not create or register an asset/entity.</p>
+<p><strong>Returns:</strong> UUID.</p>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>static UUID Generate()</code></pre></details>
+<h2 id="GetHigh">GetHigh</h2>
+<pre><code>value:GetHigh()</code></pre>
+<p>Returns the high 64 bits. Prefer text for external storage to avoid number precision/representation mistakes.</p>
+<p><strong>Returns:</strong> number.</p>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>constexpr std::uint64_t GetHigh() const</code></pre></details>
+<h2 id="GetLow">GetLow</h2>
+<pre><code>value:GetLow()</code></pre>
+<p>Returns the low 64 bits. Prefer text for external storage to avoid number precision/representation mistakes.</p>
+<p><strong>Returns:</strong> number.</p>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>constexpr std::uint64_t GetLow() const</code></pre></details>
+<h2 id="IsRoot">IsRoot</h2>
+<pre><code>value:IsRoot()</code></pre>
+<p>Returns true when both halves are zero. Zero may be a scene root but is not a valid ordinary asset ID.</p>
+<p><strong>Returns:</strong> boolean.</p>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>constexpr bool IsRoot() const</code></pre></details>
+<h2 id="IsValid">IsValid</h2>
+<pre><code>value:IsValid()</code></pre>
+<p>Returns true for a nonzero UUID. It does not check whether that asset/entity exists. The all-zero root UUID returns false here.</p>
+<p><strong>Returns:</strong> boolean.</p>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>constexpr bool IsValid() const</code></pre></details>
+<h2 id="Parse">Parse</h2>
+<pre><code>Bazzalt.UUID.Parse(text)</code></pre>
+<p>Lua-only convenience that returns a UUID or raises an error for malformed text.</p>
+<p><strong>Returns:</strong> UUID; raises an error for malformed text.</p>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<h2 id="Root">Root</h2>
+<pre><code>Bazzalt.UUID.Root()</code></pre>
+<p>Returns the all-zero UUID, representing the permanent scene root. Do not use it as a real asset ID.</p>
+<p><strong>Returns:</strong> UUID.</p>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>static constexpr UUID Root()</code></pre></details>
+<h2 id="ToString">ToString</h2>
+<pre><code>value:ToString()</code></pre>
+<p>Returns canonical hexadecimal UUID text with hyphens. Lua also supports tostring(uuid).</p>
+<p><strong>Returns:</strong> std::string.</p>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>std::string ToString() const</code></pre></details>
+<h2 id="TryParse">TryParse</h2>
+<pre><code>Bazzalt.UUID.TryParse(text)</code></pre>
+<p>Accepts 32 hexadecimal digits with optional hyphens. Returns false for malformed text; Lua returns (success, UUID), while C++ fills the output only on success.</p>
+<p><strong>Returns:</strong> success, UUID.</p>
+<table><thead><tr><th>Argument</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>std::string_view text</code></td><td>UUID text: hexadecimal digits with optional hyphens.</td></tr>
+<tr><td><code>UUID &amp; result</code></td><td>Output value filled on success.</td></tr>
+</tbody></table>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>static bool TryParse(std::string_view text, UUID &amp; result)</code></pre></details>
+<h2 id="operator-equal">operator==</h2>
+<pre><code>left == right</code></pre>
+<p>Compares entity registry/ID or UUID halves; does not compare display names.</p>
+<p><strong>Returns:</strong> boolean.</p>
+<p>Invalid arguments and C++ exceptions are reported as Lua errors at the protected script boundary. Check the specific absence/false result rules above; not every missing value is an error.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Lua members and signatures</h2>
+<p>Use <code>Bazzalt.UUID</code>. Each member below is actually registered in Lua. The adapter declarations are C++ binding notation, not Lua example code. <code>sol::property</code> exposes a field, <code>sol::overload</code> lists alternatives, <code>sol::optional</code> accepts an omitted/nil argument, and <code>std::make_tuple</code> returns multiple Lua values. <code>sol::as_table</code> returns a Lua table. Instance methods use <code>value:Method(...)</code>; service/static calls use <code>Bazzalt.UUID.Method(...)</code> unless a colon overload is explicitly registered. An engine exception becomes a Lua script error. See the examples and behavior notes above for usage.</p><h3 id="lua-Generate">Generate</h3><pre><code class="language-lua">Bazzalt.UUID.Generate()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] static UUID Generate();</code></pre></details><h3 id="lua-GetHigh">GetHigh</h3><pre><code class="language-lua">value:GetHigh()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] constexpr std::uint64_t GetHigh() const;</code></pre></details><h3 id="lua-GetLow">GetLow</h3><pre><code class="language-lua">value:GetLow()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] constexpr std::uint64_t GetLow() const;</code></pre></details><h3 id="lua-IsRoot">IsRoot</h3><pre><code class="language-lua">value:IsRoot()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] constexpr bool IsRoot() const;</code></pre></details><h3 id="lua-IsValid">IsValid</h3><pre><code class="language-lua">value:IsValid()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] constexpr bool IsValid() const;</code></pre></details><h3 id="lua-Parse">Parse</h3><pre><code class="language-lua">value:Parse(text: string)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[](const std::string&amp; text){UUID id;if(!UUID::TryParse(text,id))throw std::invalid_argument(&quot;Invalid UUID&quot;);return id;}</code></pre></details><h3 id="lua-Root">Root</h3><pre><code class="language-lua">Bazzalt.UUID.Root()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] static constexpr UUID Root();</code></pre></details><h3 id="lua-ToString">ToString</h3><pre><code class="language-lua">value:ToString()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] std::string ToString() const;</code></pre></details><h3 id="lua-TryParse">TryParse</h3><pre><code class="language-lua">Bazzalt.UUID.TryParse(text: string)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] static bool TryParse(std::string_view text, UUID&amp; result);</code></pre><pre><code>[](const std::string&amp; text){UUID id;bool valid=UUID::TryParse(text,id);return std::make_tuple(valid,id);}</code></pre></details><h3 id="lua-construction">Construction / enum values</h3><p>Construct a value with <code>Bazzalt.UUID()</code>. Constructor overloads, when available, are shown in the binding details.</p><details><summary>Native declaration and binding adapter</summary><pre><code>api.new_usertype&lt;UUID&gt;(&quot;UUID&quot;,sol::constructors&lt;UUID(),UUID(std::uint64_t,std::uint64_t)&gt;());</code></pre></details><p>Binding source: <code>src/Script/LuaMath.cpp</code>. Inherited component operations use the Entity component APIs.</p>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../Transform/en.html"><small>Previous</small>Transform</a>
+<a class="next" href="../Vec2/en.html"><small>Next</small>Vec2</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#construction">Construction</a><a class="toc-link" href="#example">Example</a><a class="toc-link" href="#Generate">Generate</a><a class="toc-link" href="#GetHigh">GetHigh</a><a class="toc-link" href="#GetLow">GetLow</a><a class="toc-link" href="#IsRoot">IsRoot</a><a class="toc-link" href="#IsValid">IsValid</a><a class="toc-link" href="#Parse">Parse</a><a class="toc-link" href="#Root">Root</a><a class="toc-link" href="#ToString">ToString</a><a class="toc-link" href="#TryParse">TryParse</a><a class="toc-link" href="#operator-equal">operator==</a><a class="toc-link" href="#source-contract">Lua members and signatures</a><a class="toc-link sub" href="#lua-Generate">Generate</a><a class="toc-link sub" href="#lua-GetHigh">GetHigh</a><a class="toc-link sub" href="#lua-GetLow">GetLow</a><a class="toc-link sub" href="#lua-IsRoot">IsRoot</a><a class="toc-link sub" href="#lua-IsValid">IsValid</a><a class="toc-link sub" href="#lua-Parse">Parse</a><a class="toc-link sub" href="#lua-Root">Root</a><a class="toc-link sub" href="#lua-ToString">ToString</a><a class="toc-link sub" href="#lua-TryParse">TryParse</a><a class="toc-link sub" href="#lua-construction">Construction / enum values</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

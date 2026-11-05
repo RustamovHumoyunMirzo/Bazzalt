@@ -10,10 +10,12 @@ BAZZALT is an editor-first C++20 game engine in active alpha development. It
 combines a native runtime with a PySide6 editor and Hub while keeping low-level
 engine lifetime, rendering, importing, and persistence away from game code.
 
-See [what is new in 0.8.0](docs/public/0.8.0/whats-new/en.html).
+See [what is new in 0.9.0](docs/public/0.9.0/whats-new/en.html).
 
 > **Alpha status:** core workflows are functional, but APIs and file formats may
 > still change. BAZZALT is not yet recommended for production projects.
+
+[![Android Runtime](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/android-runtime.yml/badge.svg?event=push)](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/android-runtime.yml)
 
 ## Supported platforms & backends
 
@@ -25,7 +27,7 @@ See [what is new in 0.8.0](docs/public/0.8.0/whats-new/en.html).
 | Linux | ✅ x64; X11, Wayland | ✅ x64, x86, ARM64; X11, Wayland |
 | macOS 12+ | ✅ Intel x64, Apple silicon | ✅ x64, ARM64 |
 | iOS / iPadOS | ❌ | ❌ |
-| Android | ❌ | ❌ |
+| Android API 26+ | ❌ | ✅ ARM64, x86_64 · OpenGL ES 3 / Vulkan |
 | Web / WebAssembly | ❌ | ❌ |
 | Xbox consoles | ❌ | ❌ |
 | PlayStation consoles | ❌ | ❌ |
@@ -41,25 +43,26 @@ asynchronous readback into Qt/SDL composition; X11 retains direct swapchain pres
 Build Settings supports native builds, WSL, user-supplied Zig/MinGW toolchains,
 content/Lua-only foreign packaging, and SSH workers. C++ cross builds require a
 matching toolchain-built SDK; shipped MSVC SDKs are not GNU/Zig ABI-compatible.
-See [cross-build requirements and the host/target table](docs/public/0.8.0/manual/cross-builds/en.html)
-and [remote workers](docs/public/0.8.0/manual/remote-builds/en.html).
+See [cross-build requirements and the host/target table](docs/public/0.9.0/manual/cross-builds/en.html)
+and [remote workers](docs/public/0.9.0/manual/remote-builds/en.html).
 
 ### Rendering backends
 
-| Backend | Windows | Linux | macOS |
-| --- | --- | --- | --- |
-| Automatic | ✅ | ✅ | ✅ Metal |
-| Vulkan | ✅ | ✅ | ❌ |
-| OpenGL | ✅ | ✅ | ❌ |
-| Metal | ❌ | ❌ | ✅ |
-| Direct3D 11 / 12 | ❌ | ❌ | ❌ |
-| OpenGL ES / WebGPU / WebGL | ❌ | ❌ | ❌ |
-| NOOP | Tests only | Tests only | Tests only |
+| Backend | Windows | Linux | macOS | Android |
+| --- | --- | --- | --- | --- |
+| Automatic | ✅ | ✅ | ✅ Metal | ✅ |
+| Vulkan | ✅ | ✅ | ❌ | ✅ |
+| OpenGL | ✅ | ✅ | ❌ | ❌ |
+| OpenGL ES 3 | ❌ | ❌ | ❌ | ✅ |
+| Metal | ❌ | ❌ | ✅ | ❌ |
+| Direct3D 11 / 12 | ❌ | ❌ | ❌ | ❌ |
+| WebGPU / WebGL | ❌ | ❌ | ❌ | ❌ |
+| NOOP | Tests only | Tests only | Tests only | Tests only |
 
 Backend choices depend on the backends included in the installed runtime SDK;
 Preferences lists those available in that build. A renderer dependency's support
 for another platform does not make it a supported BAZZALT target. See the
-[platform and backend guide](docs/public/0.8.0/manual/platforms/en.html).
+[platform and backend guide](docs/public/0.9.0/manual/platforms/en.html).
 
 ## Documentation
 

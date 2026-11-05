@@ -71,7 +71,7 @@ set(BAZZALT_SDL3_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/SDL3" CACHE PATH "SDL3 so
 if(NOT EXISTS "${BAZZALT_SDL3_DIR}/CMakeLists.txt")
     message(FATAL_ERROR "SDL3 is missing. Run scripts/get_sdl3.ps1 or scripts/get_sdl3.sh.")
 endif()
-set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+set(SDL_SHARED ${ANDROID} CACHE BOOL "" FORCE)
 set(SDL_STATIC ON CACHE BOOL "" FORCE)
 set(SDL_TESTS OFF CACHE BOOL "" FORCE)
 set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
@@ -89,7 +89,20 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(SDL_X11 ON CACHE BOOL "" FORCE)
     set(SDL_WAYLAND ON CACHE BOOL "" FORCE)
 endif()
+if(ANDROID)
+    set(SDL_VIDEO ON CACHE BOOL "" FORCE)
+    set(SDL_AUDIO ON CACHE BOOL "" FORCE)
+    set(SDL_JOYSTICK ON CACHE BOOL "" FORCE)
+    set(SDL_HAPTIC ON CACHE BOOL "" FORCE)
+    set(SDL_SENSOR ON CACHE BOOL "" FORCE)
+endif()
 add_subdirectory("${BAZZALT_SDL3_DIR}" "deps/SDL3" EXCLUDE_FROM_ALL)
+set(BAZZALT_SDL_TARGET SDL3::SDL3-static)
+if(ANDROID)
+    set(BAZZALT_SDL_TARGET SDL3::SDL3-shared)
+    set_target_properties(SDL3-shared PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor")
+    add_link_options("-Wl,-z,max-page-size=16384")
+endif()
 if(NOT WIN32)
     set_target_properties(SDL3-static PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endif()
@@ -117,6 +130,10 @@ if(WIN32)
 else()
     set(_bazzalt_tool_suffix "")
 endif()
+set(_bazzalt_material_platform desktop)
+if(ANDROID)
+    set(_bazzalt_material_platform mobile)
+endif()
 set(BAZZALT_MATC_EXECUTABLE "${BAZZALT_FILAMENT_DIR}/bin/matc${_bazzalt_tool_suffix}" CACHE FILEPATH
     "Filament material compiler")
 set(BAZZALT_FILAMESH_EXECUTABLE "${BAZZALT_FILAMENT_DIR}/bin/filamesh${_bazzalt_tool_suffix}" CACHE FILEPATH
@@ -132,7 +149,7 @@ function(bazzalt_embed_post_process name symbol)
     add_custom_command(
         OUTPUT "${_header}"
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${_bazzalt_generated_dir}"
-        COMMAND "${BAZZALT_MATC_EXECUTABLE}" --platform desktop --api all
+        COMMAND "${BAZZALT_MATC_EXECUTABLE}" --platform ${_bazzalt_material_platform} --api all
                 --output "${_binary}" "${_source}"
         COMMAND "${CMAKE_COMMAND}" -DINPUT=${_binary} -DOUTPUT=${_header}
                 -DSYMBOL=${symbol} -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedBinary.cmake"
@@ -294,7 +311,7 @@ target_include_directories(Bazzalt
 
 set_source_files_properties(src/Runtime/Network.cpp src/Persistence/SaveGame.cpp PROPERTIES INCLUDE_DIRECTORIES "${BAZZALT_YOJIMBO_DIR}/sodium")
 add_dependencies(Bazzalt BazzaltNetwork)
-target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE Threads::Threads BazzaltCrypto BazzaltMiniaudio BazzaltLuaBindings BazzaltLua SDL3::SDL3-static ryml::ryml Filament::Filament ${CMAKE_DL_LIBS})
+target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE Threads::Threads BazzaltCrypto BazzaltMiniaudio BazzaltLuaBindings BazzaltLua ${BAZZALT_SDL_TARGET} ryml::ryml Filament::Filament ${CMAKE_DL_LIBS})
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SIZEOF_VOID_P EQUAL 4)
     target_link_libraries(Bazzalt PRIVATE atomic)
 endif()
@@ -383,7 +400,21 @@ target_compile_definitions(Bazzalt PRIVATE
     BAZZALT_CMGEN_EXECUTABLE="${BAZZALT_CMGEN_EXECUTABLE}"
 )
 
-option(BAZZALT_BUILD_EDITOR_BRIDGE "Build the private Python editor runtime bridge" ON)
+if(ANDROID)
+    set(_bazzalt_editor_default OFF)
+else()
+    set(_bazzalt_editor_default ON)
+endif()
+option(BAZZALT_BUILD_EDITOR_BRIDGE "Build the private Python editor runtime bridge" ${_bazzalt_editor_default})
+if(ANDROID)
+    set(OPENSSL_USE_STATIC_LIBS TRUE)
+    find_package(OpenSSL REQUIRED)
+    add_library(BazzaltAndroidPlayer SHARED Compiler/native/PlayerAndroid.cpp)
+    target_include_directories(BazzaltAndroidPlayer PRIVATE src include Compiler/native)
+    target_link_libraries(BazzaltAndroidPlayer PRIVATE Bazzalt ryml OpenSSL::Crypto ${BAZZALT_SDL_TARGET} BazzaltFilament_zstd android log)
+    set_target_properties(BazzaltAndroidPlayer PROPERTIES OUTPUT_NAME main LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor")
+    target_link_libraries(Bazzalt PRIVATE android log)
+endif()
 if(WIN32)
     set(_game_logo_header "${_bazzalt_generated_dir}/game_logo.h")
     add_custom_command(OUTPUT "${_game_logo_header}"

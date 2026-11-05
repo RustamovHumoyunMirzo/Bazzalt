@@ -49,7 +49,7 @@ class SecurityContext:
         if self.Encrypted and (master is None or len(master)!=32):raise ValueError('Missing encryption master key')
         self.Root=os.urandom(32) if self.Encrypted else None
         self.PackageKey=Derive(self.Root,self.Salt,'packages') if self.Root else None
-        self.FooterKey=master if self.Method=='embedded' else bytes(32)
+        self.FooterKey=master if self.Method in ('embedded','android_keystore') else bytes(32)
 
     def ProtectManifest(self, payload, purpose):
         if not self.EncryptManifests:return payload

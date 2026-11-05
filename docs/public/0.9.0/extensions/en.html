@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="An extension is an optional package that adds editor tools, a gameplay SDK, or both. A gameplay SDK is reusable code and public headers that projects can call. An editor plugin is a tool that runs only inside the editor. Distribute extensions as .bpack files.">
+  <title>Creating extensions | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../assets/docs.css">
+  <script src="../../assets/theme.js"></script>
+  <script defer src="../../assets/catalog.js"></script>
+  <script defer src="../../assets/docs.js"></script>
+</head>
+<body data-root="../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../index.html">Docs</a> / Creating extensions</nav>
+      <article class="doc"><h1>Creating extensions</h1>
+<p>An extension is an optional package that adds editor tools, a gameplay SDK, or both. A gameplay SDK is reusable code and public headers that projects can call. An editor plugin is a tool that runs only inside the editor. Distribute extensions as <code>.bpack</code> files.</p>
+<h2 id="start">Start with a manifest</h2>
+<p>Create a folder containing an <code>extension.yaml</code> manifest and its registered files. Paths are relative to the manifest. Choose a stable lowercase extension ID, for example <code>studio.terrain</code>. The ID identifies a package independently of its display name. Public module names identify callable SDKs; they must not collide with modules in other enabled packages.</p>
+<p>The package builder reads files listed in AssetRegistry and native include/library/binary directories. It does not recursively include arbitrary neighboring project files. Absolute paths, path traversal, symlinks, junctions and unsafe ZIP members are rejected. This keeps a package self-contained and portable.</p>
+<h2 id="minimal">A minimal Lua SDK</h2>
+<pre><code class="language-yaml">FormatVersion: 1
+General:
+  Id: studio.math
+  Name: Studio Math
+  ShortDescription: Shared gameplay calculations.
+  Version: 1.0.0
+Compatibility:
+  MinEngineVersion: 0.7.0
+AssetRegistry:
+  - Id: math
+    Path: scripts/math.lua
+Scripts:
+  math:
+    Id: math
+    Public: true
+    ModuleName: StudioMath
+    Scope: Runtime
+</code></pre>
+<pre><code class="language-lua">local M = {}
+function M.Double(value) return value * 2 end
+return M
+</code></pre>
+<p>Save the Lua file as <code>scripts/math.lua</code>. Choose Build &gt; Build Package, select the manifest and a supplied runtime SDK, then build a <code>.bpack</code>. Lua is compiled to bytecode during packaging. A user imports the package through Window &gt; Extensions and enables it after satisfying its dependencies. Activation changes apply after an editor restart.</p>
+<p>A complete portable SDK and editor-panel example is included in the repository at <code>examples/extensions/math</code>.</p>
+<h2 id="workflow">Authoring workflow</h2>
+<p>See <a href="manifest/en.html">manifest reference</a> for every section, <a href="editor/en.html">editor plugin authoring</a> for panels and menus, <a href="native/en.html">native SDK authoring</a> for C++ and automatic Lua conversion, and <a href="packaging/en.html">packaging and deployment</a> for compatibility and game builds. These pages describe extension creation. Installing and using extensions is documented in the <a href="../manual/extensions/en.html">editor manual</a>, <a href="../native/extensions/en.html">C++ guide</a> and <a href="../lua/extensions/en.html">Lua guide</a>.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../bshader/compiler/en.html"><small>Previous</small>Bshader compiler C API</a>
+<a class="next" href="manifest/en.html"><small>Next</small>Extension manifest reference</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#start">Start with a manifest</a><a class="toc-link" href="#minimal">A minimal Lua SDK</a><a class="toc-link" href="#workflow">Authoring workflow</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

@@ -54,6 +54,9 @@ function(bazzalt_configure_filament ROOT)
         ktxreader filament backend bluegl bluevk filabridge filaflat utils smol-v
         geometry ibl-lite zstd
     )
+    if(ANDROID)
+        list(REMOVE_ITEM _filament_libraries bluegl matp imageio-lite)
+    endif()
     if(APPLE)
         # The native macOS SDK uses Metal; a Metal-only source install has no Vulkan loader archive.
         list(REMOVE_ITEM _filament_libraries bluevk)
@@ -84,6 +87,8 @@ function(bazzalt_configure_filament ROOT)
     target_link_libraries(BazzaltFilament INTERFACE ${_filament_targets})
     if(WIN32)
         target_link_libraries(BazzaltFilament INTERFACE opengl32 user32 gdi32 shlwapi)
+    elseif(ANDROID)
+        target_link_libraries(BazzaltFilament INTERFACE android log EGL GLESv3 dl)
     elseif(APPLE)
         target_link_libraries(BazzaltFilament INTERFACE
             "-framework Cocoa" "-framework Metal" "-framework CoreVideo" "-framework QuartzCore")

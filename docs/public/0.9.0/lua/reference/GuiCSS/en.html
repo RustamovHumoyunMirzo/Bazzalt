@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="GuiCSS declares the values and operations listed below. Types, defaults and overloads are part of its contract; it is not an editor panel.">
+  <title>GuiCSS | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / Lua API reference / GuiCSS</nav>
+      <article class="doc"><h1>GuiCSS</h1><p>GuiCSS declares the values and operations listed below. Types, defaults and overloads are part of its contract; it is not an editor panel.</p><p>See the <a href="../../gui/en.html">GUI guide</a> for layout, rendering, component write-back and input examples.</p><p>Obtain this non-owning handle with GUI.GetCSSStyle(entity). Set/Get/Remove operate on inline declarations; Replace/Append/GetText operate on the private runtime sheet. GetBaseText reads the directly assigned shared asset. SetRule/RemoveRule and SetKeyframes/RemoveKeyframes edit top-level definitions in the private sheet. Writes return false on invalid input without replacing the last valid styles. Changes are temporary and apply on the next GUI layout. See <a href="../../gui/stylesheets/en.html#runtime-css">runtime CSS and motion examples</a> for C++/Lua syntax, lifetime and limits.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Lua members and signatures</h2>
+<p>Use <code>Bazzalt.GuiCSS</code>. Each member below is actually registered in Lua. The adapter declarations are C++ binding notation, not Lua example code. <code>sol::property</code> exposes a field, <code>sol::overload</code> lists alternatives, <code>sol::optional</code> accepts an omitted/nil argument, and <code>std::make_tuple</code> returns multiple Lua values. <code>sol::as_table</code> returns a Lua table. Instance methods use <code>value:Method(...)</code>; service/static calls use <code>Bazzalt.GuiCSS.Method(...)</code> unless a colon overload is explicitly registered. An engine exception becomes a Lua script error. See the examples and behavior notes above for usage.</p><h3 id="lua-Append">Append</h3><pre><code class="language-lua">value:Append(text: string)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>bool Append(const std::string&amp; text);</code></pre></details><h3 id="lua-Get">Get</h3><pre><code class="language-lua">value:Get(name: string)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] std::string Get(const std::string&amp; name)const;</code></pre></details><h3 id="lua-GetBaseText">GetBaseText</h3><pre><code class="language-lua">value:GetBaseText()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] std::string GetBaseText()const;</code></pre></details><h3 id="lua-GetText">GetText</h3><pre><code class="language-lua">value:GetText()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>[[nodiscard]] std::string GetText()const;</code></pre></details><h3 id="lua-Remove">Remove</h3><pre><code class="language-lua">value:Remove(name: string)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>bool Remove(const std::string&amp; name);</code></pre></details><h3 id="lua-RemoveKeyframes">RemoveKeyframes</h3><pre><code class="language-lua">value:RemoveKeyframes(name: string)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>bool RemoveKeyframes(const std::string&amp; name);</code></pre></details><h3 id="lua-RemoveRule">RemoveRule</h3><pre><code class="language-lua">value:RemoveRule(selector: string)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>bool RemoveRule(const std::string&amp; selector);</code></pre></details><h3 id="lua-Replace">Replace</h3><pre><code class="language-lua">value:Replace(text: string)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>bool Replace(const std::string&amp; text);</code></pre></details><h3 id="lua-Set">Set</h3><pre><code class="language-lua">value:Set(name: string, value: string)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>bool Set(const std::string&amp; name,const std::string&amp; value);</code></pre></details><h3 id="lua-SetKeyframes">SetKeyframes</h3><pre><code class="language-lua">value:SetKeyframes(name: string, frames: string)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>bool SetKeyframes(const std::string&amp; name,const std::string&amp; frames);</code></pre></details><h3 id="lua-SetRule">SetRule</h3><pre><code class="language-lua">value:SetRule(selector: string, declarations: string)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>bool SetRule(const std::string&amp; selector,const std::string&amp; declarations);</code></pre></details><h3 id="lua-construction">Construction / enum values</h3><p>Runtime-owned value; there is no public Lua constructor.</p><details><summary>Native declaration and binding adapter</summary><pre><code>api.new_usertype&lt;GuiCSS&gt;(&quot;GuiCSS&quot;,sol::no_constructor);</code></pre></details><p>Binding source: <code>src/Script/LuaGUI.cpp</code>. Inherited component operations use the Entity component APIs.</p>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../GuiButton/en.html"><small>Previous</small>GuiButton</a>
+<a class="next" href="../GuiElement/en.html"><small>Next</small>GuiElement</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#source-contract">Lua members and signatures</a><a class="toc-link sub" href="#lua-Append">Append</a><a class="toc-link sub" href="#lua-Get">Get</a><a class="toc-link sub" href="#lua-GetBaseText">GetBaseText</a><a class="toc-link sub" href="#lua-GetText">GetText</a><a class="toc-link sub" href="#lua-Remove">Remove</a><a class="toc-link sub" href="#lua-RemoveKeyframes">RemoveKeyframes</a><a class="toc-link sub" href="#lua-RemoveRule">RemoveRule</a><a class="toc-link sub" href="#lua-Replace">Replace</a><a class="toc-link sub" href="#lua-Set">Set</a><a class="toc-link sub" href="#lua-SetKeyframes">SetKeyframes</a><a class="toc-link sub" href="#lua-SetRule">SetRule</a><a class="toc-link sub" href="#lua-construction">Construction / enum values</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

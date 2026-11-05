@@ -10,7 +10,11 @@ def HostArchitecture():
 
 def TargetError(target):
     selected=target.get('platform','windows');architecture=target.get('architecture','x64');host=HostPlatform()
-    if selected not in ('windows','linux','macos'):return f'Unsupported target platform: {selected}'
+    if selected not in ('windows','linux','macos','android'):return f'Unsupported target platform: {selected}'
+    if selected=='android':
+        if HostArchitecture() not in ('x64','arm64') or host not in ('windows','linux','macos') or architecture not in ('arm64','x64'):return 'Android output requires a supported 64-bit host and ARM64 or x86_64 target.'
+        if target.get('key_storage') not in (None,'android_keystore'):return 'Unsupported Android key storage.'
+        return ''
     from Compiler.cross import METHODS
     method=target.get('build_method','automatic')
     if host!=selected and method!='content_only' and (method=='native' or (host,selected) not in METHODS or method!='automatic' and method not in METHODS[(host,selected)]):return f'{selected.title()} builds require a {selected.title()} editor/compiler and matching runtime SDK. Current host: {host}.'

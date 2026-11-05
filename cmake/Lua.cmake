@@ -23,3 +23,7 @@ else()
     target_compile_definitions(BazzaltLua PRIVATE LUA_USE_LINUX)
     target_link_libraries(BazzaltLua PRIVATE m ${CMAKE_DL_LIBS})
 endif()
+
+if(ANDROID)
+    set_target_properties(BazzaltLua PROPERTIES VERSION "" SOVERSION "")
+endif()

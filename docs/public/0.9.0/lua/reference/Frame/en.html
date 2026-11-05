@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="GUI root component. Only descendants render as its widgets: widgets attached to the Frame entity itself do not render. Supports viewport, camera-bound and spatial placement.">
+  <title>Frame | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / Lua API reference / Frame</nav>
+      <article class="doc"><h1>Frame</h1><p>GUI root component. Only descendants render as its widgets: widgets attached to the Frame entity itself do not render. Supports viewport, camera-bound and spatial placement.</p><p>See the <a href="../../gui/en.html">GUI guide</a> for layout, rendering, component write-back and input examples.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Lua members and signatures</h2>
+<p>Use <code>Bazzalt.Frame</code>. Each member below is actually registered in Lua. The adapter declarations are C++ binding notation, not Lua example code. <code>sol::property</code> exposes a field, <code>sol::overload</code> lists alternatives, <code>sol::optional</code> accepts an omitted/nil argument, and <code>std::make_tuple</code> returns multiple Lua values. <code>sol::as_table</code> returns a Lua table. Instance methods use <code>value:Method(...)</code>; service/static calls use <code>Bazzalt.Frame.Method(...)</code> unless a colon overload is explicitly registered. An engine exception becomes a Lua script error. See the examples and behavior notes above for usage.</p><h3 id="lua-Camera">Camera</h3><pre><code>value.Camera: UUID</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>UUID Camera{};</code></pre></details><h3 id="lua-Interactable">Interactable</h3><pre><code>value.Interactable: boolean</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>bool Interactable=true;</code></pre></details><h3 id="lua-MatchWidthOrHeight">MatchWidthOrHeight</h3><pre><code>value.MatchWidthOrHeight: number</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>float MatchWidthOrHeight=0.5f;</code></pre></details><h3 id="lua-Mode">Mode</h3><pre><code>value.Mode: FrameMode</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>FrameMode Mode=FrameMode::Viewport;</code></pre></details><h3 id="lua-PixelsPerUnit">PixelsPerUnit</h3><pre><code>value.PixelsPerUnit: number</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>float PixelsPerUnit=100;</code></pre></details><h3 id="lua-ReferenceSize">ReferenceSize</h3><pre><code>value.ReferenceSize: Vec2</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>Vec2 ReferenceSize{1280,720};</code></pre></details><h3 id="lua-ScaleMode">ScaleMode</h3><pre><code>value.ScaleMode: GuiScaleMode</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>GuiScaleMode ScaleMode=GuiScaleMode::ScaleWithViewport;</code></pre></details><h3 id="lua-Stylesheet">Stylesheet</h3><pre><code>value.Stylesheet: UUID</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>// Legacy scene compatibility. Assign new styles to GuiElement::Stylesheet.
+    UUID Stylesheet{};</code></pre></details><h3 id="lua-Visible">Visible</h3><pre><code>value.Visible: boolean</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>bool Visible=true;</code></pre></details><h3 id="lua-ZIndex">ZIndex</h3><pre><code>value.ZIndex: number</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>int ZIndex=0;</code></pre></details><h3 id="lua-construction">Construction / enum values</h3><p>Construct a value with <code>Bazzalt.Frame()</code>. Constructor overloads, when available, are shown in the binding details.</p><details><summary>Native declaration and binding adapter</summary><pre><code>Type&lt;Frame&gt;(api,&quot;Frame&quot;);</code></pre></details><p>Binding source: <code>src/Script/LuaGUI.cpp</code>. Inherited component operations use the Entity component APIs.</p>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../FontInfo/en.html"><small>Previous</small>FontInfo</a>
+<a class="next" href="../FrameMode/en.html"><small>Next</small>FrameMode</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#source-contract">Lua members and signatures</a><a class="toc-link sub" href="#lua-Camera">Camera</a><a class="toc-link sub" href="#lua-Interactable">Interactable</a><a class="toc-link sub" href="#lua-MatchWidthOrHeight">MatchWidthOrHeight</a><a class="toc-link sub" href="#lua-Mode">Mode</a><a class="toc-link sub" href="#lua-PixelsPerUnit">PixelsPerUnit</a><a class="toc-link sub" href="#lua-ReferenceSize">ReferenceSize</a><a class="toc-link sub" href="#lua-ScaleMode">ScaleMode</a><a class="toc-link sub" href="#lua-Stylesheet">Stylesheet</a><a class="toc-link sub" href="#lua-Visible">Visible</a><a class="toc-link sub" href="#lua-ZIndex">ZIndex</a><a class="toc-link sub" href="#lua-construction">Construction / enum values</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

@@ -26,7 +26,7 @@ def main():
         else:
             executable={'editor':'Bazzalt','hub':'BazzaltHub','compiler':'BazzaltCompiler'}[product];source={'editor':'bazzalt_editor.py','hub':'bazzalt_hub.py','compiler':'bazzalt_compiler.py'}[product]
             command=[sys.executable,'-m','nuitka','--mode=standalone','--assume-yes-for-downloads','--output-dir='+str(build/'LinuxNuitka'/product),'--output-filename='+executable]
-            if product=='compiler':command+=['--nofollow-import-to=PySide6,Editor.gui,Editor.runtime,Compiler.tests','--include-module=Editor.scripting','--include-module=Editor.property_rules','--include-module=Editor.lua_declarations','--include-module=scripts.release_artifacts','--include-data-files='+str(ROOT/'releases/versions.json')+'=releases/versions.json']
+            if product=='compiler':command+=['--nofollow-import-to=PySide6,Editor.gui,Editor.runtime,Compiler.tests','--include-module=PIL.PngImagePlugin','--include-module=PIL.BmpImagePlugin','--include-data-dir='+str(ROOT/'Compiler/android')+'=Compiler/android','--include-data-files='+str(ROOT/'bazzalt/assets/branding/BazzaltLauncher.png')+'=bazzalt/assets/branding/BazzaltLauncher.png','--include-module=Editor.scripting','--include-module=Editor.property_rules','--include-module=Editor.lua_declarations','--include-module=scripts.release_artifacts','--include-data-files='+str(ROOT/'releases/versions.json')+'=releases/versions.json']
             else:
                 Run(sys.executable,'scripts/compile_resources.py','--build-directory',build/'CompiledResources')
                 if product=='editor':command+=['--include-module=PySide6.QtUiTools','--include-package=keyring.backends','--include-distribution-metadata=keyring']

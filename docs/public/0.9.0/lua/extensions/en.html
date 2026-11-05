@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Install and enable the package in Window &gt; Extensions, pin the enabled SDKs to the project, and reopen it. Public SDKs are available through Bazzalt.require; gameplay scripts do not load files from the editor&#x27;s installation directory.">
+  <title>Using extension SDKs in Lua | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Lua / Using extension SDKs in Lua</nav>
+      <article class="doc"><h1>Using extension SDKs in Lua</h1>
+<p>Install and enable the package in Window &gt; Extensions, pin the enabled SDKs to the project, and reopen it. Public SDKs are available through Bazzalt.require; gameplay scripts do not load files from the editor's installation directory.</p>
+<h2 id="require">Load a public module</h2>
+<pre><code class="language-lua">local Math = Bazzalt.require("StudioMath")
+local value = Math.Double(4)
+-- Bazzalt:require("StudioMath") is also accepted.
+</code></pre>
+<p>SelfContained modules use their ModuleName. A module configured with SelfContained: false uses ExtensionId.ModuleName. Bazzalt.Extensions.HasModule(name) tests availability; GetModules returns public names. Modules are cached within each script VM. Native functions use dot syntax and receive the same supported scalar/math/UUID values as the C++ extension API. No sol2 or Lua C headers are needed by a native SDK author.</p>
+<p>A required Lua module must return a table. Unknown/private modules, circular require calls, invalid native arguments and module execution errors produce script errors. Private Runtime helpers can be required by modules from their own extension; they are not project-facing SDK APIs. Standard Lua filesystem/process libraries are not enabled.</p>
+<p>For dynamic dispatch, Bazzalt.Extensions.Call(moduleName, functionName, argumentArray) calls a public SDK function and returns its supported value. Bazzalt.Extensions.GetAsset(extensionId, assetId) returns a registered runtime asset UUID, or zero when unavailable. Pass that UUID to the normal asset APIs.</p>
+<h2 id="scene">Read scene settings</h2>
+<p>Use Scene:GetExtensionProperty(extensionId, name, optionalFallback), Scene:SetExtensionProperty(extensionId, name, stringValue) and Scene:GetExtensionProperties(). These properties persist in scene files. Inspector-authored values use JSON string encoding; parse them appropriately for your own SDK contract.</p>
+<h2 id="games">Built games</h2>
+<p>The same module names work after building a game. Runtime SDK bytecode/native modules are packaged with it; editor-only controllers are excluded. See <a href="../../manual/extensions/en.html">installation and project pins</a>. Extension creation has a separate <a href="../../extensions/en.html">authoring reference</a>.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../gui/stylesheets/en.html"><small>Previous</small>GUI stylesheets in Lua</a>
+<a class="next" href="../reference/en.html"><small>Next</small>Lua API reference</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#require">Load a public module</a><a class="toc-link" href="#scene">Read scene settings</a><a class="toc-link" href="#games">Built games</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

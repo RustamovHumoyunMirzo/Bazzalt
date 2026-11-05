@@ -24,6 +24,14 @@ def Stage(build,output,architecture,root=None,platform=None):
     build=Path(build).resolve();output=Path(output).resolve();root=Path(root or Path(__file__).resolve().parents[1]);native=build/('Editor' if linux else 'Editor/Release')
     output.mkdir(parents=True,exist_ok=True)
     names=['BazzaltPlayer.exe','Bazzalt.dll','bazzalt_lua.dll','bazzalt_gui.dll','bazzalt_physics.dll','bazzalt_network.dll','bazzalt_crypto.dll'] if not linux else ['BazzaltPlayer','libbazzalt_player.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so','libbazzalt_physics.so','libbazzalt_network.so','libbazzalt_crypto.so']
+    if platform=="android":
+        names=['libmain.so','libSDL3.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so','libbazzalt_physics.so','libbazzalt_network.so','libbazzalt_crypto.so']
+        abi='arm64-v8a' if architecture=='arm64' else 'x86_64'
+        ndk=Path(os.environ.get('ANDROID_NDK_HOME') or os.environ['ANDROID_HOME']+'/ndk/29.0.14206865')
+        triple='aarch64-linux-android' if architecture=='arm64' else 'x86_64-linux-android'
+        shutil.copy2(ndk/'toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib'/triple/'libc++_shared.so',native/'libc++_shared.so')
+        names.append('libc++_shared.so')
+        shutil.copytree(root/'deps/SDL3/android-project/app/src/main/java',output/'android/java',dirs_exist_ok=True)
     if platform=="macos":names=["BazzaltPlayer","libbazzalt_player.dylib","libBazzalt.dylib","libbazzalt_lua.dylib","libbazzalt_gui.dylib","libbazzalt_physics.dylib","libbazzalt_network.dylib","libbazzalt_crypto.dylib"]+sorted(p.name for p in native.glob("libbazzalt_lua.*.dylib"))
     if platform=="linux":
         names+=sorted(p.name for p in native.glob('libbazzalt_lua.so.*'))
@@ -35,7 +43,7 @@ def Stage(build,output,architecture,root=None,platform=None):
         if file.name not in names:
             if Architecture(file)!=architecture:raise ValueError('Wrong CRT architecture')
             shutil.copy2(file,output/file.name);names.append(file.name)
-    if os.name=='nt':
+    if os.name=='nt' and platform=='windows':
         roots=[]
         if os.environ.get('VCToolsRedistDir'):roots.append(Path(os.environ['VCToolsRedistDir']))
         locator=Path(os.environ.get('ProgramFiles(x86)','C:/Program Files (x86)'))/'Microsoft Visual Studio/Installer/vswhere.exe'
@@ -64,8 +72,13 @@ def Stage(build,output,architecture,root=None,platform=None):
         if file.is_file():shutil.copy2(file,licenses/file.name)
     for source,name in ((root/'LICENSE','Bazzalt.txt'),(root/'deps/lua/README','Lua.txt'),(root/'deps/sol2/LICENSE.txt','Sol2.txt'),(root/'deps/filament/LICENSE','Filament.txt'),(root/'deps/SDL3/LICENSE.txt','SDL3.txt')):
         if source.is_file():shutil.copy2(source,licenses/name)
+    if platform=='android':
+        shutil.copy2(root/'build/android-bootstrap/openssl-source/LICENSE.txt',licenses/'OpenSSL.txt')
+        shutil.copy2(root/'build/android-bootstrap/filament-source/LICENSE',licenses/'Filament.txt')
+        shutil.copy2(ndk/'toolchains/llvm/prebuilt/linux-x86_64/NOTICE',licenses/'Android-libcxx-NOTICE.txt')
     versions=json.loads((root/'releases/versions.json').read_text())
-    (output/'runtime.json').write_text(json.dumps(dict(format_version=1,game_format_version=3,core_version=versions['core'],platform=platform,architecture=architecture,files=names),indent=2),encoding='utf-8')
+    metadata=dict(android_ndk='29.0.14206865',minimum_api=26,backends=['opengles','vulkan']) if platform=='android' else {}
+    (output/'runtime.json').write_text(json.dumps(dict(format_version=1,game_format_version=3,core_version=versions['core'],platform=platform,architecture=architecture,files=names,**metadata),indent=2),encoding='utf-8')
     return output
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--platform',choices=('windows','linux','macos'));parser.add_argument('--build',type=Path,default=Path('build'));parser.add_argument('--output',type=Path,required=True);parser.add_argument('--architecture',choices=('x64','x86','arm64'),required=True);args=parser.parse_args();Stage(args.build,args.output,args.architecture,platform=args.platform)
+    parser=argparse.ArgumentParser();parser.add_argument('--platform',choices=('windows','linux','macos','android'));parser.add_argument('--build',type=Path,default=Path('build'));parser.add_argument('--output',type=Path,required=True);parser.add_argument('--architecture',choices=('x64','x86','arm64'),required=True);args=parser.parse_args();Stage(args.build,args.output,args.architecture,platform=args.platform)
