@@ -4,6 +4,7 @@
 #include "Runtime/GraphicsAccess.h"
 #include "Physics/PhysicsModuleApi.h"
 #include "Bazzalt/Console.h"
+#include "Runtime/DeveloperConsoleAccess.h"
 #include "Bazzalt/Detail/ModuleLifetime.h"
 #include <map>
 #include <memory>
@@ -45,6 +46,7 @@ ApplicationEvents::Subscription ApplicationEvents::Subscribe(ApplicationEventTyp
     return Runtime::ApplicationEventsAccess::Subscribe(type,std::move(callback),CurrentOwner);
 }
 bool ApplicationEvents::Unsubscribe(Subscription id){auto found=State().Entries.find(id);if(found==State().Entries.end())return false;auto retained=found->second;State().Entries.erase(found);return true;}
+const void* Runtime::ApplicationEventsAccess::GetOwner() noexcept {return CurrentOwner;}
 const void* Runtime::ApplicationEventsAccess::SetOwner(const void* owner) noexcept {auto previous=CurrentOwner;CurrentOwner=owner;return previous;}
 int Runtime::ApplicationEventsAccess::SetSubsystemLevel(int level) noexcept{const auto previous=CurrentLevel;CurrentLevel=level;return previous;}
 int Runtime::ApplicationEventsAccess::GetSubsystemLevel() noexcept{return CurrentLevel;}
@@ -77,6 +79,7 @@ ApplicationEvents::Subscription Runtime::ApplicationEventsAccess::Subscribe(Appl
     state.Entries.emplace(id,std::make_shared<Entry>(Entry{Detail::GetCurrentGameplayModule(),std::move(callback),type,owner,CurrentLevel,CurrentAssetAccess}));return id;
 }
 void Runtime::ApplicationEventsAccess::DisconnectOwner(const void* owner) noexcept {
+    DeveloperConsoleAccess::DisconnectOwner(owner);
     DisconnectPhysicsOwner(owner);
     GlobalEventsAccess::DisconnectOwner(owner);
     GraphicsAccess::DisconnectScope(owner);

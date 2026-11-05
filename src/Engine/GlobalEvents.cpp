@@ -60,6 +60,7 @@ bool Runtime::GlobalEventsAccess::Read(const std::filesystem::path& path,EventDe
     }catch(const std::exception& e){error=e.what();return false;}
 }
 void Runtime::GlobalEventsAccess::BindThread(){Check();}
+bool Runtime::GlobalEventsAccess::IsOwnerClosing(const void* owner) noexcept{return owner&&owner==ClosingOwner;}
 const void* Runtime::GlobalEventsAccess::SetClosingOwner(const void* owner)noexcept{const auto previous=ClosingOwner;ClosingOwner=owner;return previous;}
 void Runtime::GlobalEventsAccess::DisconnectOwner(const void* owner)noexcept{
     if(!owner)return;auto& s=State();std::vector<std::uint64_t> ids;for(auto& [id,e]:s.Listeners)if(e->Owner==owner)ids.push_back(id);for(auto id:ids)s.Listeners.erase(id);

@@ -1,3 +1,4 @@
+#include "Bazzalt/DeveloperConsole.h"
 #include "Runtime/NativeScriptRuntime.h"
 #include "Runtime/LuaRuntime.h"
 #include "Runtime/Engine.h"
@@ -21,7 +22,11 @@ int main(int argc,char** argv){
  const auto source=root/"Walk.lua",bytecode=root/"Walk.blua";
  auto write=[&](const char* text){std::ofstream(source)<<text;assert(LuaRuntime::Import(source,bytecode,error));};
  write(R"lua(local T={Speed=1,State={Ticks=0,Large=9223372036854775806},Direction=Bazzalt.Vec3.new(1,2,3)}
- function T:OnCreate() self.Speed=7;self.Replay=Bazzalt.PhysicsReplay.ForScene(self.Entity:GetScene());self.Checkpoint=Bazzalt.PhysicsState.new() end
+ function T:OnCreate()
+ Bazzalt.DeveloperConsole.SetEnabled(true)
+ local d=Bazzalt.CVarDefinition.new();d.Name="reload.value";d.DefaultValue=3.0;Bazzalt.CVar.Register(d);Bazzalt.CVar.SetValue("reload.value",7.0)
+ local c=Bazzalt.ConsoleCommand.new();c.Name="reload.command";Bazzalt.DeveloperConsole.RegisterCommand(c,function() return "old" end)
+ self.Speed=7;self.Replay=Bazzalt.PhysicsReplay.ForScene(self.Entity:GetScene());self.Checkpoint=Bazzalt.PhysicsState.new() end
  function T:OnUpdate(dt) self.State.Ticks=self.State.Ticks+1 end
  function T:OnDestroy() error('reload must not destroy old gameplay') end
  return T)lua");
@@ -29,10 +34,13 @@ int main(int argc,char** argv){
  write(R"lua(local T={Speed=1,Added=12,State={Ticks=0,Large=9223372036854775806},Direction=Bazzalt.Vec3.new(0,0,0)}
  function T:OnCreate() error('reload must not recreate gameplay') end
  function T:OnSaveReloadState() return {Version=2,Speed=self.Speed,State=self.State,Direction=self.Direction} end
- function T:OnReload() assert(self.Replay:GetStatus().Mode==Bazzalt.PhysicsReplayMode.Idle and not self.Checkpoint:IsValid());assert(self.Speed==7 and self.State.Ticks==1 and self.State.Large==9223372036854775806 and self.Added==12 and self.Direction.Y==2);local p=self.Entity:GetWorldTransform();p.Position.X=42;self.Entity:SetWorldTransform(p) end
+ function T:OnReload()
+ local d=Bazzalt.CVarDefinition.new();d.Name="reload.value";d.DefaultValue=1.0;Bazzalt.CVar.Register(d);assert(Bazzalt.CVar.GetValue("reload.value")==7.0)
+ local c=Bazzalt.ConsoleCommand.new();c.Name="reload.command";Bazzalt.DeveloperConsole.RegisterCommand(c,function() return "new" end)
+ assert(self.Replay:GetStatus().Mode==Bazzalt.PhysicsReplayMode.Idle and not self.Checkpoint:IsValid());assert(self.Speed==7 and self.State.Ticks==1 and self.State.Large==9223372036854775806 and self.Added==12 and self.Direction.Y==2);local p=self.Entity:GetWorldTransform();p.Position.X=42;self.Entity:SetWorldTransform(p) end
  function T:OnUpdate(dt) local p=self.Entity:GetWorldTransform();p.Position.X=p.Position.X+2;self.Entity:SetWorldTransform(p) end
  return T)lua");
- LuaRuntime nextLua;assert(nextLua.Configure({luaBinding},error));assert(nextLua.Start(error,true));assert(nextLua.PreserveFrom(lua,error));lua.DiscardForReload();nextLua.ActivateReload();assert(entity.GetWorldTransform().Position.X==42);nextLua.Update(.1f);assert(entity.GetWorldTransform().Position.X==44);
+ LuaRuntime nextLua;assert(nextLua.Configure({luaBinding},error));assert(nextLua.Start(error,true));assert(nextLua.PreserveFrom(lua,error));lua.DiscardForReload();nextLua.ActivateReload();assert(DeveloperConsole::Execute("reload.command").Output=="new");assert(entity.GetWorldTransform().Position.X==42);nextLua.Update(.1f);assert(entity.GetWorldTransform().Position.X==44);
  write("return {Speed='incompatible'}");LuaRuntime failed;assert(failed.Configure({luaBinding},error));assert(failed.Start(error,true));assert(!failed.PreserveFrom(nextLua,error));nextLua.Update(.1f);assert(entity.GetWorldTransform().Position.X==46);failed.DiscardForReload();
 
  write(R"lua(local T={Speed="changed"}

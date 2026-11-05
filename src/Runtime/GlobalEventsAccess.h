@@ -6,6 +6,7 @@ struct GlobalEventsAccess {
     static bool Read(const std::filesystem::path&,EventDefinition&,std::string& error);
     static void DisconnectOwner(const void* owner)noexcept;
     static void BindThread();
+    static bool IsOwnerClosing(const void* owner) noexcept;
     static const void* SetClosingOwner(const void* owner)noexcept;
 };
 }

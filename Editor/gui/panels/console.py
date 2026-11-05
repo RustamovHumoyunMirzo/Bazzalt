@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from time import monotonic
-from PySide6.QtCore import QSize,Qt,Signal
+from PySide6.QtCore import QSize,Qt,Signal,QEvent
 from PySide6.QtGui import QAction,QBrush,QColor,QIcon,QKeySequence
 from PySide6.QtWidgets import (QAbstractItemView,QApplication,QComboBox,QHBoxLayout,QLineEdit,QListWidget,QListWidgetItem,QMenu,QPushButton,QVBoxLayout,QWidget)
 from ...localization import LocalizationManager
@@ -24,6 +24,44 @@ class ConsoleMessage:
 class ConsoleList(QListWidget):
     def toPlainText(self)->str:return "\n".join(self.item(index).text() for index in range(self.count()))
 
+class ConsoleCommandInput(QLineEdit):
+    def __init__(self,panel):
+        super().__init__(panel);self.Panel=panel;self.Index=-1;self.Draft='';self.Matches=[];self.MatchIndex=-1;self.Completing=False
+        self.textChanged.connect(self._ResetCompletion)
+    def _ResetCompletion(self,*_args):
+        if not self.Completing:self.Matches=[];self.MatchIndex=-1
+    def event(self,event):
+        if event.type()==QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Tab,Qt.Key.Key_Backtab):
+            self.keyPressEvent(event);return True
+        return super().event(event)
+    def keyPressEvent(self,event):
+        runtime=getattr(self.Panel,'_runtime',None)
+        if runtime and event.key() in (Qt.Key.Key_Up,Qt.Key.Key_Down):
+            history=runtime.DeveloperHistory()
+            if self.Index>=len(history):self.Index=-1
+            if event.key()==Qt.Key.Key_Up and history:
+                if self.Index<0:self.Draft=self.text();self.Index=len(history)-1
+                else:self.Index=max(0,self.Index-1)
+                self.setText(history[self.Index]);self._ResetCompletion();event.accept();return
+            if event.key()==Qt.Key.Key_Down and self.Index>=0:
+                self.Index+=1
+                if self.Index>=len(history):self.Index=-1;self.setText(self.Draft)
+                else:self.setText(history[self.Index])
+                self._ResetCompletion();event.accept();return
+        if event.key() in (Qt.Key.Key_Tab,Qt.Key.Key_Backtab):
+            if not self.Matches:
+                try:self.Matches=runtime.DeveloperComplete(self.text()) if runtime else []
+                except (RuntimeError,ValueError):self.Matches=[]
+                self.MatchIndex=-1
+            if self.Matches:
+                reverse=event.key()==Qt.Key.Key_Backtab or bool(event.modifiers()&Qt.KeyboardModifier.ShiftModifier)
+                self.MatchIndex=(self.MatchIndex+(-1 if reverse else 1))%len(self.Matches)
+                self.Completing=True
+                try:self.setText(self.Matches[self.MatchIndex]+' ')
+                finally:self.Completing=False
+            event.accept();return
+        super().keyPressEvent(event)
+
 class ConsolePanel(QWidget):
     ContextMenuRequested=Signal(object,object)
     def __init__(self,localization:LocalizationManager,resources=None,themes=None,install_shortcuts=True)->None:
@@ -36,7 +74,7 @@ class ConsolePanel(QWidget):
         if install_shortcuts:
             copyAction=QAction(self);copyAction.setShortcut(QKeySequence.StandardKey.Copy);copyAction.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut);copyAction.triggered.connect(self._CopySelected);self.View.addAction(copyAction)
             deleteAction=QAction(self);deleteAction.setShortcut(QKeySequence.StandardKey.Delete);deleteAction.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut);deleteAction.triggered.connect(self.RemoveSelected);self.View.addAction(deleteAction)
-        layout.addLayout(filters);layout.addLayout(actions);layout.addWidget(self.View,1);localization.LocaleChanged.connect(lambda _:self._Retranslate())
+        layout.addLayout(filters);layout.addLayout(actions);layout.addWidget(self.View,1);self.Command=ConsoleCommandInput(self);self.Command.setObjectName("ConsoleCommandInput");self.Command.setEnabled(False);self.Command.returnPressed.connect(self._ExecuteCommand);layout.addWidget(self.Command);localization.LocaleChanged.connect(lambda _:self._Retranslate())
         if themes is not None:themes.ThemeChanged.connect(lambda _theme:self._Refresh())
         self._SyncSources();self._Retranslate();self.RemoveButton.setEnabled(False)
     def AddMessage(self,text:str,level:ConsoleLevel=ConsoleLevel.Info,show_icon:bool=True,source:str="Editor")->None:
@@ -49,9 +87,15 @@ class ConsolePanel(QWidget):
         if getattr(self,"_runtime",None) is runtime:return
         snapshot=runtime.ConsoleSnapshot(0)
         if not isinstance(snapshot,dict):return
-        self._runtime=runtime;self._console_revision=0
+        self._runtime=runtime;self._console_revision=0;self.Command.setEnabled(hasattr(runtime,"DeveloperExecute"))
         for m in self._messages:runtime.ConsoleAdd(m.Text,{ConsoleLevel.Info:1,ConsoleLevel.Warning:2,ConsoleLevel.Error:4}[m.Level],m.Source,m.ShowIcon)
         self.RefreshNative()
+    def _ExecuteCommand(self):
+        runtime=getattr(self,'_runtime',None);text=self.Command.text()
+        if runtime is None or not text.strip():return
+        try:runtime.DeveloperExecute(text)
+        except (RuntimeError,ValueError) as error:self.AddMessage(str(error),ConsoleLevel.Error,source='Console')
+        self.Command.clear();self.Command.Index=-1;self.Command._ResetCompletion();self.RefreshNative();self.Command.setFocus()
     def RefreshNative(self,force:bool=True)->None:
         runtime=getattr(self,"_runtime",None)
         if runtime is None:return
@@ -131,6 +175,7 @@ class ConsolePanel(QWidget):
         menu=QMenu(self);copy=menu.addAction(self._localization.Translate("console.copy"));copy.setShortcut(QKeySequence.StandardKey.Copy);copy.setEnabled(bool(self.View.selectedItems()));copy.triggered.connect(self._CopySelected);remove=menu.addAction(self._localization.Translate("console.remove_selected"));remove.setEnabled(bool(self.View.selectedItems()));remove.triggered.connect(self.RemoveSelected);menu.addSeparator();filtered=menu.addAction(self._localization.Translate("console.clear_filtered"));filtered.setEnabled(self.View.count()>0);filtered.triggered.connect(self.ClearFiltered);clear=menu.addAction(self._localization.Translate("console.clear"));clear.setEnabled(bool(self._messages));clear.triggered.connect(self.Clear)
         global_position=self.View.viewport().mapToGlobal(position);self.ContextMenuRequested.emit(menu,global_position);menu.exec(global_position)
     def _Retranslate(self)->None:
+        self.Command.setPlaceholderText(self._localization.Translate("console.command_placeholder"))
         self.Search.setPlaceholderText(self._localization.Translate("console.search"));self.ClearButton.setText(self._localization.Translate("console.clear"));self.ClearFilteredButton.setText(self._localization.Translate("console.clear_filtered"));self.RemoveButton.setText(self._localization.Translate("console.remove_selected"))
         labels={ConsoleLevel.Info:"console.info",ConsoleLevel.Warning:"console.warning",ConsoleLevel.Error:"console.error"}
         selected=tuple(level.value for level in self._visible_levels);self.LevelFilter.SetOptions([(self._localization.Translate(labels[level]),level.value) for level in ConsoleLevel]);self.LevelFilter.SetValues(selected);self.LevelFilter.setText(self._localization.Translate("console.filters"))

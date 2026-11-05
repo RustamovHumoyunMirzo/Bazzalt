@@ -9,6 +9,7 @@ void BindLuaNetworkSave(sol::table api);
 void BindLuaPrefabs(sol::table api);
 void BindLuaAssets(sol::table api);
 void BindLuaConsole(sol::table api);
+void BindLuaDeveloperConsole(sol::table api);
 void BindLuaAudio(sol::table api);
 void BindLuaPhysics(sol::table api);
 void BindLuaVehicles(sol::table api);
@@ -27,7 +28,7 @@ void BindLuaServices(sol::table api){
     }
     api.create_named("Jobs")["GetWorkerCount"]=&Jobs::GetWorkerCount;
 
-    BindLuaPrefabs(api);BindLuaNetworkSave(api);BindLuaScene(api);BindLuaStreaming(api);BindLuaLighting(api);BindLuaAssets(api);BindLuaConsole(api);
+    BindLuaPrefabs(api);BindLuaNetworkSave(api);BindLuaScene(api);BindLuaStreaming(api);BindLuaLighting(api);BindLuaAssets(api);BindLuaConsole(api);BindLuaDeveloperConsole(api);
     BindLuaAudio(api);BindLuaPhysics(api);BindLuaVehicles(api);BindLuaLOD(api);BindLuaVFX(api);BindLuaAnimation(api);
     BindLuaApplicationEvents(api);
     {auto type=api.create_named("Time");

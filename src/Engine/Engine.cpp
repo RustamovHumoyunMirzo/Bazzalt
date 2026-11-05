@@ -16,6 +16,7 @@
 #include "Runtime/ExtensionAccess.h"
 #include "Runtime/ApplicationEventsAccess.h"
 #include "Runtime/ApplicationAccess.h"
+#include "Runtime/DeveloperConsoleAccess.h"
 #include "Runtime/SubsystemRuntime.h"
 #include <ryml.hpp>
 #include "Audio/AudioRuntime.h"
@@ -59,6 +60,7 @@ Engine::Engine()
 {
     m_scene->AddSystem<ParticleSystem>();
     GlobalEventsAccess::BindThread();
+    DeveloperConsoleAccess::BindThread();
     SceneManager::Bind(this);
     AssetManager::Bind(this);
     Detail::BoundMaterialServices = GetMaterialServices();
@@ -147,6 +149,9 @@ void Engine::Update(bool renderFrame)
 
     m_frameCount++;
     InputAccess::BeginFrame();
+    // Overlay input is processed against its own scene, then hidden from gameplay for this tick.
+    struct RestoreInput {Detail::InputState* State;bool Active;~RestoreInput(){State->Active=Active;}} inputScope{InputAccess::GetState(),Input::IsActive()};
+    if(m_renderBackend->ProcessDeveloperConsoleInput())InputAccess::GetState()->Active=false;
     ApplicationEventsAccess::Emit({ApplicationEventType::OnPreUpdate,m_deltaTime});
     ApplicationEventsAccess::ThrowIfFailed();
     m_scene->GetSystem<GuiSystem>().PresentationSize={float(m_renderBackend->GetPresentationWidth()),float(m_renderBackend->GetPresentationHeight())};
@@ -202,6 +207,9 @@ void Engine::RenderEditorFrame()
     ProfileScope profileScope("Editor.Frame");
     if (!m_isInitialized) return;
     m_audioRuntime->SetHostPaused(true);
+    InputAccess::BeginFrame();
+    struct RestoreConsoleInput {Detail::InputState* State;bool Active;~RestoreConsoleInput(){State->Active=Active;}} consoleInput{InputAccess::GetState(),Input::IsActive()};
+    if(m_renderBackend->ProcessDeveloperConsoleInput())InputAccess::GetState()->Active=false;
     m_audioRuntime->Update(0);
     // Editor and paused frames must not accumulate a giant gameplay delta.
     m_lastFrameTime = std::chrono::steady_clock::now();
@@ -551,7 +559,7 @@ bool Engine::PrepareApplication(){
     try{
         if(ExtensionAccess::Root()!=std::filesystem::weakly_canonical(m_projectPath.parent_path()))ExtensionAccess::Configure(m_projectPath.parent_path());
         if(auto legacy=m_project.Properties.find("application.script");legacy!=m_project.Properties.end()&&!legacy->second.empty())throw std::runtime_error("Application Script has been replaced: register a C++ script in Window > Global Subsystems");
-        ApplicationAccess::Reset(m_editorHost,m_project);m_subsystemAssets.clear();std::vector<SubsystemBinding> bindings;
+        ApplicationAccess::Reset(m_editorHost,m_project);DeveloperConsoleAccess::Initialize(m_editorHost);m_subsystemAssets.clear();std::vector<SubsystemBinding> bindings;
         if(auto found=m_project.Properties.find("application.subsystems");found!=m_project.Properties.end()&&!found->second.empty()){
             if(found->second.size()>65536)throw std::runtime_error("Subsystem registration exceeds size limit");
             auto tree=ryml::parse_in_arena(ryml::csubstr(found->second.data(),found->second.size()));auto root=tree.rootref();
@@ -579,7 +587,7 @@ bool Engine::PrepareApplication(){
 void Engine::BeginShutdown(){if(m_applicationPrepared&&!m_preShutdown){m_preShutdown=true;Application::Quit(Application::GetExitCode());ApplicationEventsAccess::Emit({ApplicationEventType::OnPreShutdown});}}
 void Engine::EndApplication(){
     if(!m_applicationPrepared)return;BeginShutdown();ApplicationAccess::SetServicesReady(false);ApplicationAccess::SetSceneReady(false);ApplicationAccess::SetAudioReady(false);ApplicationAccess::SetPhysicsReady(false);ApplicationAccess::SetInputReady(false);ApplicationEventsAccess::Emit({ApplicationEventType::OnShutdown});
-    ApplicationEventsAccess::DisconnectOwner(this);if(m_subsystems)m_subsystems->Stop();ApplicationEventsAccess::BindStageLoader({});SaveAccess::Reset();NetworkAccess::Reset();m_applicationPrepared=false;ExtensionAccess::Clear();
+    ApplicationEventsAccess::DisconnectOwner(this);if(m_subsystems)m_subsystems->Stop();ApplicationEventsAccess::BindStageLoader({});if(m_editorHost)DeveloperConsoleAccess::Initialize(true);else DeveloperConsoleAccess::Reset();SaveAccess::Reset();NetworkAccess::Reset();m_applicationPrepared=false;ExtensionAccess::Clear();
 }
 bool Engine::RefreshTextureAsset(const std::filesystem::path& source){if(!m_assetDatabase)return false;const bool result=m_assetDatabase->RefreshSource(source);if(!result)m_lastError=m_assetDatabase->GetLastError();return result;}
 

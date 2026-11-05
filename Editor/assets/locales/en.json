@@ -1680,5 +1680,6 @@
   "field.Blend Distance": "Blend Distance",
   "field.Box Projection": "Box Projection",
   "field.Box Size": "Box Size",
-  "field.Resolution": "Resolution"
+  "field.Resolution": "Resolution",
+  "console.command_placeholder": "Command or CVar (Tab to complete, Up/Down for history)"
 }

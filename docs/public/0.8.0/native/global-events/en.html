@@ -63,7 +63,7 @@ public:
         });
     }
 };</code></pre><p>In Window &gt; Global Subsystems, enable Asset Access for a subsystem that loads events or other assets directly. It defaults off, including older registrations without the field. Permissions follow each subscriber when callbacks run, rather than inheriting the emitter's permission. This option does not initialize assets early: a Boot subsystem should subscribe to a later application event, such as OnPlay, then load the event by UUID. Path-based AssetManager lookups are rejected for subsystem scripts. Package builds retain the permission setting and event UUIDs. If you restrict build content, explicitly include assets loaded dynamically by UUID.</p><p>Asset Access is an engine service permission for trusted project code; native C++ is not an operating-system sandbox. Global Events are project gameplay messages, separate from the engine's application lifecycle events.</p></article>
-      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../animation/en.html"><small>Previous</small>Animation in C++</a>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../developer-console/en.html"><small>Previous</small>Developer console and CVars in C++</a>
 <a class="next" href="../gui/en.html"><small>Next</small>GUI in C++</a></nav>
     </main>
     <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#behavior">Behavior property</a><a class="toc-link" href="#direct">Load directly by UUID</a><a class="toc-link" href="#contract">Arguments and delivery</a><a class="toc-link" href="#limits">Safety limits</a><a class="toc-link" href="#subsystems">Global Subsystems</a></nav></aside>

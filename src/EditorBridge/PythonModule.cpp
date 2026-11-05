@@ -1,3 +1,5 @@
+#include "Bazzalt/DeveloperConsole.h"
+#include "Runtime/DeveloperConsoleAccess.h"
 #include "Bazzalt/Lighting.h"
 #include "Bazzalt/Prefab.h"
 #include "Prefab/PrefabAccess.h"
@@ -145,7 +147,7 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
 
 class EditorHost final {
 public:
-    EditorHost() : m_engine(std::make_unique<Runtime::Engine>()) { m_engine->SetEditorHost(true);m_loadedScenes.push_back({{},nullptr});Runtime::ConsoleAccess::Acquire(); }
+    EditorHost() : m_engine(std::make_unique<Runtime::Engine>()) { m_engine->SetEditorHost(true);Runtime::DeveloperConsoleAccess::Initialize(true);m_loadedScenes.push_back({{},nullptr});Runtime::ConsoleAccess::Acquire(); }
     ~EditorHost() { m_lightingBake.Cancel();EndAnimationPreview();Stop(); ClearLoadedScenes(); m_engine->Shutdown(); CleanupSnapshot();Runtime::ConsoleAccess::Release(); }
     py::object ConsoleSnapshot(std::uint64_t revision){
         auto snapshot=Runtime::ConsoleAccess::Snapshot(revision);if(!snapshot)return py::none();
@@ -154,6 +156,9 @@ public:
         for(const auto& m:snapshot->Messages){py::dict value;value["id"]=m.Id;value["text"]=displayText(m.Text);value["level"]=static_cast<unsigned>(m.Level);value["source"]=displayText(m.Source);value["icon"]=m.ShowIcon;value["timestamp"]=m.Timestamp;messages.append(value);}
         result["messages"]=messages;return result;
     }
+    py::dict DeveloperExecute(const std::string& line){auto result=DeveloperConsole::Execute(line);py::dict out;out["success"]=result.Success;out["output"]=result.Output;return out;}
+    std::vector<std::string> DeveloperComplete(const std::string& prefix){return DeveloperConsole::Complete(prefix);}
+    std::vector<std::string> DeveloperHistory(){return DeveloperConsole::GetHistory();}
     void ConsoleAdd(const std::string& text,unsigned level,const std::string& source,bool icon){Console::Log(text,static_cast<ConsoleLevel>(level),source,icon);}
     void ConsoleClear(){Console::Clear();}
     void ConsoleRemove(const std::vector<std::uint64_t>& ids){Console::ClearMessages(ids);}
@@ -1019,6 +1024,9 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("animation_end_preview", &Bazzalt::EditorBridge::EditorHost::EndAnimationPreview)
         .def("component_types", &Bazzalt::EditorBridge::EditorHost::ComponentTypes)
         .def("scene_info", &Bazzalt::EditorBridge::EditorHost::SceneInfo)
+        .def("developer_execute", &Bazzalt::EditorBridge::EditorHost::DeveloperExecute)
+        .def("developer_complete", &Bazzalt::EditorBridge::EditorHost::DeveloperComplete)
+        .def("developer_history", &Bazzalt::EditorBridge::EditorHost::DeveloperHistory)
         .def("console_snapshot", &Bazzalt::EditorBridge::EditorHost::ConsoleSnapshot)
         .def("console_add", &Bazzalt::EditorBridge::EditorHost::ConsoleAdd)
         .def("console_clear", &Bazzalt::EditorBridge::EditorHost::ConsoleClear)

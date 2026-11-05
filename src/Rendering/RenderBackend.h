@@ -40,6 +40,7 @@ using ::operator&=;
 
 class RenderAssets;
 class GuiRenderer;
+class DeveloperConsoleOverlay;
 class GraphicsRenderer;
 class ImpostorRenderer;
 
@@ -81,12 +82,13 @@ public:
     std::unordered_map<std::string,double> GetStatistics() const;
     void SetEditorStatisticsText(std::string text,bool visible){m_statisticsText=std::move(text);m_statisticsVisible=visible;}
     void RenderCameraView(filament::View* view,std::uint64_t viewport=0,bool applyLOD=true);
+    bool ProcessDeveloperConsoleInput();
     void SynchronizeBakedLighting(Bazzalt::Scene& scene);
     void SetGuiScene(Bazzalt::Scene* scene);
     void ClearGuiResources();
     filament::Texture* GetCameraTexture(UUID id) const;
     void RegisterCameraView(UUID id,filament::View* view){if(auto old=m_cameraViews.find(id);old!=m_cameraViews.end()&&old->second!=view)m_lodViews.erase(old->second);m_cameraViews[id]=view;}
-    void UnregisterCameraView(UUID id){if(auto old=m_cameraViews.find(id);old!=m_cameraViews.end())m_lodViews.erase(old->second);m_cameraViews.erase(id);m_cameraOutputs.erase(id);}
+    void UnregisterCameraView(UUID id){if(auto old=m_cameraViews.find(id);old!=m_cameraViews.end())m_lodViews.erase(old->second);m_cameraViews.erase(id);m_cameraOutputs.erase(id);m_captureReads.erase(id);}
     void RegisterCameraOutput(UUID id,filament::Texture* color,filament::Texture* history,filament::RenderTarget* target,filament::RenderTarget* historyTarget);
     filament::RenderTarget* GetCameraOutputTarget(UUID id) const;
     static void ConfigureEditorFog(filament::View& view,float gridScale);
@@ -154,6 +156,7 @@ private:
     std::unique_ptr<GraphicsRenderer> m_graphics;
     std::unique_ptr<ImpostorRenderer> m_impostors;
     std::unique_ptr<GuiRenderer> m_guiRenderer;
+    std::unique_ptr<DeveloperConsoleOverlay> m_developerConsole;
     std::unique_ptr<GuiRenderer> m_statisticsRenderer;
     std::unique_ptr<Bazzalt::Scene> m_statisticsScene;
     std::string m_statisticsText;

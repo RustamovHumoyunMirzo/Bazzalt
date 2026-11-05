@@ -291,6 +291,15 @@ def supplement(language, name, record, types):
 
 
 OVERVIEWS = {
+    'Console': 'Editor-only message logging and reading. Standalone calls are no-ops/null reads by design. For runtime commands, CVars, logging and an in-game overlay, use DeveloperConsole and CVar instead.',
+    'DeveloperConsole': 'Runtime command interpreter, history/completion, bounded output and optional native-rendered overlay. Disabled by default in standalone games; editor integration enables it. Commands retain module/VM owners and disconnect on stop/reload. Execute never invokes an OS shell. See the developer-console guide for syntax, threading and limits.',
+    'CVar': 'Process-wide typed console variables. Register on the engine thread; Get/Set enforce exact types, bounds and flags. Changed callbacks observe committed values or Pending changes. Archive import validates all values before publication. Re-register from OnReload to reconnect callbacks after hot reload.',
+    'CVarDefinition': 'Unique case-insensitive console name, description, typed DefaultValue, combinable Flags and optional inclusive numeric Minimum/Maximum. DefaultValue fixes Boolean/int64/double/string type. Registration rejects collisions and invalid defaults.',
+    'CVarInfo': 'Snapshot containing Definition, Type, effective Value and optional pending restart value. Editing a snapshot does not change the registry.',
+    'CVarChange': 'Change callback data. Name is canonical lowercase; Previous and Value retain the declared type. Pending distinguishes a requested restart value from an effective change.',
+    'ConsoleCommand': 'Unique console name, description, usage text and optional Cheat gate. RegisterCommand associates a callback with this descriptor and returns a removable monotonic handle.',
+    'ConsoleResult': 'Execute result: Success reports dispatch/validation status; Output contains command text or rejection reason. Errors are also written to developer output.',
+
     'Lighting': 'Scene-based diffuse probe, UV lightmap and HDR reflection capture baking and sampling. BeginBake snapshots static contributors and schedules detached CPU tracing. CreateProbeGrid and Clear mutate the scene on its owning thread. Runtime material support and transport limits are documented in the baked-lighting guide.',
     'Lightmap': 'Static non-overlapping triangle-chart irradiance atlas. Resolution and Padding configure the next bake; BakedResolution, BakedPadding, ChartGrid, Geometry, Texels and TransformSignature describe the saved result. Moving the receiver invalidates its lighting until rebaked. Direct payload edits require Lighting.Invalidate.',
     'ReflectionProbe': 'World-oriented HDR cubemap capture with GGX roughness mips. Radius and BlendDistance control influence; BoxSize is world-space half extents for BoxProjection. Resolution configures the next bake; CapturePosition and BakedResolution describe saved Radiance. Moving a probe disables stale captures. Enabled is inherited.',

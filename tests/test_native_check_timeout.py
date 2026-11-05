@@ -1,4 +1,6 @@
 import subprocess
+import contextlib
+import io
 import sys
 import unittest
 from unittest.mock import patch
@@ -15,6 +17,7 @@ class NativeCheckTimeoutTests(unittest.TestCase):
         original=subprocess.Popen
         def Launch(*args,**kwargs):
             process=original(*args,**kwargs);processes.append(process);return process
-        with patch("scripts.run_macos_native_tests.subprocess.Popen", side_effect=Launch):
+        with patch("scripts.run_macos_native_tests.subprocess.Popen", side_effect=Launch), contextlib.redirect_stdout(io.StringIO()) as output:
             self.assertEqual(Run([sys.executable, "-c", "import time; time.sleep(60)"], timeout=.1), 124)
+            self.assertIn("timed out",output.getvalue())
             self.assertIsNotNone(processes[0].poll())  # Timed-out child was reaped.

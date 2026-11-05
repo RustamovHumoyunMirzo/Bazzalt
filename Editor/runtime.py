@@ -505,6 +505,12 @@ class RuntimeService(QObject):
 
     def IsPlaying(self)->bool:return bool(self._host and self._host.is_playing())
 
+    def DeveloperExecute(self,line):
+        return self._host.developer_execute(line) if self._host and hasattr(self._host,'developer_execute') else {'success':False,'output':'Native developer console unavailable'}
+    def DeveloperComplete(self,prefix):
+        return list(self._host.developer_complete(prefix)) if self._host and hasattr(self._host,'developer_complete') else []
+    def DeveloperHistory(self):
+        return list(self._host.developer_history()) if self._host and hasattr(self._host,'developer_history') else []
     def ConsoleSnapshot(self,revision=0):
         return self._host.console_snapshot(revision) if self._host and hasattr(self._host,"console_snapshot") else None
     def ConsoleAdd(self,text,level,source,icon=True):

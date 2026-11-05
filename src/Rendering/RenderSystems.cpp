@@ -127,8 +127,10 @@ void CameraSystem::OnUpdate(Scene& scene, float) {
         const bool allocation=descriptor&&(old.Width!=descriptor->Width||old.Height!=descriptor->Height||old.Samples!=descriptor->Samples||old.GetMipLevelCount()!=descriptor->GetMipLevelCount()||old.ColorFormat!=descriptor->ColorFormat||old.DepthFormat!=descriptor->DepthFormat);
         if(resource.OutputAsset!=camera.RenderTarget||allocation||(resource.Target&&!offscreen)||(offscreen&&(!resource.Color||resource.Color->getWidth()!=textureWidth||resource.Color->getHeight()!=textureHeight))){
             m_backend.ClearGuiResources();resource.View->setRenderTarget(nullptr);
-            m_backend.GetAssets().SetCameraTexture(id,nullptr);
+            // Material rebinding can lazily reallocate a writable Texture. Detach
+            // camera/capture lookup first so that rebinding cannot resolve its old attachments.
             m_backend.RegisterCameraOutput(id,nullptr,nullptr,nullptr,nullptr);
+            m_backend.GetAssets().SetCameraTexture(id,nullptr);
             if(resource.OutputAsset&&m_backend.GetAssets().GetTextureProducer(resource.OutputAsset)==id)m_backend.GetAssets().SetTextureProducer(resource.OutputAsset,{});
             if(resource.Owned){if(resource.Target)engine.destroy(resource.Target);if(resource.HistoryTarget)engine.destroy(resource.HistoryTarget);
             if(resource.Color)engine.destroy(resource.Color);if(resource.History)engine.destroy(resource.History);if(resource.Depth)engine.destroy(resource.Depth);}

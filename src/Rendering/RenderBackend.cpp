@@ -15,6 +15,8 @@
 #include "Runtime/GraphicsAccess.h"
 #include "Rendering/CaptureGraph.h"
 #include "GUI/GuiRenderer.h"
+#include "Rendering/DeveloperConsoleOverlay.h"
+#include "Bazzalt/DeveloperConsole.h"
 #include "GUI/GuiSystem.h"
 #include "Bazzalt/Components/Camera.h"
 #include "Bazzalt/Input.h"
@@ -686,6 +688,12 @@ void RenderBackend::BeginImpostors(filament::View* view,bool editor){
 }
 std::optional<Mat4> RenderBackend::GetEditorCameraWorld() const{for(const auto& [_,view]:m_viewports)if(view->Kind==ViewportKind::Scene&&view->View&&view->View->hasCamera()){Mat4 matrix;const auto native=view->View->getCamera().getModelMatrix();for(int c=0;c<4;++c)for(int r=0;r<4;++r)matrix(r,c)=float(native[c][r]);return matrix;}return {};}
 bool RenderBackend::IsEditorLODHidden(UUID id){for(auto& [key,view]:m_viewports)if(view->Kind==ViewportKind::Scene)return GetLODHidden(view->View).contains(id);return false;}
+bool RenderBackend::ProcessDeveloperConsoleInput(){
+    if(!DeveloperConsole::IsEnabled())return false;
+    if(!m_developerConsole&&!DeveloperConsole::IsVisible()&&!Input::GetKeyDown(KeyCode::Grave))return false;
+    if(!m_developerConsole)m_developerConsole=std::make_unique<DeveloperConsoleOverlay>(*this);
+    return m_developerConsole->ProcessInput({float(m_presentationWidth),float(m_presentationHeight)});
+}
 void RenderBackend::SynchronizeBakedLighting(Bazzalt::Scene& scene){
     if(!m_engine||!m_assets||!m_scene)return;
     m_assets->UpdateBakedLighting(scene);
@@ -721,7 +729,7 @@ filament::RenderTarget* RenderBackend::GetCameraOutputTarget(UUID id) const{
     return output->second.HistoryFront?output->second.HistoryTarget:output->second.Target;
 }
 void RenderBackend::RegisterCameraOutput(UUID id,filament::Texture* color,filament::Texture* history,filament::RenderTarget* target,filament::RenderTarget* historyTarget){
-    if(!color){m_cameraOutputs.erase(id);return;}
+    if(!color){m_captureReads.erase(id);m_cameraOutputs.erase(id);return;}
     auto& output=m_cameraOutputs[id];
     if(output.Color!=color||output.History!=history){ClearGuiResources();output={color,history,target,historyTarget,false,false};}
     if(output.Target!=target||output.HistoryTarget!=historyTarget)ClearGuiResources();
@@ -846,6 +854,7 @@ void RenderBackend::Render(double materialTime) {
             }
             m_statisticsRenderer->PrepareOverlay(*m_statisticsScene,{float(resource->Width),float(resource->Height)});
         }
+        if(resource->Kind==ViewportKind::Game&&m_developerConsole&&DeveloperConsole::IsVisible())m_developerConsole->Prepare({float(resource->Width),float(resource->Height)});
         if (!resource->SwapChain || !m_renderer->beginFrame(resource->SwapChain,frameNanoseconds)) continue;
         if(m_guiRenderer){m_guiRenderer->RenderSpatialEffects();m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});}
         if (resource->Kind == ViewportKind::Scene) {
@@ -894,6 +903,7 @@ void RenderBackend::Render(double materialTime) {
             }
         }
         if(resource->Kind==ViewportKind::Game&&m_gamePreviewMode>=0&&m_guiScene&&m_guiRenderer){m_guiRenderer->RenderOverlay(*m_guiScene,{float(resource->Width),float(resource->Height)});m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});}
+        if(resource->Kind==ViewportKind::Game&&m_developerConsole&&DeveloperConsole::IsVisible())m_developerConsole->Render({float(resource->Width),float(resource->Height)});
         if(resource->Capture){
             auto state=resource->Capture;std::unique_lock lock(state->Mutex);
             if(!state->Pending&&state->Consumed){
@@ -920,6 +930,7 @@ void RenderBackend::Shutdown() {
     m_impostors.reset();
     if (m_engine == nullptr) return;
     GraphicsAccess::BindScene(nullptr);m_graphics.reset();
+    m_developerConsole.reset();
     m_guiScene=nullptr;m_guiRenderer.reset();m_cameraViews.clear();
     m_statisticsRenderer.reset();m_statisticsScene.reset();
     m_cameraOutputs.clear();

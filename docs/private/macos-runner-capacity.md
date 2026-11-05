@@ -34,3 +34,8 @@ breadcrumbs identify which call stalls. Timeout remains a test failure; an unbou
 LLDB rerun no longer consumes the entire job. A hosted device that cannot create
 Metal argument buffers still runs Cocoa menu and package verification; actual GPU
 presentation is reported as unvalidated, not silently counted as tested.
+
+Allocation-only retry attempt two uses the alternate macos-26 / macos-26-intel
+pool; attempt three returns to macOS 15. CI and release packaging use the same
+architecture-preserving selection. Neither pool guarantees capacity. A source
+failure or a test timeout is still ineligible for automatic retry.

@@ -1,3 +1,4 @@
+#include "Bazzalt/DeveloperConsole.h"
 #include "Runtime/LuaRuntime.h"
 #include "Physics/PhysicsModuleApi.h"
 #include "Runtime/ConsoleStore.h"
@@ -46,6 +47,19 @@ assert(#B.Network.CreateKey() == 32 and #B.SaveGame.CreateEncryptionKey() == 32)
 assert(B.AntiAliasing.MSAA2x==3 and B.AntiAliasing.MSAA4x==4)
 assert(B.AntiAliasing.TAAFXAA==5 and B.AntiAliasing.MSAA2xFXAA==6 and B.AntiAliasing.MSAA4xFXAA==7)
 function Behavior:OnCreate()
+    B.DeveloperConsole.SetEnabled(true)
+    local definition=B.CVarDefinition.new();definition.Name="script.test_speed";definition.DefaultValue=2.5;definition.Minimum=0;definition.Maximum=10;definition.Flags=B.CVarFlags.Archive
+    local changed=false
+    B.CVar.Register(definition,function(e) changed=e.Name=="script.test_speed" and e.Value==3.5 end)
+    B.CVar.SetValue("script.test_speed",2.0)
+    assert(B.DeveloperConsole.Execute("script.test_speed 3.5").Success and changed)
+    assert(B.CVar.GetValue("script.test_speed")==3.5)
+    local command=B.ConsoleCommand.new();command.Name="script.test_echo";command.Usage="script.test_echo text"
+    B.DeveloperConsole.RegisterCommand(command,function(args) return args[1] end)
+    assert(B.DeveloperConsole.Execute('script.test_echo "hello world"').Output=="hello world")
+    local loop=B.ConsoleCommand.new();loop.Name="script.test_loop"
+    B.DeveloperConsole.RegisterCommand(loop,function() while true do end end)
+    local exhausted=B.DeveloperConsole.Execute("script.test_loop");assert(not exhausted.Success and exhausted.Output:find("instruction budget"))
     local lightingScene = self.Entity:GetScene()
     local lightingProbes = B.Lighting.CreateProbeGrid(lightingScene, B.Vec3.new(0,1,0), B.Vec3.new(0,1,0), 1,1,1,10)
     assert(#lightingProbes == 1)
@@ -229,7 +243,7 @@ return Behavior
     assert(entity.GetComponent<Name>().Value=="SystemCreated");
     runtime.Update(.5f);assert(std::fabs(entity.GetWorldTransform().Position.X-2)<.001f);
     runtime.FixedUpdate(.1f);assert(entity.GetComponent<Light>().Range>10);
-    runtime.Stop();assert(entity.GetComponent<Name>().Value=="Destroyed");assert(!entity.GetComponent<Light>().IsEnabled());
+    runtime.Stop();assert(!Bazzalt::CVar::Exists("script.test_speed"));assert(!Bazzalt::DeveloperConsole::Execute("script.test_echo x").Success);assert(entity.GetComponent<Name>().Value=="Destroyed");assert(!entity.GetComponent<Light>().IsEnabled());
     auto& attachments=entity.AddComponent<ScriptComponents>();ScriptAttachment attachment;
     attachment.Source=asset->Id.ToString();attachment.TypeName="Walk";attachment.Lua=true;attachment.Properties.push_back({"Speed","float","4"});attachments.Values.push_back(attachment);
     auto sceneFile=directory/"Scene.bscene";assert(engine.SaveScene(sceneFile));
