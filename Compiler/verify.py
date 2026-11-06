@@ -42,7 +42,9 @@ def Verify(folder,executable,master=None):
         if digest!=item['sha256']:raise ValueError('Signed file hash mismatch')
         listed.add(name)
     if 'game.json' not in listed:raise ValueError('Unsigned game configuration')
-    allowed=listed|{executable.relative_to(folder).as_posix(),'game.bootstrap','game.integrity','game.signature','.bazzalt-game-build'}
+    allowed=listed|{'game.bootstrap','game.integrity','game.signature','.bazzalt-game-build'}
+    if executable.resolve().is_relative_to(folder.resolve()):
+        allowed.add(executable.resolve().relative_to(folder.resolve()).as_posix())
     for path in folder.rglob('*'):
         if path.is_symlink() or path.is_file() and path.relative_to(folder).as_posix() not in allowed:raise ValueError('Unexpected or linked game output')
     return configuration

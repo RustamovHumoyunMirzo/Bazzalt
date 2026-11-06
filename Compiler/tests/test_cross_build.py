@@ -31,6 +31,16 @@ class CrossBuildTests(unittest.TestCase):
             with self.assertRaises(Exception):Verify(root,executable,b'b'*32)
             (root/'content.bin').write_bytes(b'other')
             with self.assertRaisesRegex(ValueError,'hash mismatch'):Verify(root,executable,b'a'*32)
+    def test_offline_verifier_accepts_separately_packaged_android_player(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);payload=root/'payload';payload.mkdir()
+            executable=root/'libmain.so';executable.write_bytes(b'\x7fELF'+bytes(128))
+            (payload/'game.json').write_text(json.dumps(dict(format_version=3)))
+            Seal(payload,executable)
+            self.assertEqual(Verify(payload,executable)['format_version'],3)
+            (payload/'unexpected.so').write_bytes(b'unsigned')
+            with self.assertRaisesRegex(ValueError,'Unexpected'):Verify(payload,executable)
+
     def test_arm64_binary_detection(self):
         from scripts.release_artifacts import Architecture
         with tempfile.TemporaryDirectory() as directory:
