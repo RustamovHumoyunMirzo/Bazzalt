@@ -54,8 +54,11 @@ def Discover(sdk="", ndk=""):
         try:
             revision = Properties(candidate / "source.properties")["Pkg.Revision"]
             if Version(revision) >= Version(NDK_VERSION) and (candidate / "toolchains/llvm/prebuilt" / HostTag()).is_dir():
-                compatible = candidate.resolve()
-                break
+                if compatible is None:
+                    compatible = candidate.resolve()
+                if Version(revision) == Version(NDK_VERSION):
+                    compatible = candidate.resolve()
+                    break
         except (OSError, KeyError, ValueError):
             continue
     return {"sdk_path": str(selected) if selected else "", "ndk_path": str(compatible) if compatible else ""}
@@ -118,6 +121,6 @@ def Validate(profile, architecture, runtime=None):
     if runtime is not None:
         manifest = json.loads((Path(runtime) / "runtime.json").read_text(encoding="utf-8"))
         if manifest.get("android_ndk") != revision or manifest.get("minimum_api", 999) > minimum:
-            raise ValueError("The Android runtime SDK must match the NDK revision and minimum API")
+            raise ValueError(f"The Android runtime SDK requires NDK {manifest.get('android_ndk', 'unknown')} and API {manifest.get('minimum_api', 'unknown')} or later. Selected NDK {revision}, API {minimum}")
     abi, triple = ABIS[architecture]
     return AndroidTools(sdk, ndk, build_tools, jar, java, javac, compiler, llvm / "sysroot", triple, abi, revision)

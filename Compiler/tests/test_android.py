@@ -50,9 +50,22 @@ class AndroidTests(unittest.TestCase):
                 self.assertEqual(ValidateTools(profile,'arm64').Abi,'arm64-v8a')
                 runtime=root/'Runtime';runtime.mkdir()
                 (runtime/'runtime.json').write_text(json.dumps(dict(android_ndk='1.0',minimum_api=26)))
-                with self.assertRaisesRegex(ValueError,'match the NDK'):ValidateTools(profile,'arm64',runtime)
+                with self.assertRaisesRegex(ValueError,'requires NDK 1.0'):ValidateTools(profile,'arm64',runtime)
                 (sdk/'platforms/android-36/android.jar').unlink()
                 with self.assertRaisesRegex(ValueError,'missing'):ValidateTools(profile,'x64')
+
+    def test_discovery_prefers_runtime_ndk_revision(self):
+        with tempfile.TemporaryDirectory() as folder:
+            sdk=Path(folder)/'SDK'
+            (sdk/'platforms/android-36').mkdir(parents=True)
+            (sdk/'platforms/android-36/android.jar').touch()
+            (sdk/'build-tools').mkdir()
+            for revision in (NDK_VERSION,'30.0.15000000'):
+                ndk=sdk/'ndk'/revision
+                (ndk/'toolchains/llvm/prebuilt'/HostTag()).mkdir(parents=True)
+                (ndk/'source.properties').write_text('Pkg.Revision = '+revision)
+            with patch.dict(os.environ,{'ANDROID_NDK_HOME':str(sdk/'ndk/30.0.15000000'),'ANDROID_NDK_ROOT':''}):
+                self.assertEqual(Discover(str(sdk))['ndk_path'],str((sdk/'ndk'/NDK_VERSION).resolve()))
 
     def test_manifests_and_signing_secrets(self):
         value=self.Profile()

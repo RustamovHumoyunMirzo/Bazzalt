@@ -41,6 +41,8 @@ def Stage(build,output,architecture,root=None,platform=None):
     for name in names:
         if Architecture(native/name)!=architecture:raise ValueError('Wrong runtime architecture: '+name)
         shutil.copy2(native/name,output/name)
+        if platform=='android':
+            subprocess.run([str(ndk/'toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'),'--strip-unneeded',str(output/name)],check=True)
     # App-local Microsoft CRT dependencies are required on clean consumer PCs.
     for file in (build/'ScriptSDK/lib').glob('*.dll'):
         if file.name not in names:
@@ -65,7 +67,7 @@ def Stage(build,output,architecture,root=None,platform=None):
     if not library.exists():library=build/'ScriptSDK/lib/Bazzalt.lib'
     if linux:
         for name in names:
-            if name!='BazzaltPlayer':shutil.copy2(native/name,sdk/'lib'/name)
+            if name!='BazzaltPlayer':shutil.copy2((output if platform=='android' else native)/name,sdk/'lib'/name)
     else:shutil.copy2(library,sdk/'lib/Bazzalt.lib')
     licenses=output/'licenses';licenses.mkdir(exist_ok=True)
     try:from .collect_third_party import Collect

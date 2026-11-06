@@ -12,4 +12,6 @@ SaveGame retains its public API and format. Android commits Base64-encoded save 
 
 PlayerAndroid.cpp pauses rendering on background and reconstructs its swapchain after surface restoration. Input uses SDL events including primary-touch mouse emulation. Preserve the same physics, scene, scripting and graphics APIs. Device GPU limits continue to apply. Android release validation must include device tests for surface loss, rotation, audio focus, memory pressure, input, Vulkan and GLES presentation. SDK-tool package tests alone do not establish device feature parity.
 
+Production Android SDK libraries are stripped during staging. Debug APK builds retain gameplay-module debug information while using the prebuilt Release framework.
+
 Icons use ICO for Windows, ICNS for macOS and PNG for Linux/Android. Pillow is compiler-only. The generated BazzaltLauncher.png derives from the shared SVG branding and is included in the compiler package. Neither Python nor Pillow is shipped in Android games.
