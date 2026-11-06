@@ -5,6 +5,7 @@
 [![Linux 64-bit](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/linux-64-bit.yml/badge.svg?event=push)](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/linux-64-bit.yml)
 [![Linux 32-bit Game Runtime](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/linux-32-bit.yml/badge.svg?event=push)](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/linux-32-bit.yml)
 [![macOS 64-bit](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/macos-64-bit.yml/badge.svg?event=push)](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/macos-64-bit.yml)
+[![Android Runtime](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/android-runtime.yml/badge.svg?event=push)](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/android-runtime.yml)
 
 BAZZALT is an editor-first C++20 game engine in active alpha development. It
 combines a native runtime with a PySide6 editor and Hub while keeping low-level
@@ -14,8 +15,6 @@ See [what is new in 0.9.0](docs/public/0.9.0/whats-new/en.html).
 
 > **Alpha status:** core workflows are functional, but APIs and file formats may
 > still change. BAZZALT is not yet recommended for production projects.
-
-[![Android Runtime](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/android-runtime.yml/badge.svg?event=push)](https://github.com/RustamovHumoyunMirzo/Bazzalt/actions/workflows/android-runtime.yml)
 
 ## Supported platforms & backends
 
@@ -27,7 +26,7 @@ See [what is new in 0.9.0](docs/public/0.9.0/whats-new/en.html).
 | Linux | ✅ x64; X11, Wayland | ✅ x64, x86, ARM64; X11, Wayland |
 | macOS 12+ | ✅ Intel x64, Apple silicon | ✅ x64, ARM64 |
 | iOS / iPadOS | ❌ | ❌ |
-| Android API 26+ | ❌ | ✅ ARM64, x86_64 · OpenGL ES 3 / Vulkan |
+| Android API 26+ | ❌ | ✅ ARM64, x86_64 |
 | Web / WebAssembly | ❌ | ❌ |
 | Xbox consoles | ❌ | ❌ |
 | PlayStation consoles | ❌ | ❌ |
