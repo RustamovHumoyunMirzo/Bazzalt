@@ -19,6 +19,27 @@ class AndroidTests(unittest.TestCase):
         value['target']['platform']='android'
         return Validate(value)
 
+    def test_compiler_branding_is_embedded_without_loose_ui_assets(self):
+        from scripts.embed_compiler_resources import Generate
+        from scripts.compile_resources import Audit
+        from Compiler.resources import BrandingPNG
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            (root/'Compiler').mkdir()
+            assets=root/'bazzalt/assets/branding';assets.mkdir(parents=True)
+            image=BrandingPNG()
+            (assets/'BazzaltLauncher.png').write_bytes(image)
+            generated=Generate(root)
+            namespace={};exec(compile(generated.read_text(encoding='utf-8'),str(generated),'exec'),namespace)
+            self.assertEqual(namespace['BRANDING_PNG'],image)
+            stage=root/'distribution';stage.mkdir()
+            (stage/'Compiler').mkdir()
+            (stage/'Compiler/_resources.py').write_bytes(generated.read_bytes())
+            Audit(stage)
+            leaked=stage/'bazzalt/assets/branding';leaked.mkdir(parents=True)
+            (leaked/'BazzaltLauncher.png').write_bytes(image)
+            with self.assertRaisesRegex(RuntimeError,'Raw application resources'):Audit(stage)
+
     def test_android_profile_security_and_validation(self):
         value=self.Profile()
         self.assertEqual(value['target']['architecture'],'arm64')

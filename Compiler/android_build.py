@@ -1,5 +1,6 @@
 """Build Android packages from a prebuilt runtime SDK and host-side content tools."""
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,7 @@ import uuid
 import zipfile
 from xml.sax.saxutils import escape
 
+from .resources import BrandingPNG
 from .android_tools import Validate
 from .build import (BuildLock, BuildWorkspace, CheckCancelled, CompileScripts, CookShaders,
                     Emit, KeyFor, Pack, Publish, Run, ValidateCooker, ValidateRuntime)
@@ -91,10 +93,13 @@ def Manifest(settings, configuration, split=False):
 def Resources(directory, icon, project):
     from PIL import Image
     from .icons import Validate as ValidateIcon
-    path=Path(icon) if icon else Path(__file__).resolve().parents[1]/'bazzalt/assets/branding/BazzaltLauncher.png'
-    if icon and not path.is_absolute():path=project.parent/path
-    ValidateIcon(path,'android')
-    image=Image.open(path).convert('RGBA')
+    if icon:
+        path=Path(icon)
+        if not path.is_absolute():path=project.parent/path
+        ValidateIcon(path,'android')
+        source=path
+    else:source=io.BytesIO(BrandingPNG())
+    image=Image.open(source).convert('RGBA')
     for density, size in (('mdpi', 48), ('hdpi', 72), ('xhdpi', 96), ('xxhdpi', 144), ('xxxhdpi', 192)):
         folder = directory / ('mipmap-' + density)
         folder.mkdir(parents=True)
@@ -156,7 +161,7 @@ def Package(tools, settings, configuration, work, output, payload, libraries, ru
                                           sha256=Digest(file)))
     base_assets = work / 'assets'
     base_assets.mkdir()
-    shutil.copy2(Path(__file__).resolve().parents[1]/'bazzalt/assets/branding/BazzaltLauncher.png',base_assets/'branding.png')
+    (base_assets/'branding.png').write_bytes(BrandingPNG())
     if mode == 'apk': shutil.copytree(payload, base_assets / 'bazzalt')
     elif mode in ('obb', 'external_data'):
         delivery['archive'] = f'main.{profile["version_code"]}.{profile["application_id"]}.obb' if mode == 'obb' else 'game-data.zip'
