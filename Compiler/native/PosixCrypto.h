@@ -17,7 +17,9 @@
 #include <cstring>
 #include <stdexcept>
 #include <ryml.hpp>
+#ifdef __ANDROID__
 #include "Platform/AndroidPlatform.h"
+#endif
 
 namespace Bazzalt::Game {
 inline void Require(bool value,const char* error){if(!value)throw std::runtime_error(error);}
