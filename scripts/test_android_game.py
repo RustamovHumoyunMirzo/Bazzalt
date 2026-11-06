@@ -35,7 +35,11 @@ def Test(runtime,cooker):
     scene=dict(FormatVersion=1,SceneUUID='44371a94-735c-46d9-a022-4bb9932f6b55',Entities=[
         dict(UUID=ENTITY_ID,Parent='00000000-0000-0000-0000-000000000000',Name='Probe',Components=[]),
         dict(UUID='54371a94-735c-46d9-a022-4bb9932f6b55',Parent='00000000-0000-0000-0000-000000000000',Name='Camera',
-             Components=[dict(Type='Bazzalt.Camera',Version=4,Properties={'Active':'true'})])])
+             Components=[dict(Type='Bazzalt.Camera',Version=1,Properties={
+                 'Projection':'0','FieldOfView':'1.0471975512','OrthographicSize':'10',
+                 'Near':'.1','Far':'1000','Aspect':'1.7777778','Priority':'0','Active':'true',
+                 'Clear.R':'0','Clear.G':'0','Clear.B':'0','Clear.A':'1','Post.Enabled':'false',
+                 'Post.Bloom':'false','Post.AO':'false','Post.AA':'0','Post.ToneMapping':'0','Post.Exposure':'0'})])])
     (assets/'Main.bscene').write_text(yaml.safe_dump(scene),encoding='utf-8')
     source=assets/'Probe.cpp'
     shutil.copy2(ROOT/'Compiler/tests/fixtures/AndroidIntegrationProbe.cpp',source)
