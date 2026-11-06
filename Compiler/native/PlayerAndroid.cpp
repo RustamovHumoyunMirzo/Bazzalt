@@ -4,6 +4,7 @@
 #include "Runtime/ApplicationEventsAccess.h"
 #include "Runtime/ApplicationAccess.h"
 #include "Platform/AndroidPlatform.h"
+#include "GUI/GuiSystem.h"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 #include <android/log.h>
@@ -72,7 +73,7 @@ extern "C" __attribute__((visibility("default"))) int SDL_main(int, char**) {
         bool playing=false;
         bool scriptsStarted=false;
         Input::SetActive(false);
-        SDL_StartTextInput(window);
+        bool textInput=false;
         bool active = true;
         bool surfaceReady = true;
         while (!engine.ShouldClose()) {
@@ -138,6 +139,19 @@ extern "C" __attribute__((visibility("default"))) int SDL_main(int, char**) {
             else if (active && surfaceReady) engine.Update();
             else if(playing&&Bazzalt::Application::GetRunInBackground())engine.Update(false);
             else engine.ResetFrameClock();
+            bool wantsText=false;
+            auto& scene=engine.GetScene();
+            if(playing&&scene.HasSystem<Bazzalt::Runtime::GuiSystem>()){
+                auto focused=scene.GetEntity(scene.GetSystem<Bazzalt::Runtime::GuiSystem>().Focused);
+                if(focused){
+                    const auto* input=focused.TryGetComponent<Bazzalt::GuiTextInput>();
+                    wantsText=input&&input->Enabled&&input->Interactable&&!input->ReadOnly;
+                }
+            }
+            if(wantsText!=textInput){
+                if(wantsText)SDL_StartTextInput(window);else SDL_StopTextInput(window);
+                textInput=wantsText;
+            }
             const int rate = Bazzalt::Runtime::ApplicationAccess::GetEffectiveFrameRate();
             if(active&&rate>0)std::this_thread::sleep_until(started+std::chrono::duration<double>(1.0/rate));
             else if(!active)std::this_thread::sleep_for(std::chrono::milliseconds(20));

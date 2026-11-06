@@ -92,6 +92,13 @@ def Test(runtime,cooker):
             else:raise RuntimeError('Android game did not shut down its script lifecycle')
             print('Android runtime passed',backend,delivery,flush=True)
     finally:
+        pixels=subprocess.run([str(adb),'exec-out','screencap','-p'],capture_output=True,timeout=30).stdout
+        if pixels:(root/'last-screen.png').write_bytes(pixels)
+        subprocess.run([str(adb),'shell','uiautomator','dump','/sdcard/bazzalt-window.xml'],capture_output=True,timeout=30)
+        state=subprocess.run([str(adb),'shell','cat','/sdcard/bazzalt-window.xml'],capture_output=True,timeout=30).stdout
+        (root/'window.txt').write_bytes(state)
+        files=subprocess.run([str(adb),'shell','run-as',PACKAGE,'find','.','-type','f'],capture_output=True,timeout=30).stdout
+        (root/'files.txt').write_bytes(files)
         logs=subprocess.run([str(adb),'logcat','-d'],capture_output=True,timeout=30).stdout
         (root/'logcat.txt').write_bytes(logs)
         subprocess.run([str(adb),'shell','am','force-stop',PACKAGE],capture_output=True,timeout=30)
