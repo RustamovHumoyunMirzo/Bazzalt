@@ -70,6 +70,7 @@ extern "C" __attribute__((visibility("default"))) int SDL_main(int, char**) {
         Require(native && engine.CreateEditorViewport(1, reinterpret_cast<std::uintptr_t>(native), false, width, height), "Could not create Android game surface");
         Events::Emit({Bazzalt::ApplicationEventType::OnPostWindowCreate});
         bool playing=false;
+        bool scriptsStarted=false;
         Input::SetActive(false);
         SDL_StartTextInput(window);
         bool active = true;
@@ -121,14 +122,17 @@ extern "C" __attribute__((visibility("default"))) int SDL_main(int, char**) {
             }
             Events::ThrowIfFailed();
             if(active&&surfaceReady&&!playing){
-                engine.RenderEditorFrame();
+                if(scriptsStarted)engine.Update();
+                else engine.RenderEditorFrame();
                 const bool ready=engine.WaitForViewportFrame(1);
                 const auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(started-introStarted).count();
                 Require(ready||elapsed<60000,"Android renderer startup timed out");
                 if(ready&&(!brand||elapsed>=duration||Bazzalt::Runtime::AndroidPlatform::IntroSkipped())){
-                    check(engine.StartScripts());engine.Update();
-                    Require(engine.WaitForViewportFrame(1),"First gameplay frame did not finish");
-                    Bazzalt::Runtime::AndroidPlatform::FinishIntro();playing=true;Input::SetActive(true);
+                    if(!scriptsStarted){
+                        check(engine.StartScripts());scriptsStarted=true;engine.ResetFrameClock();
+                    }else{
+                        Bazzalt::Runtime::AndroidPlatform::FinishIntro();playing=true;Input::SetActive(true);
+                    }
                 }
             }
             else if (active && surfaceReady) engine.Update();
