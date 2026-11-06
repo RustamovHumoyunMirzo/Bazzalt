@@ -82,7 +82,7 @@ def Test(runtime,cooker):
                 raise RuntimeError('Unexpected Android save preference keys')
             keys=Run([adb,'shell','run-as',PACKAGE,'ls','no_backup/keys']).stdout
             if '.key' not in keys:raise RuntimeError('Encrypted content did not provision a Keystore-protected key file')
-            Run([adb,'shell','input','keyevent','KEYCODE_BACK'])
+            Run([adb,'shell','input','keyevent','KEYCODE_Q'])
             deadline=time.monotonic()+20
             shutdown=marker.replace('smoke.txt','shutdown.txt')
             while time.monotonic()<deadline:

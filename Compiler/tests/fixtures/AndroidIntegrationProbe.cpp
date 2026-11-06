@@ -1,5 +1,6 @@
 #include <Bazzalt/Script.h>
 #include <Bazzalt/Application.h>
+#include <Bazzalt/Input.h>
 #include <Bazzalt/Material.h>
 #include <Bazzalt/SaveGame.h>
 #include <Bazzalt/Components/PrimitiveObject.h>
@@ -47,6 +48,7 @@ public:
     }
 
     void OnUpdate(float) override {
+        if (Bazzalt::Input::GetKeyDown(Bazzalt::KeyCode::Q)) Bazzalt::Application::Quit();
         if (++Frames != 45) return;
         auto* scene = GetEntity().GetScene();
         const float height = Cube.GetWorldTransform().Position.Y;
