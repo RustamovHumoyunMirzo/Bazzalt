@@ -118,15 +118,15 @@ def _ExecuteLocked(request,job,base,identity,cancel):
     previous.write_text(json.dumps(sorted(retained)),encoding='utf-8')
     relative=SafeName(request['project']);project=root.joinpath(*relative.parts)
     settings=Load(project);target=settings['target']['platform']
-    if target!=HostPlatform():raise ValueError('The worker operating system does not match the selected game target')
+    if target not in (HostPlatform(),'android'):raise ValueError('The worker operating system does not match the selected game target')
     if request.get('runtime'):settings['platforms'][target]['runtime_directory']=request['runtime']
-    settings['platforms'][target]['build_method']='native'
+    settings['platforms'][target]['build_method']='android_ndk' if target=='android' else 'native'
     settings['platforms'][target]['toolchain']='' # Client paths are not valid on the worker; use its explicit override.
     settings['packaging']['archive']=True;Save(project,settings)
     app=ToolsRoot()
     runtime=Path(settings['platforms'][target]['runtime_directory']) if settings['platforms'][target]['runtime_directory'] else app/'RuntimeTemplates'/(target+'-'+settings['platforms'][target]['architecture'])
     cooker=app/('BazzaltCooker.exe' if HostPlatform()=='windows' else 'BazzaltCooker')
-    result=Build(project,runtime,cooker,compiler_path=request.get('compiler',''),cancel=cancel)
+    result=Build(project,runtime,cooker,compiler_path=request.get('compiler',''),cancel=cancel,configuration=request.get('configuration','release'))
     with result.open('rb') as file:digest=hashlib.file_digest(file,'sha256').hexdigest()
     Emit('remote_complete','Remote build completed',output=str(result),sha256=digest,size=result.stat().st_size)
     if request.get('remove_intermediates'):

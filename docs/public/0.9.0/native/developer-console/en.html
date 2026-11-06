@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="CVar.GetInfo returns a copy containing Definition, Type, Value and optional PendingValue; GetAll returns sorted copies, optionally filtered by prefix. Unregister removes a variable; UnregisterCommand removes a command by handle. Complete accepts command prefixes and CVar-name arguments such as &quot;set game.sp&quot;. GetHistory/ClearHistory manage command recall. Message queries accept ConsoleFilter by level, exact source and text substring. Clear also clears matching mirrored editor messages.">
+  <title>Developer console and CVars in C++ | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / C++ / Developer console and CVars in C++</nav>
+      <article class="doc"><h1>Developer console and CVars in C++</h1><h2 id="cpp">Register from C++</h2><pre><code>#include &lt;Bazzalt/DeveloperConsole.h&gt;
+#include &lt;Bazzalt/CVar.h&gt;
+// Inside a subsystem or script lifecycle callback on the engine thread:
+Bazzalt::DeveloperConsole::SetEnabled(true); // opt in for standalone development
+Bazzalt::CVarDefinition speed;
+speed.Name = "game.speed";
+speed.Description = "Movement speed in metres per second";
+speed.DefaultValue = 4.0; // double; use std::int64_t(...) for integer CVars
+speed.Minimum = 0; speed.Maximum = 30;
+speed.Flags = Bazzalt::CVarFlags::Archive;
+Bazzalt::CVar::Register(speed);
+const double value = std::get&lt;double&gt;(Bazzalt::CVar::GetValue("game.speed"));
+auto handle = Bazzalt::DeveloperConsole::RegisterCommand(
+    {"game.ping", "Check command dispatch", "game.ping", false},
+    [](const std::vector&lt;std::string&gt;&amp; args) {
+        if (!args.empty()) throw std::invalid_argument("game.ping takes no arguments");
+        return std::string("pong");
+    });
+auto result = Bazzalt::DeveloperConsole::Execute("game.speed 6.5");
+if (!result.Success) { /* result.Output explains rejection */ }
+Bazzalt::DeveloperConsole::Log("A runtime message");</code></pre><p>CVar.GetInfo returns a copy containing Definition, Type, Value and optional PendingValue; GetAll returns sorted copies, optionally filtered by prefix. Unregister removes a variable; UnregisterCommand removes a command by handle. Complete accepts command prefixes and CVar-name arguments such as "set game.sp". GetHistory/ClearHistory manage command recall. Message queries accept ConsoleFilter by level, exact source and text substring. Clear also clears matching mirrored editor messages.</p><h2 id="concepts">Commands and CVars</h2><p>A command performs an action. A console variable (CVar) stores a named, typed setting that code can read and tune. Names are process-wide, case-insensitive ASCII letters, numbers, dot, dash and underscore; a name cannot start with a number. Duplicate command/CVar names are rejected, including collisions with built-in commands. Register shared names once, normally in a global subsystem after the services it uses are ready.</p><p>DeveloperConsole works in standalone games. The existing Console API remains editor-only logging. DeveloperConsole.Log writes a bounded runtime store and mirrors output to the editor when present. The developer console is enabled in the editor, but standalone games must explicitly enable it from trusted startup code. Enabled state does not pause simulation. Showing its overlay captures gameplay input for that tick; closing keys are consumed too. Its GUI scene is private and is never saved into game scenes.</p><h2 id="commands">Built-in commands</h2><table><thead><tr><th>Syntax</th><th>Behavior</th></tr></thead><tbody><tr><td>help [name]</td><td>Syntax and descriptions.</td></tr><tr><td>commands [prefix], cvars [prefix]</td><td>List registered names/settings.</td></tr><tr><td>get name, name</td><td>Read a CVar.</td></tr><tr><td>set name value, name value</td><td>Write a typed value.</td></tr><tr><td>reset name, toggle name</td><td>Restore default, or invert a Boolean.</td></tr><tr><td>echo text, clear, history</td><td>Write output, clear messages, list entered commands.</td></tr><tr><td>app.quit [exitCode]</td><td>Request normal shutdown, exit code 0–255.</td></tr></tbody></table><p>Use quotes for a value containing spaces, or an empty string: <code>set game.title "Two words"</code>, <code>set game.title ""</code>. Escaped quotes/backslashes are supported. This is not a shell: no process execution, environment expansion, command chaining or script-file execution. Semicolons in arguments remain text. Lines are limited to 4096 bytes and 64 arguments. Exceptions become failed ConsoleResult values and error messages. Custom C++ handlers must return promptly; schedule expensive work through Jobs.</p><h2 id="types">Types, flags and change events</h2><p>DefaultValue fixes a CVar’s Boolean, signed 64-bit integer, double or string type. C++ writes must match exactly. Lua integers can be written to float CVars without making common numeric literals awkward; fractional numbers cannot be written to integer CVars. Numeric Minimum/Maximum are inclusive; invalid, out-of-range and nonfinite values are rejected. Strings have a 4096-byte budget. SetFromString uses locale-independent parsing and rejects trailing junk.</p><table><thead><tr><th>Flag</th><th>Effect</th></tr></thead><tbody><tr><td>ReadOnly</td><td>Writes, reset, toggle and configuration import are rejected.</td></tr><tr><td>Archive</td><td>Included by ExportArchive; only archived CVars may be imported.</td></tr><tr><td>Cheat</td><td>Requires host SetCheatsAllowed(true); disabled by default. Disabling cheats restores cheat CVars to defaults and discards their pending changes.</td></tr><tr><td>RestartRequired</td><td>Writes update PendingValue while the effective Value stays unchanged. The host applies pending changes at a safe restart boundary.</td></tr></tbody></table><p>Registration accepts an optional change callback; Subscribe observes changes globally. CVarChange contains Name, Previous, Value and Pending. Repeating an unchanged value does not notify. Callback exceptions are logged after the change commits. Recursion is limited to 16 levels. ApplyPendingChanges commits latched values and sends effective-value events; it does not restart the process or recreate a renderer automatically.</p><h2 id="builtins">Engine tunables</h2><p>app.target_fps and app.background_fps accept 0–1000; zero is uncapped. app.run_in_background is Boolean. Writes call the real Application controls. Frame-rate and background scheduling policies are honored by the standalone player; the editor retains its own UI tick cadence. time.scale is a cheat-protected 0–100 float and updates the real gameplay clock. debug.stats displays live FPS/frame count in the open runtime console. These tunables apply when their CVar changes; direct calls to the separate Application/Time APIs do not automatically rewrite the stored CVar value.</p><h2 id="archive">Configuration and lifetime</h2><p>ExportArchive returns a name-to-text map including pending restart values. Persist that map in your game’s configuration or SaveGame slot; the console does not choose a file path, execute configuration text or store secrets. ImportArchive validates every name, type, flag and bound before publishing changes; callbacks run after all values are committed. Unknown names reject the import, so register your variables first and migrate old configuration keys explicitly.</p><p>Commands, variable callbacks and subscriptions inherit the registering native module or Lua VM owner. They disconnect when scripts stop/unload; native code stays leased while callbacks execute. Compatible CVar values survive owner teardown until re-registration in the same application, within a bounded 4096-entry recovery store. Register callbacks from lifecycle methods, not unowned static storage. During hot reload, register again in OnReload as well as OnCreate: the old VM’s functions are never reused. Avoid storing callback functions or CVarDefinition userdata in reload state; keep descriptors local and transfer ordinary data.</p><p>Registration, variable access and command execution belong on the engine thread. Log, GetMessages and Clear support worker threads. Limits: 4096 CVars, 4096 custom commands and 4096 change listeners. History defaults to 256 lines (0–4096 configurable); output defaults to 2048 messages (1–65536 configurable), with an additional fixed 8 MiB text/source byte budget. Oldest messages are evicted when either budget is reached. Handles are monotonic; removing an old command handle cannot remove a later registration. SetEnabled(false) hides the overlay and rejects Execute, but trusted gameplay can still read/write CVars. Cheat flags and disabled state are development controls, not a multiplayer authority/security boundary.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../animation/en.html"><small>Previous</small>Animation in C++</a>
+<a class="next" href="../global-events/en.html"><small>Next</small>C++ Global Events</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#cpp">Register from C++</a><a class="toc-link" href="#concepts">Commands and CVars</a><a class="toc-link" href="#commands">Built-in commands</a><a class="toc-link" href="#types">Types, flags and change events</a><a class="toc-link" href="#builtins">Engine tunables</a><a class="toc-link" href="#archive">Configuration and lifetime</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

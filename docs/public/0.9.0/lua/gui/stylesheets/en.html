@@ -1,0 +1,103 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Stylesheets are imported .css assets. Assign their UUID to GuiElement.Stylesheet for a whole GUI Frame, or GuiElement.Stylesheet for a subtree. A nested Frame starts a new scope. Existing explicit component fields remain authored fallbacks.">
+  <title>GUI stylesheets in Lua | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / GUI in Lua / GUI stylesheets in Lua</nav>
+      <article class="doc"><h1>GUI stylesheets in Lua</h1>
+<p>Stylesheets are imported .css assets. Assign their UUID to GuiElement.Stylesheet for a whole GUI Frame, or GuiElement.Stylesheet for a subtree. A nested Frame starts a new scope. Existing explicit component fields remain authored fallbacks.</p>
+<h2 id="example">Assign metadata and styles</h2>
+<p>This example runs in a behavior callback. stylesheetUUID is an existing imported asset UUID selected by your game/editor code; it is not a path or source-code string.</p>
+<pre><code>local B = Bazzalt
+local element = self.Entity:HasComponent("GuiElement")
+    and self.Entity:GetComponent("GuiElement")
+    or self.Entity:AddComponent("GuiElement")
+element.Stylesheet = stylesheetUUID
+element.ID = "play"
+element.Classes = "primary wide"
+element.Tags = "action navigation"
+element.Attributes = '[state="active"]'
+self.Entity:SetComponent("GuiElement", element)
+
+-- After the next automatic layout, inspect computed values:
+local text = B.GUI.ResolveText(self.Entity)
+local bounds = B.GUI.GetBounds(self.Entity)
+local diagnostics = B.GUI.GetStyleDiagnostics(self.Entity)</code></pre>
+<h2 id="rules">Rules and scope</h2>
+<p>Classes/tags are space-separated tokens, without leading dots. Attributes use presence/exact forms such as [disabled] or [state="active"]. Node types are Frame, Button, TextInput, Image, Text, Rectangle and Container. An empty ID uses the entity name. Tags are queried with [tags~="action"]. Actual input supplies hover, active, focus and disabled states.</p>
+<p>See the <a href="../../../native/gui/stylesheets/en.html">complete stylesheet language/application contract</a> for supported properties, asset references, inheritance and diagnostics. C++ and Lua receive the same computed results; there is no Lua-only CSS renderer.</p><h2 id="required-properties">Typed stylesheet inputs</h2><p>Declare <code>@require(name, default, type, ...);</code> at a stylesheet root, then use <code>require(name)</code> in its rules. Assign that stylesheet to GuiElement to generate inspector fields, including typed project asset pickers. Scene saves retain per-element overrides. See the <a href="../../../native/gui/stylesheets/en.html#required-properties">stylesheet input syntax and types</a> for all declarations, bounds, vectors and enum options.</p>
+<pre><code>local B = Bazzalt
+local fields = B.GUI.GetStylesheetProperties(stylesheetUUID)
+assert(B.GUI.SetStyleProperty(entity, "accent", "#ff8844"))
+assert(B.GUI.SetStyleProperty(entity, "caption", '\"Start\"'))
+local value = B.GUI.GetStyleProperty(entity, "caption")
+B.GUI.ResetStyleProperty(entity, "accent")</code></pre><p>Values are CSS literals. String literals include their quotes; textures/fonts use asset("uuid") or none. Invalid values return false. These service methods update the actual entity directly; no component copy/write-back is needed. Field descriptors contain Name, Type, DefaultValue, Label, Tooltip, HasMinimum, HasMaximum, Minimum, Maximum and Options.</p><h2 id="runtime-css">Editing CSS during play</h2>
+<p>Each GuiElement can have a private runtime stylesheet and inline declarations. These are instance data: editing one entity does not modify the shared .css asset or another entity. Runtime edits are temporary and are not written to scene files. They affect the next GUI layout/render in the same ordinary frame pipeline, including Spatial and Camera-Bound Frames.</p>
+<p>GetStylesheetCSS (or GuiCSS.GetBaseText) reads the directly assigned asset source. GetCSS returns the additional runtime stylesheet text; SetCSS replaces that layer and AppendCSS adds rules after it. The assigned asset remains the base layer. An empty replacement removes the additional layer. Inline values override normal stylesheet rules; author !important rules still win over normal inline values. GetCSSProperty reads an inline declaration, not a computed pixel value. Use GetBounds and ResolveStyle for effective layout and appearance.</p>
+<table><thead><tr><th>Operation</th><th>Purpose</th></tr></thead><tbody>
+<tr><td>GetCSSStyle(entity)</td><td>Returns a lightweight GuiCSS handle for object-style editing.</td></tr>
+<tr><td>GetCSS / SetCSS / AppendCSS</td><td>Read, replace or append the private runtime stylesheet.</td></tr>
+<tr><td>GetCSSProperty / SetCSSProperty / RemoveCSSProperty</td><td>Read, set or remove one inline declaration. Removing it restores the cascade.</td></tr>
+<tr><td>SetCSSRule / RemoveCSSRule</td><td>Replace or remove matching top-level selector rules. Pass declarations without outer braces. Replace the enclosing stylesheet to edit rules inside a media/viewport block.</td></tr>
+<tr><td>SetCSSKeyframes / RemoveCSSKeyframes</td><td>Replace or remove a named top-level keyframe definition. Pass the frame blocks as text.</td></tr>
+</tbody></table>
+<p>GuiCSS exposes Get, Set, Remove, GetText, GetBaseText, Replace, Append, SetRule, RemoveRule, SetKeyframes and RemoveKeyframes. Its owner must have an enabled GuiElement to render the styles. It does not own the entity. Invalid/stale owners and malformed edits return false; rejected edits leave the previous valid source intact. Set and rule-edit operations cannot inject additional rules through a property value.</p>
+<h2 id="motion">Transitions and keyframes</h2>
+<pre><code>Button {
+  opacity: 1;
+  width: 120px;
+  transition: width 250ms ease-out, opacity 150ms linear;
+}
+Button:hover { width: 170px; }
+@keyframes pulse {
+  from { opacity: 0.4; }
+  50% { opacity: 1; }
+  to { opacity: 0.4; }
+}
+.busy { animation: pulse 1.2s ease-in-out infinite alternate; }</code></pre>
+<p>Transitions respond to changed cascade values, including inline runtime edits, hover and requirement overrides. A replacement transition starts at the last displayed value rather than snapping back. No entrance transition runs on the initial layout. Define the base value explicitly so removal has a target to transition back to.</p>
+<p>Supported transition longhands are transition-property, transition-duration, transition-delay and transition-timing-function. Comma lists repeat when shorter than the property list; all selects interpolable changed properties and none disables transitions. Timings include s/ms, negative delay, linear, ease, ease-in, ease-out, ease-in-out, cubic-bezier(x1,y1,x2,y2), steps(count,start/end), step-start and step-end. Colors and matching numeric value structures interpolate; incompatible units, textures and discrete keywords change directly.</p>
+<p>Animation supports animation-name, animation-duration, animation-delay, animation-timing-function, animation-iteration-count (fractional or infinite), animation-direction (normal, reverse, alternate, alternate-reverse), animation-fill-mode (none, forwards, backwards, both) and animation-play-state (running, paused), plus the shorthand above and comma-separated animations. Declare keyframes outside conditional viewport/media blocks. Keyframes accept from, to, percentages and grouped offsets. Missing endpoints use the authored base value when available. Later animations override earlier animations on the same property, !important values override animations, and active transitions override both. Changing the definition restarts its timeline; pause/resume retains elapsed time. Time follows the engine game clock, including time scale and pause.</p>
+<p>The GUI implements its own CSS dialect, not a browser DOM. Animate supported GUI layout/paint properties; parsing a web-only property does not add renderer support. Interpolation requires compatible units/structure, so use consistent units across endpoints. CSS transforms, additive animation composition and per-keyframe timing overrides are not provided. Motion shorthands and longhands follow normal declaration order and cascade priority. Motion remains bounded: 64 simultaneous animations per element, 1024 keyframe offsets per definition, 256 KiB runtime stylesheet text, 128 inline properties and 64 KiB total inline data. Existing parser, hierarchy, filter and renderer limits continue to apply.</p>
+<pre><code>local css = Bazzalt.GUI.GetCSSStyle(button)
+css:Set(&quot;width&quot;, &quot;170px&quot;)
+css:SetKeyframes(&quot;pulse&quot;, &quot;from{opacity:0.4}to{opacity:1}&quot;)
+css:Set(&quot;animation&quot;, &quot;pulse 1s linear infinite alternate&quot;)
+css:Set(&quot;animation-play-state&quot;, &quot;paused&quot;)</code></pre></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../layout/en.html"><small>Previous</small>GUI layout and inheritance in Lua</a>
+<a class="next" href="../../extensions/en.html"><small>Next</small>Using extension SDKs in Lua</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Assign metadata and styles</a><a class="toc-link" href="#rules">Rules and scope</a><a class="toc-link" href="#required-properties">Typed stylesheet inputs</a><a class="toc-link" href="#runtime-css">Editing CSS during play</a><a class="toc-link" href="#motion">Transitions and keyframes</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

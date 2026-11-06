@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="The Controls menu at the right of the Scene toolbar shares the existing Gizmos, Scene Icons, Grid and Statistics toggles. Extensions can add checked scene tools below them. Checked tools can handle pointer/key events, selection changes and scene changes; returning true from a pointer/key callback consumes that event before normal scene navigation or selection.">
+  <title>Scene extension tools | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Editor manual / Using extensions / Scene extension tools</nav>
+      <article class="doc"><h1>Scene extension tools</h1><p>The Controls menu at the right of the Scene toolbar shares the existing Gizmos, Scene Icons, Grid and Statistics toggles. Extensions can add checked scene tools below them. Checked tools can handle pointer/key events, selection changes and scene changes; returning true from a pointer/key callback consumes that event before normal scene navigation or selection.</p><h2 id="manifest">Register a tool</h2><pre><code>AssetRegistry:
+  - Id: paint_source
+    Path: Editor/Paint.lua
+Scripts:
+  Paint:
+    Id: paint_source
+    Scope: Editor
+Extends:
+  Scene:
+    - Id: paint
+      Title: Paint terrain
+      Script: Paint
+      Function: OnRun
+      Shortcut: Ctrl+Alt+P
+      Checked: false</code></pre><p>Extends.Scene is a list with unique Id values. The script must be editor-scoped Lua. Function defaults to OnRun; Shortcut is optional and may not collide with existing editor actions. Checkable defaults to true. Set Checkable: false for a one-shot menu/shortcut command; its function receives enabled=true and invoked=true. Controls remember their checked state in editor settings. Checking a tool calls its function with enabled=true; unchecking calls it with enabled=false and removes its input/guide participation. On a new project, checked tools are initialized against that project.</p><p>Scene scripts run in their own Editor API VM. Existing EditorRegistry/entry adapters retain the declarative widget service; they do not share Lua globals with scene tool instances.</p><h2 id="events">Handle scene input</h2><pre><code>return {
+  OnRun = function(self, state)
+    self.enabled = state.enabled
+  end,
+  OnScenePointerDown = function(self, event)
+    if event.button ~= 1 then return false end
+    local hit = Editor.Raycast(event.origin, event.direction)
+    if hit then Editor.Log("Hit at " .. hit[1]) end
+    return true
+  end,
+  OnSelectionChanged = function(self, ids)
+    Editor.Log("Selected " .. #ids .. " objects")
+  end
+}</code></pre><p>Pointer tables contain x/y in logical viewport coordinates, button/buttons and modifiers using Qt integer values, plus world origin/direction arrays. Key tables contain key, text, repeat and modifiers. OnScenePointerMove and OnScenePointerUp use the same pointer shape; OnSceneKeyDown and OnSceneKeyUp use the key shape. OnSceneChanged receives active scene information; OnSelectionChanged receives entity UUID strings. Selection notifications include scene and programmatic selections and are coalesced over a short UI interval. Scene change notifications are coalesced; edits are not recursively echoed to their originating tool. These are authoring callbacks, not game lifecycle events. Input is suspended during Play.</p><h2 id="world">World tools and terrain authoring</h2><p>Use ScreenRay/Raycast for placement, GetEntity/GetEntities and SetTransform/SetComponentProperty for editing, and DrawLines for editor-only 3D guides. CreateMeshAsset writes a project OBJ from vertices and zero-based triangle indices; assign its returned asset UUID to a Mesh component. Larger terrain tools should work in bounded chunks. Asset writes are confined to Assets and do not expose arbitrary filesystem or process access. All panels can be discovered/opened/closed through the shared API; assets can be queried and selected. See the <a href="../editor-api/en.html">full API contract</a>.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../editor-api/en.html"><small>Previous</small>Editor Lua API</a>
+<a class="next" href="../../glossary/en.html"><small>Next</small>Terms used in these guides</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#manifest">Register a tool</a><a class="toc-link" href="#events">Handle scene input</a><a class="toc-link" href="#world">World tools and terrain authoring</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

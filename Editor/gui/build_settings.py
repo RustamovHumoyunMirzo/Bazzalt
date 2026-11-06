@@ -8,6 +8,10 @@ from bazzalt.platforms import HostPlatform,HostArchitecture
 class BuildSettingsDialog(QDialog):
     def __init__(self,editor):
         super().__init__(editor);self.Editor=editor;self.Tr=editor.Localization.Translate;self.Project=Path(editor.Runtime.ProjectInfo()['project_path']);self.Values=Load(self.Project);self.Controls={};self.PlatformControls={};self.PlatformGroups={};self._applying_preset=False
+        from Compiler.android_tools import Discover
+        detected=Discover();android=self.Values['platforms']['android']
+        for key in ('sdk_path','ndk_path'):
+            if not android[key]:android[key]=detected[key]
         if not PathFor(self.Project).exists() and HostPlatform() in self.Values['platforms']:
             self.Values['target']['platform']=HostPlatform()
             self.Values['platforms'][HostPlatform()]['architecture']=HostArchitecture()
@@ -27,15 +31,18 @@ class BuildSettingsDialog(QDialog):
                     header.toggled.connect(expanded);expanded(header.isChecked())
                     for key,value in values.items():
                         if key.startswith('wsl_') and platform!='linux':continue
-                        options=(('x64','arm64') if platform=='macos' else ('x64','x86','arm64')) if key=='architecture' else (('automatic','metal') if platform=='macos' else ('automatic','vulkan','opengl')) if key=='backend' else ('embedded','file','environment',*(['dpapi_user'] if platform=='windows' else ['keychain'] if platform=='macos' else [])) if key=='key_storage' else None
+                        options=(('x64','arm64') if platform in ('macos','android') else ('x64','x86','arm64')) if key=='architecture' else (('automatic','metal') if platform=='macos' else ('automatic','opengles','vulkan') if platform=='android' else ('automatic','vulkan','opengl')) if key=='backend' else (('android_keystore',) if platform=='android' else ('embedded','file','environment',*(['dpapi_user'] if platform=='windows' else ['keychain'] if platform=='macos' else []))) if key=='key_storage' else None
+                        if platform=='android' and key in ('toolchain','sysroot','wsl_distribution','wsl_compiler','wsl_runtime'):continue
+                        if key=='delivery':options=('apk','split_apk','obb','external_data')
+                        if key=='orientation':options=('landscape','portrait','sensor')
                         if key=='display_server':options=('automatic','x11','wayland')
                         if key=='build_method':
                             from Compiler.cross import METHODS
-                            options=('automatic','native','content_only',*METHODS.get((HostPlatform(),platform),()))
+                            options=('automatic','android_ndk') if platform=='android' else ('automatic','native','content_only',*METHODS.get((HostPlatform(),platform),()))
                         field=self._Field(key,value,options);self.PlatformControls[(platform,key)]=field
-                        if key in ('runtime_directory','toolchain','sysroot'):
+                        if key in ('runtime_directory','toolchain','sysroot','sdk_path','ndk_path','icon','signing_keystore'):
                             fieldContainer=QWidget();row=QHBoxLayout(fieldContainer);row.setContentsMargins(0,0,0,0);row.addWidget(field,1);browse=QPushButton(self.Tr('remote.browse'));row.addWidget(browse)
-                            browse.clicked.connect(lambda _,f=field,k=key:self._BrowsePath(f,k));fields.addRow(self.Tr('build.field.'+key),fieldContainer)
+                            browse.clicked.connect(lambda _,f=field,k=key,p=platform:self._BrowsePath(f,k,p));fields.addRow(self.Tr('build.field.'+key),fieldContainer)
                         else:fields.addRow(self.Tr('build.field.'+key),field)
                     detect=QPushButton(self.Tr('build.detect_toolchain'));fields.addRow(detect);detect.clicked.connect(lambda _,p=platform:self._Detect(p))
                     form.addRow(container)
@@ -45,6 +52,7 @@ class BuildSettingsDialog(QDialog):
         for platform in self.Values['platforms']:self.PlatformControls[(platform,'key_storage')].currentIndexChanged.connect(self._Custom)
         self.Sections.currentRowChanged.connect(self.Pages.setCurrentIndex);self.Sections.setCurrentRow(0)
         self.TargetWarning=QLabel();self.TargetWarning.setWordWrap(True);root.addWidget(self.TargetWarning);self.Error=QLabel();self.Error.setWordWrap(True);root.addWidget(self.Error)
+        self.AndroidValidate=QPushButton(self.Tr('build.android_validate'));root.addWidget(self.AndroidValidate);self.AndroidValidate.clicked.connect(self._ValidateAndroid)
         self.Controls[('target','platform')].currentIndexChanged.connect(self._PlatformChanged)
         for (platform,key),field in self.PlatformControls.items():
             if key in ('architecture','key_storage','build_method'):field.currentIndexChanged.connect(self._TargetWarning)
@@ -52,21 +60,34 @@ class BuildSettingsDialog(QDialog):
         for platform in self.Values['platforms']:self._ArchitectureChanged(platform)
         self._PlatformChanged()
         buttons=QHBoxLayout();buttons.addStretch();cancel=QPushButton(self.Tr('preferences.cancel'));apply=QPushButton(self.Tr('preferences.apply'));buttons.addWidget(cancel);buttons.addWidget(apply);root.addLayout(buttons);cancel.clicked.connect(self.reject);apply.clicked.connect(self._Apply)
+    def _ValidateAndroid(self):
+        try:
+            from Compiler.android_tools import Validate
+            value=self.GetValues();profile=value['platforms']['android'];Validate(profile,profile['architecture'])
+            self.Error.setText(self.Tr('build.android_valid'))
+        except (OSError,ValueError,KeyError) as error:self.Error.setText(str(error))
+
     def _Field(self,key,value,options=None):
-        choices={'platform':('windows','linux','macos'),'mode':('windowed','maximized','borderless','fullscreen'),'format':('pak','loose'),'preset':('low','medium','high','very_high','custom'),'encryption':('none','aes-256-gcm')};options=options or choices.get(key)
+        choices={'platform':('windows','linux','macos','android'),'mode':('windowed','maximized','borderless','fullscreen'),'format':('pak','loose'),'preset':('low','medium','high','very_high','custom'),'encryption':('none','aes-256-gcm')};options=options or choices.get(key)
         if options:
             field=QComboBox()
             for option in options:field.addItem(self.Tr('build.option.'+option),option)
             field.setCurrentIndex(field.findData(value));return field
         if isinstance(value,bool):field=QCheckBox();field.setChecked(value);return field
         if isinstance(value,int):
-            field=QSpinBox();low,high=(320,16384) if key=='width' else (200,16384) if key=='height' else (4,256) if key=='chunk_mb' else (0,30000) if key=='duration_ms' else (48,512) if key=='logo_size' else (0,1024);field.setRange(low,high);field.setValue(value);return field
+            field=QSpinBox();low,high=(320,16384) if key=='width' else (200,16384) if key=='height' else (4,256) if key=='chunk_mb' else (0,30000) if key=='duration_ms' else (48,512) if key=='logo_size' else (26,36) if key in ('min_sdk','target_sdk','compile_sdk') else (1,2100000000) if key=='version_code' else (0,1024);field.setRange(low,high);field.setValue(value);return field
         if key in ('license','description','include_assets','exclude_assets'):field=QPlainTextEdit(str(value));field.setMaximumHeight(90);return field
         return QLineEdit(str(value))
-    def _BrowsePath(self,field,key):
-        value=QFileDialog.getOpenFileName(self,self.Tr('remote.browse'),field.text())[0] if key=='toolchain' else QFileDialog.getExistingDirectory(self,self.Tr('remote.browse'),field.text())
+    def _BrowsePath(self,field,key,platform=None):
+        filters={name:self.Tr('build.icon_filter.'+name) for name in ('windows','linux','macos','android')}
+        file_filter=filters.get(platform,'') if key=='icon' else ''
+        value=QFileDialog.getOpenFileName(self,self.Tr('remote.browse'),field.text(),file_filter)[0] if key in ('toolchain','icon','signing_keystore') else QFileDialog.getExistingDirectory(self,self.Tr('remote.browse'),field.text())
         if value:field.setText(value)
     def _Detect(self,platform):
+        if platform=='android':
+            from Compiler.android_tools import Discover
+            for key,value in Discover().items():self.PlatformControls[(platform,key)].setText(value)
+            self._TargetWarning();return
         from Compiler.cross import Detect,METHODS
         method=self.PlatformControls[(platform,'build_method')].currentData();arch=self.PlatformControls[(platform,'architecture')].currentData();choices=(('native',) if platform==HostPlatform() else METHODS.get((HostPlatform(),platform),())) if method=='automatic' else (method,)
         for option in choices:
@@ -76,7 +97,7 @@ class BuildSettingsDialog(QDialog):
         self.Error.setText(self.Tr('build.toolchain_not_found'))
     def _ArchitectureChanged(self,platform):
         backend=self.PlatformControls[(platform,'backend')];current=backend.currentData()
-        options=('automatic','metal') if platform=='macos' else ('automatic','vulkan') if platform=='windows' and self.PlatformControls[(platform,'architecture')].currentData()=='arm64' else ('automatic','vulkan','opengl')
+        options=('automatic','metal') if platform=='macos' else ('automatic','opengles','vulkan') if platform=='android' else ('automatic','vulkan') if platform=='windows' and self.PlatformControls[(platform,'architecture')].currentData()=='arm64' else ('automatic','vulkan','opengl')
         backend.blockSignals(True);backend.clear()
         for option in options:backend.addItem(self.Tr('build.option.'+option),option)
         backend.setCurrentIndex(max(0,backend.findData(current)));backend.blockSignals(False)
@@ -86,6 +107,9 @@ class BuildSettingsDialog(QDialog):
         for platform,(header,_) in self.PlatformGroups.items():
             font=header.font();font.setBold(platform==selected);header.setFont(font)
         self.PlatformGroups[selected][0].setChecked(True)
+        self.AndroidValidate.setVisible(selected=='android')
+        for key in ('mode','width','height','resizable'):
+            self.Controls[('window',key)].setEnabled(selected!='android')
         for section,key in (('target','architecture'),('target','runtime_directory'),('target','build_method'),('window','backend'),('security','key_storage')):self.Controls[(section,key)]=self.PlatformControls[(selected,key)]
         self._TargetWarning()
     def _TargetWarning(self,*_):

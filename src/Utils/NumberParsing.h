@@ -54,6 +54,12 @@ template<class T> bool ParseDecimalFallback(std::string_view text,T& value) {
 template<class T> bool ParseNumber(std::string_view text,T& value) {
     static_assert(std::is_arithmetic_v<T> && !std::is_same_v<T,bool>);
     if(text.empty())return false;
+#if defined(__ANDROID__)
+    // NDK headers declare floating-point from_chars implementations that are
+    // absent from the shared libc++ ABI. Use the locale-isolated decimal parser.
+    if constexpr(std::is_floating_point_v<T>) return ParseDecimalFallback(text,value);
+    else
+#endif
     if constexpr(requires(const char* begin,T& number){std::from_chars(begin,begin,number);}) {
         T parsed{};const auto end=text.data()+text.size();auto result=std::from_chars(text.data(),end,parsed);
         if(result.ec!=std::errc{}||result.ptr!=end)return false;

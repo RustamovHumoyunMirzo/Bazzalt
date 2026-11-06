@@ -12,7 +12,7 @@ class GameBuildController(QObject):
     def __init__(self,editor):
         super().__init__(editor);self.Editor=editor;self.Process=None;self.Progress=None;self.Completion=None;self._buffer=''
         editor.MenuBar.RemoteBuildRequested.connect(self.Remote)
-        editor.MenuBar.BuildSettingsRequested.connect(self.Settings);editor.MenuBar.BuildRequested.connect(lambda:self.Build(False));editor.MenuBar.BuildLaunchRequested.connect(lambda:self.Build(True))
+        editor.MenuBar.BuildSettingsRequested.connect(self.Settings);editor.MenuBar.BuildRequested.connect(lambda:self.Build(False,"release"));editor.MenuBar.BuildDebugRequested.connect(lambda:self.Build(False,"debug"));editor.MenuBar.BuildLaunchRequested.connect(lambda:self.Build(True))
     def Remote(self):
         from .gui.remote_build import RemoteBuildDialog
         RemoteBuildDialog(self.Editor).exec()
@@ -21,7 +21,7 @@ class GameBuildController(QObject):
             if self.Editor.Runtime.ProjectInfo().get('project_path'):BuildSettingsDialog(self.Editor).exec()
         except (OSError,ValueError,KeyError) as error:self._Message(str(error),True)
     def _Message(self,text,error=False):self.Editor.Console.AddMessage(text,ConsoleLevel.Error if error else ConsoleLevel.Info,True,self.Editor.Localization.Translate('menu.build'))
-    def Build(self,launch):
+    def Build(self,launch,configuration="release"):
         tr=self.Editor.Localization.Translate
         if self.Process is not None:return
         if self.Editor.Runtime.IsPlaying():self._Message(tr('build.stop_first'),True);return
@@ -41,6 +41,7 @@ class GameBuildController(QObject):
             else:
                 if getattr(sys,'frozen',False) or '__compiled__' in globals():raise ValueError(tr('build.tools_missing'))
                 program=sys.executable;arguments=['-m','Compiler.build'];cooker=root/('build/Editor/Release/BazzaltCooker.exe' if __import__('bazzalt.platforms',fromlist=['HostPlatform']).HostPlatform()=='windows' else 'build/Editor/BazzaltCooker')
+            arguments+=['--configuration',configuration]
             arguments+=['--project',str(project),'--runtime',str(runtime),'--cooker',str(cooker)]
             compiler=self.Editor.PreferenceValue('tools','compiler_path','')
             if compiler:arguments+=['--script-compiler',compiler]
@@ -48,7 +49,7 @@ class GameBuildController(QObject):
             process=QProcess(self);self.Process=process;self._buffer='';self._stderr='';self._error='';self._result_path='';self._launch_requested=launch;self._launch_error='';self._cancelled=False
             process.setProgram(program);process.setArguments(arguments);process.setWorkingDirectory(str(root));environment=QProcessEnvironment.systemEnvironment();environment.insert('PYTHONUTF8','1');environment.insert('PYTHONIOENCODING','utf-8');process.setProcessEnvironment(environment)
             process.readyReadStandardOutput.connect(self._Output);process.readyReadStandardError.connect(self._Stderr);process.finished.connect(self._Finished);process.errorOccurred.connect(self._Failed)
-            for action in (self.Editor.MenuBar.BuildAction,self.Editor.MenuBar.BuildLaunchAction):action.setEnabled(False)
+            for action in (self.Editor.MenuBar.BuildAction,self.Editor.MenuBar.BuildDebugAction,self.Editor.MenuBar.BuildLaunchAction):action.setEnabled(False)
             self.Progress=BuildProgressDialog(self.Editor);self.Progress.CancelRequested.connect(self.Cancel);self.Progress.show();process.start()
         except (OSError,ValueError,KeyError) as error:self._Message(str(error),True)
     def _Output(self):
@@ -77,7 +78,7 @@ class GameBuildController(QObject):
         if self.Process is None:return
         self._Output();self._Stderr()
         self.Process.deleteLater();self.Process=None
-        for action in (self.Editor.MenuBar.BuildAction,self.Editor.MenuBar.BuildLaunchAction):action.setEnabled(True)
+        for action in (self.Editor.MenuBar.BuildAction,self.Editor.MenuBar.BuildDebugAction,self.Editor.MenuBar.BuildLaunchAction):action.setEnabled(True)
         if getattr(self,'_cancelled',False) and code==2 and status!=QProcess.ExitStatus.CrashExit:
             self._cancelled=False
             if self.Progress is not None:self.Progress.Finish()

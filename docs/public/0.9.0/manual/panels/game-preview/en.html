@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="The Game viewport toolbar previews output without changing game build settings or saved camera components.">
+  <title>Game preview controls | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Editor manual / Panels / Game preview controls</nav>
+      <article class="doc"><h1>Game preview controls</h1><p>The Game viewport toolbar previews output without changing game build settings or saved camera components.</p><h2 id="cameras">Camera selection</h2><ul><li>Not specified uses the normal output composition, including split-screen viewports and camera priorities.</li><li>Choose a camera by name to preview just its perspective across the panel. The camera's render target and authored viewport/projection are restored after rendering; selection is an editor override.</li><li>None shows a black panel, including no overlay GUI.</li></ul><p>A disabled/deleted selected camera has no output. The list follows the active scene and returns to the default when its selected camera is removed. Switching projects resets the camera override.</p><h2 id="devices">Device size</h2><p>Free Aspect follows the available panel dimensions. Fixed landscape, portrait and tablet resolutions render to a captured target at the chosen pixel dimensions and fit the image into the panel without stretching. Pointer coordinates are mapped back to those pixels for game GUI interaction. Fixed-size previews use readback and can cost more than native Free Aspect; they are a simulator, not a change to the final executable window or camera asset.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../audio-mixer/en.html"><small>Previous</small>Audio Mixer panel</a>
+<a class="next" href="../../menus/en.html"><small>Next</small>Menus and play controls</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#cameras">Camera selection</a><a class="toc-link" href="#devices">Device size</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

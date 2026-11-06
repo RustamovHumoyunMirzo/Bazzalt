@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Include Bazzalt/PhysicsReplay.h. PhysicsReplay is a scene-scoped facade; its solver storage stays inside the sibling physics module. Call these methods after the world has started, outside a physics-step callback.">
+  <title>C++ deterministic physics and replay | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / C++ / C++ deterministic physics and replay</nav>
+      <article class="doc"><h1>C++ deterministic physics and replay</h1><p>Include Bazzalt/PhysicsReplay.h. PhysicsReplay is a scene-scoped facade; its solver storage stays inside the sibling physics module. Call these methods after the world has started, outside a physics-step callback.</p>
+<h2 id="setup">Configure and record</h2><pre><code>#include &lt;Bazzalt/PhysicsReplay.h&gt;
+
+auto replay = Bazzalt::PhysicsReplay::ForScene(scene);
+Bazzalt::PhysicsDeterminismSettings policy;
+policy.Enabled = true;
+policy.FixedDeltaTime = 1.0f / 60.0f;
+replay.SetDeterminismSettings(policy);
+
+Bazzalt::PhysicsReplaySettings limits;
+limits.MaxFrames = 600;
+limits.MaxMemoryBytes = 32ull * 1024 * 1024;
+replay.BeginRecording(limits);
+// Let the engine run fixed physics steps. Then:
+replay.EndRecording();</code></pre>
+<h2 id="rollback">Branch and replay</h2><pre><code>auto physics = scene.GetPhysics();
+auto settings = physics.GetSettings();
+settings.AutoSimulation = false;
+physics.SetSettings(settings);
+
+auto checkpoint = replay.CaptureState();
+physics.ApplyImpulse(ball, {1, 2, 0});
+physics.Simulate(policy.FixedDeltaTime);
+replay.RestoreState(checkpoint); // Velocities, contacts and poses rewind too.
+
+replay.BeginPlayback(false);
+replay.SeekFrame(10); // Only if FrameCount &gt; 10.
+while (replay.AdvancePlayback()) {
+    // Inspect fixed-step states; schedule rendering separately.
+}
+replay.StopPlayback();</code></pre><p>GetFrame returns an immutable checkpoint. GetHash returns a 16-character hexadecimal string: a non-cryptographic same-build diagnostic fingerprint; compare it to detect divergence during repeat-input tests, never as a security signature. GetStatus reports Tick, FrameCount, Cursor, MemoryBytes, LimitReached and AtEnd. Methods and settings are listed in the <a href="../reference/PhysicsReplay/en.html">API reference</a>.</p><h2 id="scope">Scope and compatibility</h2><p>A checkpoint belongs to one running physics world session. Stopping/restarting simulation invalidates it for restoration. Adding/removing/recreating physics bodies, changing collider geometry, relevant hierarchy or solver configuration rejects old checkpoints. Unrelated non-physics objects may be created or moved normally. Checkpoints include the solver, soft vertices and pinning, joints, vehicle state/inputs, queued forces, contacts, physics-related transforms and their ancestors. Restore does not replay collision callbacks.</p><p>This is physics rollback and state playback, not an input-driven whole-game replay. Script variables, application time, random generators, audio and non-physics gameplay are not rewound. Pause or gate gameplay that modifies the recorded physics world while playing back. Serialized replay files, topology-changing recordings and cross-session checkpoints are not supported in this version. States remain trusted opaque handles; the API never parses arbitrary native solver bytes.</p>
+<h2 id="determinism">Determinism requirements</h2><p>Enable PhysicsDeterminismSettings.Enabled and use its exact FixedDeltaTime for every simulation step. SingleThreaded defaults to true. Repeat the same commands in the same order, with the same assets and settings. Match the application fixed step to the physics fixed step. The Jolt source build enables BAZZALT_CROSS_PLATFORM_DETERMINISTIC_PHYSICS by default; imported SDKs may differ. IsSolverCrossPlatformDeterministic reports the loaded solver flag. It does not certify script math, procedural geometry, vehicle wrapper calculations or whole-game cross-platform lockstep. Test your shipping builds and gameplay across target machines. Jolt’s Architecture documentation, “Deterministic Simulation”, describes the upstream solver requirements.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../network-save/en.html"><small>Previous</small>Networking and player saves</a>
+<a class="next" href="../prefabs/en.html"><small>Next</small>C++ prefab assets</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#setup">Configure and record</a><a class="toc-link" href="#rollback">Branch and replay</a><a class="toc-link" href="#scope">Scope and compatibility</a><a class="toc-link" href="#determinism">Determinism requirements</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

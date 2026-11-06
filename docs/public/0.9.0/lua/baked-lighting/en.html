@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Saved probe lighting is available in Lua through Bazzalt.Lighting and the LightProbe component. Gameplay uses the baked scene directly. Baking is normally an editor authoring operation.">
+  <title>Baked lighting in Lua | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Lua / Baked lighting in Lua</nav>
+      <article class="doc"><h1>Baked lighting in Lua</h1><p>Saved probe lighting is available in Lua through Bazzalt.Lighting and the LightProbe component. Gameplay uses the baked scene directly. Baking is normally an editor authoring operation.</p><h2 id="sample">Read scene lighting</h2><pre><code>local scene = Bazzalt.SceneManager.GetActiveScene()
+local irradiance = Bazzalt.Lighting.Sample(scene,
+    Bazzalt.Vec3.new(0, 1, 0), Bazzalt.Vec3.new(0, 1, 0))</code></pre><p>Values are linear diffuse irradiance. No influence returns a zero vector. Pass world-space position and a nonzero normal. The same four-probe interpolation is used by lit materials.</p><h2 id="bake">Create and bake</h2><pre><code>local probes = Bazzalt.Lighting.CreateProbeGrid(scene,
+    Bazzalt.Vec3.new(-5, 1, -5), Bazzalt.Vec3.new(5, 5, 5), 2, 2, 2, 15)
+local settings = Bazzalt.LightBakeSettings.new()
+settings.Samples = 512
+settings.Bounces = 2
+request = Bazzalt.Lighting.BeginBake(scene, settings)
+-- Poll in a later tool update; do not block the engine thread.
+if request:GetStatus() == Bazzalt.LightBakeStatus.Complete then
+    if not request:Apply(scene) then
+        local reason = request:GetError()
+    end
+end</code></pre><p>Keep the request until it finishes and call request:Cancel() when abandoning work. Instance methods use a colon; Lighting service calls use a dot. Apply must run on the thread that started the request, validates the unchanged scene, and does not save files. Lighting.Clear(scene) removes coefficients without removing probe entities. Light.Mode accepts Bazzalt.LightMode.Realtime, Baked or Mixed. Mesh.ContributeGI and PrimitiveObject.ContributeGI opt static geometry into the snapshot. Invalid settings and scene geometry raise a script error; asynchronous failure is available through GetStatus and GetError. See the editor lighting guide for quality settings and material limitations.</p><h2 id="lightmaps">UV lightmaps</h2><p>Add a Lightmap component to static Primitive Object or Mesh entities, or select them and choose Add lightmaps to selection in Window &gt; Lighting. Resolution is a power of two from 16 to 4096. Padding is the gutter around each triangle chart. Increase resolution if the charts do not fit. Bake lighting writes a non-overlapping triangle-chart irradiance atlas. Runtime reconstructs chart coordinates from the baked world triangles, preserving the model’s original texture UV sets and material textures. This is non-directional diffuse lighting. A matching lightmap replaces probe diffuse at that surface; it is not added twice.</p><p>Moving a lightmapped entity invalidates its atlas until it returns to its baked transform or is rebaked. Animated/deformed geometry is unsuitable. Meshes need not have a pre-authored UV2 channel. Each triangle receives an equal-sized chart, so dense models need higher resolution or separate receivers. Disable the component to fall back to probes.</p><h2 id="reflections">Reflection captures</h2><p>Create a Reflection Probe in Window &gt; Lighting, or add the component to an entity. Position it in empty space. Resolution (4–256) controls each cubemap face. Radius limits influence; Intensity scales HDR radiance; Blend Distance feathers the edge into the scene environment. Box Projection uses Box Size as world-space half extents for local parallax correction. Bake lighting captures contributing static triangles, analytic lights and the cached HDR environment, then generates GGX-filtered roughness mip levels. Realtime lights appear in the capture as a frozen snapshot; rebake if they change.</p><p>The four strongest overlapping captures blend per fragment. Moving a capture disables its stale result until rebaked or restored. Disabling it removes its contribution. Native material BRDF, roughness, AO, clearcoat and environment fallback remain in use. A scene without an environment uses a black fallback, not an extra light.</p><h2 id="materials">Material support</h2><p>Built-in lit materials, original imported glTF PBR materials and cooked source surface shaders receive baked lighting. Imported textures and UV mappings are retained. Unlit materials and GUI overlays remain unlit. Source material compilation adds private engine parameters without adding them to the public material inspector. Existing precompiled opaque material packages must be rebuilt from source to participate; their bytecode cannot be safely rewritten.</p><h2 id="budgets">Budgets and data lifetime</h2><p>There is no 64-probe rendering cap. Up to 65,536 diffuse probes are supported as an explicit resource budget. A spatial lookup stores all overlapping influences; excessive overlap uses exact global lookup rather than silently dropping probes. The GPU atlas is bounded by hardware support and 4096×4096 RGBA32F texels. An oversized atlas reports an error and disables baked sampling. Split very large worlds into streamed cells.</p><p>MaxBakeTexels limits lightmap and reflection storage together (default 1,048,576, maximum 8,388,608). Lightmap Samples and Reflection Samples control integration quality independently of diffuse-probe samples. Baked vectors are stored losslessly as little-endian float32 data in YAML scene fields. Scene size is limited to 256 MiB; saves publish atomically, retaining the previous file on failure. Settings and results travel with scenes through cooking and streaming.</p><h2 id="extended-api">Lua controls</h2><pre><code>entity:AddComponent("Lightmap")
+local map = entity:GetComponent("Lightmap")
+map.Resolution = 128
+entity:SetComponent("Lightmap", map)
+probeEntity:AddComponent("ReflectionProbe")
+local probe = probeEntity:GetComponent("ReflectionProbe")
+probe.Resolution = 32
+probeEntity:SetComponent("ReflectionProbe", probe)
+settings.LightmapSamples = 16
+settings.ReflectionSamples = 64
+local reflection = Bazzalt.Lighting.SampleReflection(scene, position, direction, 0.5)</code></pre><p>Component Get returns a copy; Set validates and commits it. Enabled uses the same Entity component methods as other components. The public reference lists every field, including the low-level baked payload. Editing payloads directly requires Bazzalt.Lighting.Invalidate(scene). Prefer the bake API for normal authoring.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../streaming/en.html"><small>Previous</small>Streaming from Lua</a>
+<a class="next" href="../graphics/en.html"><small>Next</small>Drawing geometry from Lua</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#sample">Read scene lighting</a><a class="toc-link" href="#bake">Create and bake</a><a class="toc-link" href="#lightmaps">UV lightmaps</a><a class="toc-link" href="#reflections">Reflection captures</a><a class="toc-link" href="#materials">Material support</a><a class="toc-link" href="#budgets">Budgets and data lifetime</a><a class="toc-link" href="#extended-api">Lua controls</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

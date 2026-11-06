@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Lua uses the same native Audio Clips, source/listener components and mixer as C++. No Lua audio loop or separate decoder is needed. Import an Audio Clip, create an enabled listener, and assign the clip in the inspector.">
+  <title>Lua audio | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Lua / Lua audio</nav>
+      <article class="doc"><h1>Lua audio</h1>
+<p>Lua uses the same native Audio Clips, source/listener components and mixer as C++. No Lua audio loop or separate decoder is needed. Import an Audio Clip, create an enabled listener, and assign the clip in the inspector.</p>
+<h2 id="source">Create and play a source</h2>
+<pre><code class="language-lua">local B = Bazzalt
+local Behavior = COMPONENT("SoundEffect")
+Behavior.Clip = PROPERTY("AudioClip", B.AudioClip.new())
+function Behavior:OnCreate()
+    local source
+    if self.Entity:HasComponent("AudioSource") then
+        source = self.Entity:GetComponent("AudioSource")
+    else
+        source = self.Entity:AddComponent("AudioSource")
+    end
+    source.Clip = self.Clip
+    source.PlayOnAwake = false
+    source.SpatialBlend = 1
+    source.MinDistance = 1
+    source.MaxDistance = 20
+    source.OutputBus = B.AudioMixer.GetSFXBus()
+    self.Entity:SetComponent("AudioSource", source)
+    self.Voice = B.Audio.Play(self.Entity)
+end
+function Behavior:OnDestroy()
+    if self.Voice then self.Voice:Stop() end
+end
+return Behavior</code></pre>
+<p>Component getters return copies. Assign changes with SetComponent; editing the returned Lua value alone does not update the scene. Source/listener component type names in Lua are AudioSource and AudioListener, without spaces. The editor displays readable names with spaces.</p>
+<h2 id="transport">Transport and one-shots</h2>
+<pre><code class="language-lua">local shot = B.Audio.PlayOneShot(clip, B.Vec3.new(0, 1, 0),
+    0.8, B.AudioMixer.GetSFXBus(), 1)
+if shot:IsValid() then
+    shot:SetPitch(1.1)
+    shot:Pause()
+    shot:Seek(0.25)
+    shot:Resume()
+    shot:FadeTo(0, 0.5)
+end
+B.AudioMixer.GetMusicBus():SetVolumeDecibels(-12)
+B.Audio.SetMaxVoices(96)</code></pre>
+<p>PlayOneShot defaults to position (0,0,0), volume 1, Master bus and Spatial Blend 0. A voice may become invalid after completion, stealing, source removal or Stop. Call IsValid/GetState before using it; invalid voice operations return false, zero or Stopped. Time is in seconds; pitch is a multiplier independent of B.Time scale.</p>
+<h2 id="curve">Custom attenuation</h2>
+<pre><code class="language-lua">local source = self.Entity:GetComponent("AudioSource")
+source.RolloffCurve = B.AudioRolloff.Custom
+source.CustomRolloff = {
+    B.Vec2.new(0, 1), B.Vec2.new(0.3, 0.8), B.Vec2.new(1, 0)
+}
+assert(source:IsValid())
+self.Entity:SetComponent("AudioSource", source)</code></pre>
+<p>Curve X is normalized distance from Min Distance to Max Distance. Y is gain. Keep points strictly increasing in X, between 0 and 1; include endpoints X=0 and X=1. Source volume is 0–1, pitch 0.5–2, and priority 0 (highest)–256 (lowest).</p>
+<h2 id="reference">Reference and lifecycle</h2>
+<p>All public C++ audio operations are bound in Lua. Use a dot for service/static calls (B.Audio.Play), a colon for value methods (voice:Pause), and .new() for constructors. Read <a href="../reference/Audio/en.html">the Lua audio API reference</a> and <a href="../../manual/audio/en.html">the editor audio guide</a> for fields, listener rules, mixer buses, supported formats and limits.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../graphics/en.html"><small>Previous</small>Drawing geometry from Lua</a>
+<a class="next" href="../physics/en.html"><small>Next</small>Physics in Lua</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#source">Create and play a source</a><a class="toc-link" href="#transport">Transport and one-shots</a><a class="toc-link" href="#curve">Custom attenuation</a><a class="toc-link" href="#reference">Reference and lifecycle</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

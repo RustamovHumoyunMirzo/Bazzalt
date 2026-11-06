@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Mouse-button identifiers used by Input.">
+  <title>MouseButton | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / Lua API reference / MouseButton</nav>
+      <article class="doc"><h1>MouseButton</h1>
+<p class="lead">Mouse-button identifiers used by Input.</p>
+<p><strong>Underlying public header:</strong> <code>Bazzalt/Input.h</code>.</p>
+<p>Read signatures together with the behavior notes below. The <a href="../en.html">reference introduction</a> explains arguments, return values, value copies, and errors.</p>
+<p>In call notation, <code>argument = default</code> describes an optional argument and its default; Lua does not use named arguments here. Supply the value positionally or omit it. The C++ declaration below is comparison data, not Lua syntax.</p>
+<p>This is an enum/static service, host-owned scene, or returned behavior table, not a constructible Lua value. Use the static service or the host-provided value.</p>
+<h2 id="Back">Back</h2>
+<pre><code>Bazzalt.MouseButton.Back</code></pre>
+<p>Back side button.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>Back</code></pre></details>
+<h2 id="Forward">Forward</h2>
+<pre><code>Bazzalt.MouseButton.Forward</code></pre>
+<p>Forward side button.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>Forward</code></pre></details>
+<h2 id="Left">Left</h2>
+<pre><code>Bazzalt.MouseButton.Left</code></pre>
+<p>Primary left mouse button.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>Left = 1</code></pre></details>
+<h2 id="Middle">Middle</h2>
+<pre><code>Bazzalt.MouseButton.Middle</code></pre>
+<p>Middle/wheel button press (not scrolling).</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>Middle</code></pre></details>
+<h2 id="Right">Right</h2>
+<pre><code>Bazzalt.MouseButton.Right</code></pre>
+<p>Secondary right mouse button.</p>
+<details><summary>Underlying C++ declaration / default values</summary><pre><code>Right</code></pre></details><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Lua members and signatures</h2>
+<p>Use <code>Bazzalt.MouseButton</code>. Each member below is actually registered in Lua. The adapter declarations are C++ binding notation, not Lua example code. <code>sol::property</code> exposes a field, <code>sol::overload</code> lists alternatives, <code>sol::optional</code> accepts an omitted/nil argument, and <code>std::make_tuple</code> returns multiple Lua values. <code>sol::as_table</code> returns a Lua table. Instance methods use <code>value:Method(...)</code>; service/static calls use <code>Bazzalt.MouseButton.Method(...)</code> unless a colon overload is explicitly registered. An engine exception becomes a Lua script error. See the examples and behavior notes above for usage.</p><h3 id="lua-Back">Back</h3><pre><code class="language-lua">value:Back()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>Left=1,Middle,Right,Back,Forward;</code></pre><pre><code>MouseButton::Back</code></pre></details><h3 id="lua-Forward">Forward</h3><pre><code class="language-lua">value:Forward()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>Left=1,Middle,Right,Back,Forward;</code></pre><pre><code>MouseButton::Forward</code></pre></details><h3 id="lua-Left">Left</h3><pre><code class="language-lua">value:Left()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>Left=1,Middle,Right,Back,Forward;</code></pre><pre><code>MouseButton::Left</code></pre></details><h3 id="lua-Middle">Middle</h3><pre><code class="language-lua">value:Middle()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>Left=1,Middle,Right,Back,Forward;</code></pre><pre><code>MouseButton::Middle</code></pre></details><h3 id="lua-Right">Right</h3><pre><code class="language-lua">value:Right()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>Left=1,Middle,Right,Back,Forward;</code></pre><pre><code>MouseButton::Right</code></pre></details><h3 id="lua-construction">Construction / enum values</h3><p>Global service table; do not construct an instance.</p><details><summary>Native declaration and binding adapter</summary><pre><code>api.create_named(&quot;MouseButton&quot;);</code></pre></details><p>Binding source: <code>src/Script/LuaServices.cpp</code>. Inherited component operations use the Entity component APIs.</p>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../ModelNode/en.html"><small>Previous</small>ModelNode</a>
+<a class="next" href="../Name/en.html"><small>Next</small>Name</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#Back">Back</a><a class="toc-link" href="#Forward">Forward</a><a class="toc-link" href="#Left">Left</a><a class="toc-link" href="#Middle">Middle</a><a class="toc-link" href="#Right">Right</a><a class="toc-link" href="#source-contract">Lua members and signatures</a><a class="toc-link sub" href="#lua-Back">Back</a><a class="toc-link sub" href="#lua-Forward">Forward</a><a class="toc-link sub" href="#lua-Left">Left</a><a class="toc-link sub" href="#lua-Middle">Middle</a><a class="toc-link sub" href="#lua-Right">Right</a><a class="toc-link sub" href="#lua-construction">Construction / enum values</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Android output runs the native engine and gameplay libraries. The editor runs on Windows, Linux or macOS. Android requires API 26 or later and an ARM64 or x86_64 device. Choose OpenGL ES 3 for compatible ES devices, Vulkan for Vulkan-capable devices, or Automatic to let the installed renderer SDK choose.">
+  <title>Building Android games | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Editor manual / Building Android games</nav>
+      <article class="doc"><h1 id="android">Building Android games</h1>
+
+<p>Android output runs the native engine and gameplay libraries. The editor runs on Windows, Linux or macOS. Android requires API 26 or later and an ARM64 or x86_64 device. Choose OpenGL ES 3 for compatible ES devices, Vulkan for Vulkan-capable devices, or Automatic to let the installed renderer SDK choose.</p>
+
+<h2 id="tools">Install the tools</h2><ol><li>Install a JDK, Android SDK platform 36 and Build Tools 36.0.0. Set JAVA_HOME to the JDK directory.</li><li>Install NDK r29, revision 29.0.14206865. The gameplay compiler and prebuilt runtime must use the same NDK revision.</li><li>Download the matching Android Core SDK from the release artifacts. Extract it and select its runtime.json directory in Build Settings.</li><li>Open Build Settings, select Android, expand its profile, and check SDK directory and NDK directory. Discovery uses environment variables, standard SDK directories and adb. Missing tools leave empty fields. Choose directories manually when needed.</li><li>Press Validate Android SDK / NDK. The compiler repeats validation before building.</li></ol>
+
+<p>Minimum SDK controls the oldest supported Android API. Target SDK selects Android compatibility behavior. Compile SDK selects the android.jar used to compile the Java launcher. Minimum must be at least 26 and no greater than Target, and Target must not exceed Compile. The matching platform and Build Tools must be installed.</p>
+
+<h2 id="identity">Identity, signing and icons</h2><p>Set a unique reverse-domain Application ID, such as com.company.game. Increase Version code for updates. Use a square 512 × 512 PNG application icon. An empty icon field uses the Bazzalt launcher icon.</p><p>Build Debug uses an automatically generated local debug keystore and enables Android debugging. Build Release requires your signing keystore and alias. Store and key passwords are read from the named environment variables. Keep the signing keystore backed up securely. Losing it prevents updates signed with that identity. Passwords are never written to BuildSettings.json or passed as literal release passwords on the process command line.</p>
+
+<h2 id="delivery">Choose content delivery</h2><table><thead><tr><th>Mode</th><th>Files</th><th>Installation</th></tr></thead><tbody><tr><td>Bundled APK</td><td>base.apk</td><td>Install the APK.</td></tr><tr><td>Split APKs</td><td>base.apk and content.apk</td><td>Install together with adb install-multiple. Both files use the same signing identity and version.</td></tr><tr><td>OBB</td><td>base.apk and main.VERSION.PACKAGE.obb</td><td>Install the APK, then copy the OBB to Android/obb/PACKAGE/.</td></tr><tr><td>App-specific external data</td><td>base.apk and game-data.zip</td><td>Install and launch once to create app directories. Copy the archive to Android/data/PACKAGE/files/.</td></tr></tbody></table><p>Build and Launch installs on exactly one connected, authorized adb device and deploys companion data. Device storage policies may require the distribution installer to supply companion content. These outputs target direct distribution. Google Play App Bundles and Play Asset Delivery require a separate publishing pipeline.</p>
+
+<h2 id="security">Content verification and key storage</h2><p>APK signing protects the launcher, native modules and content inventory. On startup the launcher checks payload lengths and SHA-256 hashes before copying files to app-private no-backup storage. The native player verifies the signed inventory, player seal and encrypted packages before loading scenes.</p><p>Android Keystore creates a non-exportable AES-256-GCM wrapping key for the installation. Wrapped content keys live in private no-backup files. Hardware protection depends on the device. Offline distribution includes bootstrap material inside the signed native player, so Keystore does not make offline game content extraction-proof. Server-authorized key provisioning is a separate service.</p>
+
+<h2 id="saves">Save games and lifecycle</h2><p>The existing C++ and Lua SaveGame APIs keep their slot, backup, encryption and asynchronous behavior. Android stores encoded slots in private SharedPreferences with synchronous commit from the save worker. No content wrapping keys are stored in preferences. SaveGame.GetDirectory identifies the logical private profile directory. Slot data lives in preferences, so use the SaveGame API to read or export it. Profiles are namespaced by project UUID. Saves are bounded by the existing slot limits. Uninstalling the app removes its preferences and Keystore entries.</p><p>SDL supplies keyboard, mouse and primary touch-as-mouse input. Window focus events report app foreground/background changes. Rendering pauses while inactive. Application.GetPlatform returns Android. RunInBackground permits background updates while Android keeps the process active. Android may suspend or terminate background processes. Test lifecycle behavior and GPU support on actual target devices.</p>
+
+<h2 id="outputs">Output and configuration</h2><p>Build Release and Build Debug write to bin/Release and bin/Debug. Working caches use .bazzalt/Cache/Build/Release and Debug. Architecture-specific output folders keep Android builds separate from desktop output. Archive output produces a ZIP of the complete APK set and companion data. Native engine libraries are shipped prebuilt. Debug changes gameplay script compilation and Android debuggability.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../platforms/en.html"><small>Previous</small>Supported platforms and rendering backends</a>
+<a class="next" href="../workspace/en.html"><small>Next</small>Panels and scene controls</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#tools">Install the tools</a><a class="toc-link" href="#identity">Identity, signing and icons</a><a class="toc-link" href="#delivery">Choose content delivery</a><a class="toc-link" href="#security">Content verification and key storage</a><a class="toc-link" href="#saves">Save games and lifecycle</a><a class="toc-link" href="#outputs">Output and configuration</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Git keeps a history of your project files and lets a team combine changes. Open Window &gt; Version Control inside an active project. The dialog shows the repository folder, current branch, upstream branch and the number of commits ahead or behind it. Its three tabs contain changes, commit history and local branches.">
+  <title>Version control with Git | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Editor manual / Version control with Git</nav>
+      <article class="doc"><h1>Version control with Git</h1>
+<p>Git keeps a history of your project files and lets a team combine changes. Open <strong>Window &gt; Version Control</strong> inside an active project. The dialog shows the repository folder, current branch, upstream branch and the number of commits ahead or behind it. Its three tabs contain changes, commit history and local branches.</p>
+<h2 id="setup">Set up a project repository</h2>
+<p>Install Git 2.23 or later and make its executable available on PATH before starting the editor. Bazzalt uses your installed Git and its repository configuration. Configure your commit identity with <code>git config --global user.name "Your Name"</code> and <code>git config --global user.email "you@example.com"</code>. A repository-local identity also works.</p>
+<p>If your project already belongs to a repository, the dialog discovers its root. A project in a subfolder uses the containing repository, so its status, commits, stashes and branch operations cover that entire repository. Check the folder displayed at the top.</p>
+<p>For a new project, choose <strong>Initialize Git</strong> and confirm. This creates a local repository and adds ignores for <code>/.bazzalt/Cache/</code>, <code>/.bazzalt/Editor/</code> and <code>/bin/</code>. Initialization appends missing patterns to <code>.gitignore</code>. Source assets, scripts, scenes, project configuration and asset <code>.meta</code> files belong in version control. Metadata stores persistent asset IDs, which keep scene and material references connected across machines.</p>
+<h2 id="changes">Working files, staged files and commits</h2>
+<p>The <strong>working tree</strong> contains the files currently on disk. The <strong>index</strong>, also called the staging area, holds the exact versions prepared for the next commit. A <strong>commit</strong> records that staged snapshot with your identity and a message. Unsaved scene edits remain in editor memory until you save them.</p>
+<ol><li>Save the scenes and documents you intend to share.</li><li>Select files in <strong>Changes</strong>. Use Ctrl or Shift to select several rows.</li><li>Choose <strong>Working Tree</strong> or <strong>Staged</strong> above the diff to compare the selected file. A new untracked text file displays its contents.</li><li>Choose <strong>Stage Selected</strong>. Asset files and their metadata are staged together. For an unstaged rename, select both the deleted and new rows. Git detects the rename after both sides are staged. Unstaging a detected rename includes its original path.</li><li>Enter a message explaining the change, then choose <strong>Commit Staged</strong>.</li></ol>
+<p>The status columns use Git codes. <code>M</code> means modified, <code>A</code> added, <code>D</code> deleted, <code>R</code> renamed, <code>C</code> copied, <code>U</code> conflicted, <code>?</code> untracked and <code>.</code> unchanged. A file can contain both staged and unstaged edits. Hover over a status column heading for the legend.</p>
+<p><strong>Unstage Selected</strong> updates the staging area for the next commit. <strong>Discard Working Changes</strong> asks for confirmation and restores selected tracked files, including metadata, to their staged versions. Discard requires tracked files. The row context menu provides staging, unstaging, resolution and discard actions.</p>
+<h2 id="history">Inspect history and diffs</h2>
+<p><strong>History</strong> lists the latest 100 commits with ID, author, date and subject. Select a commit to inspect its full message and patch. This view includes the commit's repository-wide changes. Git binary-file notices appear for assets without a text diff. Preview text is capped at 2 MiB and displays a truncation notice when that limit is reached.</p>
+<h2 id="branches">Branches and stashes</h2>
+<p>A <strong>branch</strong> names a line of development. Select a local branch in <strong>Branches</strong> and choose <strong>Switch Branch</strong>, or use <strong>Create Branch</strong> to start another branch from the current commit. Switching requires a clean repository and a target branch containing this project file. Changes across the repository must first be committed or stashed.</p>
+<p><strong>Stash Changes</strong> temporarily stores tracked and untracked changes and cleans the worktree. Git ignore rules determine which untracked files the stash collects. <strong>Apply Last Stash</strong> restores the latest stash. A successful application removes that stash. A conflicted application keeps it available in Git.</p>
+<p>Stop Play and save scene changes before operations that rewrite working files. Open asset documents flush their changes before the operation. The editor pauses updates and releases scene-file locks for the Git write. It then reloads project assets and surviving loaded scenes, restores the active scene when available, and clears undo history and open graph/mixer document buffers from the previous revision.</p>
+<h2 id="conflicts">Merge and resolve conflicts</h2>
+<p><strong>Merge Branch</strong> combines a selected local branch into the current branch. If both branches changed the same area, Git may create a conflict. Conflicted rows use the theme's error color. Editing stays paused while these conflicts remain, so invalid scene files stay out of the runtime.</p>
+<ol><li>Select a conflicted UTF-8 text file and choose <strong>Resolve Conflict</strong>, or double-click its row.</li><li>Inspect <strong>Base · Index Stage 1</strong>, <strong>Ours · Index Stage 2</strong> and <strong>Theirs · Index Stage 3</strong>.</li><li>Edit the <strong>Resolution</strong> tab. Remove conflict markers and preserve the file's required format.</li><li>Choose <strong>Save and Stage Resolution</strong>. Repeat for every conflicted file, including metadata.</li><li>Once all conflicts are staged, the editor reloads the project. Enter a merge commit message and choose <strong>Commit Staged</strong>.</li></ol>
+<p>Text resolution supports regular UTF-8 files up to 2 MiB. For binary assets, large files, symlinks or delete/modify conflicts, use an index-stage button to select a complete version. Selecting an absent stage deletes the file. These choices require confirmation. During a rebase, Git's stage 2 and stage 3 refer to the rebased upstream and replayed commit respectively, so inspect their contents before choosing.</p>
+<p><strong>Abort Merge</strong> confirms and restores the pre-merge state. Git worktrees and repository operation markers are detected through Git itself, including repositories whose <code>.git</code> entry is a file. An existing rebase can be resolved and staged here, then continued or aborted with Git's command line. The branch tools reject a second operation while a merge or rebase is in progress.</p>
+<p>If a resolved project cannot load, restore valid project/scene files and choose <strong>Retry Project Reload</strong>. The editor keeps updates paused until loading succeeds. Closing the editor also releases the pending session.</p>
+<h2 id="remotes">Share with a remote</h2>
+<p>Configure remotes and upstream tracking with Git, for example <code>git remote add origin URL</code> and <code>git push --set-upstream origin BRANCH</code>. Set up your Git credential manager or SSH agent. The editor uses existing credentials and shows authentication failures in its status area.</p>
+<p><strong>Fetch</strong> updates remote references. <strong>Pull (fast-forward)</strong> advances a clean branch when its upstream is ahead. Diverged branches require an explicit merge. <strong>Push</strong> publishes through the current branch's configured upstream. Remote actions run when clicked.</p>
+<h2 id="refresh">Refresh and operational limits</h2>
+<p>The visible dialog refreshes status every five seconds and supports manual refresh. Git runs on a dedicated worker with one operation at a time. File selection, diff rendering and commit-message editing stay on the Qt UI thread. Commands have a 60-second deadline, and status/history output has a 16 MiB limit. An operation that times out reports an error. Inspect repository status before retrying.</p>
+<p>Git executes configured hooks and asset filters during mutation commands and uses its signing configuration for commits. Text previews disable external diff programs and text-conversion helpers. Filenames pass as literal path arguments, including spaces, Unicode and pattern characters. Git and this dialog are editor tools. The Git dialog runs in the editor process.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../global-events/en.html"><small>Previous</small>Global Event assets</a>
+<a class="next" href="../settings/en.html"><small>Next</small>Preferences and project settings</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#setup">Set up a project repository</a><a class="toc-link" href="#changes">Working files, staged files and commits</a><a class="toc-link" href="#history">Inspect history and diffs</a><a class="toc-link" href="#branches">Branches and stashes</a><a class="toc-link" href="#conflicts">Merge and resolve conflicts</a><a class="toc-link" href="#remotes">Share with a remote</a><a class="toc-link" href="#refresh">Refresh and operational limits</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

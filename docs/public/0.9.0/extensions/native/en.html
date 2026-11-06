@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Register ordinary C++ functions through Bazzalt/Extension.h. The engine supplies Lua conversion; extension authors do not include sol2 or Lua headers and do not receive renderer or editor internals. A native extension is trusted native code and runs with the process&#x27;s privileges.">
+  <title>Native SDK authoring | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Extensions / Native SDK authoring</nav>
+      <article class="doc"><h1>Native SDK authoring</h1>
+<p>Register ordinary C++ functions through Bazzalt/Extension.h. The engine supplies Lua conversion; extension authors do not include sol2 or Lua headers and do not receive renderer or editor internals. A native extension is trusted native code and runs with the process's privileges.</p>
+<h2 id="example">Export a module</h2>
+<pre><code class="language-cpp">#include &lt;Bazzalt/Extension.h&gt;
+namespace {
+double Double(double value) { return value * 2; }
+void Register(Bazzalt::ExtensionRegistry&amp; registry) {
+    registry.Bind("StudioMath", "Double", Double);
+}
+}
+BAZZALT_EXTENSION(Register)
+</code></pre>
+<p>Register this source in Scripts with Public: true and ModuleName: StudioMath. Build Package compiles it against the selected prebuilt ScriptSDK. BAZZALT_EXTENSION declares the versioned module entry point. Registration must export only the module name declared by the manifest. Duplicate names reject loading.</p>
+<h2 id="registry">Registry API</h2>
+<p>ExtensionRegistry.Bind(module, name, functionPointer) wraps a free function. It validates argument counts and converts arguments. ExtensionRegistry.Export(module, name, callback) accepts an ExtensionFunction for dynamic dispatch. The callback receives ExtensionArguments and returns ExtensionValue. No Lua binding internals are exposed.</p>
+<p>ExtensionValue supports nil/monostate, bool, signed 64-bit integer, double, string, Vec2, Vec3, Vec4 and UUID. Bind converts supported C++ numeric argument types and can return void. References to custom C++ objects, raw pointers, containers and arbitrary user classes are not marshalled through this boundary. Expose operations using supported values or supply public C++ headers for richer native-only interfaces.</p>
+<h2 id="using">Consume from Lua and C++</h2>
+<pre><code class="language-lua">local Math = Bazzalt.require("StudioMath")
+local result = Math.Double(4)
+</code></pre>
+<pre><code class="language-cpp">auto result = Bazzalt::Extensions::Call("StudioMath", "Double", {4.0});
+auto doubled = std::get&lt;double&gt;(result);
+</code></pre>
+<p>Call native module functions with dot syntax in Lua. Bazzalt.require itself accepts dot or colon syntax. Public SDK functions are available to gameplay scripts; private helpers are scoped to their owning extension. Native function callbacks retain their library lease through invocation.</p>
+<h2 id="abi">Binary compatibility and dependencies</h2>
+<p>Supply libraries matching the target OS, architecture and engine SDK version. C++ ABI compatibility is not inferred from a manifest's version range. Package artifacts record their engine version. A game build can compile a missing target artifact from the packaged native source using its matching prebuilt runtime SDK; it never builds Filament, Qt or the engine. Supplied third-party link/runtime libraries must support that target too. Restrict Compatibility when they do not.</p>
+<p>Put public headers in IncludeDirs and link/runtime dependencies in the appropriate platform directories. Do not include private Runtime, Rendering or EditorBridge headers. Native code cannot be sandboxed by manifest validation; package hashes detect corruption, not a malicious author or administrator.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../editor/en.html"><small>Previous</small>Editor plugin API</a>
+<a class="next" href="../packaging/en.html"><small>Next</small>Package builds and game deployment</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Export a module</a><a class="toc-link" href="#registry">Registry API</a><a class="toc-link" href="#using">Consume from Lua and C++</a><a class="toc-link" href="#abi">Binary compatibility and dependencies</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

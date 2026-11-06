@@ -204,7 +204,7 @@ class MaterialCompiler:
         if str(reference)==CANVAS_SHADER:return self.InspectShader(reference)
         reflection=self.InspectShader(reference);asset=self.runtime.AssetInfo(reference);cache=Path(asset["cache"])
         source=Path(str(cache)+".translated.mat");output=Path(str(cache)+".filamat");state=Path(str(cache)+".build.json");tool=self._Tool("matc")
-        digest=hashlib.sha256(source.read_bytes()+str(tool.stat().st_mtime_ns).encode()+b"bazzalt-material-v3").hexdigest()
+        digest=hashlib.sha256(source.read_bytes()+str(tool.stat().st_mtime_ns).encode()+getattr(self,"TargetPlatform","desktop").encode()+b"bazzalt-material-v3").hexdigest()
         try:previous=json.loads(state.read_text(encoding="utf-8"))
         except (OSError,ValueError):previous={}
         if previous.get("hash")==digest and output.is_file():
@@ -217,7 +217,7 @@ class MaterialCompiler:
             with tempfile.TemporaryDirectory(prefix="BazzaltMaterial-",dir=_ToolTemporaryRoot()) as staging:
                 staged_source=Path(staging)/"source.mat";staged_output=Path(staging)/"compiled.filamat"
                 shutil.copyfile(source,staged_source)
-                process=subprocess.run([str(tool),"--platform","desktop","--api","all","--output",str(staged_output),str(staged_source)],capture_output=True,text=True,encoding="utf-8",errors="replace",creationflags=subprocess.CREATE_NO_WINDOW if os.name=="nt" else 0)
+                process=subprocess.run([str(tool),"--platform",getattr(self,"TargetPlatform","desktop"),"--api","all","--output",str(staged_output),str(staged_source)],capture_output=True,text=True,encoding="utf-8",errors="replace",creationflags=subprocess.CREATE_NO_WINDOW if os.name=="nt" else 0)
                 if process.returncode or not staged_output.is_file():
                     message=(process.stdout+process.stderr).strip() or "Filament material compilation failed";self._failures[asset["uuid"]]=(digest,message);raise MaterialError(message)
                 shutil.copyfile(staged_output,temporary)

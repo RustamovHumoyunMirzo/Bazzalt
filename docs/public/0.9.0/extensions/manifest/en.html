@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="The authoring file is YAML. The package contains a normalized, versioned JSON manifest and a SHA-256 inventory. The .bpack container is a bounded ZIP archive; it is not a project asset archive and cannot be installed by simply renaming an arbitrary ZIP.">
+  <title>Extension manifest reference | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Extensions / Extension manifest reference</nav>
+      <article class="doc"><h1>Extension manifest reference</h1>
+<p>The authoring file is YAML. The package contains a normalized, versioned JSON manifest and a SHA-256 inventory. The <code>.bpack</code> container is a bounded ZIP archive; it is not a project asset archive and cannot be installed by simply renaming an arbitrary ZIP.</p>
+<h2 id="general">FormatVersion and General</h2>
+<table><thead><tr><th>Field</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>FormatVersion</td><td>Integer 1. Omission means version 1.</td></tr>
+<tr><td>General.Id</td><td>Required stable lowercase ID. Segments start with letters; lowercase letters, digits and underscores are allowed within segments. Dots or hyphens can separate segments.</td></tr>
+<tr><td>Name, ShortDescription, Version</td><td>Required nonempty display strings and semantic version, such as 1.0.0 or v1.0.0-beta.</td></tr>
+<tr><td>LongDescription</td><td>Optional relative path to a packaged text file.</td></tr>
+<tr><td>HomePageUrl, RepoUrl, DocsUrl</td><td>Optional HTTPS URLs. Installation does not fetch them.</td></tr>
+<tr><td>Authors</td><td>Optional author information retained in the manifest.</td></tr>
+</tbody></table>
+<h2 id="compatibility">Compatibility and Dependencies</h2>
+<p><code>MinEngineVersion</code> is required. <code>MaxEngineVersion</code> is an optional inclusive maximum. Prereleases compare before the corresponding stable release. Optional <code>Platforms</code> contains Windows and/or Linux. Optional <code>Architecture</code> contains x86_64 and/or x86. Omit these lists to express portability; doing so does not manufacture native libraries for another target.</p>
+<p><code>Dependencies.Requires</code> is a list of extension IDs. Dependencies must already be installed and enabled. Missing dependencies, cycles and public module collisions reject activation without changing the enabled state. Project locks pin exact package digests and versions, including dependencies. There is no automatic network dependency installer.</p>
+<h2 id="assets">AssetRegistry</h2>
+<p>Each entry has a unique identifier <code>Id</code> and a relative file <code>Path</code>. Register scripts, UI files, icons and other files needed by your tool. A script or panel references this ID, not an absolute filename. Asset IDs are local to an extension; public module names are global. Optional asset Scope is Runtime or Editor. Panel UI and panel icons default to Editor; other data defaults to Runtime. Explicitly mark other editor-only data as Editor. Runtime data assets receive stable project UUIDs and can be resolved with Extensions.GetAsset. Package inventory hashes cover the normalized manifest and every packaged file. Editing installed files causes integrity validation to fail.</p>
+<h2 id="scripts">Scripts</h2>
+<p>Scripts is a mapping from local script keys to registrations. Each registration requires an asset <code>Id</code> referring to a .lua or .cpp file. <code>ModuleName</code> defaults to its key. <code>Public</code> defaults to false. Public scripts are gameplay SDK modules and must have Runtime scope. <code>SelfContained</code> defaults to true: the module is addressed by ModuleName alone. When false, its name is ExtensionId.ModuleName. Private modules always use ExtensionId.ModuleName and can be required by SDK modules from that same extension.</p>
+<p><code>Scope</code> is Runtime or Editor. Entry scripts and scripts referenced by editor panels or menus default to Editor; other scripts default to Runtime. Mark editor-only helper scripts explicitly with Scope: Editor so they never enter a game build. <code>Entry</code> defaults to false. At most one editor entry script is allowed. An entry script cannot be Public. The builder adds a <code>Compiled</code> map for portable Lua bytecode or target-specific native binaries; do not edit generated artifact paths by hand.</p>
+<h2 id="native">Native</h2>
+<p><code>Enabled</code> controls deployment of supplied dependent native binaries. <code>IncludeDirs</code> lists packaged public header directories. <code>LibDirsWin</code> and <code>LibDirsLinux</code> provide link libraries for native scripts. <code>BinDirsWin</code> and <code>BinDirsLinux</code> provide runtime libraries, copied next to native extension modules. Native.Scope is Runtime or Editor; an editor-only plugin defaults to Editor so its native libraries are not copied into games. EditorLibDirsWin/EditorLibDirsLinux and EditorBinDirsWin/EditorBinDirsLinux supply additional editor-only dependencies in a combined package. All directories are relative to the manifest. Provide libraries matching the selected target architecture. Duplicate output library names are rejected.</p>
+<h2 id="editor">EditorRegistry and Extends.Menubar</h2>
+<p>EditorRegistry keys refer to .ui asset IDs. Each panel requires Title and optionally Icon (another registered asset ID) and Script (a script key). Panels are registered in the shared docking system and can be opened from Window or an Editor.OpenPanel command.</p>
+<p>Extends.Menubar is a list of mappings with Menu, Title, Script and Function. Menu can be File, Edit, Object, Build, View, Window or Help, or a new top-level menu title. Triggering an action calls the named function on the controller table returned by its script. Editor scripts and their UI assets are excluded from game output.</p>
+<h2 id="components">Extends.Component</h2>
+<p>Each mapping entry has Script and optionally Icon. Script must refer to a private, non-entry COMPONENT behavior, not a subsystem. The actual COMPONENT declaration names its type and PROPERTY declarations define its inspector fields. Use a type name unique across all project and extension scripts, for example StudioTerrainBrush. A component can use SDK modules, private helpers from its own extension and normal gameplay APIs. Its source and SDK headers are materialized under Assets/Extensions/ExtensionId, becoming normal project script assets. Removing or disabling the tool does not delete those authored project assets.</p>
+<h2 id="scene-settings">Extends.SceneSettings</h2>
+<p>Each setting is keyed by a unique field name and contains Type (bool, int, float or string), Default, optional Label and optional numeric Min/Max. Defaults must match the type and range. Fields appear when a scene is selected in the hierarchy. Values are saved in that scene under ExtensionProperties using ExtensionId:FieldName keys. Values remain serialized if the extension is disabled and are available through the public Scene extension-property methods.</p>
+<pre><code class="language-yaml">Extends:
+  SceneSettings:
+    GravityScale:
+      Type: float
+      Default: 1.0
+      Min: 0.0
+      Max: 10.0
+      Label: Gravity scale
+</code></pre></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../en.html"><small>Previous</small>Creating extensions</a>
+<a class="next" href="../editor/en.html"><small>Next</small>Editor plugin API</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#general">FormatVersion and General</a><a class="toc-link" href="#compatibility">Compatibility and Dependencies</a><a class="toc-link" href="#assets">AssetRegistry</a><a class="toc-link" href="#scripts">Scripts</a><a class="toc-link" href="#native">Native</a><a class="toc-link" href="#editor">EditorRegistry and Extends.Menubar</a><a class="toc-link" href="#components">Extends.Component</a><a class="toc-link" href="#scene-settings">Extends.SceneSettings</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

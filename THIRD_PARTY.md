@@ -158,3 +158,7 @@ libsodium subset is ISC licensed. The transport is distributed as
 `bazzalt_network`; the shared cryptography provider is `bazzalt_crypto`.
 Full upstream notices are retained in `licenses/third_party/yojimbo-*`.
 No networking or cryptography dependency is downloaded by a shipped game.
+
+## Android distribution
+
+Android runtime SDKs link OpenSSL 3.5.4 statically for package verification and encryption. Its Apache-2.0 license is retained in the SDK. The NDK-provided libc++ shared library and its LLVM notices accompany the runtime. SDL Android Java glue retains its zlib license. Android SDK/NDK and JDK tools are installed separately by developers and CI. Pillow is used by the compiler to generate application icons and retains its HPND license.

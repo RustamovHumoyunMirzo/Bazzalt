@@ -15,3 +15,6 @@ TODO.md
 /bazzalt/_editor_resources_rc.py
 /bazzalt/_hub_resources_rc.py
 /bazzalt/_branding_resources_rc.py
+
+# Generated standalone compiler resources
+/Compiler/_resources.py

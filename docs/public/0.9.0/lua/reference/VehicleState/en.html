@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Read-only runtime snapshot from PhysicsScene.GetVehicleState. Speed is signed forward m/s, EngineRPM is RPM, Clutch is normalized friction, Gear is -1 reverse/0 neutral/positive forward, and GroundedWheels/WheelCount summarize registered contacts. Absent outside running simulation.">
+  <title>VehicleState | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / Lua API reference / VehicleState</nav>
+      <article class="doc"><h1>VehicleState</h1><p>Read-only runtime snapshot from PhysicsScene.GetVehicleState. Speed is signed forward m/s, EngineRPM is RPM, Clutch is normalized friction, Gear is -1 reverse/0 neutral/positive forward, and GroundedWheels/WheelCount summarize registered contacts. Absent outside running simulation.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Lua members and signatures</h2>
+<p>Use <code>Bazzalt.VehicleState</code>. Each member below is actually registered in Lua. The adapter declarations are C++ binding notation, not Lua example code. <code>sol::property</code> exposes a field, <code>sol::overload</code> lists alternatives, <code>sol::optional</code> accepts an omitted/nil argument, and <code>std::make_tuple</code> returns multiple Lua values. <code>sol::as_table</code> returns a Lua table. Instance methods use <code>value:Method(...)</code>; service/static calls use <code>Bazzalt.VehicleState.Method(...)</code> unless a colon overload is explicitly registered. An engine exception becomes a Lua script error. See the examples and behavior notes above for usage.</p><h3 id="lua-Clutch">Clutch</h3><pre><code class="language-lua">value:Clutch()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>float Speed=0,EngineRPM=0,Clutch=0;</code></pre><pre><code>sol::readonly(&amp;VehicleState::Clutch)</code></pre></details><h3 id="lua-EngineRPM">EngineRPM</h3><pre><code class="language-lua">value:EngineRPM()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>float Speed=0,EngineRPM=0,Clutch=0;</code></pre><pre><code>sol::readonly(&amp;VehicleState::EngineRPM)</code></pre></details><h3 id="lua-Gear">Gear</h3><pre><code class="language-lua">value:Gear()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>int Gear=0;</code></pre><pre><code>sol::readonly(&amp;VehicleState::Gear)</code></pre></details><h3 id="lua-GroundedWheels">GroundedWheels</h3><pre><code class="language-lua">value:GroundedWheels()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>unsigned GroundedWheels=0,WheelCount=0;</code></pre><pre><code>sol::readonly(&amp;VehicleState::GroundedWheels)</code></pre></details><h3 id="lua-Speed">Speed</h3><pre><code class="language-lua">value:Speed()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>float Speed=0,EngineRPM=0,Clutch=0;</code></pre><pre><code>sol::readonly(&amp;VehicleState::Speed)</code></pre></details><h3 id="lua-WheelCount">WheelCount</h3><pre><code class="language-lua">value:WheelCount()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>unsigned GroundedWheels=0,WheelCount=0;</code></pre><pre><code>sol::readonly(&amp;VehicleState::WheelCount)</code></pre></details><h3 id="lua-construction">Construction / enum values</h3><p>Construct a value with <code>Bazzalt.VehicleState()</code>. Constructor overloads, when available, are shown in the binding details.</p><details><summary>Native declaration and binding adapter</summary><pre><code>api.new_usertype&lt;VehicleState&gt;(&quot;VehicleState&quot;);</code></pre></details><p>Binding source: <code>src/Script/LuaVehicles.cpp</code>. Inherited component operations use the Entity component APIs.</p>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../VehicleEngine/en.html"><small>Previous</small>VehicleEngine</a>
+<a class="next" href="../VehicleTransmission/en.html"><small>Next</small>VehicleTransmission</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#source-contract">Lua members and signatures</a><a class="toc-link sub" href="#lua-Clutch">Clutch</a><a class="toc-link sub" href="#lua-EngineRPM">EngineRPM</a><a class="toc-link sub" href="#lua-Gear">Gear</a><a class="toc-link sub" href="#lua-GroundedWheels">GroundedWheels</a><a class="toc-link sub" href="#lua-Speed">Speed</a><a class="toc-link sub" href="#lua-WheelCount">WheelCount</a><a class="toc-link sub" href="#lua-construction">Construction / enum values</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

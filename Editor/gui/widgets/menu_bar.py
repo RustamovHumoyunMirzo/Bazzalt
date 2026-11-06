@@ -85,6 +85,7 @@ class EditorMenuBar(QMenuBar):
     RemoteBuildRequested = Signal()
     BuildSettingsRequested = Signal()
     BuildRequested = Signal()
+    BuildDebugRequested = Signal()
     BuildLaunchRequested = Signal()
     EditCommandRequested = Signal(str)
     ObjectCommandRequested = Signal(str)
@@ -137,6 +138,7 @@ class EditorMenuBar(QMenuBar):
         self._BuildFileMenu()
         self.BuildSettingsAction=self.BuildMenu.addAction("");self.BuildSettingsAction.triggered.connect(self.BuildSettingsRequested)
         self.BuildMenu.addSeparator()
+        self.BuildDebugAction=self.BuildMenu.addAction("");self.BuildDebugAction.triggered.connect(self.BuildDebugRequested)
         self.BuildAction=self.BuildMenu.addAction("");self.BuildAction.triggered.connect(self.BuildRequested)
         self.BuildLaunchAction=self.BuildMenu.addAction("");self.BuildLaunchAction.triggered.connect(self.BuildLaunchRequested)
         self.RemoteBuildAction=self.BuildMenu.addAction("");self.RemoteBuildAction.triggered.connect(self.RemoteBuildRequested)
@@ -282,7 +284,7 @@ class EditorMenuBar(QMenuBar):
     def _Retranslate(self) -> None:
         tr = self._localization.Translate
         self.FileMenu.setTitle(tr("menu.file"))
-        self.BuildMenu.setTitle(tr('menu.build'));self.BuildSettingsAction.setText(tr('build.settings'));self.BuildAction.setText(tr('build.build'));self.BuildLaunchAction.setText(tr('build.launch'));self.RemoteBuildAction.setText(tr('remote.title'))
+        self.BuildMenu.setTitle(tr('menu.build'));self.BuildSettingsAction.setText(tr('build.settings'));self.BuildAction.setText(tr('build.release'));self.BuildDebugAction.setText(tr('build.debug'));self.BuildLaunchAction.setText(tr('build.launch'));self.RemoteBuildAction.setText(tr('remote.title'))
         self.BuildPackageAction.setText(tr("extensions.build"))
         self.EditMenu.setTitle(tr("menu.edit"))
         self.ObjectMenu.setTitle(tr("menu.object"));self.ObjectModeMenu.setTitle(tr("object.modes"))

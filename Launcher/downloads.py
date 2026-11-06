@@ -52,7 +52,8 @@ def ValidateEntry(entry: dict) -> None:
     if not isinstance(entry, dict): raise ValueError("Invalid download entry")
     if entry.get("product") not in {"editor", "core", "llvm", "hub", "compiler", "windows-build-tools"}: raise ValueError("Unknown product")
     Version.Parse(entry.get("version", ""))
-    if entry.get("platform") not in {"windows","linux","macos"} or entry.get("architecture") not in {"x86", "x64","arm64"}: raise ValueError("Unsupported target")
+    if entry.get("platform") not in {"windows","linux","macos","android"} or entry.get("architecture") not in {"x86", "x64","arm64"}: raise ValueError("Unsupported target")
+    if entry["platform"]=="android" and (entry["product"]!="core" or entry["architecture"] not in ("arm64","x64")):raise ValueError("Android is a game runtime SDK target")
     if entry["platform"]=="macos" and entry["architecture"]=="x86":raise ValueError("Unsupported platform architecture")
     if not re.fullmatch(r"[a-zA-Z0-9_.-]+", entry.get("id", "")): raise ValueError("Unsafe download identifier")
     _Https(entry.get("url", ""))
@@ -128,7 +129,7 @@ def Install(entry: dict, archive: Path, versions: Path) -> Path:
         digest=hashlib.file_digest(stream,"sha256").hexdigest()
     if archive.stat().st_size != entry["size"] or digest.lower() != entry["sha256"].lower():
         raise ValueError("Package changed or failed its integrity check before installation")
-    product = entry["product"];linux=entry["platform"]=="linux";executable="Bazzalt" if linux else "Bazzalt.exe";core="libBazzalt.so" if linux else "Bazzalt.dll";lua="libbazzalt_lua.so" if linux else "bazzalt_lua.dll";gui="libbazzalt_gui.so" if linux else "bazzalt_gui.dll";physics="libbazzalt_physics.so" if linux else "bazzalt_physics.dll"
+    product = entry["product"];linux=entry["platform"] in ("linux","android");executable="Bazzalt" if linux else "Bazzalt.exe";core="libBazzalt.so" if linux else "Bazzalt.dll";lua="libbazzalt_lua.so" if linux else "bazzalt_lua.dll";gui="libbazzalt_gui.so" if linux else "bazzalt_gui.dll";physics="libbazzalt_physics.so" if linux else "bazzalt_physics.dll"
     mac=entry["platform"]=="macos"
     if mac:executable="Bazzalt.app/Contents/MacOS/Bazzalt";core="libBazzalt.dylib";lua="libbazzalt_lua.dylib";gui="libbazzalt_gui.dylib";physics="libbazzalt_physics.dylib"
     if product not in {"editor", "llvm", "core"}: raise ValueError("This download is not an installable ZIP package")

@@ -55,7 +55,7 @@ class NativeBuildTests(unittest.TestCase):
                 if preset=='plain_manifest':settings['security']['encrypt_manifests']=False;settings['security']['preset']='custom'
                 settings['production']['name']='TestGame';settings['packaging']['archive']=archive;settings['packaging']['format']=format;Save(project,settings)
                 with patch.dict(os.environ,{'BAZZALT_GAME_KEY':'01'*32}):output=Build(project,runtime,ROOT/'build/Editor/Release/BazzaltCooker.exe')
-                self.assertFalse(list((root/'.bazzalt/Cache/Build/x64').glob('work-*')))
+                self.assertFalse(list((root/'.bazzalt/Cache/Build/Release/x64').glob('work-*')))
                 # Obsolete products beside the current scene cache must never
                 # enter subsequent cooks, even though they remain editor cache.
                 caches=list((root/'.bazzalt/Cache').glob('*/*.bscene'))
@@ -131,10 +131,10 @@ class NativeBuildTests(unittest.TestCase):
                 self.assertIn('Data/Assets/Main.bscene',zipped.namelist());self.assertNotIn('Data/Assets/Compressed.bin',zipped.namelist());self.assertNotIn('Data/Assets/Duplicate.bin',zipped.namelist())
             import hashlib,threading
             from Compiler.build import BuildCancelled
-            archive_path=root/'bin/TestGame-windows-x64.zip';before=hashlib.sha256(archive_path.read_bytes()).digest();cancel=threading.Event()
+            archive_path=root/'bin/Release/TestGame-windows-x64.zip';before=hashlib.sha256(archive_path.read_bytes()).digest();cancel=threading.Event()
             def stop_scripts(*args):cancel.set();return []
             with patch('Compiler.build.CompileScripts',side_effect=stop_scripts),self.assertRaises(BuildCancelled):Build(project,runtime,ROOT/'build/Editor/Release/BazzaltCooker.exe',cancel=cancel.is_set)
-            self.assertEqual(before,hashlib.sha256(archive_path.read_bytes()).digest());self.assertFalse(list((root/'.bazzalt/Cache/Build/x64').glob('work-*')))
+            self.assertEqual(before,hashlib.sha256(archive_path.read_bytes()).digest());self.assertFalse(list((root/'.bazzalt/Cache/Build/Release/x64').glob('work-*')))
     @unittest.skipUnless(os.environ.get('BAZZALT_GAME_GPU_TEST')=='1','Opt in to real hidden-window rendering')
     def test_native_game_renders_and_runs_script_lifecycle(self):
         with tempfile.TemporaryDirectory() as folder:

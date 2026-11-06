@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Include Bazzalt/Profiler.h for bounded CPU timing. Captures include all instrumented threads in this process. This measures elapsed CPU scope time, including waits; it does not measure GPU execution or memory allocation.">
+  <title>Profiler | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / C++ / C++ API reference / Profiler</nav>
+      <article class="doc"><h1>Profiler</h1><p>Include <code>Bazzalt/Profiler.h</code> for bounded CPU timing. Captures include all instrumented threads in this process. This measures elapsed CPU scope time, including waits; it does not measure GPU execution or memory allocation.</p>
+<h2 id="capture">Capture</h2><pre><code>Bazzalt::Profiler::BeginCapture();
+{
+    Bazzalt::ProfileScope scope("Build terrain");
+    BuildTerrain();
+}
+Bazzalt::Profiler::EndCapture();
+Bazzalt::Profiler::ExportTrace("terrain-trace.json");</code></pre>
+<p><code>BeginCapture(capacity = 100000)</code> replaces previous samples and starts recording. Capacity must be 1–10000000, otherwise invalid_argument is thrown. Memory is bounded by sample count, though long custom names increase storage. Only completed scopes are recorded. Scopes active when a capture stops or is replaced are discarded. <code>EndCapture()</code> stops recording and keeps results. <code>IsCapturing()</code> polls capture state.</p>
+<h2 id="scope">ProfileScope</h2><p>Create a noncopyable RAII scope with a name. Its destructor records elapsed time on the creating thread, even during exception unwinding. Names are copied only when capturing. Keep the object on its creating thread. Disabled scopes perform an atomic check without recording samples.</p>
+<h2 id="samples">Samples and export</h2><p><code>GetSamples()</code> returns a synchronized snapshot of completed <code>ProfileSample</code> values: Name, StartMicroseconds relative to capture start, DurationMicroseconds, and Thread identifier. Nested durations overlap: do not add them as independent frame time. <code>GetDroppedSampleCount()</code> reports scopes rejected because the buffer was full; it resets with BeginCapture. <code>ExportTrace(path)</code> writes a snapshot as Chrome/Perfetto trace JSON. It accepts filesystem paths and throws on write failures. Stop capture first for consistent final results. File paths belong to the caller; parent directories are not created.</p>
+<h2 id="engine">Engine instrumentation</h2><p>Scopes cover runtime and editor frames, fixed physics steps, system callbacks, script updates, overlays, render submission/presentation and scheduled jobs. Rendering scope time is CPU submission/presentation, not GPU time. Worker thread IDs let trace viewers separate concurrent work.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Public declarations</h2>
+<p>Header: <code>Bazzalt/Profiler.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
+<pre><code class="language-cpp">class Profiler {
+Profiler() = delete;
+/// Starts a new bounded capture. Old in-flight scopes cannot enter it.
+    static void BeginCapture(std::size_t capacity = 100000);
+static void EndCapture();
+static bool IsCapturing();
+static std::vector&lt;ProfileSample&gt; GetSamples();
+static std::uint64_t GetDroppedSampleCount();
+/// Chrome/Perfetto trace JSON. File failures throw; caller owns the path.
+    static void ExportTrace(const std::filesystem::path&amp; path);
+};</code></pre>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../PrimitiveShape/en.html"><small>Previous</small>PrimitiveShape</a>
+<a class="next" href="../ProfileSample/en.html"><small>Next</small>ProfileSample</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#capture">Capture</a><a class="toc-link" href="#scope">ProfileScope</a><a class="toc-link" href="#samples">Samples and export</a><a class="toc-link" href="#engine">Engine instrumentation</a><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

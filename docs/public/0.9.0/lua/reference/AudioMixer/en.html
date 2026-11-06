@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Runtime mixer routing, effects and snapshots. Load replaces mixer configuration transactionally. Snapshot application changes mix state while retaining current routing.">
+  <title>AudioMixer | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / Lua API reference / AudioMixer</nav>
+      <article class="doc"><h1>AudioMixer</h1><p>Runtime mixer routing, effects and snapshots. Load replaces mixer configuration transactionally. Snapshot application changes mix state while retaining current routing.</p><p>See the <a href="../Audio/en.html">audio reference</a> for units, ranges, errors, effect parameters and playback/routing behavior.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Lua members and signatures</h2>
+<p>Use <code>Bazzalt.AudioMixer</code>. Each member below is actually registered in Lua. The adapter declarations are C++ binding notation, not Lua example code. <code>sol::property</code> exposes a field, <code>sol::overload</code> lists alternatives, <code>sol::optional</code> accepts an omitted/nil argument, and <code>std::make_tuple</code> returns multiple Lua values. <code>sol::as_table</code> returns a Lua table. Instance methods use <code>value:Method(...)</code>; service/static calls use <code>Bazzalt.AudioMixer.Method(...)</code> unless a colon overload is explicitly registered. An engine exception becomes a Lua script error. See the examples and behavior notes above for usage.</p><h3 id="lua-ApplySnapshot">ApplySnapshot</h3><pre><code class="language-lua">Bazzalt.AudioMixer.ApplySnapshot(snapshot: AudioMixerSnapshot)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static bool ApplySnapshot(const AudioMixerSnapshot&amp; snapshot);</code></pre></details><h3 id="lua-CaptureSnapshot">CaptureSnapshot</h3><pre><code class="language-lua">Bazzalt.AudioMixer.CaptureSnapshot()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static AudioMixerSnapshot CaptureSnapshot();</code></pre></details><h3 id="lua-CreateBus">CreateBus</h3><pre><code class="language-lua">Bazzalt.AudioMixer.CreateBus(name: string, parent: AudioBus (optional), id: UUID (optional))</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static AudioBus CreateBus(const std::string&amp; name, AudioBus parent={}, UUID id=UUID::Generate());</code></pre><pre><code>[](const std::string&amp; name,sol::optional&lt;AudioBus&gt; parent,sol::optional&lt;UUID&gt; id){return AudioMixer::CreateBus(name,parent.value_or(AudioBus{}),id.value_or(UUID::Generate()));}</code></pre></details><h3 id="lua-GetBuses">GetBuses</h3><pre><code class="language-lua">Bazzalt.AudioMixer.GetBuses()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static std::vector&lt;AudioBusSettings&gt; GetBuses();</code></pre><pre><code>[](){return sol::as_table(AudioMixer::GetBuses());}</code></pre></details><h3 id="lua-GetMasterBus">GetMasterBus</h3><pre><code class="language-lua">Bazzalt.AudioMixer.GetMasterBus()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static AudioBus GetMasterBus();</code></pre></details><h3 id="lua-GetMusicBus">GetMusicBus</h3><pre><code class="language-lua">Bazzalt.AudioMixer.GetMusicBus()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static AudioBus GetMusicBus();</code></pre></details><h3 id="lua-GetSFXBus">GetSFXBus</h3><pre><code class="language-lua">Bazzalt.AudioMixer.GetSFXBus()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static AudioBus GetSFXBus();</code></pre></details><h3 id="lua-Load">Load</h3><pre><code class="language-lua">Bazzalt.AudioMixer.Load(mixerAsset: UUID)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>// Children and sources are rerouted to its parent.
+    static bool Load(UUID mixerAsset);</code></pre></details><h3 id="lua-RemoveBus">RemoveBus</h3><pre><code class="language-lua">Bazzalt.AudioMixer.RemoveBus(bus: AudioBus)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static bool RemoveBus(AudioBus bus);</code></pre></details><h3 id="lua-Validate">Validate</h3><pre><code class="language-lua">Bazzalt.AudioMixer.Validate(buses: std::vector&lt;AudioBusSettings&gt;)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>transactional replacement.
+    static bool Validate(const std::vector&lt;AudioBusSettings&gt;&amp; buses, std::string&amp; error);</code></pre><pre><code>[](sol::as_table_t&lt;std::vector&lt;AudioBusSettings&gt;&gt; buses){std::string error;bool valid=AudioMixer::Validate(buses.value(),error);return std::make_tuple(valid,error);}</code></pre></details><h3 id="lua-construction">Construction / enum values</h3><p>Global service table; do not construct an instance.</p><details><summary>Native declaration and binding adapter</summary><pre><code>api.create_named(&quot;AudioMixer&quot;);</code></pre></details><p>Binding source: <code>src/Script/LuaAudio.cpp</code>. Inherited component operations use the Entity component APIs.</p>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../AudioListener/en.html"><small>Previous</small>AudioListener</a>
+<a class="next" href="../AudioMixerSnapshot/en.html"><small>Next</small>AudioMixerSnapshot</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#source-contract">Lua members and signatures</a><a class="toc-link sub" href="#lua-ApplySnapshot">ApplySnapshot</a><a class="toc-link sub" href="#lua-CaptureSnapshot">CaptureSnapshot</a><a class="toc-link sub" href="#lua-CreateBus">CreateBus</a><a class="toc-link sub" href="#lua-GetBuses">GetBuses</a><a class="toc-link sub" href="#lua-GetMasterBus">GetMasterBus</a><a class="toc-link sub" href="#lua-GetMusicBus">GetMusicBus</a><a class="toc-link sub" href="#lua-GetSFXBus">GetSFXBus</a><a class="toc-link sub" href="#lua-Load">Load</a><a class="toc-link sub" href="#lua-RemoveBus">RemoveBus</a><a class="toc-link sub" href="#lua-Validate">Validate</a><a class="toc-link sub" href="#lua-construction">Construction / enum values</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

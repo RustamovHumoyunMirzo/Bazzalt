@@ -1,3 +1,4 @@
+#include "Platform/AndroidPlatform.h"
 #include "Runtime/ExtensionAccess.h"
 #include <ryml.hpp>
 #include "Bazzalt/Detail/ModuleLifetime.h"
@@ -78,7 +79,11 @@ void ExtensionAccess::Configure(const std::filesystem::path& projectRoot){
                     auto library=LoadLibraryExW(it->c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
                     if(library){Libraries.emplace_back(library,[directories=NativeDirectories](void* value){FreeLibrary(static_cast<HMODULE>(value));});}
 #else
-                    auto library=dlopen(it->c_str(),RTLD_NOW|RTLD_GLOBAL);if(library)Libraries.emplace_back(library,[](void* value){dlclose(value);});
+                    auto dependency=*it;
+#ifdef __ANDROID__
+                    dependency=AndroidPlatform::NativeModule(*it);
+#endif
+                    auto library=dlopen(dependency.c_str(),RTLD_NOW|RTLD_GLOBAL);if(library)Libraries.emplace_back(library,[](void* value){dlclose(value);});
 #endif
                     if(library){it=pending.erase(it);progress=true;}else ++it;
                 }
@@ -97,7 +102,11 @@ void ExtensionAccess::Configure(const std::filesystem::path& projectRoot){
             auto library=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);if(!library)throw std::runtime_error("Could not load native extension library");
             lease={library,[directories=NativeDirectories](void* p){FreeLibrary(static_cast<HMODULE>(p));}};auto get=reinterpret_cast<const ExtensionModuleApi*(*)()>(GetProcAddress(library,"BazzaltGetExtensionModuleV1"));
 #else
-            auto library=dlopen(path.c_str(),RTLD_NOW|RTLD_LOCAL);if(!library)throw std::runtime_error(dlerror());lease={library,[](void* p){dlclose(p);}};auto get=reinterpret_cast<const ExtensionModuleApi*(*)()>(dlsym(library,"BazzaltGetExtensionModuleV1"));
+            auto nativePath=path;
+#ifdef __ANDROID__
+            nativePath=AndroidPlatform::NativeModule(path);
+#endif
+            auto library=dlopen(nativePath.c_str(),RTLD_NOW|RTLD_LOCAL);if(!library)throw std::runtime_error(dlerror());lease={library,[](void* p){dlclose(p);}};auto get=reinterpret_cast<const ExtensionModuleApi*(*)()>(dlsym(library,"BazzaltGetExtensionModuleV1"));
 #endif
             if(!get)throw std::runtime_error("Native extension entry point missing");const auto* api=get();if(!api||api->AbiVersion!=ExtensionAbiVersion||!api->Register)throw std::runtime_error("Native extension ABI mismatch");
             Allowed={name};CurrentLibrary=lease;ExtensionRegistry registry;api->Register(registry);CurrentLibrary.reset();Allowed.clear();Libraries.push_back(std::move(lease));
