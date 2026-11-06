@@ -260,10 +260,10 @@ def BuildAndroid(project, runtime, cooker, settings, configuration, launch, canc
             libraries.mkdir()
             for name in files: shutil.copy2(runtime / name, libraries / name)
             settings['_native_modules']=StageModules(cooked,libraries,arch)
-            if configuration=='release':
-                strip=tools.Compiler.parent/('llvm-strip.exe' if os.name=='nt' else 'llvm-strip')
-                for library in libraries.glob('*.so'):
-                    check();Run([strip,'--strip-unneeded',library])
+            strip=tools.Compiler.parent/('llvm-strip.exe' if os.name=='nt' else 'llvm-strip')
+            for library in libraries.glob('*.so'):
+                if configuration=='debug' and library.name not in files:continue
+                check();Run([strip,'--strip-unneeded',library])
             ValidateLibraries(libraries,tools,profile['min_sdk'])
             payload = work / 'payload'
             payload.mkdir()

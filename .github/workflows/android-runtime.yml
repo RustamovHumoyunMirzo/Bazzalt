@@ -107,10 +107,13 @@ jobs:
           name: android-runtime-x64
           path: dist/android-artifact
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: host-objects
         with:
           path: build/.ccache
           key: android-smoke-host-${{ github.run_id }}
-          restore-keys: linux-x64-objects-
+          restore-keys: |
+            android-smoke-host-
+            linux-x64-objects-
       - name: Prepare host cooker and Android emulator tools
         run: |
           sudo apt-get update
@@ -121,13 +124,24 @@ jobs:
           cmake --build build --parallel 2 --target BazzaltCooker BazzaltGui
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;29.0.14206865" "platforms;android-36" "build-tools;36.0.0" "emulator" "system-images;android-35;google_apis;x86_64"
           python -c "from pathlib import Path; import zipfile; zipfile.ZipFile(next(Path('dist/android-artifact').glob('*.zip'))).extractall('dist/android-sdk')"
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: always() && steps.host-objects.outcome == 'success'
+        with:
+          path: build/.ccache
+          key: ${{ steps.host-objects.outputs.cache-primary-key }}
       - name: Test native GLES and Vulkan games on Android
         run: |
           sudo chmod 666 /dev/kvm
-          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n BazzaltCi -k "system-images;android-35;google_apis;x86_64" --device pixel_5
+          export ANDROID_USER_HOME="$RUNNER_TEMP/bazzalt-android"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n BazzaltCi -k "system-images;android-35;google_apis;x86_64" --device pixel_5 --path "$ANDROID_AVD_HOME/BazzaltCi.avd"
+          "$ANDROID_HOME/emulator/emulator" -list-avds | grep -Fx BazzaltCi
           "$ANDROID_HOME/emulator/emulator" -avd BazzaltCi -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect -feature Vulkan -memory 3072 -cores 2 > dist/emulator.log 2>&1 &
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
-          adb wait-for-device
+          emulator_pid=$!
+          trap 'kill "$emulator_pid" 2>/dev/null || true' EXIT
+          timeout 180 adb wait-for-device || { cat dist/emulator.log; exit 1; }
           for attempt in $(seq 1 180); do
             if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then break; fi
             sleep 2
