@@ -5,6 +5,7 @@
 #include "VFX/ParticleFields.h"
 #include "Animation/AnimationFields.h"
 #include "Runtime/StreamingFields.h"
+#include "Navigation/NavigationFields.h"
 #include <sstream>
 #include <iomanip>
 namespace Bazzalt::Runtime {
@@ -38,8 +39,9 @@ template<class T> bool Decode(const PropertyMap& p,const std::string& name,T& v)
 }
 void RegisterAdvancedLODComponents(ComponentSerializationRegistry& registry){
 #define REGISTER(Type,Visit) registry.Register<Type>("Bazzalt." #Type,1,[](const Type& value,PropertyMap& p){Visit(value,[&](const char* name,const auto& field){Encode(p,name,field);});},[](Type& output,const PropertyMap& p,std::uint32_t version){if(version!=1)return false;Type value;bool valid=true;Visit(value,[&](const char* name,auto& field){if constexpr(std::is_same_v<Type,ParticleEmitter>){if(std::string(name)=="Backend"&&!p.contains(name))return;}valid&=Decode(p,name,field);});if(!valid||!value.IsValid())return false;output=std::move(value);return true;});
- REGISTER(TimelineDirector,VisitTimelineDirector) REGISTER(Lightmap,VisitLightmap) REGISTER(ReflectionProbe,VisitReflectionProbe) REGISTER(LightProbe,VisitLightProbe) REGISTER(WorldCell,VisitWorldCell) REGISTER(StreamingSource,VisitStreamingSource) REGISTER(IKConstraint,VisitIKConstraint) REGISTER(Animator,VisitAnimator) REGISTER(HLOD,VisitHLOD) REGISTER(LODTransition,VisitLODTransition) REGISTER(Impostor,VisitImpostor) REGISTER(ParticleEmitter,VisitParticleEmitter)
+ REGISTER(NavMeshSurface,VisitNavMeshSurface) REGISTER(NavigationAgent,VisitNavigationAgent) REGISTER(NavigationObstacle,VisitNavigationObstacle) REGISTER(NavMeshModifier,VisitNavMeshModifier) REGISTER(TimelineDirector,VisitTimelineDirector) REGISTER(Lightmap,VisitLightmap) REGISTER(ReflectionProbe,VisitReflectionProbe) REGISTER(LightProbe,VisitLightProbe) REGISTER(WorldCell,VisitWorldCell) REGISTER(StreamingSource,VisitStreamingSource) REGISTER(IKConstraint,VisitIKConstraint) REGISTER(Animator,VisitAnimator) REGISTER(HLOD,VisitHLOD) REGISTER(LODTransition,VisitLODTransition) REGISTER(Impostor,VisitImpostor) REGISTER(ParticleEmitter,VisitParticleEmitter)
 #undef REGISTER
+ registry.RegisterEntityReference("Bazzalt.NavigationAgent","Surface");
  registry.RegisterEntityReference("Bazzalt.IKConstraint","AnimatorEntity");registry.RegisterEntityReference("Bazzalt.IKConstraint","Target");registry.RegisterEntityReference("Bazzalt.IKConstraint","PoleTarget");
 }
 }

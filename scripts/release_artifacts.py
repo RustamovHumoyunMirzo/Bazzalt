@@ -44,7 +44,7 @@ def PayloadArchitecture(relative: Path, architecture: str, platform: str) -> str
 def Audit(root: Path, architecture: str, product: str, platform: str="windows") -> None:
     if platform=="macos":
         from Compiler.macos import Architectures
-        required={"editor":["Bazzalt.app/Contents/MacOS/Bazzalt","editor.json","Bazzalt.app/Contents/MacOS/Editor/libBazzalt.dylib","Bazzalt.app/Contents/MacOS/ScriptSDK/include/Bazzalt/Scene.h"],"hub":["BazzaltHub.app/Contents/MacOS/BazzaltHub"],"core":["include/Bazzalt/Scene.h","lib/libBazzalt.dylib","lib/libbazzalt_physics.dylib","lib/libbazzalt_network.dylib","lib/libbazzalt_crypto.dylib","lib/libbazzalt_gui.dylib","lib/libbazzalt_lua.dylib"],"compiler":["BazzaltCompiler","BazzaltCooker"]}.get(product,[])
+        required={"editor":["Bazzalt.app/Contents/MacOS/Bazzalt","editor.json","Bazzalt.app/Contents/MacOS/Editor/libBazzalt.dylib","Bazzalt.app/Contents/MacOS/ScriptSDK/include/Bazzalt/Scene.h"],"hub":["BazzaltHub.app/Contents/MacOS/BazzaltHub"],"core":["include/Bazzalt/Scene.h","lib/libBazzalt.dylib","lib/libbazzalt_physics.dylib","lib/libbazzalt_ai.dylib","lib/libbazzalt_network.dylib","lib/libbazzalt_crypto.dylib","lib/libbazzalt_gui.dylib","lib/libbazzalt_lua.dylib"],"compiler":["BazzaltCompiler","BazzaltCooker"]}.get(product,[])
         for name in required:
             if not (root/name).is_file():raise ValueError("Missing macOS file: "+name)
         found=0
@@ -55,16 +55,16 @@ def Audit(root: Path, architecture: str, product: str, platform: str="windows") 
             if magic in tuple(bytes.fromhex(v) for v in ('cffaedfe','cafebabe','bebafeca','cafebabf','bfbafeca')):
                 found+=1
                 if PayloadArchitecture(path.relative_to(root),architecture,platform) not in Architectures(path):raise ValueError('Wrong Mach-O architecture: '+str(path))
-            if product=='hub' and (path.name.startswith('_bazzalt_runtime') or path.name in {'libBazzalt.dylib','libbazzalt_gui.dylib','libbazzalt_physics.dylib','libbazzalt_network.dylib','libbazzalt_crypto.dylib'}):raise ValueError('Hub contains engine files')
+            if product=='hub' and (path.name.startswith('_bazzalt_runtime') or path.name in {'libBazzalt.dylib','libbazzalt_gui.dylib','libbazzalt_physics.dylib','libbazzalt_ai.dylib','libbazzalt_network.dylib','libbazzalt_crypto.dylib'}):raise ValueError('Hub contains engine files')
         if not found or architecture not in ('x64','arm64'):raise ValueError('Unsupported macOS payload')
         return
     if platform=="linux":
-        required={"editor":["Bazzalt","editor.json","Editor/libBazzalt.so","Editor/libbazzalt_gui.so","Editor/libbazzalt_physics.so","Editor/libbazzalt_network.so","Editor/libbazzalt_crypto.so","Editor/libbazzalt_lua.so","ScriptSDK/include/Bazzalt/Scene.h","ScriptSDK/lib/libBazzalt.so"],"core":["include/Bazzalt/Scene.h","lib/libBazzalt.so","lib/libbazzalt_lua.so","lib/libbazzalt_gui.so","lib/libbazzalt_physics.so","lib/libbazzalt_network.so","lib/libbazzalt_crypto.so"],"hub":["BazzaltHub"],"compiler":["BazzaltCompiler","BazzaltCooker"]}.get(product,[])
+        required={"editor":["Bazzalt","editor.json","Editor/libBazzalt.so","Editor/libbazzalt_gui.so","Editor/libbazzalt_physics.so","Editor/libbazzalt_ai.so","Editor/libbazzalt_network.so","Editor/libbazzalt_crypto.so","Editor/libbazzalt_lua.so","ScriptSDK/include/Bazzalt/Scene.h","ScriptSDK/lib/libBazzalt.so"],"core":["include/Bazzalt/Scene.h","lib/libBazzalt.so","lib/libbazzalt_lua.so","lib/libbazzalt_gui.so","lib/libbazzalt_physics.so","lib/libbazzalt_ai.so","lib/libbazzalt_network.so","lib/libbazzalt_crypto.so"],"hub":["BazzaltHub"],"compiler":["BazzaltCompiler","BazzaltCooker"]}.get(product,[])
         for name in required:
             if not (root/name).is_file():raise ValueError("Missing Linux file: "+name)
         if product=="hub":
             for path in root.rglob("*"):
-                if path.name.lower() in {"versions","scriptsdk","libbazzalt.so","libbazzalt_lua.so","libbazzalt_gui.so","libbazzalt_physics.so","libbazzalt_network.so","libbazzalt_crypto.so","toolchain"} or path.name.startswith("_bazzalt_runtime"):raise ValueError("Hub contains editor/core files: "+str(path))
+                if path.name.lower() in {"versions","scriptsdk","libbazzalt.so","libbazzalt_lua.so","libbazzalt_gui.so","libbazzalt_physics.so","libbazzalt_ai.so","libbazzalt_network.so","libbazzalt_crypto.so","toolchain"} or path.name.startswith("_bazzalt_runtime"):raise ValueError("Hub contains editor/core files: "+str(path))
         binaries=[]
         for path in root.rglob("*"):
             if not path.is_file():continue
@@ -84,14 +84,14 @@ def Audit(root: Path, architecture: str, product: str, platform: str="windows") 
         if Architecture(path) != architecture: raise ValueError(f"Wrong architecture: {path}")
     if product == "hub":
         for path in root.rglob("*"):
-            if path.name.lower() in {"versions", "scriptsdk", "bazzalt.dll", "bazzalt_lua.dll", "bazzalt_gui.dll","bazzalt_physics.dll","bazzalt_network.dll","bazzalt_crypto.dll", "bazzalt.exe", "toolchain"} or path.name.startswith("_bazzalt_runtime"):
+            if path.name.lower() in {"versions", "scriptsdk", "bazzalt.dll", "bazzalt_lua.dll", "bazzalt_gui.dll","bazzalt_physics.dll","bazzalt_ai.dll","bazzalt_network.dll","bazzalt_crypto.dll", "bazzalt.exe", "toolchain"} or path.name.startswith("_bazzalt_runtime"):
                 raise ValueError(f"Hub must not ship editors/core/tools: {path}")
     elif product == "editor":
-        for required in ("Bazzalt.exe", "editor.json", "Editor/Bazzalt.dll", "Editor/bazzalt_lua.dll", "Editor/bazzalt_gui.dll", "Editor/bazzalt_physics.dll","Editor/bazzalt_network.dll","Editor/bazzalt_crypto.dll", "ScriptSDK/include/Bazzalt/Scene.h", "ScriptSDK/lib/Bazzalt.lib", "ScriptSDK/lib/bazzalt_lua.dll", "ScriptSDK/lib/bazzalt_gui.dll", "ScriptSDK/lib/bazzalt_physics.dll","ScriptSDK/lib/bazzalt_network.dll","ScriptSDK/lib/bazzalt_crypto.dll"):
+        for required in ("Bazzalt.exe", "editor.json", "Editor/Bazzalt.dll", "Editor/bazzalt_lua.dll", "Editor/bazzalt_gui.dll", "Editor/bazzalt_physics.dll","Editor/bazzalt_ai.dll","Editor/bazzalt_network.dll","Editor/bazzalt_crypto.dll", "ScriptSDK/include/Bazzalt/Scene.h", "ScriptSDK/lib/Bazzalt.lib", "ScriptSDK/lib/bazzalt_lua.dll", "ScriptSDK/lib/bazzalt_gui.dll", "ScriptSDK/lib/bazzalt_physics.dll","ScriptSDK/lib/bazzalt_ai.dll","ScriptSDK/lib/bazzalt_network.dll","ScriptSDK/lib/bazzalt_crypto.dll"):
             if not (root / required).is_file(): raise ValueError(f"Missing editor file: {required}")
         if (root / "toolchain").exists(): raise ValueError("Editors must use separately installed build tools")
     elif product == "core":
-        for required in ("include/Bazzalt/Scene.h", "lib/Bazzalt.dll", "lib/bazzalt_lua.dll", "lib/bazzalt_gui.dll", "lib/bazzalt_physics.dll","lib/bazzalt_network.dll","lib/bazzalt_crypto.dll"):
+        for required in ("include/Bazzalt/Scene.h", "lib/Bazzalt.dll", "lib/bazzalt_lua.dll", "lib/bazzalt_gui.dll", "lib/bazzalt_physics.dll","lib/bazzalt_ai.dll","lib/bazzalt_network.dll","lib/bazzalt_crypto.dll"):
             if not (root / required).is_file():raise ValueError(f"Missing core file: {required}")
 
 

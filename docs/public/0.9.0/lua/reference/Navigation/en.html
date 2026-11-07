@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Navigation declares the values and operations listed below. Types, defaults and overloads are part of its contract; it is not an editor panel.">
+  <title>Navigation | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / Lua API reference / Navigation</nav>
+      <article class="doc"><h1>Navigation</h1><p>Navigation declares the values and operations listed below. Types, defaults and overloads are part of its contract; it is not an editor panel.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Lua members and signatures</h2>
+<p>Use <code>Bazzalt.Navigation</code>. Each member below is actually registered in Lua. The adapter declarations are C++ binding notation, not Lua example code. <code>sol::property</code> exposes a field, <code>sol::overload</code> lists alternatives, <code>sol::optional</code> accepts an omitted/nil argument, and <code>std::make_tuple</code> returns multiple Lua values. <code>sol::as_table</code> returns a Lua table. Instance methods use <code>value:Method(...)</code>; service/static calls use <code>Bazzalt.Navigation.Method(...)</code> unless a colon overload is explicitly registered. An engine exception becomes a Lua script error. See the examples and behavior notes above for usage.</p><h3 id="lua-Bake">Bake</h3><pre><code class="language-lua">Bazzalt.Navigation.Bake(surface: Entity)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static void Bake(Entity surface);</code></pre></details><h3 id="lua-CalculatePath">CalculatePath</h3><pre><code class="language-lua">Bazzalt.Navigation.CalculatePath(e: Entity, a: Vec3, b: Vec3, mask: unsigned (optional))</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static NavigationPath CalculatePath(Entity surface, Vec3 start, Vec3 end,
+                                        unsigned areaMask = 0xffff);</code></pre><pre><code>[](Entity e, Vec3 a, Vec3 b, sol::optional&lt;unsigned&gt; mask) {
+        return Navigation::CalculatePath(e, a, b, mask.value_or(0xffff));
+    }</code></pre></details><h3 id="lua-Clear">Clear</h3><pre><code class="language-lua">Bazzalt.Navigation.Clear(scene: Scene)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static void Clear(Scene &amp;scene);</code></pre></details><h3 id="lua-GetAgentState">GetAgentState</h3><pre><code class="language-lua">Bazzalt.Navigation.GetAgentState(agent: Entity)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static NavigationAgentState GetAgentState(Entity agent);</code></pre></details><h3 id="lua-GetStatistics">GetStatistics</h3><pre><code class="language-lua">Bazzalt.Navigation.GetStatistics(scene: Scene)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static NavigationStatistics GetStatistics(Scene &amp;scene);</code></pre></details><h3 id="lua-IsReady">IsReady</h3><pre><code class="language-lua">Bazzalt.Navigation.IsReady(surface: Entity)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static bool IsReady(Entity surface);</code></pre></details><h3 id="lua-Load">Load</h3><pre><code class="language-lua">Bazzalt.Navigation.Load(e: Entity, path: string)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static void Load(Entity surface, const std::filesystem::path &amp;source);</code></pre><pre><code>[](Entity e, const std::string &amp;path) {
+        Navigation::Load(e, std::filesystem::u8path(path));
+    }</code></pre></details><h3 id="lua-LoadAsset">LoadAsset</h3><pre><code class="language-lua">Bazzalt.Navigation.LoadAsset(surface: Entity, asset: UUID)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static void LoadAsset(Entity surface, UUID asset);</code></pre></details><h3 id="lua-Raycast">Raycast</h3><pre><code class="language-lua">Bazzalt.Navigation.Raycast(e: Entity, a: Vec3, b: Vec3, mask: unsigned (optional))</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static NavigationHit Raycast(Entity surface, Vec3 start, Vec3 end, unsigned areaMask = 0xffff);</code></pre><pre><code>[](Entity e, Vec3 a, Vec3 b, sol::optional&lt;unsigned&gt; mask) {
+        return Navigation::Raycast(e, a, b, mask.value_or(0xffff));
+    }</code></pre></details><h3 id="lua-ResetPath">ResetPath</h3><pre><code class="language-lua">Bazzalt.Navigation.ResetPath(agent: Entity)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static void ResetPath(Entity agent);</code></pre></details><h3 id="lua-SamplePosition">SamplePosition</h3><pre><code class="language-lua">Bazzalt.Navigation.SamplePosition(e: Entity, p: Vec3, ext: Vec3 (optional), mask: unsigned (optional))</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static NavigationHit SamplePosition(Entity surface, Vec3 position, Vec3 extents = {2, 4, 2},
+                                        unsigned areaMask = 0xffff);</code></pre><pre><code>[](Entity e, Vec3 p, sol::optional&lt;Vec3&gt; ext,
+                               sol::optional&lt;unsigned&gt; mask) {
+        return Navigation::SamplePosition(e, p, ext.value_or(Vec3{2, 4, 2}), mask.value_or(0xffff));
+    }</code></pre></details><h3 id="lua-Save">Save</h3><pre><code class="language-lua">Bazzalt.Navigation.Save(e: Entity, path: string)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static void Save(Entity surface, const std::filesystem::path &amp;destination);</code></pre><pre><code>[](Entity e, const std::string &amp;path) {
+        Navigation::Save(e, std::filesystem::u8path(path));
+    }</code></pre></details><h3 id="lua-SetAreaCost">SetAreaCost</h3><pre><code class="language-lua">Bazzalt.Navigation.SetAreaCost(surface: Entity, area: unsigned, cost: number)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static void SetAreaCost(Entity surface, unsigned area, float cost);</code></pre></details><h3 id="lua-SetDestination">SetDestination</h3><pre><code class="language-lua">Bazzalt.Navigation.SetDestination(agent: Entity, destination: Vec3)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static bool SetDestination(Entity agent, Vec3 destination);</code></pre></details><h3 id="lua-Warp">Warp</h3><pre><code class="language-lua">Bazzalt.Navigation.Warp(agent: Entity, position: Vec3)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static bool Warp(Entity agent, Vec3 position);</code></pre></details><h3 id="lua-construction">Construction / enum values</h3><p>Global service table; do not construct an instance.</p><details><summary>Native declaration and binding adapter</summary><pre><code>api.create_named(&quot;Navigation&quot;);</code></pre></details><p>Binding source: <code>src/Script/LuaNavigation.cpp</code>. Inherited component operations use the Entity component APIs.</p>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../Name/en.html"><small>Previous</small>Name</a>
+<a class="next" href="../NavigationAgent/en.html"><small>Next</small>NavigationAgent</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#source-contract">Lua members and signatures</a><a class="toc-link sub" href="#lua-Bake">Bake</a><a class="toc-link sub" href="#lua-CalculatePath">CalculatePath</a><a class="toc-link sub" href="#lua-Clear">Clear</a><a class="toc-link sub" href="#lua-GetAgentState">GetAgentState</a><a class="toc-link sub" href="#lua-GetStatistics">GetStatistics</a><a class="toc-link sub" href="#lua-IsReady">IsReady</a><a class="toc-link sub" href="#lua-Load">Load</a><a class="toc-link sub" href="#lua-LoadAsset">LoadAsset</a><a class="toc-link sub" href="#lua-Raycast">Raycast</a><a class="toc-link sub" href="#lua-ResetPath">ResetPath</a><a class="toc-link sub" href="#lua-SamplePosition">SamplePosition</a><a class="toc-link sub" href="#lua-Save">Save</a><a class="toc-link sub" href="#lua-SetAreaCost">SetAreaCost</a><a class="toc-link sub" href="#lua-SetDestination">SetDestination</a><a class="toc-link sub" href="#lua-Warp">Warp</a><a class="toc-link sub" href="#lua-construction">Construction / enum values</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

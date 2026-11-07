@@ -147,6 +147,11 @@ def Install(entry: dict, archive: Path, versions: Path) -> Path:
             if manifest.get("lua_version"):
                 for name in ("Editor/"+lua,"ScriptSDK/lib/"+lua):
                     if not (program/name).is_file():raise ValueError("Missing Lua runtime library: "+name)
+            if manifest.get("navigation_abi"):
+                if type(manifest["navigation_abi"]) is not int or manifest["navigation_abi"]!=1:raise ValueError("Unsupported navigation runtime ABI")
+                ai="libbazzalt_ai.dylib" if mac else "libbazzalt_ai.so" if linux else "bazzalt_ai.dll"
+                for name in ("Editor/"+ai,"ScriptSDK/lib/"+ai):
+                    if not (program/name).is_file():raise ValueError("Missing navigation runtime library: "+name)
             if manifest.get("physics_abi"):
                 if type(manifest["physics_abi"]) is not int or manifest["physics_abi"]!=2:raise ValueError("Unsupported physics runtime ABI")
                 for name in ("Editor/"+physics,"ScriptSDK/lib/"+physics):

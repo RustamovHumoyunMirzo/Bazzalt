@@ -69,6 +69,10 @@ Read the [public guides](docs/public/index.html). Open the downloaded HTML in a 
 offline use. Documentation authoring and version/language setup are described
 in [docs/public/README.md](docs/public/README.md).
 
+Recast/Detour navigation supports baked surfaces, agents and dynamic obstacle
+carving through the separate AI runtime. See the
+[navigation guide](docs/public/0.9.0/manual/navigation/en.html).
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines, API/Lua parity,

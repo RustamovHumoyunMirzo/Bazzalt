@@ -573,5 +573,10 @@
     "file": "yojimbo-libsodium-NOTICE.txt",
     "source": "https://raw.githubusercontent.com/mas-bandwidth/yojimbo/f0cde95f5a27ca345f83dad65dc36712366077db/sodium/sodium.c",
     "sha256": "93e7cac854d71cdafc9d9e4e9f8fd28d87ae541b3dda224d7c8fe23d37875704"
+  },
+  {
+    "file": "RecastNavigation/LICENSE",
+    "source": "https://raw.githubusercontent.com/recastnavigation/recastnavigation/6dc1667f580357e8a2154c28b7867bea7e8ad3a7/License.txt",
+    "sha256": "ffad87821cce7cfd3be00b63ffadd01b04e83a4c6a0bcc68f06362ffd42d705e"
   }
 ]

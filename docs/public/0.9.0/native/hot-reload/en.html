@@ -43,7 +43,7 @@ public:
 };</code></pre><p>OnSaveReloadState returns a versionable, NUL-free string for fields that are not PROPERTY declarations. OnRestoreReloadState receives it on the candidate before commit. Both may reject a reload by throwing. Keep save const and restore limited to the candidate's own data; external mutations cannot be rolled back. The custom payload and each reflected value are limited to 1 MiB. No process addresses, object bytes or vtables are copied.</p>
 <h2 id="lifetime">Lifetime</h2><p>OnCreate/OnDestroy are skipped for the swap, while C++ constructors/destructors still execute. Use OnReload to restore scoped subscriptions and avoid persistent scene edits in constructors. Engine-owned module jobs complete before capture and unload. Old module leases remain alive while engine-managed work needs them. Reacquire Behavior pointers after reload. Globals, statics, arbitrary external threads, global subsystems and extension DLLs do not migrate.</p><p>See the <a href="../reference/Behavior/en.html">Behavior reference</a> and <a href="../../manual/hot-reload/en.html">editor controls</a>.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../asset-dependencies/en.html"><small>Previous</small>C++ asset dependency queries</a>
-<a class="next" href="../network-save/en.html"><small>Next</small>Networking and player saves</a></nav>
+<a class="next" href="../navigation/en.html"><small>Next</small>Navigation in C++</a></nav>
     </main>
     <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#hooks">Custom state and callbacks</a><a class="toc-link" href="#lifetime">Lifetime</a></nav></aside>
   </div>

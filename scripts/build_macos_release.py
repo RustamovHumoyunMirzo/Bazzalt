@@ -11,7 +11,7 @@ from Compiler.macos import Sign
 def Run(*args):subprocess.run([str(x) for x in args],cwd=ROOT,check=True)
 def Libraries(build,destination):
     destination.mkdir(parents=True,exist_ok=True)
-    for pattern in ('libBazzalt*.dylib','libbazzalt_lua*.dylib','libbazzalt_gui*.dylib','libbazzalt_physics*.dylib','libbazzalt_network*.dylib','libbazzalt_crypto*.dylib','libbshad*.dylib'):
+    for pattern in ('libBazzalt*.dylib','libbazzalt_lua*.dylib','libbazzalt_gui*.dylib','libbazzalt_physics*.dylib','libbazzalt_ai*.dylib','libbazzalt_network*.dylib','libbazzalt_crypto*.dylib','libbshad*.dylib'):
         for path in (build/'Editor').glob(pattern):shutil.copy2(path,destination/path.name)
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--product',choices=('core','editor','hub','compiler','all'),default='all');parser.add_argument('--build',type=Path,default=ROOT/'build');parser.add_argument('--output',type=Path,default=ROOT/'dist/releases');parser.add_argument('--base-url',default='');args=parser.parse_args()
@@ -26,7 +26,7 @@ def main():
         if stage.exists():raise SystemExit('Choose a clean staging directory: '+str(stage))
         if product=='core':
             stage.mkdir(parents=True);shutil.copytree(build/'ScriptSDK/include',stage/'include');Libraries(build,stage/'lib');Stage(build,stage/('RuntimeTemplates/macos-'+architecture),architecture,platform='macos')
-            (stage/'core.json').write_text(json.dumps(dict(version=versions['core'],architecture=architecture,platform='macos',abi=1,lua_version='5.4.9',gui_abi=6,physics_abi=2)))
+            (stage/'core.json').write_text(json.dumps(dict(version=versions['core'],architecture=architecture,platform='macos',abi=1,lua_version='5.4.9',gui_abi=6,physics_abi=2,navigation_abi=1)))
         else:
             executable={'editor':'Bazzalt','hub':'BazzaltHub','compiler':'BazzaltCompiler'}[product];source={'editor':'bazzalt_editor.py','hub':'bazzalt_hub.py','compiler':'bazzalt_compiler.py'}[product]
             command=[sys.executable,'-m','nuitka','--mode=standalone','--assume-yes-for-downloads','--output-dir='+str(build/'macOSNuitka'/product),'--output-filename='+executable]
@@ -52,7 +52,7 @@ def main():
                 shutil.copy2(modules[0],program/'Editor'/modules[0].name);shutil.copytree(build/'ScriptSDK',program/'ScriptSDK',symlinks=False);Stage(build,program/('RuntimeTemplates/macos-'+architecture),architecture,platform='macos')
                 compiler=build/'macOSRelease/compiler'
                 if not compiler.is_dir():raise ValueError('Package the macOS compiler before the editor')
-                shutil.copytree(compiler,program/'tools/compiler');(stage/'editor.json').write_text(json.dumps(dict(version=versions['editor'],architecture=architecture,platform='macos',executable='Bazzalt.app/Contents/MacOS/Bazzalt',project_format_max=1,lua_version='5.4.9',gui_abi=6,physics_abi=2)))
+                shutil.copytree(compiler,program/'tools/compiler');(stage/'editor.json').write_text(json.dumps(dict(version=versions['editor'],architecture=architecture,platform='macos',executable='Bazzalt.app/Contents/MacOS/Bazzalt',project_format_max=1,lua_version='5.4.9',gui_abi=6,physics_abi=2,navigation_abi=1)))
         Collect(stage/'licenses',ROOT,python=product!='core')
         if product=="hub":
             (stage/"share").mkdir(exist_ok=True);shutil.copy2(ROOT/"bazzalt/assets/branding/BazzaltIcon.svg",stage/"share/BazzaltLogo.svg")

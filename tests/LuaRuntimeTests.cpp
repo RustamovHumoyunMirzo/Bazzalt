@@ -309,6 +309,15 @@ function Walk:OnCreate()
  B.Cinematics.Stop(self.Entity)
  assert(not B.Cinematics.GetStatus(self.Entity).Playing)
  self.Entity:RemoveComponent("TimelineDirector")
+ local surface=B.NavMeshSurface.new();assert(surface:IsValid())
+ local agent=self.Entity:AddComponent("NavigationAgent");agent.Speed=6
+ self.Entity:SetComponent("NavigationAgent",agent)
+ assert(self.Entity:GetComponent("NavigationAgent").Speed==6)
+ assert(B.Navigation.GetStatistics(self.Entity:GetScene()).Agents==0)
+ self.Entity:RemoveComponent("NavigationAgent")
+ local obstacle=B.NavigationObstacle.new();obstacle.Shape=B.NavigationObstacleShape.Cylinder
+ assert(obstacle:IsValid())
+
  self.Speed=100;assert(self.Speed==100);self.Speed=4 -- Inspector rules never gate gameplay.
 end
 function Walk:OnUpdate(dt)

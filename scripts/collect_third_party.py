@@ -8,6 +8,7 @@ import shutil
 import sys
 
 SOURCES = {
+    'RecastNavigation.txt': 'deps/recast/License.txt',
     'Jolt.txt': 'deps/jolt/LICENSE',
     'EnTT.txt': 'deps/entt/LICENSE',
     'Filament.txt': 'deps/filament/LICENSE',

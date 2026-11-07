@@ -1,3 +1,4 @@
+#include "Navigation/NavigationModuleApi.h"
 #include "Prefab/PrefabAccess.h"
 #include "Runtime/ApplicationEventsAccess.h"
 #include "Runtime/StreamingRuntime.h"
@@ -139,6 +140,7 @@ struct StreamingRuntime::Impl {
     void Release(Cell& cell) {Stop(cell);if(!cell.Prefab)RemoveEntities(cell);cell.Staging.reset();{std::lock_guard lock(cell.State->Mutex);cell.State->Prepared.reset();cell.State->Memory.reset();}}
     void StartCellScripts(Cell& cell) {
         if(!Host.m_scriptsRunning)return;
+        UpdateNavigationScene(Host.GetScene(),0);
         std::vector<ScriptBinding> native,lua;
         for(auto id:cell.Owned){
             auto entity=Host.GetScene().GetEntity(id);auto* components=entity.TryGetComponent<ScriptComponents>();

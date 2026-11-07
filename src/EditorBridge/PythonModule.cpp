@@ -1,4 +1,5 @@
 #include "Bazzalt/Timeline.h"
+#include "Bazzalt/Navigation.h"
 #include "Bazzalt/DeveloperConsole.h"
 #include "Runtime/DeveloperConsoleAccess.h"
 #include "Bazzalt/Lighting.h"
@@ -638,7 +639,7 @@ public:
     py::dict PreviewAnimationController(const std::string& id,const std::string& source,float delta,const py::dict& parameters,bool reset){BeginAnimationPreview(id);auto e=RequireEntity(id);if(reset){Animation::SetController(e,AnimationController::FromSource(source));Animation::Play(e);}for(auto item:parameters)Animation::SetParameter(e,py::cast<std::string>(item.first),py::cast<float>(item.second));Animation::Evaluate(e,delta);auto status=Animation::GetStatus(e);py::dict out;out["state"]=status.State;out["time"]=status.Time;out["weight"]=status.TransitionWeight;return out;}
     py::list ComponentTypes() const {
         py::list result;
-        result.append("Timeline Director");result.append("Lightmap");result.append("Reflection Probe");result.append("Light Probe");result.append("World Cell");result.append("Streaming Source");result.append("IK Constraint");result.append("Animator");result.append("Particle Emitter");result.append("HLOD");result.append("LOD Transition");result.append("Impostor");result.append("LOD");result.append("Rigidbody");result.append("Shape Collider");result.append("Mesh Collider");result.append("Joint");result.append("Distance Joint");result.append("Hinge Joint");result.append("Slider Joint");result.append("Ball And Socket Joint");result.append("Fixed Joint");result.append("Cloth");result.append("Rope");result.append("Vehicle");result.append("Vehicle Wheel");result.append("Wheel Suspension");result.append("Wheel Tire");result.append("Wheel Brake");result.append("Wheel Steering");result.append("Vehicle Engine");result.append("Vehicle Transmission");result.append("Vehicle Differential");result.append("Vehicle Anti Roll Bar");result.append("Vehicle Aerodynamics");result.append("Audio Source");result.append("Audio Listener");
+        result.append("NavMesh Surface");result.append("Navigation Agent");result.append("Navigation Obstacle");result.append("NavMesh Modifier");result.append("Timeline Director");result.append("Lightmap");result.append("Reflection Probe");result.append("Light Probe");result.append("World Cell");result.append("Streaming Source");result.append("IK Constraint");result.append("Animator");result.append("Particle Emitter");result.append("HLOD");result.append("LOD Transition");result.append("Impostor");result.append("LOD");result.append("Rigidbody");result.append("Shape Collider");result.append("Mesh Collider");result.append("Joint");result.append("Distance Joint");result.append("Hinge Joint");result.append("Slider Joint");result.append("Ball And Socket Joint");result.append("Fixed Joint");result.append("Cloth");result.append("Rope");result.append("Vehicle");result.append("Vehicle Wheel");result.append("Wheel Suspension");result.append("Wheel Tire");result.append("Wheel Brake");result.append("Wheel Steering");result.append("Vehicle Engine");result.append("Vehicle Transmission");result.append("Vehicle Differential");result.append("Vehicle Anti Roll Bar");result.append("Vehicle Aerodynamics");result.append("Audio Source");result.append("Audio Listener");
         for (const char* name : {"Camera", "Light", "Mesh", "Primitive Object", "Scene Query Bounds", "Gaussian Blur", "Vignette"})
             result.append(name);
         for(auto name:GuiNames)result.append(name);
@@ -707,7 +708,7 @@ public:
             const auto mode=value.cast<int>();if(mode<0||mode>7)return false;
         }
         Entity entity=RequireEntity(id);
-        if(type=="Timeline Director"||type=="Lightmap"||type=="Reflection Probe"||type=="Light Probe"||type=="World Cell"||type=="Streaming Source"||type=="IK Constraint"||type=="Animator"||type=="Particle Emitter"||type=="HLOD"||type=="LOD Transition"||type=="Impostor")return SetAdvancedLODProperty(entity,type,property,value);
+        if(type=="NavMesh Surface"||type=="Navigation Agent"||type=="Navigation Obstacle"||type=="NavMesh Modifier"||type=="Timeline Director"||type=="Lightmap"||type=="Reflection Probe"||type=="Light Probe"||type=="World Cell"||type=="Streaming Source"||type=="IK Constraint"||type=="Animator"||type=="Particle Emitter"||type=="HLOD"||type=="LOD Transition"||type=="Impostor")return SetAdvancedLODProperty(entity,type,property,value);
         if(type=="LOD")return SetLODProperty(entity,property,value);
         if(type=="Rigidbody"||type=="Shape Collider"||type=="Mesh Collider"||type=="Joint"||type=="Distance Joint"||type=="Hinge Joint"||type=="Slider Joint"||type=="Ball And Socket Joint"||type=="Fixed Joint"||type=="Cloth"||type=="Rope"||type=="Vehicle"||type=="Vehicle Wheel"||type=="Wheel Suspension"||type=="Wheel Tire"||type=="Wheel Brake"||type=="Wheel Steering"||type=="Vehicle Engine"||type=="Vehicle Transmission"||type=="Vehicle Differential"||type=="Vehicle Anti Roll Bar"||type=="Vehicle Aerodynamics")return SetPhysicsProperty(entity,type,property,value);
         if(type=="Audio Source"||type=="Audio Listener")return SetAudioProperty(entity,type,property,value);
@@ -835,6 +836,11 @@ public:
         if (!m_snapshot.empty()) m_engine->LoadScene(m_snapshot);
         for(const auto& [id,path]:m_extraSnapshots)for(std::size_t i=0;i<m_loadedScenes.size();++i)if(i!=m_activeScene&&SceneAt(i).GetUUID()==id){auto restored=m_engine->LoadSceneAsset(path);if(restored)m_loadedScenes[i].Data=std::move(restored);break;}
         CleanupSnapshot();
+    }
+    void BakeNavigation(const std::string& id,const std::string& path) {
+        if(m_playing)throw std::logic_error("Stop Play before saving a navigation bake");
+        auto [scene,e]=FindEntity(id);if(!e)throw std::invalid_argument("Missing navigation surface");
+        Navigation::Bake(e);Navigation::Save(e,std::filesystem::u8path(path));
     }
     bool IsPlaying() const { return m_playing; }
     bool IsPaused() const { return m_paused; }
@@ -1128,6 +1134,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("tick", &Bazzalt::EditorBridge::EditorHost::Tick)
         .def("application_tick_interval", &Bazzalt::EditorBridge::EditorHost::ApplicationTickInterval)
         .def("stop", &Bazzalt::EditorBridge::EditorHost::Stop)
+        .def("bake_navigation", &Bazzalt::EditorBridge::EditorHost::BakeNavigation)
         .def("is_playing", &Bazzalt::EditorBridge::EditorHost::IsPlaying)
         .def("is_paused", &Bazzalt::EditorBridge::EditorHost::IsPaused)
         .def("rename_asset_directory", &Bazzalt::EditorBridge::EditorHost::RenameAssetDirectory)

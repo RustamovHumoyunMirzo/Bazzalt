@@ -20,7 +20,7 @@ def Package(architecture):
     shutil.copytree(template/'licenses',stage/'licenses')
     version=json.loads((root/'releases/versions.json').read_text())['core']
     (stage/'core.json').write_text(json.dumps(dict(version=version,architecture=architecture,platform='android',
-        abi=1,lua_version='5.4.9',gui_abi=6,physics_abi=2,android_ndk='29.0.14206865',minimum_api=26)),encoding='utf-8')
+        abi=1,lua_version='5.4.9',gui_abi=6,physics_abi=2,navigation_abi=1,android_ndk='29.0.14206865',minimum_api=26)),encoding='utf-8')
     for path in stage.rglob('*.so'):
         if Architecture(path)!=architecture:raise ValueError('Wrong Android library architecture: '+str(path))
     output=root/'dist/releases'

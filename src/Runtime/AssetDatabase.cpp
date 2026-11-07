@@ -1,4 +1,7 @@
 #include "Bazzalt/Timeline.h"
+#include "Bazzalt/Navigation.h"
+#include "Bazzalt/Scene.h"
+#include "Bazzalt/Components/NavMeshSurface.h"
 #include "Bazzalt/Animation.h"
 #include "Prefab/PrefabAccess.h"
 #include "Runtime/GlobalEventsAccess.h"
@@ -312,6 +315,16 @@ public:
     }
 };
 
+class NavigationImporter final:public AssetImporter {
+public:
+    std::string GetName()const override{return "Bazzalt.Navigation";}
+    std::uint32_t GetVersion()const override{return 1;}
+    bool Supports(const std::filesystem::path& p)const override{return LowerExtension(p)==".bnavmesh";}
+    bool CollectDependencies(const AssetInfo& asset,AssetDependencyReport& report)const override{report.Asset=asset.Id;report.State=asset.State==AssetState::Ready?AssetDependencyScanState::Complete:AssetDependencyScanState::Unknown;return true;}
+    bool Import(const AssetImportContext& c,std::string& error)override{
+        try{Scene scene;auto e=scene.CreateEntity("Validate Navigation");auto& surface=e.AddComponent<NavMeshSurface>();surface.AgentHeight=.001f;surface.AgentRadius=.001f;surface.MaxClimb=0;Navigation::Load(e,c.SourcePath);return CopyAsset(c,error);}catch(const std::exception& ex){error=ex.what();return false;}
+    }
+};
 class TimelineImporter final:public AssetImporter {
 public:
  std::string GetName()const override{return "Bazzalt.Timeline";}
@@ -484,6 +497,7 @@ AssetDatabase::AssetDatabase() {
     RegisterImporter(std::make_unique<VFXImporter>());
     RegisterImporter(std::make_unique<AnimationControllerImporter>());
     RegisterImporter(std::make_unique<TimelineImporter>());
+    RegisterImporter(std::make_unique<NavigationImporter>());
     RegisterImporter(std::make_unique<GlobalEventImporter>());
     RegisterImporter(std::make_unique<PrefabImporter>());
     RegisterImporter(std::make_unique<GuiDataImporter>(false));RegisterImporter(std::make_unique<GuiDataImporter>(true));

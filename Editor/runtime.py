@@ -377,6 +377,10 @@ class RuntimeService(QObject):
     def PhysicsAuthoringData(self,entity_id: str) -> dict:
         return dict(self._host.physics_authoring_data(entity_id)) if self._host is not None and hasattr(self._host,'physics_authoring_data') else {}
 
+    def BakeNavigation(self,entity,path):
+        if not self._host or not hasattr(self._host,'bake_navigation'):raise RuntimeError("Navigation baking requires an updated native runtime")
+        self._host.bake_navigation(str(entity),str(path))
+
     def CaptureTimelinePose(self,entity,world=False):
         if not self._host or not hasattr(self._host,'timeline_capture_pose'):
             raise RuntimeError("Timeline preview requires an updated native editor runtime")

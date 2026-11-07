@@ -91,10 +91,10 @@ def ValidateRuntime(runtime,architecture,platform="windows"):
     core_version=json.loads(versions.read_text(encoding='utf-8-sig'))['core']
     if manifest.get('core_version')!=core_version:raise ValueError('Runtime template does not match this compiler/core version')
     if manifest.get('platform','windows')!=platform:raise ValueError('Runtime platform mismatch')
-    required=['BazzaltPlayer.exe','Bazzalt.dll','bazzalt_lua.dll','bazzalt_gui.dll','bazzalt_physics.dll','bazzalt_network.dll','bazzalt_crypto.dll'] if platform=='windows' else ['BazzaltPlayer','libbazzalt_player.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so','libbazzalt_physics.so','libbazzalt_network.so','libbazzalt_crypto.so']
+    required=['BazzaltPlayer.exe','Bazzalt.dll','bazzalt_lua.dll','bazzalt_gui.dll','bazzalt_physics.dll','bazzalt_ai.dll','bazzalt_network.dll','bazzalt_crypto.dll'] if platform=='windows' else ['BazzaltPlayer','libbazzalt_player.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so','libbazzalt_physics.so','libbazzalt_ai.so','libbazzalt_network.so','libbazzalt_crypto.so']
     if platform=='android' and manifest.get('android_runtime_abi')!=1:raise ValueError('Install an Android runtime SDK with the matching launcher/module ABI')
-    if platform=='android':required=['libmain.so','libSDL3.so','libc++_shared.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so','libbazzalt_physics.so','libbazzalt_network.so','libbazzalt_crypto.so']
-    if platform=='macos':required=['BazzaltPlayer','libbazzalt_player.dylib','libBazzalt.dylib','libbazzalt_lua.dylib','libbazzalt_gui.dylib','libbazzalt_physics.dylib','libbazzalt_network.dylib','libbazzalt_crypto.dylib']
+    if platform=='android':required=['libmain.so','libSDL3.so','libc++_shared.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so','libbazzalt_physics.so','libbazzalt_ai.so','libbazzalt_network.so','libbazzalt_crypto.so']
+    if platform=='macos':required=['BazzaltPlayer','libbazzalt_player.dylib','libBazzalt.dylib','libbazzalt_lua.dylib','libbazzalt_gui.dylib','libbazzalt_physics.dylib','libbazzalt_ai.dylib','libbazzalt_network.dylib','libbazzalt_crypto.dylib']
     files=manifest.get('files',required)
     if not set(required)<=set(files):raise ValueError('Incomplete runtime template')
     for name in files:

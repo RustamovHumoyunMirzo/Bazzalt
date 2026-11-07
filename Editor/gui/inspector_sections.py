@@ -1,5 +1,18 @@
 """Presentation-only grouping. Property identifiers and serialization stay stable."""
 GROUPS = {
+    "NavMeshSurface": {
+        "Bounds": ("Center", "Size"),
+        "Voxelization": ("CellSize", "CellHeight", "TileSize", "MaxSimplificationError"),
+        "Agent Profile": ("AgentRadius", "AgentHeight", "MaxSlope", "MaxClimb"),
+        "Sources": ("Data", "LayerMask", "UsePhysicsGeometry", "AutoBake"),
+        "Capacity": ("MaxAgents", "MaxObstacles"),
+    },
+    "NavigationAgent": {
+        "Agent": ("Surface", "Radius", "Height", "BaseOffset", "AreaMask"),
+        "Movement": ("Speed", "Acceleration", "AngularSpeed", "StoppingDistance", "UpdatePosition", "UpdateRotation", "Stopped"),
+        "Avoidance": ("Avoidance", "SeparationWeight"),
+    },
+
     "Camera": {
         "Projection": ("Projection", "Field of View", "Orthographic Size", "Near", "Far"),
         "Output": ("Render Target", "Viewport", "Aspect Ratio", "Aspect Mode", "Priority", "Active", "Clear Color"),

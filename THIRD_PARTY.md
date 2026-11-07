@@ -41,6 +41,7 @@ and material binding while preserving upstream glTF material generation.
 | [Lua](https://www.lua.org), Lua.org / PUC-Rio | Separate scripting library | [MIT](https://www.lua.org/license.html) |
 | [sol2](https://github.com/ThePhD/sol2), Rapptz, ThePhD and contributors | Lua bindings | [MIT](https://github.com/ThePhD/sol2/blob/develop/LICENSE.txt) |
 | [SDL3](https://github.com/libsdl-org/SDL), Sam Lantinga and contributors | Windowing/input | [zlib](https://github.com/libsdl-org/SDL/blob/main/LICENSE.txt) |
+| [Recast Navigation / Detour](https://github.com/recastnavigation/recastnavigation/tree/v1.6.0), Mikko Mononen and contributors | Private AI navigation module | [zlib](https://github.com/recastnavigation/recastnavigation/blob/v1.6.0/License.txt); snapshot in licenses/third_party/RecastNavigation/LICENSE |
 | [Jolt Physics](https://github.com/jrouwe/JoltPhysics/tree/v5.3.0), Jorrit Rouwe and contributors | Separate native physics runtime | [MIT](https://github.com/jrouwe/JoltPhysics/blob/v5.3.0/LICENSE); snapshot in licenses/third_party/Jolt/LICENSE |
 | [miniaudio](https://github.com/mackron/miniaudio), David Reid | Audio decoding/mixing/output | [Public-domain or MIT-0 alternatives](https://github.com/mackron/miniaudio/blob/master/LICENSE); MIT-0 is the distribution option used here |
 | [stb](https://github.com/nothings/stb), Sean Barrett and contributors | Image decoding through Filament, Vorbis decoding with miniaudio | [MIT or public-domain alternatives](https://github.com/nothings/stb/blob/master/LICENSE); preserve file notices |

@@ -23,9 +23,9 @@ def Stage(build,output,architecture,root=None,platform=None):
     platform=platform or HostPlatform();linux=platform!="windows"
     build=Path(build).resolve();output=Path(output).resolve();root=Path(root or Path(__file__).resolve().parents[1]);native=build/('Editor' if linux else 'Editor/Release')
     output.mkdir(parents=True,exist_ok=True)
-    names=['BazzaltPlayer.exe','Bazzalt.dll','bazzalt_lua.dll','bazzalt_gui.dll','bazzalt_physics.dll','bazzalt_network.dll','bazzalt_crypto.dll'] if not linux else ['BazzaltPlayer','libbazzalt_player.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so','libbazzalt_physics.so','libbazzalt_network.so','libbazzalt_crypto.so']
+    names=['BazzaltPlayer.exe','Bazzalt.dll','bazzalt_lua.dll','bazzalt_gui.dll','bazzalt_physics.dll','bazzalt_ai.dll','bazzalt_network.dll','bazzalt_crypto.dll'] if not linux else ['BazzaltPlayer','libbazzalt_player.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so','libbazzalt_physics.so','libbazzalt_ai.so','libbazzalt_network.so','libbazzalt_crypto.so']
     if platform=="android":
-        names=['libmain.so','libSDL3.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so','libbazzalt_physics.so','libbazzalt_network.so','libbazzalt_crypto.so']
+        names=['libmain.so','libSDL3.so','libBazzalt.so','libbazzalt_lua.so','libbazzalt_gui.so','libbazzalt_physics.so','libbazzalt_ai.so','libbazzalt_network.so','libbazzalt_crypto.so']
         abi='arm64-v8a' if architecture=='arm64' else 'x86_64'
         ndk=Path(os.environ.get('ANDROID_NDK_HOME') or os.environ['ANDROID_HOME']+'/ndk/29.0.14206865')
         triple='aarch64-linux-android' if architecture=='arm64' else 'x86_64-linux-android'
@@ -35,7 +35,7 @@ def Stage(build,output,architecture,root=None,platform=None):
         from types import SimpleNamespace
         ValidateLibraries(native,SimpleNamespace(Ndk=ndk,Compiler=ndk/'toolchains/llvm/prebuilt/linux-x86_64/bin/clang++'),26)
         shutil.copytree(root/'deps/SDL3/android-project/app/src/main/java',output/'android/java',dirs_exist_ok=True)
-    if platform=="macos":names=["BazzaltPlayer","libbazzalt_player.dylib","libBazzalt.dylib","libbazzalt_lua.dylib","libbazzalt_gui.dylib","libbazzalt_physics.dylib","libbazzalt_network.dylib","libbazzalt_crypto.dylib"]+sorted(p.name for p in native.glob("libbazzalt_lua.*.dylib"))
+    if platform=="macos":names=["BazzaltPlayer","libbazzalt_player.dylib","libBazzalt.dylib","libbazzalt_lua.dylib","libbazzalt_gui.dylib","libbazzalt_physics.dylib","libbazzalt_ai.dylib","libbazzalt_network.dylib","libbazzalt_crypto.dylib"]+sorted(p.name for p in native.glob("libbazzalt_lua.*.dylib"))
     if platform=="linux":
         names+=sorted(p.name for p in native.glob('libbazzalt_lua.so.*'))
     for name in names:

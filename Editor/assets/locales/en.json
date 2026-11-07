@@ -1855,5 +1855,16 @@
   "panel.timeline": "Timeline",
   "component.Timeline Director": "Timeline Director",
   "field.Sequence": "Sequence",
-  "field.RestoreOnStop": "Restore On Stop"
+  "field.RestoreOnStop": "Restore On Stop",
+  "navigation.bake": "Bake Navigation",
+  "navigation.baking": "Baking navigation…",
+  "navigation.title": "Navigation",
+  "navigation.import_failed": "The navigation bake could not be imported.",
+  "component.NavMesh Surface": "NavMesh Surface",
+  "component.Navigation Agent": "Navigation Agent",
+  "component.Navigation Obstacle": "Navigation Obstacle",
+  "component.NavMesh Modifier": "NavMesh Modifier",
+  "navigation.surface": "Select NavMesh Surface",
+  "navigation.box": "Box",
+  "navigation.cylinder": "Cylinder"
 }

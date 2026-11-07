@@ -157,6 +157,24 @@ class DownloadTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,"Unsupported physics runtime ABI"):
                 Install(self.MakeEntry(archive.read_bytes()),archive,self.Root/"unknown-physics")
 
+    def test_navigation_module_abi_and_both_library_locations(self):
+        archive=self.EditorZip()
+        with zipfile.ZipFile(archive) as source:files={name:source.read(name) for name in source.namelist()}
+        metadata={"version":"0.5.0","architecture":"x64","executable":"Bazzalt.exe","navigation_abi":1}
+        files["editor.json"]=json.dumps(metadata)
+        with self.assertRaisesRegex(ValueError,"Missing navigation runtime library"):
+            archive=self.Zip(files);Install(self.MakeEntry(archive.read_bytes()),archive,self.Root/"missing-navigation")
+        files["Editor/bazzalt_ai.dll"]=PE()
+        with self.assertRaisesRegex(ValueError,"Missing navigation runtime library"):
+            archive=self.Zip(files);Install(self.MakeEntry(archive.read_bytes()),archive,self.Root/"missing-sdk-navigation")
+        files["ScriptSDK/lib/bazzalt_ai.dll"]=PE()
+        archive=self.Zip(files);target=Install(self.MakeEntry(archive.read_bytes()),archive,self.Root/"navigation")
+        self.assertTrue((target/"Editor/bazzalt_ai.dll").is_file())
+        for abi in (2,3,"1",True):
+            metadata["navigation_abi"]=abi;files["editor.json"]=json.dumps(metadata);archive=self.Zip(files)
+            with self.assertRaisesRegex(ValueError,"Unsupported navigation runtime ABI"):
+                Install(self.MakeEntry(archive.read_bytes()),archive,self.Root/"unknown-navigation")
+
     def test_core_audit_requires_gui_runtime(self):
         (self.Root/"include/Bazzalt").mkdir(parents=True);(self.Root/"include/Bazzalt/Scene.h").write_text("// header")
         (self.Root/"lib").mkdir();(self.Root/"lib/Bazzalt.dll").write_bytes(PE());(self.Root/"lib/bazzalt_lua.dll").write_bytes(PE())
@@ -164,6 +182,8 @@ class DownloadTests(unittest.TestCase):
         (self.Root/"lib/bazzalt_gui.dll").write_bytes(PE())
         with self.assertRaisesRegex(ValueError,"bazzalt_physics.dll"):Audit(self.Root,"x64","core")
         (self.Root/"lib/bazzalt_physics.dll").write_bytes(PE())
+        with self.assertRaisesRegex(ValueError,"bazzalt_ai.dll"):Audit(self.Root,"x64","core")
+        (self.Root/"lib/bazzalt_ai.dll").write_bytes(PE())
         with self.assertRaisesRegex(ValueError,"bazzalt_network.dll"):Audit(self.Root,"x64","core")
         (self.Root/"lib/bazzalt_network.dll").write_bytes(PE())
         with self.assertRaisesRegex(ValueError,"bazzalt_crypto.dll"):Audit(self.Root,"x64","core")

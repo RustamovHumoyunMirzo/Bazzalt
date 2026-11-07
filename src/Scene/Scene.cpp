@@ -1,4 +1,5 @@
 #include "Bazzalt/Profiler.h"
+#include "Navigation/NavigationModuleApi.h"
 #include <typeinfo>
 #include "Bazzalt/Scene.h"
 #include "Bazzalt/GUI.h"
@@ -33,6 +34,7 @@ void Scene::RetainGameplayModule() {
 }
 
 Scene::~Scene() {
+    Runtime::ReleaseNavigationScene(*this);
     DestroySystems();
     m_lifetime.reset();
     Runtime::ReleasePhysicsScene(*this);
@@ -66,6 +68,7 @@ void Scene::DestroyEntity(Entity entity) {
 }
 
 void Scene::Clear() {
+    Runtime::ReleaseNavigationScene(*this);
     Cinematics::StopAll(*this);
     Runtime::ReleasePhysicsScene(*this);
     m_physicsSettings={};

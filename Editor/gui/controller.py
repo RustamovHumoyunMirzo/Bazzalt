@@ -344,6 +344,10 @@ class EditorController(QObject):
                     if editor is not None:
                         if (component=="Camera" and property_name=="Post Process Materials") or (component=="LOD" and property_name=="Levels") or (component=="HLOD" and property_name in ("Sources","Proxies")):section.FieldSection(FieldGroup(str(component),property_name)).AddWideWidget(editor);section._fields[property_name]=editor
                         else:section.AddField(property_name,editor,FieldGroup(str(component),property_name))
+                if component=="NavMesh Surface":
+                    bake=QPushButton(self.Window.Localization.Translate("navigation.bake"))
+                    bake.clicked.connect(lambda _checked=False,entity=inspected_entity:self._BakeNavigation(entity))
+                    section.AddWideWidget(bake)
                 if component=="GuiElement":
                     from .stylesheet_fields import Field
                     for property in getattr(self.Runtime,"StylesheetProperties",lambda _:[])(inspected_entity):
@@ -366,6 +370,37 @@ class EditorController(QObject):
         self._RefreshScriptRules()
 
         self._UpdateGizmo()
+
+    def _BakeNavigation(self,entity):
+        from PySide6.QtWidgets import QProgressDialog, QMessageBox
+        from PySide6.QtCore import QCoreApplication, QEventLoop
+
+        if self.Runtime.IsPlaying():
+            return
+        tr = self.Window.Localization.Translate
+        assets = Path(self.Runtime.AssetDirectory())
+        path = assets / "Navigation" / (str(entity) + ".bnavmesh")
+        dialog = QProgressDialog(tr("navigation.baking"), "", 0, 0, self.Window)
+        dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
+        dialog.setCancelButton(None)
+        dialog.setMinimumDuration(0)
+        dialog.show()
+        try:
+            QCoreApplication.processEvents(QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self.Runtime.BakeNavigation(entity, path)
+            self.Runtime.RefreshAsset(path)
+            record = self.Runtime.ResolveAssetRecord(str(path)) or {}
+            identity = record.get("uuid", "")
+            if not identity:
+                raise RuntimeError(tr("navigation.import_failed"))
+            self._CommitComponent(entity, "NavMesh Surface", "Data", str(identity))
+            self.Window.AssetBrowser.Refresh()
+        except (RuntimeError, OSError, ValueError) as error:
+            QMessageBox.warning(self.Window, tr("navigation.title"), str(error))
+        finally:
+            dialog.close()
+            dialog.deleteLater()
 
     def SelectEntities(self,entity_ids:list[str])->None:
         unique=list(dict.fromkeys(value for value in entity_ids if value and not self.Runtime.IsEditorLocked(value)))
@@ -862,6 +897,9 @@ class EditorController(QObject):
                 editor.SetOptions(options);editor.SetValue(value);editor.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
             except (RuntimeError,ValueError):pass
         if component=="World Cell" and name=="Scene Asset":return self._AssetPicker(value,{".bscene"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
+        if component=="Navigation Obstacle" and name=="Shape":
+            editor=EnumInput();editor.SetOptions([(self.Window.Localization.Translate("navigation.box"),0),(self.Window.Localization.Translate("navigation.cylinder"),1)]);editor.SetValue(value);editor.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
+        if component=="NavMesh Surface" and name=="Data":return self._AssetPicker(value,{".bnavmesh"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
         if component=="Timeline Director" and name=="Sequence":return self._AssetPicker(value,{".btimeline"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
         if component=="Animator" and name in {"Model","Controller"}:return self._AssetPicker(value,{".glb",".gltf"} if name=="Model" else {".banim"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
         if component=="Animator" and name=="Root Motion":
@@ -963,15 +1001,17 @@ class EditorController(QObject):
             if (component=="GuiElement" and name=="MaterialAsset") or (component=="Camera" and name=="Post Process Material"):return self._AssetPicker(value,{".matinst"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
             if component in ("Frame","GuiElement") and name=="Stylesheet":return self._AssetPicker(value,{".css"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
             if component in ("GuiText","GuiTextInput") and name=="Font":return self._AssetPicker(value,FONT_EXTENSIONS,lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
-            if component in ("Frame","GuiImage") and name=="Camera":
+            if (component in ("Frame","GuiImage") and name=="Camera") or (component=="Navigation Agent" and name=="Surface"):
                 entities={str(item["uuid"]):item for item in self.Runtime.Entities()};tr=self.Window.Localization.Translate
-                cameras={identity:item for identity,item in entities.items() if "Camera" in item.get("components",[])}
-                editor=ObjectPickerInput(tr("gui.select_camera"),validator=lambda identity:identity in cameras)
+                required="NavMesh Surface" if component=="Navigation Agent" else "Camera"
+                title=tr("navigation.surface" if component=="Navigation Agent" else "gui.select_camera")
+                cameras={identity:item for identity,item in entities.items() if required in item.get("components",[])}
+                editor=ObjectPickerInput(title,validator=lambda identity:identity in cameras)
                 editor.SetValue(value if value in cameras else None,cameras.get(value,{}).get("name",""))
                 def assign_camera(identity):
                     editor.Display.setText(cameras.get(str(identity),{}).get("name",""));self._CommitComponent(entity_id,component,name,identity or ZERO)
                 def pick_camera():
-                    dialog=QDialog(editor);dialog.setWindowTitle(tr("gui.select_camera"));layout=QVBoxLayout(dialog);items=QListWidget(dialog);layout.addWidget(items)
+                    dialog=QDialog(editor);dialog.setWindowTitle(title);layout=QVBoxLayout(dialog);items=QListWidget(dialog);layout.addWidget(items)
                     for identity,item in cameras.items():
                         row=QListWidgetItem(item.get("name",""));row.setData(Qt.ItemDataRole.UserRole,identity);items.addItem(row)
                     def accept_camera(item):editor.SetValue(item.data(Qt.ItemDataRole.UserRole));dialog.accept()

@@ -7,7 +7,7 @@
 #include "Physics/PhysicsReplayAccess.h"
 namespace Bazzalt { class ComponentSerializationRegistry; }
 namespace Bazzalt::Runtime {
-inline constexpr std::uint32_t PhysicsModuleVersion=4;
+inline constexpr std::uint32_t PhysicsModuleVersion=5;
 enum class PhysicsCommand { Force,ForceAtPosition,Impulse,ImpulseAtPosition,Torque,AngularImpulse,LinearVelocity,AngularVelocity,MoveKinematic,Teleport,Wake,Sleep };
 struct PhysicsModuleApi {
     std::uint32_t Version,Size;
@@ -16,6 +16,7 @@ struct PhysicsModuleApi {
     bool (*VehicleGear)(Scene&,Entity,int,float);
     std::optional<VehicleState> (*ReadVehicle)(Scene&,Entity);
     std::optional<VehicleWheelState> (*ReadWheel)(Scene&,Entity);
+    std::vector<std::array<Vec3,3>> (*NavigationGeometry)(Scene&,std::uint32_t);
     void (*Release)(Scene&);
     void (*Start)(Scene&);
     void (*Stop)(Scene&);

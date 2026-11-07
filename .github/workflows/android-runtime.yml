@@ -45,7 +45,7 @@ jobs:
           key: android-dependencies-r29-filament177-rtti-${{ matrix.abi }}-${{ hashFiles('scripts/build_android_dependencies.py') }}
       - name: Fetch pinned engine sources
         run: |
-          for dependency in entt rapidyaml sdl3 lua sol2 miniaudio jolt yojimbo freetype text_shaping; do sh "scripts/get_${dependency}.sh"; done
+          for dependency in entt rapidyaml sdl3 lua sol2 miniaudio jolt recast yojimbo freetype text_shaping; do sh "scripts/get_${dependency}.sh"; done
       - name: Validate Android settings and real APK tooling
         env:
           BAZZALT_ANDROID_SDK_TESTS: '1'
@@ -119,7 +119,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang ccache libc++-dev libc++abi-dev ninja-build pkg-config libssl-dev libx11-dev libx11-xcb-dev libxcb1-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev libgl1-mesa-dev libvulkan-dev libwayland-dev wayland-protocols libdecor-0-dev
           python -m pip install -r requirements-build.txt PySide6==6.10.2
-          for dependency in entt rapidyaml filament sdl3 lua sol2 miniaudio jolt yojimbo freetype text_shaping; do sh "scripts/get_${dependency}.sh"; done
+          for dependency in entt rapidyaml filament sdl3 lua sol2 miniaudio jolt recast yojimbo freetype text_shaping; do sh "scripts/get_${dependency}.sh"; done
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DBAZZALT_BUILD_EDITOR_BRIDGE=OFF -DBUILD_TESTING=OFF
           cmake --build build --parallel 2 --target BazzaltCooker BazzaltGui
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;29.0.14206865" "platforms;android-36" "build-tools;36.0.0" "emulator" "system-images;android-35;google_apis;x86_64"

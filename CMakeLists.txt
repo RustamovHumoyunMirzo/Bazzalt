@@ -237,6 +237,7 @@ add_subdirectory(src/GUI/CSS)
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/GUI/(GuiSystem|GuiRenderer|GuiSerialization|GuiModule)\\.cpp$")
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/Script/Lua[^/]*\\.cpp$|/Runtime/LuaRuntime\\.cpp$")
 file(GLOB BAZZALT_LUA_BINDING_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/Script/Lua*.cpp")
+list(FILTER LIB_SOURCES EXCLUDE REGEX "/Navigation/NavigationWorld\\.cpp$")
 add_library(BazzaltLuaBindings STATIC ${BAZZALT_LUA_BINDING_SOURCES} src/Runtime/LuaRuntime.cpp)
 set_target_properties(BazzaltLuaBindings PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(BazzaltLuaBindings PRIVATE include src "${BAZZALT_SOL2_DIR}/include")
@@ -345,6 +346,20 @@ endforeach()
 add_custom_command(TARGET BazzaltPhysics POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:BazzaltPhysics>"
         "${CMAKE_BINARY_DIR}/ScriptSDK/lib/$<TARGET_FILE_NAME:BazzaltPhysics>" VERBATIM)
+
+include(cmake/Recast.cmake)
+add_library(BazzaltAI SHARED src/Navigation/NavigationWorld.cpp)
+target_include_directories(BazzaltAI PRIVATE include src)
+target_link_libraries(BazzaltAI PRIVATE Bazzalt BazzaltRecast BazzaltDetour BazzaltDetourCrowd BazzaltDetourTileCache)
+target_compile_features(BazzaltAI PRIVATE cxx_std_20)
+set_target_properties(BazzaltAI PROPERTIES OUTPUT_NAME bazzalt_ai RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor" LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor" BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+if(APPLE)
+    set_target_properties(BazzaltAI PROPERTIES BUILD_RPATH "@loader_path" INSTALL_RPATH "@loader_path")
+endif()
+if(MSVC)
+    target_compile_options(BazzaltAI PRIVATE /utf-8 /bigobj)
+endif()
+add_custom_command(TARGET BazzaltAI POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:BazzaltAI>" "${CMAKE_BINARY_DIR}/ScriptSDK/lib/$<TARGET_FILE_NAME:BazzaltAI>" VERBATIM)
 
 # One-way link: GUI imports core; core loads the sibling module through a private
 # versioned table. This avoids circular DLL dependencies/import libraries.
@@ -490,11 +505,11 @@ if(WIN32)
 endif()
 
 if(TARGET BazzaltPlayer)
-    add_dependencies(BazzaltPlayer BazzaltPhysics)
+    add_dependencies(BazzaltPlayer BazzaltPhysics BazzaltAI)
 endif()
 if(TARGET BazzaltCooker)
     target_compile_definitions(BazzaltCooker PRIVATE BAZZALT_CORE_VERSION="${PROJECT_VERSION}")
-    add_dependencies(BazzaltCooker BazzaltPhysics)
+    add_dependencies(BazzaltCooker BazzaltPhysics BazzaltAI)
 endif()
 
 if(BAZZALT_BUILD_EDITOR_BRIDGE)
@@ -526,7 +541,7 @@ if(BAZZALT_BUILD_EDITOR_BRIDGE)
         C_VISIBILITY_PRESET default WINDOWS_EXPORT_ALL_SYMBOLS ON
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor")
-    add_dependencies(_bazzalt_runtime bshader BazzaltGui BazzaltPhysics)
+    add_dependencies(_bazzalt_runtime bshader BazzaltGui BazzaltPhysics BazzaltAI)
     target_link_libraries(_bazzalt_runtime PRIVATE Bazzalt BazzaltLua Filament::Filament)
     target_include_directories(_bazzalt_runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     set_target_properties(_bazzalt_runtime PROPERTIES
@@ -542,10 +557,10 @@ target_link_libraries(BazzaltExample
     PRIVATE
     Bazzalt
 )
-add_dependencies(BazzaltExample BazzaltGui BazzaltPhysics)
+add_dependencies(BazzaltExample BazzaltGui BazzaltPhysics BazzaltAI)
 if(WIN32)
     add_custom_command(TARGET BazzaltExample POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE:BazzaltCrypto>" "$<TARGET_FILE:BazzaltNetwork>" "$<TARGET_FILE:BazzaltLua>" "$<TARGET_FILE:BazzaltGui>" "$<TARGET_FILE:BazzaltPhysics>" "$<TARGET_FILE_DIR:BazzaltExample>")
+        "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE:BazzaltCrypto>" "$<TARGET_FILE:BazzaltNetwork>" "$<TARGET_FILE:BazzaltLua>" "$<TARGET_FILE:BazzaltGui>" "$<TARGET_FILE:BazzaltPhysics>" "$<TARGET_FILE:BazzaltAI>" "$<TARGET_FILE_DIR:BazzaltExample>")
 endif()
 
 include(CTest)
@@ -570,11 +585,11 @@ if(BUILD_TESTING)
         add_test(NAME BazzaltBshaderTests COMMAND BazzaltBshaderTests)
     endif()
     function(bazzalt_enable_test_assertions target)
-        add_dependencies(${target} BazzaltGui BazzaltPhysics)
+        add_dependencies(${target} BazzaltGui BazzaltPhysics BazzaltAI)
         target_sources(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests/TestDiagnostics.cpp")
         if(WIN32)
             add_custom_command(TARGET ${target} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE:BazzaltCrypto>" "$<TARGET_FILE:BazzaltNetwork>" "$<TARGET_FILE:BazzaltLua>" "$<TARGET_FILE:BazzaltGui>" "$<TARGET_FILE:BazzaltPhysics>" "$<TARGET_FILE_DIR:${target}>")
+                "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE:BazzaltCrypto>" "$<TARGET_FILE:BazzaltNetwork>" "$<TARGET_FILE:BazzaltLua>" "$<TARGET_FILE:BazzaltGui>" "$<TARGET_FILE:BazzaltPhysics>" "$<TARGET_FILE:BazzaltAI>" "$<TARGET_FILE_DIR:${target}>")
         endif()
         if(MSVC)
             target_compile_options(${target} PRIVATE /UNDEBUG)
@@ -852,4 +867,14 @@ if(BUILD_TESTING)
     bazzalt_enable_test_assertions(BazzaltPhysicsReplayTests)
     add_test(NAME BazzaltPhysicsReplayTests COMMAND BazzaltPhysicsReplayTests)
     set_tests_properties(BazzaltPhysicsReplayTests PROPERTIES TIMEOUT 60)
+endif()
+
+if(BUILD_TESTING)
+    add_executable(BazzaltNavigationTests tests/NavigationTests.cpp)
+    target_include_directories(BazzaltNavigationTests PRIVATE src)
+    target_link_libraries(BazzaltNavigationTests PRIVATE Bazzalt)
+    add_dependencies(BazzaltNavigationTests BazzaltAI BazzaltPhysics)
+    bazzalt_enable_test_assertions(BazzaltNavigationTests)
+    add_test(NAME BazzaltNavigationTests COMMAND BazzaltNavigationTests)
+    set_tests_properties(BazzaltNavigationTests PROPERTIES TIMEOUT 60)
 endif()

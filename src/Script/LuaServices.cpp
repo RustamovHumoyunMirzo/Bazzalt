@@ -16,7 +16,7 @@ void BindLuaVehicles(sol::table api);
 void BindLuaLOD(sol::table api);
 void BindLuaVFX(sol::table api);
 void BindLuaAnimation(sol::table api);
-void BindLuaTimeline(sol::table api);
+void BindLuaTimeline(sol::table api);void BindLuaNavigation(sol::table api);
 void BindLuaApplicationEvents(sol::table api);
 void BindLuaServices(sol::table api){
     {auto type=api.create_named("Profiler");
@@ -30,7 +30,7 @@ void BindLuaServices(sol::table api){
     api.create_named("Jobs")["GetWorkerCount"]=&Jobs::GetWorkerCount;
 
     BindLuaPrefabs(api);BindLuaNetworkSave(api);BindLuaScene(api);BindLuaStreaming(api);BindLuaLighting(api);BindLuaAssets(api);BindLuaConsole(api);BindLuaDeveloperConsole(api);
-    BindLuaAudio(api);BindLuaPhysics(api);BindLuaVehicles(api);BindLuaLOD(api);BindLuaVFX(api);BindLuaAnimation(api);BindLuaTimeline(api);
+    BindLuaAudio(api);BindLuaPhysics(api);BindLuaVehicles(api);BindLuaLOD(api);BindLuaVFX(api);BindLuaAnimation(api);BindLuaTimeline(api);BindLuaNavigation(api);
     BindLuaApplicationEvents(api);
     {auto type=api.create_named("Time");
      type["GetDeltaTime"]=&Time::GetDeltaTime;

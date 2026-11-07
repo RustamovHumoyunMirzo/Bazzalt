@@ -1,5 +1,6 @@
 #include "Bazzalt/Systems/TimelineSystem.h"
 #include "Bazzalt/Timeline.h"
+#include "Navigation/NavigationModuleApi.h"
 #include "Bazzalt/Components/LightProbe.h"
 #include "Bazzalt/Components/ReflectionProbe.h"
 #include "Bazzalt/Components/Impostor.h"
@@ -166,6 +167,7 @@ void Engine::Update(bool renderFrame)
         TimeAccess::FixedScope fixed;
         ApplicationEventsAccess::Emit({ApplicationEventType::OnFixedUpdate,step});
         ApplicationEventsAccess::ThrowIfFailed();
+        if(m_scriptsRunning)UpdateNavigationScene(*m_scene,step);
         m_scene->FixedUpdate(step);
         m_scriptRuntime->FixedUpdate(step);
         m_luaRuntime->FixedUpdate(step);
@@ -313,6 +315,7 @@ for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id
     m_renderBackend->SetEditorOutline(std::move(selectedOwners),std::move(hoveredOwners));
     for(const auto& p:m_editorTransformTrail)guides.push_back({p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9],true});
     for(const auto& p:m_editorToolGuides)guides.push_back({p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9],false});
+    if(m_editorIconsVisible)for(auto selected:m_selectedObjects)for(const auto& p:NavigationGuides(*m_scene,selected))guides.push_back({p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9],true});
     m_renderBackend->SetEditorGuides(guides);
 }
 void Engine::SetGamePreview(int mode,UUID camera){m_renderBackend->SetGamePreview(mode,camera);}
@@ -550,12 +553,12 @@ bool Engine::StartScripts(bool resetTime){
     m_audioRuntime->Start(*m_scene,m_headlessAudio);
     ApplicationAccess::SetAudioReady(true);
     ApplicationEventsAccess::Emit({ApplicationEventType::OnAudioInit});ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterAudioInit});
-    try{ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforePhysicsInit});ApplicationEventsAccess::ThrowIfFailed();PhysicsModule().Start(*m_scene);ApplicationAccess::SetPhysicsReady(true);ApplicationEventsAccess::Emit({ApplicationEventType::OnPhysicsInit});ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterPhysicsInit});ApplicationAccess::SetServicesReady(true);ApplicationAccess::SetSceneReady(true);ApplicationEventsAccess::CompleteInitialization(m_scene->GetUUID().ToString(),m_editorHost);}catch(const std::exception& error){m_lastError=error.what();m_audioRuntime->Stop();ReleasePhysicsScene(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationAccess::SetAudioReady(false);ApplicationAccess::SetServicesReady(false);return false;}
-    if(!m_scriptRuntime->Start(m_lastError)){m_audioRuntime->Stop();PhysicsModule().Stop(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationAccess::SetAudioReady(false);ApplicationAccess::SetServicesReady(false);return false;}
-    if(!m_luaRuntime->Start(m_lastError)){m_scriptRuntime->Stop();m_audioRuntime->Stop();PhysicsModule().Stop(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationAccess::SetAudioReady(false);ApplicationAccess::SetServicesReady(false);return false;}
+    try{ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforePhysicsInit});ApplicationEventsAccess::ThrowIfFailed();PhysicsModule().Start(*m_scene);ApplicationAccess::SetPhysicsReady(true);ApplicationEventsAccess::Emit({ApplicationEventType::OnPhysicsInit});ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterPhysicsInit});ApplicationAccess::SetServicesReady(true);ApplicationAccess::SetSceneReady(true);UpdateNavigationScene(*m_scene,0);ApplicationEventsAccess::CompleteInitialization(m_scene->GetUUID().ToString(),m_editorHost);}catch(const std::exception& error){m_lastError=error.what();m_audioRuntime->Stop();ReleaseNavigationScene(*m_scene);ReleasePhysicsScene(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationAccess::SetAudioReady(false);ApplicationAccess::SetServicesReady(false);return false;}
+    if(!m_scriptRuntime->Start(m_lastError)){m_audioRuntime->Stop();ReleaseNavigationScene(*m_scene);PhysicsModule().Stop(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationAccess::SetAudioReady(false);ApplicationAccess::SetServicesReady(false);return false;}
+    if(!m_luaRuntime->Start(m_lastError)){m_scriptRuntime->Stop();m_audioRuntime->Stop();ReleaseNavigationScene(*m_scene);PhysicsModule().Stop(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationAccess::SetAudioReady(false);ApplicationAccess::SetServicesReady(false);return false;}
     m_scriptsRunning=true;if(!m_streaming->StartScripts()){StopScripts();return false;}ApplicationEventsAccess::Emit({ApplicationEventType::OnPlay});return true;
 }
-void Engine::StopScripts(){m_streaming->StopScripts();if(m_scriptsRunning){ApplicationEventsAccess::Emit({ApplicationEventType::OnStop});m_scriptsRunning=false;}m_luaRuntime->Stop();m_scriptRuntime->Stop();Cinematics::StopAll(*m_scene);ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforePhysicsShutdown});ReleasePhysicsScene(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterPhysicsShutdown});m_audioRuntime->Stop();ApplicationAccess::SetAudioReady(false);if(m_scene->HasSystem<ParticleSystem>()){m_scene->RemoveSystem<ParticleSystem>();m_scene->AddSystem<ParticleSystem>();}if(m_scene->HasSystem<AnimationSystem>()){m_scene->RemoveSystem<AnimationSystem>();m_scene->AddSystem<AnimationSystem>();}GraphicsAccess::CancelFrame();ResetRuntimeMaterials();ResetRuntimeTextures();}
+void Engine::StopScripts(){m_streaming->StopScripts();if(m_scriptsRunning){ApplicationEventsAccess::Emit({ApplicationEventType::OnStop});m_scriptsRunning=false;}m_luaRuntime->Stop();m_scriptRuntime->Stop();Cinematics::StopAll(*m_scene);ReleaseNavigationScene(*m_scene);ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforePhysicsShutdown});ReleasePhysicsScene(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterPhysicsShutdown});m_audioRuntime->Stop();ApplicationAccess::SetAudioReady(false);if(m_scene->HasSystem<ParticleSystem>()){m_scene->RemoveSystem<ParticleSystem>();m_scene->AddSystem<ParticleSystem>();}if(m_scene->HasSystem<AnimationSystem>()){m_scene->RemoveSystem<AnimationSystem>();m_scene->AddSystem<AnimationSystem>();}GraphicsAccess::CancelFrame();ResetRuntimeMaterials();ResetRuntimeTextures();}
 
 bool Engine::PrepareApplication(){
     if(m_applicationPrepared)return true;

@@ -25,6 +25,8 @@
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include <Jolt/Physics/Collision/Shape/OffsetCenterOfMassShape.h>
 #include "Physics/PhysicsModuleApi.h"
+#include "Bazzalt/Components/NavigationAgent.h"
+#include "Bazzalt/Components/NavigationObstacle.h"
 #include "Physics/PhysicsExtras.h"
 #include "Physics/PhysicsFields.h"
 #include "Physics/PhysicsGeometry.h"
@@ -445,10 +447,59 @@ static std::vector<std::array<float,10>> Guides(Scene& scene,UUID selected){
     return lines;
 }
 #include "Physics/PhysicsReplayWorld.inl"
+std::vector<std::array<Vec3, 3>> NavigationGeometry(Scene &scene, std::uint32_t mask) {
+    auto world = Get(scene);
+    world->Synchronize();
+    std::vector<std::array<Vec3, 3>> output;
+    auto &bodies = world->System.GetBodyInterface();
+    for (auto &[key, data] : world->Colliders) {
+        bool moving = false;
+        for (auto entity = scene.GetEntity(data.Collider); entity; entity = entity.GetParent())
+            if (entity.HasComponent<NavigationAgent>() ||
+                entity.HasComponent<NavigationObstacle>()) {
+                moving = true;
+                break;
+            }
+        if (moving)
+            continue;
+        auto body = world->Bodies.find(data.Body);
+        if (body == world->Bodies.end() ||
+            body->second.Authored.MotionType != BodyMotionType::Static || data.Trigger ||
+            !(mask & (1u << data.Layer)))
+            continue;
+        const auto rotation = Q(bodies.GetRotation(body->second.Id) * Q(data.Local.Rotation));
+        const auto position = V(bodies.GetPosition(body->second.Id) +
+                                bodies.GetRotation(body->second.Id) * V(data.Local.Position));
+        auto &shape = *data.NativeShape;
+        JPH::Shape::GetTrianglesContext context;
+        auto com = shape.GetCenterOfMass();
+        auto box =
+            JPH::AABox(com - JPH::Vec3::sReplicate(50000), com + JPH::Vec3::sReplicate(50000));
+        shape.GetTrianglesStart(context, box, com, JPH::Quat::sIdentity(),
+                                JPH::Vec3::sReplicate(1));
+        JPH::Float3 vertices[96];
+        for (;;) {
+            auto count = shape.GetTrianglesNext(context, 32, vertices);
+            if (!count)
+                break;
+            for (int i = 0; i < count; ++i) {
+                if (output.size() >= 2000000)
+                    throw std::length_error("Navigation collider triangle budget exceeded");
+                std::array<Vec3, 3> triangle;
+                for (int j = 0; j < 3; ++j) {
+                    auto &p = vertices[i * 3 + j];
+                    triangle[j] = position + rotation.Rotate({p.x, p.y, p.z});
+                }
+                output.push_back(triangle);
+            }
+        }
+    }
+    return output;
+}
 static const PhysicsModuleApi Api{
     PhysicsModuleVersion,sizeof(PhysicsModuleApi),ReplayApi,
     [](Scene& scene,Entity e,float a,float b,float c,float d){return Get(scene)->ReplayMode!=PhysicsReplayMode::Playback&&SetVehicleInput(scene,e,a,b,c,d);},
-    [](Scene& scene,Entity e,int gear,float clutch){return Get(scene)->ReplayMode!=PhysicsReplayMode::Playback&&SetVehicleGear(scene,e,gear,clutch);},ReadVehicleState,ReadVehicleWheelState,
+    [](Scene& scene,Entity e,int gear,float clutch){return Get(scene)->ReplayMode!=PhysicsReplayMode::Playback&&SetVehicleGear(scene,e,gear,clutch);},ReadVehicleState,ReadVehicleWheelState,NavigationGeometry,
     [](Scene& scene){auto& worlds=State().Worlds;auto it=worlds.find(&scene);if(it!=worlds.end()){it->second->Dead=true;worlds.erase(it);}},
     [](Scene& scene){auto w=Get(scene);w->Synchronize();w->Running=true;w->SyncVehicles();},
     [](Scene& scene){auto& worlds=State().Worlds;auto it=worlds.find(&scene);if(it!=worlds.end()){it->second->Dead=true;worlds.erase(it);}},
