@@ -84,3 +84,5 @@ using GetScriptModuleApi = const ScriptModuleApi* (*)();
 // to build inspector metadata and generates the private module entry point.
 #define COMPONENT(Name) class Name final : public ::Bazzalt::Behavior
 #define PROPERTY(Type, Name, DefaultValue, ...) Type Name = DefaultValue;
+// Inspector-only grouping for subsequent properties. SECTION("") returns to the root.
+#define SECTION(Name)

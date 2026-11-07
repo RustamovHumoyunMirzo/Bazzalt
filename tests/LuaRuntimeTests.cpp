@@ -291,7 +291,9 @@ end})");
     write("return {OnCreate=function(self) while true do end end}");assert(Runtime::LuaRuntime::Import(source,output,error));assert(runtime.Configure({binding},error));assert(!runtime.Start(error));assert(error.find("instruction budget")!=std::string::npos);
     write(R"(local B=Bazzalt
 local Walk=COMPONENT("Walk")
+SECTION("Movement/Speed")
 Walk.Speed=PROPERTY("float",4.0,{Min=0,Max=10,Validate="value <= 10"})
+SECTION("")
 Walk.Direction=PROPERTY("Vec3",B.Vec3.new(1,0,0))
 function Walk:OnCreate()
  assert(self.Speed==4 and self.Direction.X==1)

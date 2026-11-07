@@ -297,8 +297,9 @@ class VersionControlDialog(QDialog):
                     return
             self.UpdateSession = session
         self.Body.setEnabled(not mutation)
-        for button in self.ActionButtons:
-            button.setEnabled(False)
+        if mutation:
+            for button in self.ActionButtons:
+                button.setEnabled(False)
         if mutation or self.Repository is None:
             self.Status.setPlainText(self.Tr("vcs.busy"))
         self.Deliver = deliver
@@ -346,6 +347,9 @@ class VersionControlDialog(QDialog):
             self.Refresh()
 
     def ShowState(self, state):
+        if state == self.State:
+            if self.Paths():self.DeferredPreview = "diff"
+            return
         self.State = state
         self.InitButton.setEnabled(False)
         self.Location.setText(self.Tr("vcs.location", root=state.Root, branch=state.Branch,
@@ -354,7 +358,7 @@ class VersionControlDialog(QDialog):
             self.Location.setText(self.Location.text() + "\n" + self.Tr("vcs.rebase_active" if state.Rebase else "vcs.merge_active"))
         selected = set(self.Paths())
         history_id = self.History.currentItem().data(0, Qt.ItemDataRole.UserRole) if self.History.currentItem() else None
-        blockers = [QSignalBlocker(self.Changes), QSignalBlocker(self.History)]
+        blockers = [QSignalBlocker(self.Changes), QSignalBlocker(self.History), QSignalBlocker(self.Branches)]
         self.Changes.clear()
         for change in state.Changes:
             item = QTreeWidgetItem([change.Path, change.Index, change.Worktree])
@@ -430,7 +434,6 @@ class VersionControlDialog(QDialog):
             return
         if self.Repository and paths and not self.Busy:
             staged = self.DiffMode.currentIndex() == 1
-            self.Diff.clear()
             self.Submit(lambda: self.Repository.Diff(paths[0], staged), lambda value: self.ShowDiff(self.Diff, value))
 
     def LoadCommit(self):
@@ -446,7 +449,8 @@ class VersionControlDialog(QDialog):
         text = value["text"] or self.Tr("vcs.no_diff")
         if value["truncated"]:
             text += "\n" + self.Tr("vcs.truncated")
-        view.setPlainText(text)
+        if view.toPlainText() != text:
+            view.setPlainText(text)
 
     def Resolve(self):
         paths = self.Paths()

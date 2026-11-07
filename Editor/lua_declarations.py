@@ -32,9 +32,9 @@ def _Rules(tokens):
     except RuleError as error:raise DeclarationError(str(error)) from error
 
 def ReadDeclarations(text):
-    tokens=_Tokens(text);components=[];properties=[]
+    tokens=_Tokens(text);components=[];properties=[];section=""
     for i,token in enumerate(tokens):
-        if token not in ('COMPONENT','PROPERTY') or i+1>=len(tokens) or tokens[i+1]!='(':continue
+        if token not in ('COMPONENT','PROPERTY','SECTION') or i+1>=len(tokens) or tokens[i+1]!='(':continue
         if i and tokens[i-1] in ('.',':','function'):continue
         depth=0;args=[];start=i+2;end=None
         for j in range(start,len(tokens)):
@@ -44,7 +44,12 @@ def ReadDeclarations(text):
             elif value in (')','}',']'):depth-=1
             elif value==',' and depth==0:args.append(tokens[start:j]);start=j+1
         if end is None:raise DeclarationError('Unclosed Lua declaration')
-        if token=='COMPONENT':
+        if token=='SECTION':
+            if len(args)!=1 or len(args[0])!=1:raise DeclarationError('Use SECTION("Title")')
+            section=_String(args[0][0])
+            try:CheckRules({"Section":section})
+            except RuleError as error:raise DeclarationError(str(error)) from error
+        elif token=='COMPONENT':
             if i<3 or tokens[i-1]!='=' or tokens[i-3]!='local' or len(args)!=1 or len(args[0])!=1:raise DeclarationError('Use local Name = COMPONENT("Name")')
             name=_String(args[0][0]);variable=tokens[i-2]
             if not re.fullmatch(r'[A-Za-z_]\w*',name):raise DeclarationError('Invalid Lua component name')
@@ -52,6 +57,7 @@ def ReadDeclarations(text):
         else:
             if i<4 or tokens[i-1]!='=' or tokens[i-3]!='.' or len(args) not in (2,3) or len(args[0])!=1:raise DeclarationError('Use Name.Field = PROPERTY("type", default, {options})')
             rules=_Rules(args[2]) if len(args)==3 else {}
+            if section:rules.setdefault('Section',section)
             kind=_String(args[0][0]);default=''.join(args[1])
             try:CheckTypeRules(kind,rules)
             except RuleError as error:raise DeclarationError(str(error)) from error

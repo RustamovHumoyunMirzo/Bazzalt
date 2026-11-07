@@ -1794,5 +1794,15 @@
   "build.icon_filter.windows": "Windows icons (*.ico)",
   "build.icon_filter.macos": "macOS icons (*.icns)",
   "build.icon_filter.linux": "PNG images (*.png)",
-  "build.icon_filter.android": "512 x 512 PNG images (*.png)"
+  "build.icon_filter.android": "512 x 512 PNG images (*.png)",
+  "component.Projection": "Projection",
+  "component.Output": "Output",
+  "component.Post Processing": "Post Processing",
+  "component.Depth of Field": "Depth of Field",
+  "component.Shape": "Shape",
+  "component.Shadows": "Shadows",
+  "component.Playback": "Playback",
+  "component.Spatial Audio": "Spatial Audio",
+  "component.Dynamics": "Dynamics",
+  "component.Collision": "Collision"
 }

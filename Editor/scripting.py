@@ -75,7 +75,22 @@ class ScriptCompiler:
                 if depth==0:break
         if depth:raise ScriptValidationError(f"{path}: component {match.group(1)} has an incomplete body")
         body=_CodeMask(text,False)[start:end];body_mask=mask[start:end]
-        properties=tuple(ScriptProperty(m.group(1).strip(),m.group(2),m.group(3).strip(),tuple(a.strip() for a in (m.group(4) or "").split(",") if a.strip())) for m in _PROPERTY.finditer(body) if body_mask[m.start():].startswith("PROPERTY"))
+        sections=[]
+        for marker in re.finditer(r"\bSECTION\s*\(([^)]*)\)",body):
+            if not body_mask[marker.start():].startswith("SECTION"):continue
+            try:
+                title=ast.literal_eval(marker.group(1).strip())
+                from Editor.property_rules import CheckRules
+                CheckRules({"Section":title})
+            except (ValueError,SyntaxError) as error:raise ScriptValidationError(f"{path}: invalid SECTION declaration") from error
+            sections.append((marker.start(),title))
+        properties=[]
+        for m in _PROPERTY.finditer(body):
+            if not body_mask[m.start():].startswith("PROPERTY"):continue
+            attributes=tuple(a.strip() for a in (m.group(4) or "").split(",") if a.strip())
+            title=next((title for offset,title in reversed(sections) if offset<m.start()),"")
+            if title and not any(a.split('=',1)[0].strip()=="Section" for a in attributes):attributes+=("Section="+repr(title),)
+            properties.append(ScriptProperty(m.group(1).strip(),m.group(2),m.group(3).strip(),attributes))
         names=[p.name for p in properties]
         if len(names)!=len(set(names)):raise ScriptValidationError(f"{path}: component {match.group(1)} has duplicate PROPERTY names")
         from Editor.property_rules import CheckTypeRules,RuleError

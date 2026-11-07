@@ -74,7 +74,7 @@ def Evaluate(expression,properties,value=None):
     except (TypeError,ValueError,ZeroDivisionError,OverflowError,AttributeError) as error:raise RuleError(str(error)) from error
 
 def CheckRules(rules):
-    known={'Min','Max','Step','MaxLength','MinLength','Trim','Filter','Pattern','ReadOnly','VisibleIf','EnabledIf','Validate','Message','Tooltip','Label'}
+    known={'Min','Max','Step','MaxLength','MinLength','Trim','Filter','Pattern','ReadOnly','VisibleIf','EnabledIf','Validate','Message','Tooltip','Label','Section'}
     if not isinstance(rules,dict) or set(rules)-known:raise RuleError('Unknown inspector property rule')
     for key,value in rules.items():
         if key in ('Min','Max','Step','MaxLength','MinLength'):
@@ -86,6 +86,7 @@ def CheckRules(rules):
         else:
             if not isinstance(value,str) or len(value)>512:raise RuleError(key+' must be a short string')
             if key in ('VisibleIf','EnabledIf','Validate'):_Tree(value)
+            if key=='Section' and value and (len(value.split('/'))>8 or any(not part.strip() or len(part)>80 for part in value.split('/'))):raise RuleError('Section requires up to eight nonempty path segments of at most 80 characters')
             if key=='Filter' and value not in ('Digits','Letters','Alphanumeric','Identifier'):raise RuleError('Unknown string filter')
     if rules.get('Min',-math.inf)>rules.get('Max',math.inf) or rules.get('MinLength',0)>rules.get('MaxLength',4096):raise RuleError('Minimum exceeds maximum')
     return rules

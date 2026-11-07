@@ -78,6 +78,7 @@ class EditorShellTests(unittest.TestCase):
         self.assertEqual(self.Window.MenuBar.PreferencesAction.text(),"Preferences…")
 
     def test_scene_toolbar_autosaves_and_preferences_restore_history_limits(self) -> None:
+        self.assertTrue(self.Window.Scene.StatsToggle.isHidden())
         from copy import deepcopy
         saved=[];self.Window._settings_saver=lambda value:saved.append(deepcopy(value))
         self.Window.Scene.PivotMode.setCurrentIndex(1);self.Window.Scene.LocalToggle.setChecked(True);self.Window.Scene.StatsToggle.setChecked(True)

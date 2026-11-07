@@ -226,6 +226,11 @@ QWidget#MixerSidebar {{ background: {t.surface}; }}
     #ComponentHeader {{ background: {t.surface}; border: 0; border-bottom: 1px solid {t.border};
                         border-radius: 0; min-height: 21px; max-height: 21px;
                         padding: 0 5px; text-align: left; font-size: 11px; font-weight: 600; }}
+    #ComponentSubsection {{ background: transparent; border: 0; }}
+    #ComponentSubheaderRow {{ background: transparent; border: 0; }}
+    #ComponentSubheader {{ background: transparent; border: 0; padding: 3px 2px;
+                           text-align: left; font-size: 11px; font-weight: 600; }}
+    #ComponentSubheader:hover {{ background: {t.surface_hover}; }}
     #ComponentHeader:hover {{ background: {t.surface_hover}; }}
     #ComponentHeaderRow {{ background: {t.surface}; border-bottom: 1px solid {t.border}; }}
     QToolButton[editorOptionsButton="true"] {{ background: transparent; color: {t.text_muted};

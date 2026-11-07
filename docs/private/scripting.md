@@ -56,3 +56,9 @@ Console errors and stop Play without crashing. Engine developers can still use
 the source-development toolchain. See [production packaging](production-packaging.md).
 
 `Behavior` exposes lifecycle callbacks only. It intentionally does not expose engine initialization, event pumping, rendering presentation, or shutdown.
+
+## Inspector sections
+
+`SECTION("Title/Child")` groups subsequent declarative properties. `SECTION("")` resets to the root. C++ defines an empty authoring macro in Script.h. Lua installs a no-op SECTION function for module declaration and removes it with COMPONENT/PROPERTY after loading. Both metadata readers place the active path into each property's existing `rules["Section"]` entry. Explicit PROPERTY Section options override that path. Rule validation bounds path length and depth. Sections introduce no serialized property values or native component instances.
+
+ComponentSection owns nested presentation containers while retaining a flat field lookup for refresh, copy/paste and existing callers. Visibility and title changes delegate to the field's owning foldout. Built-in grouping lives in Editor/gui/inspector_sections.py. Add localized component-label entries when introducing headings.

@@ -32,8 +32,8 @@ class ComponentSection(QFrame):
     def __init__(self, title: str, expanded: bool = True, removable: bool = True,
                  localization: LocalizationManager | None = None,
                  icon: QIcon | None = None, enabled:bool|None=None,
-                 parent: QWidget | None = None) -> None:
-        super().__init__(parent); self.setObjectName("ComponentSection")
+                 parent: QWidget | None = None, subsection: bool = False) -> None:
+        super().__init__(parent); self.setObjectName("ComponentSubsection" if subsection else "ComponentSection")
         self.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Fixed)
         layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0);layout.setSpacing(0)
         header=QWidget(self);header.setObjectName("ComponentHeaderRow");headerLayout=QHBoxLayout(header);headerLayout.setContentsMargins(3,0,2,0);headerLayout.setSpacing(3)
@@ -41,7 +41,7 @@ class ComponentSection(QFrame):
         self.Toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.Toggle.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Fixed)
         self.Toggle.setObjectName("ComponentHeader")
-        self._fields:dict[str,QWidget]={};self._localization=localization;self._removable=removable;self._title=title;self._captions={}
+        self._subsections={};self._fieldowners={};self._fields:dict[str,QWidget]={};self._localization=localization;self._removable=removable;self._title=title;self._captions={}
         if localization:localization.LocaleChanged.connect(self._RetranslateLabels)
         self.Body=QWidget(self);self.Form=QGridLayout(self.Body);self.Form.setContentsMargins(8,6,8,6)
         self.Form.setHorizontalSpacing(14);self.Form.setVerticalSpacing(6);self.Form.setColumnStretch(1,1)
@@ -57,6 +57,10 @@ class ComponentSection(QFrame):
         enabledLayout.addWidget(self.Enabled,0,Qt.AlignmentFlag.AlignCenter)
         headerLayout.addWidget(enabledSlot);headerLayout.addWidget(self.Toggle,1)
         options=OptionsButton(header);options.setObjectName("ComponentOptionsButton");options.setToolTip(localization.Translate("hierarchy.helpers") if localization else "Options");options.clicked.connect(lambda:self._ShowOptions(options));headerLayout.addWidget(options)
+        if subsection:
+            options.hide();enabledSlot.hide();self.IconLabel.hide()
+            self.Toggle.setObjectName("ComponentSubheader")
+            header.setObjectName("ComponentSubheaderRow")
         layout.addWidget(header);layout.addWidget(self.Body)
         self.Toggle.toggled.connect(self.SetExpanded);self.SetExpanded(expanded)
 
@@ -64,7 +68,25 @@ class ComponentSection(QFrame):
         self.Toggle.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
         self.Body.setVisible(expanded)
 
-    def AddField(self, label: str, editor: QWidget) -> None:
+    def AddSubsection(self, title: str) -> "ComponentSection":
+        if title not in self._subsections:
+            section=ComponentSection(title,expanded=True,removable=False,localization=self._localization,parent=self.Body,subsection=True)
+            self._subsections[title]=section
+            section._RetranslateLabels()
+            self.AddWideWidget(section)
+        return self._subsections[title]
+
+    def FieldSection(self, path: str) -> "ComponentSection":
+        section=self
+        for title in filter(None,path.split("/")):
+            section=section.AddSubsection(title)
+        return section
+
+    def AddField(self, label: str, editor: QWidget, group: str = "") -> None:
+        if group:
+            owner=self.FieldSection(group);owner.AddField(label,editor)
+            self._fields[label]=editor;self._captions[label]=owner._captions[label];self._fieldowners[label]=owner
+            return
         row=self.Form.rowCount();caption=QLabel(DisplayName(self._localization,label,"field"),self.Body);caption.setObjectName("InspectorFieldLabel");self._captions[label]=caption
         caption.setWordWrap(True);caption.setToolTip(caption.text())
         caption.setMinimumWidth(min(120,max(72,caption.fontMetrics().horizontalAdvance(caption.text())+4)));caption.setMaximumWidth(120);caption.setSizePolicy(QSizePolicy.Policy.Preferred,QSizePolicy.Policy.Fixed);caption.setAlignment(Qt.AlignmentFlag.AlignLeading|Qt.AlignmentFlag.AlignVCenter)
@@ -84,6 +106,9 @@ class ComponentSection(QFrame):
         for key,caption in self._captions.items():caption.setText(getattr(self,"_custom_titles",{}).get(key,DisplayName(self._localization,key,"field")));caption.setToolTip(caption.text())
 
     def SetFieldVisible(self,label:str,visible:bool)->None:
+        if label in self._fieldowners:
+            self._fieldowners[label].SetFieldVisible(label,visible)
+            return
         editor=self._fields.get(label);caption=self._captions.get(label)
         if editor is not None:
             editor.setVisible(visible)
@@ -92,6 +117,8 @@ class ComponentSection(QFrame):
         if caption is not None:caption.setVisible(visible)
 
     def SetFieldTitle(self,label:str,title:str)->None:
+        if label in self._fieldowners:
+            self._fieldowners[label].SetFieldTitle(label,title)
         if not hasattr(self,"_custom_titles"):self._custom_titles={}
         self._custom_titles[label]=title
         if label in self._captions:self._captions[label].setText(title)

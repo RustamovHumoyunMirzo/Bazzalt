@@ -575,11 +575,11 @@ class ViewportPanel(QFrame):
             self.PivotMode=QComboBox();self.PivotMode.setObjectName("ScenePivotMode");self.PivotMode.addItems(("Pivot","Center"));self.PivotMode.setToolTip("Gizmo pivot position")
             self.ShadingMode=QComboBox();self.ShadingMode.addItems(("Lit","Unlit","Wireframe","Lighting Only","Overdraw"))
             plane=self.GridPlane=QComboBox();plane.addItems(("XY","XZ","YZ"));plane.setCurrentIndex(1)
-            grid=self.GridToggle=QToolButton();self.GizmoToggle=QToolButton();self.StatsToggle=QToolButton()
+            grid=self.GridToggle=QToolButton();self.GizmoToggle=QToolButton();self.StatsToggle=QToolButton(controls);self.StatsToggle.hide()
             for button,tooltip,checked in ((grid,"Grid",True),(self.GizmoToggle,"Gizmos",True),(self.StatsToggle,"Statistics",False)):
                 button.setObjectName("SceneToolChip");button.setCheckable(True);button.setChecked(checked);button.setToolTip(tooltip)
             self.StatsLabel=StatisticsText(runtime)
-            for widget in (self.LocalToggle,self.PivotMode,self.HighLevelToggle,self.ShadingMode,plane,grid,self.GizmoToggle,self.StatsToggle):row.addWidget(widget)
+            for widget in (self.LocalToggle,self.PivotMode,self.HighLevelToggle,self.ShadingMode,plane,grid,self.GizmoToggle):row.addWidget(widget)
             row.addStretch();self.Controls=QToolButton();self.Controls.setText(localization.Translate("viewport.controls"));self.Controls.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup);self.ControlsMenu=SceneControlsMenu("",themes,self.Controls) if themes else QMenu(self.Controls);self.Controls.setMenu(self.ControlsMenu);row.addWidget(self.Controls);localization.LocaleChanged.connect(lambda *_:self.Controls.setText(localization.Translate("viewport.controls")));layout.addWidget(controls)
             update_selection_text()
             def update_icons(_theme=None):

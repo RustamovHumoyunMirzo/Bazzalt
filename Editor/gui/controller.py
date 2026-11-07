@@ -1,6 +1,7 @@
 """Coordinates editor widgets with the private runtime bridge."""
 
 from __future__ import annotations
+from .inspector_sections import FieldGroup
 
 from pathlib import Path
 from math import cos, sin
@@ -338,8 +339,8 @@ class EditorController(QObject):
                 for property_name, value in dict(component_data.get(component, {})).items():
                     editor = self._ComponentEditor(inspected_entity, component, property_name, value)
                     if editor is not None:
-                        if (component=="Camera" and property_name=="Post Process Materials") or (component=="LOD" and property_name=="Levels") or (component=="HLOD" and property_name in ("Sources","Proxies")):section.AddWideWidget(editor);section._fields[property_name]=editor
-                        else:section.AddField(property_name,editor)
+                        if (component=="Camera" and property_name=="Post Process Materials") or (component=="LOD" and property_name=="Levels") or (component=="HLOD" and property_name in ("Sources","Proxies")):section.FieldSection(FieldGroup(str(component),property_name)).AddWideWidget(editor);section._fields[property_name]=editor
+                        else:section.AddField(property_name,editor,FieldGroup(str(component),property_name))
                 if component=="GuiElement":
                     from .stylesheet_fields import Field
                     for property in getattr(self.Runtime,"StylesheetProperties",lambda _:[])(inspected_entity):
@@ -356,7 +357,7 @@ class EditorController(QObject):
                 for property_name,value in script.get("properties",{}).items():
                     editor=self._ScriptEditor(script,property_name,value)
                     if editor is not None:
-                        section.AddField(property_name,editor)
+                        section.AddField(property_name,editor,getattr(editor,"_inspector_rules",{}).get("Section",""))
                         if getattr(editor,"_inspector_rules",{}).get("Label"):section.SetFieldTitle(property_name,editor._inspector_rules["Label"])
                         self._script_rule_rows.append((script,property_name,section,editor,getattr(editor,"_inspector_rules",{})))
         self._RefreshScriptRules()

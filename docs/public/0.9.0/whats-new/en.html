@@ -30,7 +30,7 @@
 
 <p>This release adds Android game packaging and separate Debug and Release builds. Existing Windows, Linux and macOS projects retain independent platform profiles.</p>
 
-<h2 id="android">Android game output</h2><p>Android ARM64 and x86_64 runtime SDKs provide OpenGL ES 3 and Vulkan. The editor discovers installed SDK/NDK directories and validates the selected toolchain before packaging. Engine binaries come from CI-built SDKs. Read the <a href="../manual/android/en.html">Android build guide</a>.</p>
+<h2 id="inspector-sections">Inspector sections and quieter Git refreshes</h2><p>Component fields can be grouped into nested, collapsible sections. Camera depth of field, projection and output fields use this layout, along with light, audio and rigidbody settings. C++ and Lua behaviors can declare sections with SECTION and the Section property option. The scene toolbar removes its Statistics chip. View menu and preference controls remain available. Git background refreshes preserve unchanged list items, selection and diff text, avoiding periodic disabled-button flashes.</p><h2 id="android">Android game output</h2><p>Android ARM64 and x86_64 runtime SDKs provide OpenGL ES 3 and Vulkan. The editor discovers installed SDK/NDK directories and validates the selected toolchain before packaging. Engine binaries come from CI-built SDKs. Read the <a href="../manual/android/en.html">Android build guide</a>.</p>
 
 <h2 id="delivery">Signing and content delivery</h2><p>Android profiles select APK-bundled content, a signed content split APK, OBB expansion files or app-specific external data. Signed inventories and optional AES-GCM encryption apply to each delivery mode. Android Keystore protects per-install wrapping keys. SaveGame slots use private SharedPreferences.</p>
 
@@ -39,7 +39,7 @@
 <h2 id="icons">Application icons</h2><p>Each platform profile has its own icon field. Windows uses ICO, macOS uses ICNS, Linux uses square PNG and Android uses a 512-pixel square PNG that produces density-specific launcher icons.</p><h2 id="hub-sdk">Android SDK downloads in Hub 1.2</h2><p>The updated Hub accepts Android Core SDK packages and installs their runtime templates alongside desktop SDKs. Use the matching Hub and Editor release when installing the Android SDK.</p></article>
       <nav class="pager" aria-label="Previous and next guide"><a class="next" href="../manual/en.html"><small>Next</small>Start here</a></nav>
     </main>
-    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#android">Android game output</a><a class="toc-link" href="#delivery">Signing and content delivery</a><a class="toc-link" href="#build-configurations">Debug and Release</a><a class="toc-link" href="#icons">Application icons</a><a class="toc-link" href="#hub-sdk">Android SDK downloads in Hub 1.2</a></nav></aside>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#inspector-sections">Inspector sections and quieter Git refreshes</a><a class="toc-link" href="#android">Android game output</a><a class="toc-link" href="#delivery">Signing and content delivery</a><a class="toc-link" href="#build-configurations">Debug and Release</a><a class="toc-link" href="#icons">Application icons</a><a class="toc-link" href="#hub-sdk">Android SDK downloads in Hub 1.2</a></nav></aside>
   </div>
   <footer data-doc-footer>BAZZALT documentation</footer>
   <dialog id="search-dialog" aria-labelledby="search-title">

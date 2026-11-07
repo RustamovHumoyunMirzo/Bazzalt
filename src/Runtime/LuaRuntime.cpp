@@ -129,6 +129,7 @@ bool LuaRuntime::Start(std::string& error,bool reloading){
             if(declared->valid()||name!=typeName)throw std::invalid_argument("COMPONENT must declare the attached type exactly once");
             *declared=lua.create_table();return *declared;
         });
+        lua.set_function("SECTION",[](const std::string&){ /* Inspector metadata only. */ });
         lua.set_function("PROPERTY",[](const std::string& type,sol::object value,sol::optional<sol::table> inspectorOptions){
             // Options belong to editor authoring only; gameplay values are unrestricted.
             (void)inspectorOptions;
@@ -158,7 +159,7 @@ bool LuaRuntime::Start(std::string& error,bool reloading){
         active.Object=result.get<sol::table>();active.Object["Entity"]=owner;
         if(declared->valid()&&active.Object!=*declared)throw std::invalid_argument("Return the table created by COMPONENT");
         // Declaration functions are source-initialization helpers, not lifecycle APIs.
-        lua["COMPONENT"]=sol::lua_nil;lua["PROPERTY"]=sol::lua_nil;
+        lua["COMPONENT"]=sol::lua_nil;lua["PROPERTY"]=sol::lua_nil;lua["SECTION"]=sol::lua_nil;
         for(const auto& [key,value]:binding.Properties)SetProperty(active.Object,key,value);
         if(!m_impl->Reloading)active.Call("OnCreate");
         if(m_impl->Instances.size()==1){
