@@ -41,7 +41,7 @@ void AssetDatabase::ScanDependencies(UUID id){
                 auto tree=ryml::parse_in_arena(ryml::csubstr(text.data(),text.size()));
                 for(auto node:tree.crootref().children())add(Text(node),"Stylesheet");
                 report.State=AssetDependencyScanState::Complete;
-            }else if(extension==".bscene"||extension==".bprefab"||extension==".matinst"||extension==".shadg"||extension==".vfx"||extension==".banim"){
+            }else if(extension==".bscene"||extension==".bprefab"||extension==".matinst"||extension==".shadg"||extension==".vfx"||extension==".banim"||extension==".btimeline"){
                 // Unknown/custom component properties may have user-defined meaning.
                 report.State=extension==".matinst"?AssetDependencyScanState::Complete:AssetDependencyScanState::Partial;
                 auto text=DependencyText(asset->SourcePath);auto tree=ryml::parse_in_arena(ryml::csubstr(text.data(),text.size()));
@@ -61,6 +61,7 @@ void AssetDatabase::ScanDependencies(UUID id){
                         if(child.has_children()){stack.push_back({child,field,component});continue;}
                         if(!child.has_val())continue;const auto value=Text(child);
                         if(extension==".banim"&&key=="sourceModel")add(value,field);
+                        if(extension==".btimeline"&&key=="event")add(value,field);
                         if((extension==".shadg"&&key=="texture")||(extension==".vfx"&&(key=="asset"||key=="material"||key=="texture"||key=="mesh")))add(value,field);
                         if(extension==".matinst"){
                             if(key=="shader"||entry.Field=="properties")add(value,field);
@@ -72,7 +73,7 @@ void AssetDatabase::ScanDependencies(UUID id){
                             ((component=="Bazzalt.ModelInstance"||component=="Bazzalt.ModelNode")&&key=="ModelAsset")||
                             ((component=="Bazzalt.Frame"||component=="Bazzalt.GuiElement")&&key=="Stylesheet")||
                             ((component=="Bazzalt.GuiText"||component=="Bazzalt.GuiTextInput")&&key=="Font")||
-                            (component=="Bazzalt.WorldCell"&&key=="SceneAsset")||(component=="Bazzalt.Animator"&&(key=="Model"||key=="Controller"))||(component=="Bazzalt.ParticleEmitter"&&(key=="Graph"||key=="MaterialOverride"))||(component=="Bazzalt.Impostor"&&key=="Atlas")||(component=="Bazzalt.AudioSource"&&key=="Clip")||(component=="Bazzalt.AudioListener"&&key=="MixerAsset");
+                            (component=="Bazzalt.TimelineDirector"&&key=="Sequence")||(component=="Bazzalt.WorldCell"&&key=="SceneAsset")||(component=="Bazzalt.Animator"&&(key=="Model"||key=="Controller"))||(component=="Bazzalt.ParticleEmitter"&&(key=="Graph"||key=="MaterialOverride"))||(component=="Bazzalt.Impostor"&&key=="Atlas")||(component=="Bazzalt.AudioSource"&&key=="Clip")||(component=="Bazzalt.AudioListener"&&key=="MixerAsset");
                         const bool camera=component=="Bazzalt.Camera"&&(key=="RenderTarget"||key=="Post.Material"||(key.starts_with("Post.Materials.")&&key.ends_with(".Asset"))||(key.starts_with("Post.Custom.")&&(key.ends_with(".Shader")||key.ends_with(".Texture"))));
                         const bool prefab=component=="Bazzalt.PrefabInstance"&&key=="Asset";
                         const bool image=component=="Bazzalt.GuiImage"&&key=="Texture";

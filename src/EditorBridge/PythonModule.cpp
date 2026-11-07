@@ -1,3 +1,4 @@
+#include "Bazzalt/Timeline.h"
 #include "Bazzalt/DeveloperConsole.h"
 #include "Runtime/DeveloperConsoleAccess.h"
 #include "Bazzalt/Lighting.h"
@@ -148,7 +149,7 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
 class EditorHost final {
 public:
     EditorHost() : m_engine(std::make_unique<Runtime::Engine>()) { m_engine->SetEditorHost(true);Runtime::DeveloperConsoleAccess::Initialize(true);m_loadedScenes.push_back({{},nullptr});Runtime::ConsoleAccess::Acquire(); }
-    ~EditorHost() { m_lightingBake.Cancel();EndAnimationPreview();Stop(); ClearLoadedScenes(); m_engine->Shutdown(); CleanupSnapshot();Runtime::ConsoleAccess::Release(); }
+    ~EditorHost() { EndTimelinePreview();m_lightingBake.Cancel();EndAnimationPreview();Stop(); ClearLoadedScenes(); m_engine->Shutdown(); CleanupSnapshot();Runtime::ConsoleAccess::Release(); }
     py::object ConsoleSnapshot(std::uint64_t revision){
         auto snapshot=Runtime::ConsoleAccess::Snapshot(revision);if(!snapshot)return py::none();
         py::dict result;result["revision"]=snapshot->Revision;py::list messages;
@@ -584,8 +585,34 @@ public:
         return true;
     }
 
+    std::unique_ptr<TimelinePlayer> m_timelinePreview;
+    std::string m_timelineSource;
+public:
+    py::dict CaptureTimelinePose(const std::string& id,bool world) {
+        auto entity=RequireEntity(id);
+        auto pose=world?entity.GetWorldTransform():entity.GetComponent<Transform>();
+        py::dict result;
+        result["position"]=py::make_tuple(pose.Position.X,pose.Position.Y,pose.Position.Z);
+        result["rotation"]=py::make_tuple(pose.Rotation.X,pose.Rotation.Y,pose.Rotation.Z,pose.Rotation.W);
+        result["scale"]=py::make_tuple(pose.Scale.X,pose.Scale.Y,pose.Scale.Z);
+        return result;
+    }
+    void EndTimelinePreview() {
+        m_timelinePreview.reset();
+        m_timelineSource.clear();
+    }
+    void PreviewTimeline(const std::string& source,double time,bool reset) {
+        if(IsPlaying())throw std::logic_error("Stop Play before timeline preview");
+        if(reset||source!=m_timelineSource||!m_timelinePreview) {
+            EndAnimationPreview();
+            auto sequence=TimelineSequence::FromSource(source);
+            m_timelinePreview=std::make_unique<TimelinePlayer>(m_engine->GetScene(),std::move(sequence));
+            m_timelineSource=source;
+        }
+        m_timelinePreview->Seek(time,false);
+    }
     std::string m_animationPreviewOwner;std::optional<Animator> m_animationOriginal;std::map<UUID,Transform> m_animationTransforms;std::shared_ptr<const AnimationRig> m_animationRig;UUID m_animationModel;
-    void EndAnimationPreview(){
+    void EndAnimationPreview(){EndTimelinePreview();
         if(m_animationPreviewOwner.empty())return;
         auto [scene,owner]=FindEntity(m_animationPreviewOwner);
         if(owner&&owner.HasComponent<Animator>()){try{Animation::Stop(owner);}catch(const std::exception&){}if(m_animationOriginal)owner.GetComponent<Animator>()=*m_animationOriginal;try{Animation::Rebind(owner);}catch(const std::exception&){}if(!m_animationOriginal)owner.RemoveComponent<Animator>();}
@@ -611,7 +638,7 @@ public:
     py::dict PreviewAnimationController(const std::string& id,const std::string& source,float delta,const py::dict& parameters,bool reset){BeginAnimationPreview(id);auto e=RequireEntity(id);if(reset){Animation::SetController(e,AnimationController::FromSource(source));Animation::Play(e);}for(auto item:parameters)Animation::SetParameter(e,py::cast<std::string>(item.first),py::cast<float>(item.second));Animation::Evaluate(e,delta);auto status=Animation::GetStatus(e);py::dict out;out["state"]=status.State;out["time"]=status.Time;out["weight"]=status.TransitionWeight;return out;}
     py::list ComponentTypes() const {
         py::list result;
-        result.append("Lightmap");result.append("Reflection Probe");result.append("Light Probe");result.append("World Cell");result.append("Streaming Source");result.append("IK Constraint");result.append("Animator");result.append("Particle Emitter");result.append("HLOD");result.append("LOD Transition");result.append("Impostor");result.append("LOD");result.append("Rigidbody");result.append("Shape Collider");result.append("Mesh Collider");result.append("Joint");result.append("Distance Joint");result.append("Hinge Joint");result.append("Slider Joint");result.append("Ball And Socket Joint");result.append("Fixed Joint");result.append("Cloth");result.append("Rope");result.append("Vehicle");result.append("Vehicle Wheel");result.append("Wheel Suspension");result.append("Wheel Tire");result.append("Wheel Brake");result.append("Wheel Steering");result.append("Vehicle Engine");result.append("Vehicle Transmission");result.append("Vehicle Differential");result.append("Vehicle Anti Roll Bar");result.append("Vehicle Aerodynamics");result.append("Audio Source");result.append("Audio Listener");
+        result.append("Timeline Director");result.append("Lightmap");result.append("Reflection Probe");result.append("Light Probe");result.append("World Cell");result.append("Streaming Source");result.append("IK Constraint");result.append("Animator");result.append("Particle Emitter");result.append("HLOD");result.append("LOD Transition");result.append("Impostor");result.append("LOD");result.append("Rigidbody");result.append("Shape Collider");result.append("Mesh Collider");result.append("Joint");result.append("Distance Joint");result.append("Hinge Joint");result.append("Slider Joint");result.append("Ball And Socket Joint");result.append("Fixed Joint");result.append("Cloth");result.append("Rope");result.append("Vehicle");result.append("Vehicle Wheel");result.append("Wheel Suspension");result.append("Wheel Tire");result.append("Wheel Brake");result.append("Wheel Steering");result.append("Vehicle Engine");result.append("Vehicle Transmission");result.append("Vehicle Differential");result.append("Vehicle Anti Roll Bar");result.append("Vehicle Aerodynamics");result.append("Audio Source");result.append("Audio Listener");
         for (const char* name : {"Camera", "Light", "Mesh", "Primitive Object", "Scene Query Bounds", "Gaussian Blur", "Vignette"})
             result.append(name);
         for(auto name:GuiNames)result.append(name);
@@ -680,7 +707,7 @@ public:
             const auto mode=value.cast<int>();if(mode<0||mode>7)return false;
         }
         Entity entity=RequireEntity(id);
-        if(type=="Lightmap"||type=="Reflection Probe"||type=="Light Probe"||type=="World Cell"||type=="Streaming Source"||type=="IK Constraint"||type=="Animator"||type=="Particle Emitter"||type=="HLOD"||type=="LOD Transition"||type=="Impostor")return SetAdvancedLODProperty(entity,type,property,value);
+        if(type=="Timeline Director"||type=="Lightmap"||type=="Reflection Probe"||type=="Light Probe"||type=="World Cell"||type=="Streaming Source"||type=="IK Constraint"||type=="Animator"||type=="Particle Emitter"||type=="HLOD"||type=="LOD Transition"||type=="Impostor")return SetAdvancedLODProperty(entity,type,property,value);
         if(type=="LOD")return SetLODProperty(entity,property,value);
         if(type=="Rigidbody"||type=="Shape Collider"||type=="Mesh Collider"||type=="Joint"||type=="Distance Joint"||type=="Hinge Joint"||type=="Slider Joint"||type=="Ball And Socket Joint"||type=="Fixed Joint"||type=="Cloth"||type=="Rope"||type=="Vehicle"||type=="Vehicle Wheel"||type=="Wheel Suspension"||type=="Wheel Tire"||type=="Wheel Brake"||type=="Wheel Steering"||type=="Vehicle Engine"||type=="Vehicle Transmission"||type=="Vehicle Differential"||type=="Vehicle Anti Roll Bar"||type=="Vehicle Aerodynamics")return SetPhysicsProperty(entity,type,property,value);
         if(type=="Audio Source"||type=="Audio Listener")return SetAudioProperty(entity,type,property,value);
@@ -1029,6 +1056,9 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("animation_retarget_map", &Bazzalt::EditorBridge::EditorHost::AnimationRetargetMap,py::arg("id"),py::arg("source"),py::arg("humanoid")=false)
         .def("animation_preview_controller", &Bazzalt::EditorBridge::EditorHost::PreviewAnimationController)
         .def("animation_clip_source", &Bazzalt::EditorBridge::EditorHost::AnimationClipSource)
+        .def("timeline_capture_pose", &Bazzalt::EditorBridge::EditorHost::CaptureTimelinePose)
+        .def("timeline_preview", &Bazzalt::EditorBridge::EditorHost::PreviewTimeline)
+        .def("timeline_end_preview", &Bazzalt::EditorBridge::EditorHost::EndTimelinePreview)
         .def("animation_info", &Bazzalt::EditorBridge::EditorHost::AnimationInfo)
         .def("animation_preview", &Bazzalt::EditorBridge::EditorHost::PreviewAnimation)
         .def("animation_end_preview", &Bazzalt::EditorBridge::EditorHost::EndAnimationPreview)

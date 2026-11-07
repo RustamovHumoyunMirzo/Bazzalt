@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Cinematics declares the values and operations listed below. Types, defaults and overloads are part of its contract; it is not an editor panel.">
+  <title>Cinematics | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / Lua API reference / Cinematics</nav>
+      <article class="doc"><h1>Cinematics</h1><p>Cinematics declares the values and operations listed below. Types, defaults and overloads are part of its contract; it is not an editor panel.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Lua members and signatures</h2>
+<p>Use <code>Bazzalt.Cinematics</code>. Each member below is actually registered in Lua. The adapter declarations are C++ binding notation, not Lua example code. <code>sol::property</code> exposes a field, <code>sol::overload</code> lists alternatives, <code>sol::optional</code> accepts an omitted/nil argument, and <code>std::make_tuple</code> returns multiple Lua values. <code>sol::as_table</code> returns a Lua table. Instance methods use <code>value:Method(...)</code>; service/static calls use <code>Bazzalt.Cinematics.Method(...)</code> unless a colon overload is explicitly registered. An engine exception becomes a Lua script error. See the examples and behavior notes above for usage.</p><h3 id="lua-ConsumeEvents">ConsumeEvents</h3><pre><code class="language-lua">Bazzalt.Cinematics.ConsumeEvents(e: Entity)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static std::vector&lt;TimelineEvent&gt; ConsumeEvents(Entity director);</code></pre><pre><code>[](Entity e) {
+        return sol::as_table(Cinematics::ConsumeEvents(e));
+    }</code></pre></details><h3 id="lua-GetOutputCamera">GetOutputCamera</h3><pre><code class="language-lua">Bazzalt.Cinematics.GetOutputCamera(director: Entity)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static Entity GetOutputCamera(Entity director);</code></pre></details><h3 id="lua-GetStatus">GetStatus</h3><pre><code class="language-lua">Bazzalt.Cinematics.GetStatus(director: Entity)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static TimelineStatus GetStatus(Entity director);</code></pre></details><h3 id="lua-Pause">Pause</h3><pre><code class="language-lua">Bazzalt.Cinematics.Pause(director: Entity)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static void Pause(Entity director);</code></pre></details><h3 id="lua-Play">Play</h3><pre><code class="language-lua">Bazzalt.Cinematics.Play(director: Entity)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static void Play(Entity director);</code></pre></details><h3 id="lua-Resume">Resume</h3><pre><code class="language-lua">Bazzalt.Cinematics.Resume(director: Entity)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static void Resume(Entity director);</code></pre></details><h3 id="lua-Seek">Seek</h3><pre><code class="language-lua">Bazzalt.Cinematics.Seek(e: Entity, time: number, fire: boolean (optional))</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static void Seek(Entity director, double time, bool fireSignals = false);</code></pre><pre><code>[](Entity e, double time, sol::optional&lt;bool&gt; fire) {
+        Cinematics::Seek(e, time, fire.value_or(false));
+    }</code></pre></details><h3 id="lua-SetSequence">SetSequence</h3><pre><code class="language-lua">Bazzalt.Cinematics.SetSequence(director: Entity, sequence: TimelineSequence)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static void SetSequence(Entity director, TimelineSequence sequence);</code></pre></details><h3 id="lua-Stop">Stop</h3><pre><code class="language-lua">Bazzalt.Cinematics.Stop(director: Entity)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static void Stop(Entity director);</code></pre></details><h3 id="lua-StopAll">StopAll</h3><pre><code class="language-lua">Bazzalt.Cinematics.StopAll(scene: Scene)</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>static void StopAll(Scene &amp;scene);</code></pre></details><h3 id="lua-construction">Construction / enum values</h3><p>Global service table; do not construct an instance.</p><details><summary>Native declaration and binding adapter</summary><pre><code>api.create_named(&quot;Cinematics&quot;);</code></pre></details><p>Binding source: <code>src/Script/LuaTimeline.cpp</code>. Inherited component operations use the Entity component APIs.</p>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../CameraViewport/en.html"><small>Previous</small>CameraViewport</a>
+<a class="next" href="../Cloth/en.html"><small>Next</small>Cloth</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#source-contract">Lua members and signatures</a><a class="toc-link sub" href="#lua-ConsumeEvents">ConsumeEvents</a><a class="toc-link sub" href="#lua-GetOutputCamera">GetOutputCamera</a><a class="toc-link sub" href="#lua-GetStatus">GetStatus</a><a class="toc-link sub" href="#lua-Pause">Pause</a><a class="toc-link sub" href="#lua-Play">Play</a><a class="toc-link sub" href="#lua-Resume">Resume</a><a class="toc-link sub" href="#lua-Seek">Seek</a><a class="toc-link sub" href="#lua-SetSequence">SetSequence</a><a class="toc-link sub" href="#lua-Stop">Stop</a><a class="toc-link sub" href="#lua-StopAll">StopAll</a><a class="toc-link sub" href="#lua-construction">Construction / enum values</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

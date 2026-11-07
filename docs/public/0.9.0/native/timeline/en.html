@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Include Bazzalt/Timeline.h for sequence data, evaluation and controls. Include Bazzalt/Components/TimelineDirector.h to attach a Director. Scene installs TimelineSystem automatically. Timeline poses evaluate after scene animation and game logic and before camera rendering.">
+  <title>Cinematics in C++ | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / C++ / Cinematics in C++</nav>
+      <article class="doc"><h1 id="cinematics-cpp">Cinematics in C++</h1><p>Include <code>Bazzalt/Timeline.h</code> for sequence data, evaluation and controls. Include <code>Bazzalt/Components/TimelineDirector.h</code> to attach a Director. Scene installs TimelineSystem automatically. Timeline poses evaluate after scene animation and game logic and before camera rendering.</p>
+<h2 id="example">Build and play a sequence</h2><pre><code class="language-cpp">auto actor = scene.FindEntityByName("Cube");
+auto director = scene.CreateEntity("Intro");
+director.AddComponent&lt;Bazzalt::TimelineDirector&gt;();
+Bazzalt::TimelineSequence sequence;
+sequence.Duration = 2;
+Bazzalt::TimelineTransformTrack track;
+track.Target = actor.GetUUID();
+Bazzalt::TimelineTransformKey start, finish;
+start.Value = actor.GetComponent&lt;Bazzalt::Transform&gt;();
+finish = start;
+finish.Time = 2;
+finish.Value.Position.X += 5;
+track.Keys = {start, finish};
+sequence.Tracks.push_back(track);
+Bazzalt::Cinematics::SetSequence(director, sequence);
+Bazzalt::Cinematics::Play(director);</code></pre>
+<h2 id="sequence">Sequence data</h2><p>TimelineSequence owns Name, Duration, FrameRate, Tracks, Cameras and Signals. Validate checks time ordering, finite values, quaternion and scale validity, UUIDs, overlapping shots and resource budgets. FromSource parses version-1 YAML. ToSource writes a validated JSON-form YAML document. Load resolves a ready <code>.btimeline</code> asset through AssetManager.</p><p>TimelineTransformKey contains Time, Value and Interpolation. TimelineTransformTrack contains Name, Target, WorldSpace, Muted and Keys. Targets must be unique across transform tracks. TimelineCameraShot contains Name, Camera, Start, End and BlendIn. TimelineSignal contains Time, Name, Event and Arguments. A zero Event UUID creates a marker. Arguments use the same EventValue variants as GlobalEvent.</p>
+<h2 id="control">Director controls</h2><p>Cinematics::SetSequence installs an in-memory sequence on a Director. Play starts at zero using its Loop and Speed fields. Pause freezes advancement. Resume continues a paused sequence. Stop restores transforms according to RestoreOnStop and returns camera control. Seek samples an absolute time in [0, Duration], with optional forward signal dispatch. GetStatus returns Time, Duration, Playing, Paused and Error. GetOutputCamera returns the temporary output camera entity or an empty entity. ConsumeEvents drains a bounded event queue. StopAll releases all scene Director players.</p><p>TimelineEventType includes Started, Paused, Resumed, Stopped, Completed, Looped and Signal. Each event includes Type, Time and Name. Restore On Completion emits completion followed by stop while preserving the final cursor time. Use GlobalEvent subscriptions for callbacks at authored cues, and ConsumeEvents for transport lifecycle observations.</p>
+<h2 id="player">Standalone evaluator and preview</h2><p>TimelinePlayer takes a Scene reference and TimelineSequence value. Play accepts loop and speed. SetLoop and SetSpeed change playback settings. Advance accepts a nonnegative delta in seconds. Pause, Resume, Stop, Seek, GetStatus, GetOutputCamera and ConsumeEvents mirror Director controls. Stop accepts a restore flag. Destruction restores its captured scene state. A scene lifetime guard prevents later cleanup from dereferencing a destroyed scene.</p><p>Seek is silent by default. A stopped player can be evaluated again with Seek. A non-looping TimelinePlayer holds its final sample until Stop or destruction. Editor preview uses this evaluator without dispatching signals. Restore state before saving authoring scenes. See the <a href="../../manual/timeline/en.html">Timeline manual</a> for bindings, blending, limits and authoring behavior.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../subsystems/en.html"><small>Previous</small>Global subsystems</a>
+<a class="next" href="../../lua/en.html"><small>Next</small>Write a Lua behavior</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Build and play a sequence</a><a class="toc-link" href="#sequence">Sequence data</a><a class="toc-link" href="#control">Director controls</a><a class="toc-link" href="#player">Standalone evaluator and preview</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

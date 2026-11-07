@@ -297,6 +297,18 @@ SECTION("")
 Walk.Direction=PROPERTY("Vec3",B.Vec3.new(1,0,0))
 function Walk:OnCreate()
  assert(self.Speed==4 and self.Direction.X==1)
+ local director=self.Entity:AddComponent("TimelineDirector")
+ director.PlayOnAwake=false
+ self.Entity:SetComponent("TimelineDirector",director)
+ local sequence=B.TimelineSequence.new();sequence.Duration=1
+ B.Cinematics.SetSequence(self.Entity,sequence)
+ B.Cinematics.Play(self.Entity);B.Cinematics.Pause(self.Entity)
+ assert(B.Cinematics.GetStatus(self.Entity).Paused)
+ B.Cinematics.Resume(self.Entity);B.Cinematics.Seek(self.Entity,.5)
+ assert(B.Cinematics.GetStatus(self.Entity).Time==.5)
+ B.Cinematics.Stop(self.Entity)
+ assert(not B.Cinematics.GetStatus(self.Entity).Playing)
+ self.Entity:RemoveComponent("TimelineDirector")
  self.Speed=100;assert(self.Speed==100);self.Speed=4 -- Inspector rules never gate gameplay.
 end
 function Walk:OnUpdate(dt)

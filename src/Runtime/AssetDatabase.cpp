@@ -1,3 +1,4 @@
+#include "Bazzalt/Timeline.h"
 #include "Bazzalt/Animation.h"
 #include "Prefab/PrefabAccess.h"
 #include "Runtime/GlobalEventsAccess.h"
@@ -311,6 +312,13 @@ public:
     }
 };
 
+class TimelineImporter final:public AssetImporter {
+public:
+ std::string GetName()const override{return "Bazzalt.Timeline";}
+ std::uint32_t GetVersion()const override{return 1;}
+ bool Supports(const std::filesystem::path& path)const override{return LowerExtension(path)==".btimeline";}
+ bool Import(const AssetImportContext& c,std::string& error)override{try{auto size=std::filesystem::file_size(c.SourcePath);if(size>16*1024*1024)throw std::invalid_argument("Timeline exceeds 16 MiB");std::ifstream file(c.SourcePath,std::ios::binary);std::string source(std::size_t(size),'\0');if(!file.read(source.data(),std::streamsize(size)))throw std::invalid_argument("Cannot read timeline");TimelineSequence::FromSource(source);return CopyAsset(c,error);}catch(const std::exception& e){error=e.what();return false;}}
+};
 class AnimationControllerImporter final:public AssetImporter {
 public:std::string GetName()const override{return "Bazzalt.AnimationController";}std::uint32_t GetVersion()const override{return 1;}
  bool Supports(const std::filesystem::path& path)const override{return LowerExtension(path)==".banim";}
@@ -475,6 +483,7 @@ AssetDatabase::AssetDatabase() {
     RegisterImporter(std::make_unique<RawImporter>());
     RegisterImporter(std::make_unique<VFXImporter>());
     RegisterImporter(std::make_unique<AnimationControllerImporter>());
+    RegisterImporter(std::make_unique<TimelineImporter>());
     RegisterImporter(std::make_unique<GlobalEventImporter>());
     RegisterImporter(std::make_unique<PrefabImporter>());
     RegisterImporter(std::make_unique<GuiDataImporter>(false));RegisterImporter(std::make_unique<GuiDataImporter>(true));

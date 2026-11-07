@@ -12,6 +12,8 @@
 #include "Bazzalt/Components/Mesh.h"
 #include "Bazzalt/Components/ModelInstance.h"
 #include "Bazzalt/Systems/AnimationSystem.h"
+#include "Bazzalt/Systems/TimelineSystem.h"
+#include "Bazzalt/Timeline.h"
 #include "Bazzalt/Components/ModelNode.h"
 
 namespace Bazzalt {
@@ -21,6 +23,7 @@ Scene::Scene() {
     CreateRootEntity();
     AddSystem<Runtime::GuiSystem>();
     AddSystem<AnimationSystem>();
+    AddSystem<TimelineSystem>();
 }
 
 void Scene::RetainGameplayModule() {
@@ -63,6 +66,7 @@ void Scene::DestroyEntity(Entity entity) {
 }
 
 void Scene::Clear() {
+    Cinematics::StopAll(*this);
     Runtime::ReleasePhysicsScene(*this);
     m_physicsSettings={};
     m_extensionProperties.clear();

@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="TimelineDirector declares the values and operations listed below. Types, defaults and overloads are part of its contract; it is not an editor panel.">
+  <title>TimelineDirector | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / Lua / Lua API reference / TimelineDirector</nav>
+      <article class="doc"><h1>TimelineDirector</h1><p>TimelineDirector declares the values and operations listed below. Types, defaults and overloads are part of its contract; it is not an editor panel.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Lua members and signatures</h2>
+<p>Use <code>Bazzalt.TimelineDirector</code>. Each member below is actually registered in Lua. The adapter declarations are C++ binding notation, not Lua example code. <code>sol::property</code> exposes a field, <code>sol::overload</code> lists alternatives, <code>sol::optional</code> accepts an omitted/nil argument, and <code>std::make_tuple</code> returns multiple Lua values. <code>sol::as_table</code> returns a Lua table. Instance methods use <code>value:Method(...)</code>; service/static calls use <code>Bazzalt.TimelineDirector.Method(...)</code> unless a colon overload is explicitly registered. An engine exception becomes a Lua script error. See the examples and behavior notes above for usage.</p><h3 id="lua-IsValid">IsValid</h3><pre><code class="language-lua">value:IsValid()</code></pre><details><summary>Native declaration and binding adapter</summary><pre><code>bool IsValid() const;</code></pre></details><h3 id="lua-Loop">Loop</h3><pre><code>value.Loop: boolean</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>bool PlayOnAwake = true, Loop = false, UseUnscaledTime = false, RestoreOnStop = true,
+         RestoreOnCompletion = true;</code></pre></details><h3 id="lua-PlayOnAwake">PlayOnAwake</h3><pre><code>value.PlayOnAwake: boolean</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>bool PlayOnAwake = true, Loop = false, UseUnscaledTime = false, RestoreOnStop = true,
+         RestoreOnCompletion = true;</code></pre></details><h3 id="lua-RestoreOnCompletion">RestoreOnCompletion</h3><pre><code>value.RestoreOnCompletion: boolean</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>bool PlayOnAwake = true, Loop = false, UseUnscaledTime = false, RestoreOnStop = true,
+         RestoreOnCompletion = true;</code></pre></details><h3 id="lua-RestoreOnStop">RestoreOnStop</h3><pre><code>value.RestoreOnStop: boolean</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>bool PlayOnAwake = true, Loop = false, UseUnscaledTime = false, RestoreOnStop = true,
+         RestoreOnCompletion = true;</code></pre></details><h3 id="lua-Sequence">Sequence</h3><pre><code>value.Sequence: UUID</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>UUID Sequence{};</code></pre></details><h3 id="lua-Speed">Speed</h3><pre><code>value.Speed: number</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>double Speed = 1;</code></pre></details><h3 id="lua-UseUnscaledTime">UseUnscaledTime</h3><pre><code>value.UseUnscaledTime: boolean</code></pre><p>Read/write value field. Defaults are shown in the declaration below. For copied entity components, commit edits with <code>entity:SetComponent(typeName, value)</code>.</p><details><summary>Native declaration and binding adapter</summary><pre><code>bool PlayOnAwake = true, Loop = false, UseUnscaledTime = false, RestoreOnStop = true,
+         RestoreOnCompletion = true;</code></pre></details><h3 id="lua-construction">Construction / enum values</h3><p>Construct a value with <code>Bazzalt.TimelineDirector()</code>. Constructor overloads, when available, are shown in the binding details.</p><details><summary>Native declaration and binding adapter</summary><pre><code>api.new_usertype&lt;TimelineDirector&gt;(&quot;TimelineDirector&quot;,
+                                                       sol::constructors&lt;TimelineDirector()&gt;(),
+                                                       sol::base_classes, sol::bases&lt;Component&gt;());</code></pre></details><p>Binding source: <code>src/Script/LuaTimeline.cpp</code>. Inherited component operations use the Entity component APIs.</p>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../TimelineCameraShot/en.html"><small>Previous</small>TimelineCameraShot</a>
+<a class="next" href="../TimelineEvent/en.html"><small>Next</small>TimelineEvent</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#source-contract">Lua members and signatures</a><a class="toc-link sub" href="#lua-IsValid">IsValid</a><a class="toc-link sub" href="#lua-Loop">Loop</a><a class="toc-link sub" href="#lua-PlayOnAwake">PlayOnAwake</a><a class="toc-link sub" href="#lua-RestoreOnCompletion">RestoreOnCompletion</a><a class="toc-link sub" href="#lua-RestoreOnStop">RestoreOnStop</a><a class="toc-link sub" href="#lua-Sequence">Sequence</a><a class="toc-link sub" href="#lua-Speed">Speed</a><a class="toc-link sub" href="#lua-UseUnscaledTime">UseUnscaledTime</a><a class="toc-link sub" href="#lua-construction">Construction / enum values</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

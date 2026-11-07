@@ -546,7 +546,7 @@ class EditorShellTests(unittest.TestCase):
     def test_default_workspace_registers_all_builtin_panels(self) -> None:
         self.assertEqual(
             {panel.panel_id for panel in self.Window.Docking.panels()},
-            {"console", "output", "scene", "hierarchy", "properties", "asset_browser", "audio_mixer", "shader_graph", "vfx_graph", "animation", "macros"},
+            {"console", "output", "scene", "hierarchy", "properties", "asset_browser", "audio_mixer", "shader_graph", "vfx_graph", "animation", "timeline", "macros"},
         )
         self.assertTrue(all(not panel.icon.isNull() for panel in self.Window.Docking.panels()))
 

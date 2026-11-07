@@ -134,7 +134,7 @@ class AssetBrowserPanel(QWidget):
             pixmap=QPixmap(64,64);pixmap.fill(Qt.GlobalColor.transparent);painter=QPainter(pixmap);gradient=QRadialGradient(25,20,35);gradient.setColorAt(0,QColor("#f4f4f4"));gradient.setColorAt(.35,QColor("#9aa5b5"));gradient.setColorAt(1,QColor("#1d222a"));painter.setBrush(gradient);painter.setPen(QColor("#59616d"));painter.drawEllipse(7,7,50,50);painter.end();return QIcon(pixmap)
         if ext in ENVIRONMENT_EXTENSIONS:
             pixmap=QPixmap(64,64);gradient=QLinearGradient(0,0,0,64);gradient.setColorAt(0,QColor("#456f9b"));gradient.setColorAt(.55,QColor("#d4b678"));gradient.setColorAt(1,QColor("#252d25"));painter=QPainter(pixmap);painter.fillRect(pixmap.rect(),gradient);painter.end();return QIcon(pixmap)
-        name="animation.svg" if ext==".banim" else "vfx.svg" if ext==".vfx" else "prefab.svg" if ext==".bprefab" else "shadergraph.svg" if ext==".shadg" else "dir.svg" if path.is_dir() else "texture.svg" if ext==".btexture" else "scene.svg" if ext==".bscene" else "header.svg" if ext in {".h",".hpp"} else "nativecpp.svg" if ext in {".c",".cc",".cpp"} else "3dfiles.svg" if ext in MODEL_EXTENSIONS else "shader.svg" if ext in SHADER_EXTENSIONS else "file.svg"
+        name="timeline.svg" if ext==".btimeline" else "animation.svg" if ext==".banim" else "vfx.svg" if ext==".vfx" else "prefab.svg" if ext==".bprefab" else "shadergraph.svg" if ext==".shadg" else "dir.svg" if path.is_dir() else "texture.svg" if ext==".btexture" else "scene.svg" if ext==".bscene" else "header.svg" if ext in {".h",".hpp"} else "nativecpp.svg" if ext in {".c",".cc",".cpp"} else "3dfiles.svg" if ext in MODEL_EXTENSIONS else "shader.svg" if ext in SHADER_EXTENSIONS else "file.svg"
         return self._resources.Icon(f"icons/abrowser/{name}") if self._resources else QIcon()
     def _ThumbnailReady(self,path,image):
         self._thumbnail_timer.start(0)
@@ -262,6 +262,9 @@ class AssetBrowserPanel(QWidget):
         while candidate.exists():candidate=candidate.with_name(f"{stem} {number}{suffix}");number+=1
         return candidate
     def _Create(self,kind)->None:
+        if kind=="timeline":
+            from ...timeline import Save,NewSequence
+            path=self._Unique("NewTimeline.btimeline");Save(path,NewSequence());self.Refresh(path);self.Browser.editItem(self.Browser.currentItem());return
         if kind=="animation":
             from ...animation import Save,NewController
             path=self._Unique("NewAnimation.banim");Save(path,NewController());self.Refresh(path);self.Browser.editItem(self.Browser.currentItem());return
@@ -393,7 +396,7 @@ class AssetBrowserPanel(QWidget):
         if target is not None and widget is self.Browser and not target.isSelected():self.Browser.setCurrentItem(target)
         reveal_paths=[Path(target.data(0,Qt.ItemDataRole.UserRole))] if widget is self.Tree and target is not None else [Path(item.data(Qt.ItemDataRole.UserRole)) for item in self.Browser.selectedItems()]
         tr=self._localization.Translate;menu=QMenu(self);create=menu.addMenu(tr("assets.create"))
-        for key,label in (("global_event","events.asset"),("folder","assets.folder"),("scene","assets.scene"),("texture","assets.texture"),("audio_mixer","audio.mixer"),("cpp","assets.native_cpp"),("subsystem","subsystems.script"),("header","assets.header"),("lua","assets.lua"),("css","assets.stylesheet"),("shader","assets.shader"),("animation","panel.animation"),("vfx","panel.vfx_graph"),("shader_graph","panel.shader_graph"),("material","assets.material"),("canvas_material","materials.canvas")):
+        for key,label in (("global_event","events.asset"),("folder","assets.folder"),("scene","assets.scene"),("texture","assets.texture"),("audio_mixer","audio.mixer"),("cpp","assets.native_cpp"),("subsystem","subsystems.script"),("header","assets.header"),("lua","assets.lua"),("css","assets.stylesheet"),("shader","assets.shader"),("timeline","panel.timeline"),("animation","panel.animation"),("vfx","panel.vfx_graph"),("shader_graph","panel.shader_graph"),("material","assets.material"),("canvas_material","materials.canvas")):
             action=create.addAction(tr(label));action.triggered.connect(lambda _=False,k=key:self._Create(k))
         menu.addAction(tr("assets.import"),self._Import);menu.addSeparator();selected=bool(self.Browser.selectedItems()) if widget is self.Browser else False
         current=Path(self.Browser.currentItem().data(Qt.ItemDataRole.UserRole)) if widget is self.Browser and self.Browser.currentItem() else None
@@ -402,7 +405,7 @@ class AssetBrowserPanel(QWidget):
         open_with=menu.addAction(tr("assets.open_with"));open_with.setVisible(external);open_with.triggered.connect(lambda _=False:self._OpenExternal(reveal_paths,True))
         audio=bool(current and current.suffix.lower() in AUDIO_EXTENSIONS)
         preview=menu.addAction(tr("audio.preview"));preview.setVisible(audio);preview.triggered.connect(lambda:self.AssetActivated.emit(current) if current else None)
-        graph=menu.addAction(tr("graph.open"));graph.setVisible(bool(current and current.suffix.lower() in {".shadg",".vfx",".banim"}));graph.triggered.connect(lambda:self.AssetActivated.emit(current) if current else None)
+        graph=menu.addAction(tr("graph.open"));graph.setVisible(bool(current and current.suffix.lower() in {".shadg",".vfx",".banim",".btimeline"}));graph.triggered.connect(lambda:self.AssetActivated.emit(current) if current else None)
         unlock=menu.addAction(tr("graph.unlock"));unlock.setVisible(bool(current and current.suffix.lower()==".shadg"));unlock.triggered.connect(lambda:self.UnlockGraphRequested.emit(current) if current else None)
         mixer=menu.addAction(tr("audio.edit_mixer"));mixer.setVisible(bool(current and current.suffix.lower()==".bmixer"));mixer.triggered.connect(lambda:self.AssetActivated.emit(current) if current else None)
         load=menu.addAction(tr("assets.load_scene"));is_scene=bool(current and current.suffix.lower()==".bscene");load.setVisible(is_scene);load.setEnabled(bool(is_scene and not (callable(self.SceneLoadedChecker) and self.SceneLoadedChecker(current))));load.triggered.connect(lambda:self.LoadSceneRequested.emit(current) if current else None)

@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Bazzalt exposes TimelineSequence, TimelineTransformTrack, TimelineTransformKey, TimelineCameraShot, TimelineSignal, TimelineDirector, TimelineStatus, TimelineEvent, TimelineInterpolation and TimelineEventType. Data objects use .new(). Methods on data instances use colons. Cinematics service methods use dots.">
+  <title>Cinematics in Lua | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Lua / Cinematics in Lua</nav>
+      <article class="doc"><h1 id="cinematics-lua">Cinematics in Lua</h1><p>Bazzalt exposes TimelineSequence, TimelineTransformTrack, TimelineTransformKey, TimelineCameraShot, TimelineSignal, TimelineDirector, TimelineStatus, TimelineEvent, TimelineInterpolation and TimelineEventType. Data objects use <code>.new()</code>. Methods on data instances use colons. Cinematics service methods use dots.</p>
+<h2 id="example">Play an authored asset</h2><pre><code class="language-lua">local B = Bazzalt
+local Intro = COMPONENT("Intro")
+function Intro:OnCreate()
+    -- This entity already has a configured Timeline Director in the scene.
+    B.Cinematics.Play(self.Entity)
+end
+function Intro:OnUpdate(dt)
+    local status = B.Cinematics.GetStatus(self.Entity)
+    for _, event in ipairs(B.Cinematics.ConsumeEvents(self.Entity)) do
+        if event.Type == B.TimelineEventType.Completed then
+            -- Continue gameplay here.
+        end
+    end
+end
+return Intro</code></pre>
+<h2 id="data">Create or load sequence data</h2><p><code>B.TimelineSequence.Load(assetUUID)</code> loads a ready timeline asset. <code>B.TimelineSequence.FromSource(yamlText)</code> parses version-1 sequence data. A sequence instance exposes Name, Duration, FrameRate, Tracks, Cameras and Signals, plus Validate and ToSource. Transform keys expose Time, Value and Interpolation. Tracks expose Name, Target, WorldSpace, Muted and Keys. Shots expose Name, Camera, Start, End and BlendIn. Signals expose Time, Name, Event and Arguments. UUID fields use B.UUID objects. Typed signal arguments can be authored using FromSource with the documented argument records.</p><p>To add a Director, call <code>entity:AddComponent("TimelineDirector")</code>. It exposes Sequence, Speed, PlayOnAwake, Loop, UseUnscaledTime, RestoreOnStop and RestoreOnCompletion. Components are copies in Lua, so write modified settings back through <code>entity:SetComponent("TimelineDirector", settings)</code>. The Sequence field is an asset UUID. Alternatively, call Cinematics.SetSequence(entity, sequence) to install in-memory data.</p>
+<h2 id="controls">Service methods and results</h2><p>Cinematics.Play(entity) starts at zero. Pause(entity) and Resume(entity) control advancement. Stop(entity) releases camera control and applies the Director's stop restoration setting. Seek(entity, seconds, fireSignals) samples the sequence, with fireSignals defaulting to false. GetStatus(entity) exposes Time, Duration, Playing, Paused and Error. GetOutputCamera(entity) returns its temporary camera entity. ConsumeEvents(entity) drains an array of events, each containing Type, Time and Name. StopAll(scene) releases all Director players in a scene.</p><p>TimelineInterpolation has Step, Linear and Smooth. TimelineEventType has Started, Paused, Resumed, Stopped, Completed, Looped and Signal. Use project Global Events for authored callbacks. Preview scrubbing is silent. Read the <a href="../../manual/timeline/en.html">Timeline manual</a> for the asset schema, binding rules, physics restrictions, camera blending and budgets.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../prefabs/en.html"><small>Previous</small>Lua prefab assets</a>
+<a class="next" href="../../bshader/en.html"><small>Next</small>Shaders and material assets</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Play an authored asset</a><a class="toc-link" href="#data">Create or load sequence data</a><a class="toc-link" href="#controls">Service methods and results</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

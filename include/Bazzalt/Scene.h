@@ -189,6 +189,7 @@ private:
     SceneEnvironment m_environment{};
     PhysicsSettings m_physicsSettings{};
     std::map<std::string,std::string> m_extensionProperties;
+    friend class TimelinePlayer;
     friend class SceneSerializer;
     friend class Runtime::Engine;
     friend class Runtime::StreamingRuntime;

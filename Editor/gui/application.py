@@ -32,6 +32,7 @@ from .panels.audio_mixer import AudioMixerPanel
 from .panels.shader_graph import ShaderGraphPanel
 from .panels.vfx_graph import VFXGraphPanel
 from .panels.animation import AnimationPanel
+from .panels.timeline import TimelinePanel
 from .panels.macros import MacrosPanel
 
 
@@ -97,6 +98,7 @@ class Editor(QMainWindow):
         self.AudioMixer=AudioMixerPanel(self.Runtime,self.Localization,self.Resources,self.ThemeManager)
         self.Macros=MacrosPanel(self)
         self.ShaderGraph=ShaderGraphPanel(self.Runtime,self.Localization,self.Resources,self.ThemeManager)
+        self.Timeline=TimelinePanel(self.Runtime,self.Localization,self.Resources,self.ThemeManager)
         self.Animation=AnimationPanel(self.Runtime,self.Localization,self.Resources,self.ThemeManager)
         self.VFXGraph=VFXGraphPanel(self.Runtime,self.Localization,self.Resources,self.ThemeManager)
         from ..asset_opening import ExternalAssetOpener
@@ -108,7 +110,7 @@ class Editor(QMainWindow):
             "hierarchy": self.Hierarchy,
             "properties": self.Properties,
             "asset_browser": self.AssetBrowser,
-            "animation":self.Animation,"vfx_graph":self.VFXGraph,"audio_mixer":self.AudioMixer,"shader_graph":self.ShaderGraph,"macros":self.Macros,
+            "timeline":self.Timeline,"animation":self.Animation,"vfx_graph":self.VFXGraph,"audio_mixer":self.AudioMixer,"shader_graph":self.ShaderGraph,"macros":self.Macros,
         }
         self._RegisterPanels()
         self._default_layout=self._LoadDefaultWorkspace()
@@ -136,6 +138,9 @@ class Editor(QMainWindow):
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.Toolbar)
         self.setCentralWidget(self.Docking)
         self.Controller = EditorController(self, self.Runtime)
+        self.Timeline.GetAssets=self.Controller._ProjectAssets
+        self.Timeline.AssetChanged.connect(self.Controller._GraphChanged)
+        self.Hierarchy.SelectionChanged.connect(self.Timeline.SetEntity)
         from ..editor_tools import EditorTools
         self.EditorTools=EditorTools(self)
         from ..game_build import GameBuildController
@@ -255,6 +260,7 @@ class Editor(QMainWindow):
     def _EditContext(self):
         focus=QApplication.focusWidget()
         if isinstance(focus,(QLineEdit,QTextEdit,QPlainTextEdit)):return "text",focus
+        if focus is not None and (focus is self.Timeline or self.Timeline.isAncestorOf(focus)):return "timeline",self.Timeline
         if focus is not None and (focus is self.Animation or self.Animation.isAncestorOf(focus)):return "animation",self.Animation
         if focus is not None and (focus is self.VFXGraph or self.VFXGraph.isAncestorOf(focus)):return "graph",self.VFXGraph
         if focus is not None and (focus is self.ShaderGraph or self.ShaderGraph.isAncestorOf(focus)):return "graph",self.ShaderGraph
@@ -270,6 +276,8 @@ class Editor(QMainWindow):
             selected=widget.hasSelectedText() if isinstance(widget,QLineEdit) else widget.textCursor().hasSelection()
             writable=not widget.isReadOnly()
             states=dict(copy=selected,paste=writable,delete=selected and writable,rename=False,duplicate=False,select_all=True,deselect_all=selected)
+        elif context=="timeline":
+            states=dict(copy=bool(self.Timeline.Selected()),paste=True,delete=bool(self.Timeline.Selected()),rename=False,duplicate=bool(self.Timeline.Selected()),select_all=True,deselect_all=True)
         elif context=="animation":
             states=dict(copy=False,paste=False,delete=bool(self.Animation.Selected),rename=False,duplicate=False,select_all=True,deselect_all=True)
         elif context=="graph":
@@ -296,6 +304,12 @@ class Editor(QMainWindow):
             elif command=="deselect_all":
                 if isinstance(widget,QLineEdit):widget.deselect()
                 else:cursor=widget.textCursor();cursor.clearSelection();widget.setTextCursor(cursor)
+        elif context=="timeline":
+            if command in ('copy','paste','delete','duplicate'):getattr(self.Timeline,command.capitalize())()
+            elif command=='select_all':
+                for item in self.Timeline.Scene.items():
+                    if item.data(0):item.setSelected(True)
+            elif command=='deselect_all':self.Timeline.Scene.clearSelection()
         elif context=="animation":
             if command=='delete':self.Animation.DeleteSelected()
             elif command=='select_all':
@@ -440,6 +454,7 @@ class Editor(QMainWindow):
         self.Docking.add_panel(self.AudioMixer,tr("panel.audio_mixer"),self._PanelIcon("audio_mixer"),relative_to=assets,panel_id="audio_mixer")
         self.Docking.add_panel(self.Macros,tr("panel.macros"),self._PanelIcon("macros"),relative_to=assets,panel_id="macros")
         self.Docking.add_panel(self.ShaderGraph,tr("panel.shader_graph"),self._PanelIcon("shader_graph"),relative_to=assets,panel_id="shader_graph")
+        self.Docking.add_panel(self.Timeline,tr("panel.timeline"),self._PanelIcon("timeline"),relative_to=assets,panel_id="timeline")
         self.Docking.add_panel(self.Animation,tr("panel.animation"),self._PanelIcon("animation"),relative_to=assets,panel_id="animation")
         self.Docking.add_panel(self.VFXGraph,tr("panel.vfx_graph"),self._PanelIcon("vfx_graph"),relative_to=assets,panel_id="vfx_graph")
 
@@ -496,6 +511,9 @@ class Editor(QMainWindow):
             return
         if self.GameBuild.IsRunning():
             QMessageBox.information(self,self.Localization.Translate('menu.build'),self.Localization.Translate('build.close_wait'));event.ignore();return
+        if not self.Timeline.Flush():
+            QMessageBox.warning(self,self.Localization.Translate("panel.timeline"),self.Timeline.Error.text());event.ignore();return
+        self.Timeline.EndPreview()
         if not self.Animation.Flush():
             QMessageBox.warning(self,self.Localization.Translate("panel.animation"),self.Animation.Error.text());event.ignore();return
         self.Animation.EndPreview()
@@ -520,6 +538,7 @@ class Editor(QMainWindow):
         self.ObjectTools.Close()
         self.Scene.Surface._fly_timer.stop();self.Output.Surface._fly_timer.stop()
         self.Scene.Surface.ClearTransformTrail();self.AudioMixer.SyncTimer.stop()
+        self.Timeline.EndPreview()
         self.Animation.EndPreview()
         self.VFXGraph.PreviewTimer.stop()
         self.ShaderGraph.PreviewTimer.stop()

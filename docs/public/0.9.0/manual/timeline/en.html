@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A timeline is a sequence of changes arranged in time. A track controls one subject, such as an entity transform. A key stores a value at a particular time. A camera shot selects the camera used for a period of the sequence. A signal invokes a project Global Event when playback crosses its time.">
+  <title>Cinematics and Timeline | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Editor manual / Cinematics and Timeline</nav>
+      <article class="doc"><h1 id="timeline">Cinematics and Timeline</h1>
+<p>A timeline is a sequence of changes arranged in time. A track controls one subject, such as an entity transform. A key stores a value at a particular time. A camera shot selects the camera used for a period of the sequence. A signal invokes a project Global Event when playback crosses its time.</p>
+<h2 id="create">Create a sequence</h2><ol><li>In the Asset Browser, choose Create &gt; Timeline. The resulting <code>.btimeline</code> file is a YAML asset.</li><li>Double-click it to open the Timeline panel. You can also open the panel through Window &gt; Timeline.</li><li>Set Duration in seconds and FPS for the frame-snapping grid. Changing FPS keeps existing key times in seconds.</li><li>Select an entity in Hierarchy and press Add Transform Track, or drag an entity onto the track list. Dropping onto an existing transform row rebinds that track.</li><li>Press Record Transform Key at a playhead position to capture the current position, quaternion rotation and scale. To create movement, record another key at a different time with different values.</li></ol>
+<h2 id="edit">Edit tracks and keys</h2><p>The left pane lists transform bindings, Camera Shots and Signals / Markers. Select a diamond or shot to edit its values below the timeline. Drag selected items horizontally to change their timing. Control-click or drag a selection box to select multiple items. Right-click for key creation, signals, copy, paste and deletion. A transform track context menu includes mute, local/world space and track removal.</p><p>Transform keys contain position, quaternion rotation in XYZW order, and scale. Linear interpolation blends position and scale and uses quaternion spherical interpolation for rotation. Step holds the previous key. Smooth applies an ease-in/ease-out curve. The interpolation setting belongs to the segment leaving that key. A track holds its first pose before its first key and its last pose after its last key.</p><p>Control-wheel zooms the time axis. The Snap toggle quantizes edits and manual scrubbing to FPS. Previous Frame and Next Frame move by exactly one frame. Undo and redo work from the panel toolbar or the editor shortcuts while Timeline has focus. Copy/paste aligns the earliest copied item with the playhead. Duplicate offsets a copy by one frame. Invalid edits, including colliding key times and overlapping camera shots, are rejected.</p>
+<h2 id="preview">Preview safely</h2><p>Drag the ruler or edit Time to sample the sequence. Play / Pause Preview advances the playhead. Speed changes preview speed. In and Out define a temporary preview range, while Loop repeats that range. These preview controls do not change the asset duration or runtime Director settings.</p><p>Stop and Restore returns affected transforms and camera activation to their pre-preview state. Hiding the panel, changing project or scene, starting game playback, or saving a scene ends native preview. Preview never fires Global Events. The asset saves after accepted edits, using a temporary file and atomic replacement. If saving fails, the filename receives an asterisk and the previous saved file is preserved. Resolve that error before closing.</p>
+<h2 id="camera-shots">Cinematic camera shots</h2><p>Create ordinary Camera entities in the scene and configure their lenses, post-processing and viewports. Add Camera Shot chooses an enabled Camera component. Edit Start, End and Blend In in the selection properties. Shots must be sorted and may touch but cannot overlap. Animate a camera's transform with a transform track to create a dolly or pan.</p><p>During a shot, the sequencer creates an output Camera entity and copies the selected camera settings to it. Other cameras temporarily become inactive. Blend In smoothly interpolates from the preceding shot camera's transform and, for matching projection modes, its field of view, orthographic size and depth-of-field focus distance. The first shot cuts in. Gaps return to the original camera activation. Runtime code can obtain the output entity through <code>Cinematics::GetOutputCamera</code> or <code>Bazzalt.Cinematics.GetOutputCamera</code>, including for camera-bound GUI.</p>
+<h2 id="signals">Global Event signals and markers</h2><p>Add Signal / Marker places a marker at the playhead. Leave Global Event empty for a named marker that code can read through ConsumeEvents. Select a project <code>.event</code> asset to invoke it during runtime playback. Arguments are a JSON array in the event definition's declared order, for example <code>[{"type":"number","value":42},{"type":"string","value":"Open"}]</code>. Supported types are bool, int, number, string, vec2, vec3, vec4, quaternion and uuid. Their types must match the Global Event schema. Use event listeners to start audio, animation, dialogue or custom gameplay actions.</p><p>Playback fires each crossed signal once per pass. A signal at zero fires on the first advance. Pause and silent seeking do not fire signals. Programmatic Seek can explicitly request signals on forward seeks. Rewinding does not replay signals immediately. Loops can fire them again on the next pass. Signals at the same time preserve file order.</p>
+<h2 id="runtime">Play in a game</h2><ol><li>Add Timeline Director to a scene entity through Add Component.</li><li>Pick the Timeline asset in Sequence.</li><li>Enable Play On Awake to start it when the scene updates during game playback. Set Loop, Speed and Use Unscaled Time as required.</li><li>Restore On Completion returns transforms and cameras when a non-looping sequence finishes. Disable it to hold the final evaluation until Stop. Restore On Stop controls explicit stop pose restoration. Stopping always releases cinematic camera control.</li></ol>
+<p>Bindings use entity UUIDs in the owning scene. Rebind tracks and camera shots when reusing a sequence in another scene. Missing bindings produce an error. Disabled camera components cannot be shot sources. Transform tracks require nondynamic rigidbodies. Kinematic bodies are synchronized with the physics world. Two simultaneous sequences cannot control the same transform or both own the scene camera output.</p>
+<h2 id="budgets">Budgets and current track types</h2><p>Assets support transform tracks, cinematic camera shots and typed Global Event signals or markers. Audio and skeletal animation can be orchestrated through signals and their public APIs. Duration is limited to 24 hours, FPS to 1–240, transform tracks to 1,024, total transform keys to 100,000, shots to 4,096, and signals to 65,536. A single advance is bounded to 256 loops and 65,536 fired signals. Sequence data is limited to 16 MiB. Timeline operations and scene evaluation run on the engine thread. Large sequences should be split into smaller authored sequences.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../remote-builds/en.html"><small>Previous</small>SSH build workers</a>
+<a class="next" href="../../native/en.html"><small>Next</small>C++ gameplay API</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#create">Create a sequence</a><a class="toc-link" href="#edit">Edit tracks and keys</a><a class="toc-link" href="#preview">Preview safely</a><a class="toc-link" href="#camera-shots">Cinematic camera shots</a><a class="toc-link" href="#signals">Global Event signals and markers</a><a class="toc-link" href="#runtime">Play in a game</a><a class="toc-link" href="#budgets">Budgets and current track types</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

@@ -63,6 +63,9 @@ class EditorController(QObject):
         self.LuaAssets.Finished.connect(self._LuaImportFinished);self.LuaAssets.Failed.connect(self._LuaImportFailed)
         self.MaterialCompiler=MaterialCompiler(runtime);self._material_check=0.0;self._material_error=""
         window.AudioMixer.AssetProvider=self._ProjectAssets
+        window.Timeline.History.canUndoChanged.connect(self._HistoryChanged)
+        window.Timeline.History.canRedoChanged.connect(self._HistoryChanged)
+        window.Timeline.Scene.selectionChanged.connect(window.RefreshEditActions)
         window.Animation.AssetProvider=self._ProjectAssets
         window.Animation.AssetChanged.connect(self._GraphChanged)
         window.Animation.History.canUndoChanged.connect(self._HistoryChanged)
@@ -412,7 +415,7 @@ class EditorController(QObject):
 
     def _FocusedGraph(self):
         focus=QApplication.focusWidget()
-        for name in ('ShaderGraph','VFXGraph','Animation'):
+        for name in ('Timeline','ShaderGraph','VFXGraph','Animation'):
             graph=getattr(self.Window,name,None)
             if name=='Animation' and graph and (not graph.Path or graph.Tabs.currentWidget() not in (graph.GraphPage,graph.Author)):continue
             if graph and isValid(graph) and focus and (graph is focus or graph.isAncestorOf(focus)):return graph
@@ -435,6 +438,7 @@ class EditorController(QObject):
         return result
 
     def Undo(self)->None:
+        if self.Window._EditContext()[0]=="timeline":self.Window.Timeline.History.undo();return
         if self._GraphHasFocus():self._FocusedGraph().History.undo();return
         scene=self.InspectedScene
         if self.History.Undo():
@@ -443,6 +447,7 @@ class EditorController(QObject):
             else:self._RefreshInspectorValues();self._UpdateGizmo()
 
     def Redo(self)->None:
+        if self.Window._EditContext()[0]=="timeline":self.Window.Timeline.History.redo();return
         if self._GraphHasFocus():self._FocusedGraph().History.redo();return
         scene=self.InspectedScene
         if self.History.Redo():
@@ -857,6 +862,7 @@ class EditorController(QObject):
                 editor.SetOptions(options);editor.SetValue(value);editor.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
             except (RuntimeError,ValueError):pass
         if component=="World Cell" and name=="Scene Asset":return self._AssetPicker(value,{".bscene"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
+        if component=="Timeline Director" and name=="Sequence":return self._AssetPicker(value,{".btimeline"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
         if component=="Animator" and name in {"Model","Controller"}:return self._AssetPicker(value,{".glb",".gltf"} if name=="Model" else {".banim"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
         if component=="Animator" and name=="Root Motion":
             editor=EnumInput();editor.SetOptions([(self.Window.Localization.Translate('animation.root_'+key),i) for i,key in enumerate(('disabled','extract','transform','physics'))]);editor.SetValue(int(value));editor.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
@@ -1184,6 +1190,10 @@ class EditorController(QObject):
         if path.suffix.lower()==".bprefab":self.Prefabs.Instantiate(path,"")
         elif path.suffix.lower()==".bscene":self.LoadSceneAdditive(path)
         elif path.suffix.lower()==".bmixer":self.OpenAudioMixer(path)
+        elif path.suffix.lower()==".btimeline":
+            if self.Window.Timeline.Open(path):
+                if not self.Window.Docking.is_panel_open("timeline"):self.Window.Docking.dock("timeline","center",relative_to="asset_browser")
+                self.Window.Docking.activate_panel("timeline")
         elif path.suffix.lower()==".banim":
             if self.Window.Animation.Open(path):
                 if not self.Window.Docking.is_panel_open("animation"):self.Window.Docking.dock("animation","center",relative_to="asset_browser")
@@ -1206,7 +1216,7 @@ class EditorController(QObject):
         if self.Window.ShaderGraph.Path==Path(path):self.Window.ShaderGraph.Unlock()
     def _GraphChanged(self,path):
         browser=self.Window.AssetBrowser;item=browser.Browser.currentItem();selected=Path(item.data(Qt.ItemDataRole.UserRole)) if item else None
-        if Path(path).suffix.lower() in {".vfx",".banim"}:self.Runtime.RefreshAsset(path)
+        if Path(path).suffix.lower() in {".vfx",".banim",".btimeline"}:self.Runtime.RefreshAsset(path)
         else:self.Runtime.RefreshAssets()
         converted=bool(selected and not selected.exists() and selected.with_suffix('.shad')==Path(path) or selected and not selected.exists() and selected.with_suffix('.shadg')==Path(path))
         browser.Refresh(path if converted else None)
