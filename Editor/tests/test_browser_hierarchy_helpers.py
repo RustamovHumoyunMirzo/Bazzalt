@@ -70,6 +70,7 @@ class BrowserHierarchyHelpersTests(unittest.TestCase):
             panel._thumbnails.Ready.connect(lambda name,image:completed.append((name,image)))
             try:
                 panel.SetProjectRoot(folder);item=panel.Browser.item(0);old=item.icon().cacheKey();item.setSelected(True)
+                panel.Refresh();self.assertIs(panel.Browser.item(0),item)
                 finished=self._WaitFor(lambda:bool(completed))
                 self.assertTrue(finished,f"Thumbnail completion timeout: {panel._thumbnails.WorkerDiagnostics()}")
                 # SetProjectRoot resolves aliases (including Windows RUNNER~1

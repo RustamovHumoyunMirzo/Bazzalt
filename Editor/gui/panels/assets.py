@@ -168,8 +168,8 @@ class AssetBrowserPanel(QWidget):
             self.Search.clear();self._search_timer.stop();previous_folder=Path(select).parent
         tree_blocked=self.Tree.blockSignals(True);browser_blocked=self.Browser.blockSignals(True)
         try:
-            self.Tree.clear();self.Browser.clear();self._folder=None
-            if self._root is None or not self._root.is_dir():return
+            self.Tree.clear();self._folder=None
+            if self._root is None or not self._root.is_dir():self.Browser.clear();return
             root=QTreeWidgetItem([self._root.name]);root.setData(0,Qt.ItemDataRole.UserRole,self._root);root.setIcon(0,self._Icon(self._root));self.Tree.addTopLevelItem(root);self._PopulateDirectories(root,self._root);root.setExpanded(True)
             target=self._FindDirectoryItem(root,previous_folder) or root;self.Tree.setCurrentItem(target);self.Tree.scrollToItem(target);self._FolderSelected(target,None)
             for i in range(self.Browser.count()):
@@ -218,7 +218,7 @@ class AssetBrowserPanel(QWidget):
 
     def _PopulateBrowser(self)->None:
         self._search_timer.stop();selected={str(item.data(Qt.ItemDataRole.UserRole)) for item in self.Browser.selectedItems()}
-        blocked=self.Browser.blockSignals(True);self.Browser.clear()
+        blocked=self.Browser.blockSignals(True)
         if self._folder is None:self.Browser.blockSignals(blocked);return
         terms=self.Search.text().casefold().split()
         def candidates():
@@ -231,9 +231,14 @@ class AssetBrowserPanel(QWidget):
                     if not path.is_symlink() and all(term in str(path.relative_to(self._root)).casefold() for term in terms):yield path
         try:entries=sorted(candidates(),key=lambda p:(not p.is_dir(),p.name.casefold(),str(p)))
         except OSError:self.Browser.blockSignals(blocked);return
+        # Keep unchanged item identities across delayed filesystem notifications.
+        # Thumbnail delivery and active drag operations can retain these objects.
+        existing={}
+        while self.Browser.count():
+            item=self.Browser.takeItem(0);existing[Path(item.data(Qt.ItemDataRole.UserRole))]=item
         for entry in entries:
             if entry.suffix.casefold()==".meta":continue
-            asset=QListWidgetItem(self._Icon(entry),self._DisplayName(entry));asset.setSizeHint(QSize(104,86));asset.setTextAlignment(Qt.AlignmentFlag.AlignHCenter|Qt.AlignmentFlag.AlignBottom);asset.setData(Qt.ItemDataRole.UserRole,entry);asset.setData(Qt.ItemDataRole.UserRole+1,entry.name);asset.setFlags(asset.flags()|Qt.ItemFlag.ItemIsEditable|Qt.ItemFlag.ItemIsDragEnabled);self.Browser.addItem(asset)
+            asset=existing.pop(entry,None) or QListWidgetItem();asset.setIcon(self._Icon(entry));asset.setText(self._DisplayName(entry));asset.setSizeHint(QSize(104,86));asset.setTextAlignment(Qt.AlignmentFlag.AlignHCenter|Qt.AlignmentFlag.AlignBottom);asset.setData(Qt.ItemDataRole.UserRole,entry);asset.setData(Qt.ItemDataRole.UserRole+1,entry.name);asset.setFlags(asset.flags()|Qt.ItemFlag.ItemIsEditable|Qt.ItemFlag.ItemIsDragEnabled);self.Browser.addItem(asset)
             asset.setToolTip(str(entry.relative_to(self._root)) if self._root else str(entry))
             if str(entry) in selected:asset.setSelected(True)
         self.Browser.blockSignals(blocked)
