@@ -73,6 +73,8 @@ in [docs/public/README.md](docs/public/README.md).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines, API/Lua parity,
 testing and dependency maintenance.
+The [contributor handbook](docs/private/README.md) maps the source tree and explains
+how to add, maintain and replace features.
 
 ## License
 

@@ -1,58 +1,70 @@
-# BAZZALT private documentation
+# Contributor handbook
 
-This handbook documents the engine as it exists in the repository. It explains
-the public game-facing API, private editor/runtime boundary, persistent formats,
-resource ownership, and extension points for game code.
+This is the actively maintained implementation handbook for engine, editor,
+compiler and Hub contributors. The directory name `private` describes internal
+APIs. These guides are part of the repository's contribution contract.
 
-The standalone [native Hub](native-hub.md) manages projects and installed editor
-versions using platform-native Qt Widgets, independently of the editor UI.
-See [production packaging and downloads](production-packaging.md) for Windows
-release workflows, shared build tools, and architecture support.
+Start with the task you have. Keep the relevant guide accurate in the same pull
+request as its implementation. Gameplay usage and callable reference remain in
+[the public documentation](../public/README.md).
 
-## Read in this order
+## First contribution
 
-1. [Getting started](getting-started.md) — dependencies, building, linking, and
-   a first component/system.
-2. [Architecture and ownership](architecture.md) — the editor-first model and
-   why game code does not control the engine loop.
-3. [ECS, components, and systems](ecs.md) — entities, custom components,
-   queries, systems, and lifecycle rules.
-4. [Scenes, hierarchy, and serialization](scenes-and-serialization.md) — UUIDs,
-   parenting, scene transitions, YAML formats, and custom serializers.
-5. [Asset database and import pipeline](assets.md) — `.meta` files, cache
-   invalidation, importers, and runtime lookup.
-6. [Rendering](rendering.md) — cameras, lights, meshes, glTF, materials, and the
-   private Filament backend.
-   [Scene environments](environments.md) covers HDR/EXR imports, scene lighting,
-   environment materials, and shared inspector previews.
-   [Materials and shaders](materials-and-shaders.md) covers the material Inspector,
-   demand-driven compilation, typed C++ handles, and script asset properties.
-   [Runtime materials](runtime-materials.md) covers builders, built-in shaders,
-   live C++/Lua edits, render state, lifetime, and per-slot assignments.
-7. [Math](math.md) — coordinate conventions and public math types.
-8. [Public API reference](api-reference.md) — header-by-header reference.
-   [Gameplay time](time.md) covers slow motion, scaled/unscaled clocks, pause,
-   and fixed updates.
-   [Gameplay input](input.md) covers keyboard/mouse APIs, focus gating,
-   Game maximization, and Play-mode restoration.
-   [Native script SDK](script-sdk.md) covers direct public API linking, shared
-   engine state, entity properties, and safe native module lifetime.
-9. [Roadmap](roadmap.md) — planned systems that are not part of the current API.
+1. [Development setup](getting-started.md) explains source-mode editing and SDK builds.
+2. [Architecture](architecture.md) establishes ownership and dependency direction.
+3. [Code map](maintenance-map.md) identifies the source of truth for each subsystem.
+4. [Change recipes](contributor-workflows.md) walks through fields, assets and panels.
+5. [Module providers](module-development.md) explains adding/replacing native implementations.
+6. [Verification](verification.md) selects checks and documents platform coverage.
 
-## API stability boundary
+## Runtime and data
 
-Only files under `include/Bazzalt` are public. The following are private even
-when tests or the editor include them:
+| Area | Implementation guides |
+| --- | --- |
+| Entity state and math | [ECS](ecs.md), [math](math.md), [scene queries](scene-queries.md) |
+| Persistence | [Scenes/serialization](scenes-and-serialization.md), [prefabs](prefabs.md), [networking/save games](networking-and-save-game.md) |
+| Assets | [Import pipeline](assets.md), [dependencies](asset-dependencies.md), [model hierarchies](model-hierarchies.md) |
+| Execution | [Time](time.md), [input](input.md), [jobs/profiling](jobs-profiler.md), [optimization work](optimizations-0.8.md) |
+| Physics and AI | [Jolt](physics.md), [replay](physics-replay.md), [navigation](navigation.md), [behavior trees](behavior-trees.md) |
+| Animation and worlds | [Animation](animation.md), [cinematics](cinematics.md), [streaming/instancing](streaming-instancing.md) |
+| Audio | [Audio runtime](audio.md), [mixer effects](audio-mixer-effects.md) |
+| Diagnostics | [Developer console](developer-console.md), [scripting console](scripting-console.md) |
 
-- `src/Runtime` — engine lifetime, project/scene persistence, imports, frames.
-- `src/Rendering` — Filament objects, gltfio, filameshio, and GPU resources.
+## Rendering and GUI
 
-Applications may depend on public C++ types and serialized UUIDs. They should
-not persist EnTT entity identifiers, pointers, cache paths, or renderer handles.
+| Area | Implementation guides |
+| --- | --- |
+| Backend and drawing | [Rendering](rendering.md), [graphics API](graphics.md), [advanced LOD](advanced-lod.md) |
+| Materials | [Materials/shaders](materials-and-shaders.md), [runtime materials](runtime-materials.md), [shader graph](shader-graph.md) |
+| Lighting and VFX | [Environments](environments.md), [baked lighting](baked-lighting.md), [VFX](vfx.md) |
+| GUI runtime | [GUI](gui.md), [CSS](gui-css.md), [styles/fonts](gui-styles-fonts.md), [CSS motion](gui-css-motion.md) |
 
-- [Extension packages, SDK lifetime and deployment](extensions.md)
+## Scripting and extensibility
 
-- [Jolt physics runtime](physics.md) — separate module, scene ownership, fixed steps, queries, events, scripting and release contracts.
+| Area | Implementation guides |
+| --- | --- |
+| Gameplay scripts | [Scripting](scripting.md), [native SDK](script-sdk.md), [Lua bindings](lua-scripting.md), [hot reload](hot-reload.md) |
+| Global lifecycle | [Application events](application-events.md), [global events](global-events.md), [global subsystems](global-subsystems.md) |
+| Packages and reference | [Extensions](extensions.md), [API overview](api-reference.md), [reference maintenance](api-reference-maintenance.md) |
 
+## Editor and distribution
 
-> NOTICE! Content in the `docs/private` directory may be outdated or inaccurate. If you find any issues, feel free to report them or open a pull request. Only public documentation is actively maintained.
+| Area | Implementation guides |
+| --- | --- |
+| Editor shell | [Panels](editor-panels.md), [widgets](editor-widgets.md), [services](editor-services.md), [runtime bridge](editor-runtime-integration.md) |
+| Scene authoring | [Toolbar/gizmos](editor-toolbar-and-gizmos.md), [transform feedback](editor-transform-feedback.md), [camera persistence](scene-camera-state.md), [tools](editor-tools.md) |
+| Branding and collaboration | [Branding](branding.md), [version control](version-control.md) |
+| Hub | [Native Hub](native-hub.md), [Hub/editor storage](hub-and-editor-data.md) |
+| Game output | [Compilation](game-compilation.md), [security](game-build-security.md), [build contracts/limits](game-build-limitations.md), [cross/remote builds](cross-and-remote-builds.md) |
+| Releases | [Production packaging](production-packaging.md), [Linux](linux-platform.md), [macOS](macos.md), [macOS runner capacity](macos-runner-capacity.md), [Android](android.md) |
+| Planned work | [Roadmap](roadmap.md) |
+
+## Keeping this handbook useful
+
+Document where a feature enters the engine, who owns its resources, how its data
+is persisted, and which tests exercise it. Explain replacement contracts and
+compatibility with older authored data. Record limitations at the point where a
+contributor will encounter them.
+
+Run `python scripts/check_contributor_docs.py` to check links and index coverage.
+The documentation workflow runs this check for contributor-guide changes.

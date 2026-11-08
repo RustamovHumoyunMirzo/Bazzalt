@@ -1,7 +1,11 @@
-# Public API reference
+# API implementation overview
 
-This covers headers under `include/Bazzalt`. Headers remain authoritative for
-templates and exact declarations.
+This is a contributor overview of foundational public headers. The complete
+callable inventories are the C++ and Lua reference sections in
+[the public documentation](../public/index.html). Select the version being maintained. Use those pages and
+source headers for exact declarations. Keep feature ownership and maintenance
+notes here, and update generated reference through
+[the reference workflow](api-reference-maintenance.md).
 
 ## `Bazzalt/Input.h`
 

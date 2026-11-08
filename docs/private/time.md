@@ -71,7 +71,7 @@ public:
     }
     void OnFixedUpdate(float fixedDeltaTime) override {
         // GetDeltaTime() returns this fixed step in this callback.
-        // Custom simulation and future physics belong here.
+        // Custom fixed-rate simulation belongs here.
     }
 };
 ```

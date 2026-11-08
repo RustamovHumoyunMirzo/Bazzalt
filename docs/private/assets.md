@@ -80,4 +80,7 @@ metadata edits, and cache cleanup remain private.
 - `Missing` — reserved missing source/reference state.
 - `Failed` — import failed.
 
-Currently, project opening fails when any scanned asset cannot be imported.
+Failed content imports remain indexed with `State == Failed` and `LastError`.
+The editor shows a warning icon and error details while the rest of the project
+can open. Filesystem/index failures that cannot produce a usable asset record
+can still fail a refresh. Keep content errors separate from project-level errors.

@@ -60,7 +60,7 @@ void BehaviorAgentRuntime::Tick(Scene &scene, float dt) {
     std::vector<std::shared_ptr<Impl::Agent>> removed;
     std::erase_if(m_impl->Agents, [&](const auto &row) {
         auto e = scene.GetEntity(row.first);
-        if (e && e == row.second->Object && e.HasComponent<BehaviorTreeAgent>())
+        if (e && e == row.second->Object && e.template HasComponent<BehaviorTreeAgent>())
             return false;
         removed.push_back(row.second);
         return true;

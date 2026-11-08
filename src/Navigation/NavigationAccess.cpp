@@ -12,12 +12,11 @@
 #include <fstream>
 #include <map>
 #include <stdexcept>
+#include "Runtime/ModuleLoader.h"
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <Windows.h>
-#else
-#include <dlfcn.h>
 #endif
 namespace Bazzalt::Runtime {
 namespace {
@@ -30,38 +29,8 @@ struct PreviewAttempt {
 };
 std::map<Scene *, std::map<UUID, PreviewAttempt>> PreviewAttempts;
 const NavigationModuleApi *LoadModule() {
-#ifdef _WIN32
-    HMODULE core = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                            reinterpret_cast<LPCWSTR>(&NavigationModule), &core))
-        throw std::runtime_error("Cannot locate core for navigation");
-    std::wstring name(32768, L'\0');
-    auto size = GetModuleFileNameW(core, name.data(), DWORD(name.size()));
-    if (!size || size >= name.size())
-        throw std::runtime_error("Cannot resolve core path");
-    name.resize(size);
-    auto path = std::filesystem::path(name).parent_path() / L"bazzalt_ai.dll";
-    auto module = LoadLibraryExW(
-        path.c_str(), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
-    auto get = module ? reinterpret_cast<const NavigationModuleApi *(*)(unsigned, unsigned)>(
-                            GetProcAddress(module, "BazzaltGetNavigationModuleApi"))
-                      : nullptr;
-#else
-    Dl_info info{};
-    if (!dladdr(reinterpret_cast<void *>(&NavigationModule), &info) || !info.dli_fname)
-        throw std::runtime_error("Cannot resolve core path");
-#ifdef __APPLE__
-    auto path = std::filesystem::path(info.dli_fname).parent_path() / "libbazzalt_ai.dylib";
-#else
-    auto path = std::filesystem::path(info.dli_fname).parent_path() / "libbazzalt_ai.so";
-#endif
-    auto module = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
-    auto get = module ? reinterpret_cast<const NavigationModuleApi *(*)(unsigned, unsigned)>(
-                            dlsym(module, "BazzaltGetNavigationModuleApi"))
-                      : nullptr;
-#endif
-    auto api = get ? get(1, sizeof(NavigationModuleApi)) : nullptr;
+    const auto* api = LoadSiblingModuleApi<NavigationModuleApi>("bazzalt_ai",
+        "BazzaltGetNavigationModuleApi", 1);
     if (!api || api->Version != 1 || api->Size != sizeof(NavigationModuleApi) || !api->Bake ||
         !api->Release || !api->Step || !api->Restore)
         throw std::runtime_error("Missing or incompatible sibling bazzalt_ai navigation runtime");

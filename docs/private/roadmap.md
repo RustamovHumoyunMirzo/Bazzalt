@@ -1,23 +1,25 @@
-# Roadmap and planned technology
+# Roadmap and compatibility planning
 
-This page separates intended direction from implemented API. Items here are not
-available until they appear under `include/Bazzalt` and are covered by tests.
+[TODO.md](../../TODO.md) is the current source of planned feature work. Use issues
+and pull requests for detailed proposals. This handbook describes implemented
+maintenance contracts.
 
-## Editor and deployment model
+## Current foundation
 
-The intended editor is Python 3 with PySide6. It will host the same runtime used
-by shipped games, render into an embedded/offscreen target, edit project data,
-and drive import/compile tasks. A standalone host will provide native windowing
-and presentation without changing scene or asset formats.
+The repository has shared native core/provider libraries, editor and Hub,
+standalone platform hosts, native/Lua scripting, cooking and release workflows.
+Use [architecture](architecture.md) and [the code map](maintenance-map.md) for the
+current ownership model. Supported targets/backends are listed in the current
+public platform guide, reached from [the documentation index](../public/index.html).
 
-The runtime may eventually ship as `.dll`, `.so`, or `.dylib` behind a stable
-host interface. Today the repository builds a static C++ library and does not
-define a stable C ABI.
+## Proposing an integration
 
-## Script-module direction
+Record the intended user behavior, owning layer, persisted data and compatibility
+needs. Identify the public C++/Lua contract, editor workflow, runtime cost and
+verification path. For provider changes, explain whether the existing dispatch
+contract suffices or needs a coordinated ABI version change.
 
-The proposed model is a generated native game module with stable registration
-entry points and, when used, embedded Lua bytecode. The runtime would load this
-module rather than recompiling the engine for every project. ABI design, reload
-safety, Lua sandboxing, bytecode compatibility, and errors must be specified
-before this is supported.
+Prefer incremental changes with working entry points. Preserve existing callers,
+assets and tests while moving implementation details. Use the
+[module guide](module-development.md) for backend replacement and the
+[change recipes](contributor-workflows.md) for new features.

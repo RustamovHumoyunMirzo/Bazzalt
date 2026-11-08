@@ -40,23 +40,20 @@ function Copy-ReleaseSDK([string]$Destination) {
     Copy-Item -LiteralPath (Join-Path $Root 'deps/miniaudio/LICENSE') -Destination (Join-Path $Destination 'licenses/miniaudio.txt')
     Copy-Item -LiteralPath (Join-Path $Root 'deps/miniaudio/extras/stb_vorbis.c') -Destination (Join-Path $Destination 'licenses/stb_vorbis-source.txt')
     Copy-Item -LiteralPath (Join-Path $Build 'ScriptSDK/include') -Destination $Destination -Recurse
-    Copy-Item -LiteralPath (Join-Path $Build 'Editor/Release/Bazzalt.dll') -Destination (Join-Path $Destination 'lib/Bazzalt.dll')
-    Copy-Item -LiteralPath (Join-Path $Build 'Editor/Release/bazzalt_lua.dll') -Destination (Join-Path $Destination 'lib/bazzalt_lua.dll')
-    Copy-Item -LiteralPath (Join-Path $Build 'Editor/Release/bazzalt_gui.dll') -Destination (Join-Path $Destination 'lib/bazzalt_gui.dll')
-    Copy-Item -LiteralPath (Join-Path $Build 'Editor/Release/bazzalt_physics.dll') -Destination (Join-Path $Destination 'lib/bazzalt_physics.dll')
-    Copy-Item -LiteralPath (Join-Path $Build 'Editor/Release/bazzalt_ai.dll') -Destination (Join-Path $Destination 'lib/bazzalt_ai.dll')
-    Copy-Item -LiteralPath (Join-Path $Build 'Editor/Release/bazzalt_network.dll') -Destination (Join-Path $Destination 'lib/bazzalt_network.dll')
-    Copy-Item -LiteralPath (Join-Path $Build 'Editor/Release/bazzalt_crypto.dll') -Destination (Join-Path $Destination 'lib/bazzalt_crypto.dll')
+    foreach ($Name in $RuntimeLibraries) {
+        Copy-Item -LiteralPath (Join-Path $Build "Editor/Release/$Name") -Destination (Join-Path $Destination "lib/$Name")
+    }
     Copy-Item -LiteralPath (Join-Path $Build 'ScriptSDK/lib/Release/Bazzalt.lib') -Destination (Join-Path $Destination 'lib/Bazzalt.lib')
 }
 if ($Product -ne 'hub') {
-    $Target = if ($Product -eq 'editor') {'_bazzalt_runtime'} else {'Bazzalt'}
+    $Target = if ($Product -eq 'editor') {'_bazzalt_runtime'} else {'BazzaltRuntime'}
     cmake --build $Build --config Release --target $Target
     if ($LASTEXITCODE -ne 0) { throw 'Native build failed' }
-    cmake --build $Build --config Release --target BazzaltGui BazzaltPhysics BazzaltAI
-    if ($LASTEXITCODE -ne 0) { throw 'GUI runtime build failed' }
     cmake --build $Build --config Release --target BazzaltPlayer
     if ($LASTEXITCODE -ne 0) { throw 'Native game player build failed' }
+    $RuntimeLibraries = @(python (Join-Path $Root 'scripts/list_runtime_libraries.py') --folder (Join-Path $Build 'Editor/Release') --platform windows)
+    if ($LASTEXITCODE -ne 0) { throw 'Runtime library inventory failed' }
+
 }
 if ($Product -eq 'core') {
     New-Item -ItemType Directory -Path $Stage | Out-Null
@@ -88,7 +85,10 @@ if ($Product -eq 'core') {
         $Native = Get-ChildItem -LiteralPath $NativeFolder -Filter '_bazzalt_runtime*.pyd' | Select-Object -First 1
         if (-not $Native) { throw 'Native editor module missing' }
         New-Item -ItemType Directory -Force -Path (Join-Path $Stage 'Editor') | Out-Null
-        foreach ($File in @($Native.FullName, (Join-Path $NativeFolder 'Bazzalt.dll'), (Join-Path $NativeFolder 'bshad.dll'), (Join-Path $NativeFolder 'bazzalt_lua.dll'), (Join-Path $NativeFolder 'bazzalt_gui.dll'), (Join-Path $NativeFolder 'bazzalt_physics.dll'), (Join-Path $NativeFolder 'bazzalt_ai.dll'), (Join-Path $NativeFolder 'bazzalt_network.dll'), (Join-Path $NativeFolder 'bazzalt_crypto.dll'))) {
+        foreach ($Name in $RuntimeLibraries) {
+            Copy-Item -LiteralPath (Join-Path $NativeFolder $Name) -Destination (Join-Path $Stage 'Editor')
+        }
+        foreach ($File in @($Native.FullName, (Join-Path $NativeFolder 'bshad.dll'))) {
             Copy-Item -LiteralPath $File -Destination (Join-Path $Stage 'Editor')
         }
         Copy-ReleaseSDK (Join-Path $Stage 'ScriptSDK')

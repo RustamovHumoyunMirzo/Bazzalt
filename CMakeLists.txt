@@ -36,7 +36,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_link_options("$<$<LINK_LANGUAGE:CXX>:-stdlib=${_bazzalt_linux_stdlib}>")
 endif()
 include(cmake/Networking.cmake)
-include(cmake/Jolt.cmake)
 include(cmake/Lua.cmake)
 include(cmake/FreeType.cmake)
 include(cmake/TextShaping.cmake)
@@ -224,21 +223,20 @@ bazzalt_embed_svg_icon(scene_asource SceneAudioSourceIconRgba)
 bazzalt_embed_svg_icon(scene_alisten SceneAudioListenerIconRgba)
 
 # Environments are project assets, imported on demand; no hidden default lighting.
+include(cmake/RuntimeModules.cmake)
+add_subdirectory(src/GUI/CSS)
+include(cmake/modules/Builtins.cmake)
 
 file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/EditorBridge/")
-list(FILTER LIB_SOURCES EXCLUDE REGEX "/Network/NetworkBackend\\.cpp$")
-list(FILTER LIB_SOURCES EXCLUDE REGEX "/Physics/(JoltWorld|PhysicsGeometry)\\.cpp$")
+get_property(_module_sources GLOBAL PROPERTY BAZZALT_RUNTIME_IMPLEMENTATION_SOURCES)
+get_property(_builtin_sources GLOBAL PROPERTY BAZZALT_RUNTIME_EXCLUDED_SOURCES)
+list(REMOVE_ITEM LIB_SOURCES ${_module_sources} ${_builtin_sources})
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/GUI/CSS/")
-list(FILTER LIB_SOURCES EXCLUDE REGEX "/GUI/(FontFace|GuiStyles|GuiPaint)\\.cpp$")
-add_subdirectory(src/GUI/CSS)
-list(FILTER LIB_SOURCES EXCLUDE REGEX "/GUI/(GuiSystem|GuiRenderer|GuiSerialization|GuiModule)\\.cpp$")
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/Script/Lua[^/]*\\.cpp$|/Runtime/LuaRuntime\\.cpp$")
 file(GLOB BAZZALT_LUA_BINDING_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/Script/Lua*.cpp")
-list(FILTER LIB_SOURCES EXCLUDE REGEX "/Navigation/NavigationWorld\\.cpp$")
-list(FILTER LIB_SOURCES EXCLUDE REGEX "/AI/(BehaviorTreeRuntime|BehaviorAgentRuntime|BehaviorModule)\\.cpp$")
 add_library(BazzaltLuaBindings STATIC ${BAZZALT_LUA_BINDING_SOURCES} src/Runtime/LuaRuntime.cpp)
 set_target_properties(BazzaltLuaBindings PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(BazzaltLuaBindings PRIVATE include src "${BAZZALT_SOL2_DIR}/include")
@@ -254,14 +252,8 @@ file(GLOB_RECURSE LIB_HEADERS CONFIGURE_DEPENDS
 )
 
 find_package(Threads REQUIRED)
-add_library(BazzaltNetwork SHARED src/Network/NetworkBackend.cpp)
-target_include_directories(BazzaltNetwork PRIVATE include src)
-target_link_libraries(BazzaltNetwork PRIVATE BazzaltYojimbo)
-set_target_properties(BazzaltNetwork PROPERTIES OUTPUT_NAME bazzalt_network POSITION_INDEPENDENT_CODE ON
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor" LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"
-    BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
 if(APPLE)
-    set_target_properties(BazzaltNetwork BazzaltCrypto PROPERTIES BUILD_RPATH "@loader_path" INSTALL_RPATH "@loader_path")
+    set_target_properties(BazzaltCrypto PROPERTIES BUILD_RPATH "@loader_path" INSTALL_RPATH "@loader_path")
 endif()
 add_library(Bazzalt SHARED
     ${LIB_SOURCES}
@@ -312,79 +304,18 @@ target_include_directories(Bazzalt
 )
 
 set_source_files_properties(src/Runtime/Network.cpp src/Persistence/SaveGame.cpp PROPERTIES INCLUDE_DIRECTORIES "${BAZZALT_YOJIMBO_DIR}/sodium")
-add_dependencies(Bazzalt BazzaltNetwork)
 target_link_libraries(Bazzalt PUBLIC EnTT::EnTT PRIVATE Threads::Threads BazzaltCrypto BazzaltMiniaudio BazzaltLuaBindings BazzaltLua ${BAZZALT_SDL_TARGET} ryml::ryml Filament::Filament ${CMAKE_DL_LIBS})
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SIZEOF_VOID_P EQUAL 4)
     target_link_libraries(Bazzalt PRIVATE atomic)
 endif()
 
-# The core uses a private dispatch table; the solver is linked only here.
-if(NOT TARGET Jolt)
-    message(FATAL_ERROR "The physics runtime requires the Jolt dependency")
-endif()
-add_library(BazzaltPhysics SHARED src/Physics/JoltWorld.cpp src/Physics/PhysicsGeometry.cpp)
-target_include_directories(BazzaltPhysics PRIVATE include src)
-target_link_libraries(BazzaltPhysics PRIVATE Bazzalt Bazzalt::JoltDependency)
-target_compile_features(BazzaltPhysics PRIVATE cxx_std_20)
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SIZEOF_VOID_P EQUAL 4)
-    target_link_libraries(BazzaltPhysics PRIVATE atomic)
-endif()
-set_target_properties(BazzaltPhysics PROPERTIES OUTPUT_NAME bazzalt_physics
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"
-    BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
-if(APPLE)
-    set_target_properties(BazzaltPhysics PROPERTIES BUILD_RPATH "@loader_path" INSTALL_RPATH "@loader_path")
-endif()
-if(MSVC)
-    target_compile_options(BazzaltPhysics PRIVATE /utf-8 /bigobj)
-endif()
-foreach(_online_module BazzaltCrypto BazzaltNetwork)
-    add_custom_command(TARGET ${_online_module} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/ScriptSDK/lib"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:${_online_module}>" "${CMAKE_BINARY_DIR}/ScriptSDK/lib/$<TARGET_FILE_NAME:${_online_module}>" VERBATIM)
-endforeach()
-add_custom_command(TARGET BazzaltPhysics POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:BazzaltPhysics>"
-        "${CMAKE_BINARY_DIR}/ScriptSDK/lib/$<TARGET_FILE_NAME:BazzaltPhysics>" VERBATIM)
-
-include(cmake/Recast.cmake)
-add_library(BazzaltAI SHARED src/Navigation/NavigationWorld.cpp
-    src/AI/BehaviorTreeRuntime.cpp src/AI/BehaviorAgentRuntime.cpp src/AI/BehaviorModule.cpp)
-target_include_directories(BazzaltAI PRIVATE include src)
-target_link_libraries(BazzaltAI PRIVATE Bazzalt BazzaltRecast BazzaltDetour BazzaltDetourCrowd BazzaltDetourTileCache)
-target_compile_features(BazzaltAI PRIVATE cxx_std_20)
-set_target_properties(BazzaltAI PROPERTIES OUTPUT_NAME bazzalt_ai RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor" LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor" BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
-if(APPLE)
-    set_target_properties(BazzaltAI PROPERTIES BUILD_RPATH "@loader_path" INSTALL_RPATH "@loader_path")
-endif()
-if(MSVC)
-    target_compile_options(BazzaltAI PRIVATE /utf-8 /bigobj)
-endif()
-add_custom_command(TARGET BazzaltAI POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:BazzaltAI>" "${CMAKE_BINARY_DIR}/ScriptSDK/lib/$<TARGET_FILE_NAME:BazzaltAI>" VERBATIM)
-
-# One-way link: GUI imports core; core loads the sibling module through a private
-# versioned table. This avoids circular DLL dependencies/import libraries.
-add_library(BazzaltGui SHARED src/GUI/GuiPaint.cpp src/GUI/FontFace.cpp src/GUI/GuiStyles.cpp src/GUI/GuiModule.cpp src/GUI/GuiSystem.cpp
-    src/GUI/GuiRenderer.cpp src/GUI/GuiSerialization.cpp ${BAZZALT_EMBEDDED_HEADERS})
-target_include_directories(BazzaltGui PRIVATE include src "${_bazzalt_generated_dir}")
-target_link_libraries(BazzaltGui PRIVATE Bazzalt Filament::Filament BazzaltCSS freetype harfbuzz SheenBidi)
-target_compile_features(BazzaltGui PRIVATE cxx_std_20)
-set_target_properties(BazzaltGui PROPERTIES OUTPUT_NAME bazzalt_gui
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"
-    BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
-if(APPLE)
-    set_target_properties(BazzaltGui PROPERTIES BUILD_RPATH "@loader_path" INSTALL_RPATH "@loader_path")
-endif()
-if(MSVC)
-    target_compile_options(BazzaltGui PRIVATE /utf-8 /bigobj)
-endif()
-add_custom_command(TARGET BazzaltGui POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:BazzaltGui>"
-        "${CMAKE_BINARY_DIR}/ScriptSDK/lib/$<TARGET_FILE_NAME:BazzaltGui>" VERBATIM)
+add_custom_command(TARGET BazzaltCrypto POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/ScriptSDK/lib"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:BazzaltCrypto>"
+        "${CMAKE_BINARY_DIR}/ScriptSDK/lib/$<TARGET_FILE_NAME:BazzaltCrypto>" VERBATIM)
 
 target_compile_features(Bazzalt PUBLIC cxx_std_20)
+bazzalt_finalize_runtime()
 if(MSVC)
     # Public API strings and checked-in sources use UTF-8, regardless of the
     # developer/CI machine's ANSI code page (including Unicode path literals).
@@ -507,11 +438,11 @@ if(WIN32)
 endif()
 
 if(TARGET BazzaltPlayer)
-    add_dependencies(BazzaltPlayer BazzaltPhysics BazzaltAI)
+    bazzalt_stage_runtime(BazzaltPlayer)
 endif()
 if(TARGET BazzaltCooker)
     target_compile_definitions(BazzaltCooker PRIVATE BAZZALT_CORE_VERSION="${PROJECT_VERSION}")
-    add_dependencies(BazzaltCooker BazzaltPhysics BazzaltAI)
+    bazzalt_stage_runtime(BazzaltCooker)
 endif()
 
 if(BAZZALT_BUILD_EDITOR_BRIDGE)
@@ -543,7 +474,8 @@ if(BAZZALT_BUILD_EDITOR_BRIDGE)
         C_VISIBILITY_PRESET default WINDOWS_EXPORT_ALL_SYMBOLS ON
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor"
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Editor")
-    add_dependencies(_bazzalt_runtime bshader BazzaltGui BazzaltPhysics BazzaltAI)
+    add_dependencies(_bazzalt_runtime bshader)
+    bazzalt_stage_runtime(_bazzalt_runtime)
     target_link_libraries(_bazzalt_runtime PRIVATE Bazzalt BazzaltLua Filament::Filament)
     target_include_directories(_bazzalt_runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     set_target_properties(_bazzalt_runtime PROPERTIES
@@ -559,11 +491,7 @@ target_link_libraries(BazzaltExample
     PRIVATE
     Bazzalt
 )
-add_dependencies(BazzaltExample BazzaltGui BazzaltPhysics BazzaltAI)
-if(WIN32)
-    add_custom_command(TARGET BazzaltExample POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE:BazzaltCrypto>" "$<TARGET_FILE:BazzaltNetwork>" "$<TARGET_FILE:BazzaltLua>" "$<TARGET_FILE:BazzaltGui>" "$<TARGET_FILE:BazzaltPhysics>" "$<TARGET_FILE:BazzaltAI>" "$<TARGET_FILE_DIR:BazzaltExample>")
-endif()
+bazzalt_stage_runtime(BazzaltExample)
 
 include(CTest)
 if(BUILD_TESTING)
@@ -587,18 +515,19 @@ if(BUILD_TESTING)
         add_test(NAME BazzaltBshaderTests COMMAND BazzaltBshaderTests)
     endif()
     function(bazzalt_enable_test_assertions target)
-        add_dependencies(${target} BazzaltGui BazzaltPhysics BazzaltAI)
+        bazzalt_stage_runtime(${target})
         target_sources(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests/TestDiagnostics.cpp")
-        if(WIN32)
-            add_custom_command(TARGET ${target} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "$<TARGET_FILE:Bazzalt>" "$<TARGET_FILE:BazzaltCrypto>" "$<TARGET_FILE:BazzaltNetwork>" "$<TARGET_FILE:BazzaltLua>" "$<TARGET_FILE:BazzaltGui>" "$<TARGET_FILE:BazzaltPhysics>" "$<TARGET_FILE:BazzaltAI>" "$<TARGET_FILE_DIR:${target}>")
-        endif()
         if(MSVC)
             target_compile_options(${target} PRIVATE /UNDEBUG)
         else()
             target_compile_options(${target} PRIVATE -UNDEBUG)
         endif()
     endfunction()
+    add_executable(BazzaltModuleLoaderTests tests/ModuleLoaderTests.cpp)
+    target_link_libraries(BazzaltModuleLoaderTests PRIVATE Bazzalt)
+    target_include_directories(BazzaltModuleLoaderTests PRIVATE src)
+    bazzalt_enable_test_assertions(BazzaltModuleLoaderTests)
+    add_test(NAME BazzaltModuleLoaderTests COMMAND BazzaltModuleLoaderTests)
     add_library(BazzaltSystemIdentityModule SHARED tests/fixtures/SystemIdentityModule.cpp)
     target_link_libraries(BazzaltSystemIdentityModule PRIVATE Bazzalt)
     target_compile_definitions(BazzaltSystemIdentityModule PRIVATE BUILDING_SYSTEM_IDENTITY_PROBE)

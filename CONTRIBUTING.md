@@ -4,6 +4,18 @@ Report bugs with the engine version, operating system, reproduction steps and lo
 For rendering bugs, include the GPU/backend and a small scene that reproduces the
 problem. Do not attach private projects, credentials or encryption keys.
 
+## Start here
+
+The [contributor handbook](docs/private/README.md) is actively maintained alongside
+the code. Start with the [code map](docs/private/maintenance-map.md), then use the
+[change recipes](docs/private/contributor-workflows.md) for a field, component,
+asset, panel or API. [Native module providers](docs/private/module-development.md)
+cover adding and replacing backend implementations without rewriting host code.
+
+Pick a focused first change and run the affected tests against an existing SDK.
+Use source-mode editor development to avoid packaging applications on each edit.
+The [verification guide](docs/private/verification.md) explains the local/CI split.
+
 ## Changes and pull requests
 
 Keep pull requests focused. Explain the behavior before and after the change and
@@ -22,6 +34,11 @@ Extension changes must also update the separate Extensions authoring reference,
 public C++/Lua SDK usage, package version/ABI checks and editor/game deployment
 tests. See [extension architecture](docs/private/extensions.md).
 
+Keep implementation sources with their owning module. Use the shared module
+loader and provider/staging helpers instead of copying platform-specific loaders
+or DLL lists. Reuse existing field visitors and codecs. Document ownership,
+teardown and migration rules in the relevant contributor guide with each change.
+
 Every user-visible API or editor change must update the current release's
 `docs/public/<version>/whats-new/en.html` in the same change. Include additions,
 changed behavior, fixes and migration requirements, and link to the relevant
@@ -38,6 +55,9 @@ an already supplied SDK rather than rebuilding Filament or Qt for routine work.
 - Run relevant native tests with `ctest --test-dir build -C Release --output-on-failure`.
 - Run editor tests with `python -m unittest discover -s Editor/tests -t .`.
 - Run compiler tests with `python -m unittest discover -s Compiler/tests`.
+- Run `python scripts/check_contributor_docs.py` after contributor-guide changes.
+- Run `python -m unittest discover -s tests -p test_runtime_modules.py` after
+  provider, source ownership or runtime staging changes.
 - Refresh API references using `python scripts/sync_api_reference.py`, then
   documentation using `python scripts/build_public_docs.py`. Both support `--check`.
 - Run `python -m unittest discover -s tests -p 'test_public_docs*.py'` after docs changes.

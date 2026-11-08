@@ -4,39 +4,12 @@
 #include <filesystem>
 #include <algorithm>
 #include <stdexcept>
-#if defined(_WIN32)
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <windows.h>
-#else
-#include <dlfcn.h>
-#endif
+#include "Runtime/ModuleLoader.h"
 namespace Bazzalt::Runtime {
 namespace {
 const GuiModuleApi* Load(){
-    // Resolve relative to the core library, never the project or working directory.
-    // Keep the module loaded for process lifetime: serializers retain callbacks.
-#if defined(_WIN32)
-    HMODULE core=nullptr;
-    if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(&GuiModule),&core))throw std::runtime_error("Cannot locate Bazzalt core for GUI loading");
-    std::wstring filename(32768,L'\0');const auto length=GetModuleFileNameW(core,filename.data(),static_cast<DWORD>(filename.size()));
-    if(!length||length>=filename.size())throw std::runtime_error("Cannot resolve Bazzalt core path");
-    filename.resize(length);const auto path=std::filesystem::path(filename).parent_path()/L"bazzalt_gui.dll";
-    auto module=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
-    if(!module)throw std::runtime_error("Could not load sibling bazzalt_gui.dll (Windows error "+std::to_string(GetLastError())+"). Reinstall the matching runtime modules.");
-    auto get=reinterpret_cast<GetGuiModuleApi>(GetProcAddress(module,"BazzaltGetGuiModuleApi"));
-#else
-    Dl_info info{};if(!dladdr(reinterpret_cast<void*>(&GuiModule),&info)||!info.dli_fname)throw std::runtime_error("Cannot resolve Bazzalt core path");
-#if defined(__APPLE__)
-    const auto path=std::filesystem::path(info.dli_fname).parent_path()/"libbazzalt_gui.dylib";
-#else
-    const auto path=std::filesystem::path(info.dli_fname).parent_path()/"libbazzalt_gui.so";
-#endif
-    auto module=dlopen(path.c_str(),RTLD_NOW|RTLD_LOCAL);
-    if(!module){const auto* error=dlerror();throw std::runtime_error(std::string("Could not load sibling GUI runtime: ")+(error?error:"unknown error"));}
-    auto get=reinterpret_cast<GetGuiModuleApi>(dlsym(module,"BazzaltGetGuiModuleApi"));
-#endif
-    const auto* api=get?get(GuiModuleVersion,sizeof(GuiModuleApi)):nullptr;
+    const auto* api = LoadSiblingModuleApi<GuiModuleApi>("bazzalt_gui",
+        "BazzaltGetGuiModuleApi", GuiModuleVersion);
     if(!api||api->Version!=GuiModuleVersion||api->Size!=sizeof(GuiModuleApi)||!api->Layout||!api->ProcessInput||!api->Focus||!api->RegisterComponents||!api->CreateRenderer||!api->DestroyRenderer||!api->ClearRenderer||!api->BatchCount||!api->PrepareSpatial||!api->PrepareOverlay||!api->RenderOverlay||!api->RenderCameraOverlay)throw std::runtime_error("Incompatible GUI runtime. Core and bazzalt_gui must come from the same build.");
     if(!api->ValidateAsset||!api->InspectFont||!api->MeasureFont||!api->StylesheetReferences||!api->PreviewFont||!api->SceneInputTarget||!api->RenderSpatialEffects||!api->StylesheetProperties||!api->GetStyleProperty||!api->SetStyleProperty||!api->EditCSS||!api->ReadStylesheetCSS)throw std::runtime_error("Incomplete GUI module");
     return api;

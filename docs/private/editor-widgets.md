@@ -1,8 +1,8 @@
 # Editor field widgets
 
 `Editor.gui.widgets` contains reusable PySide controls for Properties and other editor tools.
-They deliberately operate on ordinary Python values and UUID-like objects so a future
-component-field/reflection layer can bind them without coupling UI code to runtime ECS types.
+They deliberately operate on ordinary Python values and UUID-like objects so the
+inspector/controller can bind them without coupling widgets to runtime ECS types.
 
 ## Typed inputs
 

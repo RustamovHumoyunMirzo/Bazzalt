@@ -2,44 +2,13 @@
 #include "Bazzalt/Scene.h"
 #include <filesystem>
 #include <stdexcept>
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <Windows.h>
-#else
-#include <dlfcn.h>
-#endif
+#include "Runtime/ModuleLoader.h"
 namespace Bazzalt::Runtime {
 namespace {
 const PhysicsModuleApi* Loaded=nullptr;
 const PhysicsModuleApi* Load(){
-    // Resolve relative to the core library, never the project or working directory.
-    // Keep the module loaded for process lifetime: serializers retain callbacks.
-#if defined(_WIN32)
-    HMODULE core=nullptr;
-    if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(&PhysicsModule),&core))throw std::runtime_error("Cannot locate Bazzalt core for physics loading");
-    std::wstring filename(32768,L'\0');const auto length=GetModuleFileNameW(core,filename.data(),static_cast<DWORD>(filename.size()));
-    if(!length||length>=filename.size())throw std::runtime_error("Cannot resolve Bazzalt core path");
-    filename.resize(length);const auto path=std::filesystem::path(filename).parent_path()/L"bazzalt_physics.dll";
-    auto module=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
-    if(!module)throw std::runtime_error("Could not load sibling bazzalt_physics.dll (Windows error "+std::to_string(GetLastError())+"). Reinstall the matching runtime modules.");
-    auto get=reinterpret_cast<GetPhysicsModuleApi>(GetProcAddress(module,"BazzaltGetPhysicsModuleApi"));
-#else
-    Dl_info info{};if(!dladdr(reinterpret_cast<void*>(&PhysicsModule),&info)||!info.dli_fname)throw std::runtime_error("Cannot resolve Bazzalt core path");
-#if defined(__APPLE__)
-    const auto path=std::filesystem::path(info.dli_fname).parent_path()/"libbazzalt_physics.dylib";
-#else
-#ifdef __APPLE__
-    const auto path=std::filesystem::path(info.dli_fname).parent_path()/"libbazzalt_physics.dylib";
-#else
-    const auto path=std::filesystem::path(info.dli_fname).parent_path()/"libbazzalt_physics.so";
-#endif
-#endif
-    auto module=dlopen(path.c_str(),RTLD_NOW|RTLD_LOCAL);
-    if(!module){const auto* error=dlerror();throw std::runtime_error(std::string("Could not load sibling physics runtime: ")+(error?error:"unknown error"));}
-    auto get=reinterpret_cast<GetPhysicsModuleApi>(dlsym(module,"BazzaltGetPhysicsModuleApi"));
-#endif
-    const auto* api=get?get(PhysicsModuleVersion,sizeof(PhysicsModuleApi)):nullptr;
+    const auto* api = LoadSiblingModuleApi<PhysicsModuleApi>("bazzalt_physics",
+        "BazzaltGetPhysicsModuleApi", PhysicsModuleVersion);
     if(!api||api->Version!=PhysicsModuleVersion||api->Size!=sizeof(PhysicsModuleApi)||!api->NavigationGeometry||!api->Release||!api->Start||!api->Stop||!api->Step||!api->Synchronize||!api->IsRunning||!api->BodyCount||!api->Query||!api->Command||!api->Velocity||!api->Awake||!api->Subscribe||!api->Unsubscribe||!api->DisconnectOwner||!api->SetInterpolationAlpha||!api->RenderMatrix||!api->Guides||!api->JointControl||!api->SoftVertices||!api->SoftControl||!api->Render||!api->VehicleInput||!api->VehicleGear||!api->ReadVehicle||!api->ReadWheel||!api->Replay.GetDeterminism||!api->Replay.SetDeterminism||!api->Replay.CrossPlatform||!api->Replay.Capture||!api->Replay.Restore||!api->Replay.Control||!api->Replay.Status||!api->Replay.Frame)throw std::runtime_error("Incompatible physics runtime; reinstall matching bazzalt_physics");
     return api;
 }

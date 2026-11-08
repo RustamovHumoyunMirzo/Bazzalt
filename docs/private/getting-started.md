@@ -12,38 +12,35 @@ The launcher runs `bazzalt_editor.py` directly. Python, Qt, themes, panels, and 
 
 On Linux or macOS, use `./scripts/run_editor.sh /path/to/Game.bproject`.
 
-## Requirements
+## Requirements and dependency strategy
 
-- CMake 3.16 or newer
-- A C++20 compiler
-- Git, `curl`, and an archive tool used by the dependency scripts
-- A graphics driver supported by the selected Filament backend
+Use CMake, Git, a supported C++20 toolchain and Python with the repository's
+editor dependencies. Windows uses MSVC. Linux x64 uses Clang/libc++ to match the
+Filament SDK. Linux x86 uses its configured multilib runtime. macOS uses the
+matching Apple toolchain. Editor and Hub require a 64-bit machine.
 
-BAZZALT pins EnTT, SDL3, rapidyaml, and the Filament SDK through scripts in
-`scripts/`. Dependencies are placed under `deps/` and do not expand the public
-include surface.
+Start from a supplied matching SDK or an existing configured build. Production
+Filament/Qt and cross-architecture dependency builds belong in GitHub Actions.
+Review the matching platform workflow before setting up a new toolchain.
 
-## Fetch dependencies
-
-Windows PowerShell:
+Fetch scripts pin dependencies under `deps`. For the desktop source build, the
+current dependency set is shown below. Fetching should use supplied archives where
+available. Do not start large source builds as part of routine contributor work.
 
 ```powershell
-./scripts/get_entt.ps1
-./scripts/get_sdl3.ps1
-./scripts/get_miniaudio.ps1
-./scripts/get_rapidyaml.ps1
-./scripts/get_filament.ps1
+$Dependencies = 'entt','rapidyaml','filament','sdl3','stb_image','lua','sol2','miniaudio','jolt','recast','yojimbo','freetype','text_shaping','pybind11'
+foreach ($Dependency in $Dependencies) { & "./scripts/get_$Dependency.ps1" }
 ```
-
-Linux or macOS:
 
 ```bash
-./scripts/get_entt.sh
-./scripts/get_sdl3.sh
-./scripts/get_miniaudio.sh
-./scripts/get_rapidyaml.sh
-./scripts/get_filament.sh
+for dependency in entt rapidyaml filament sdl3 stb_image lua sol2 miniaudio jolt recast yojimbo freetype text_shaping pybind11; do
+    ./scripts/get_${dependency}.sh
+done
 ```
+
+Provider replacements can select their own solver dependencies. See
+[module development](module-development.md). Use [verification](verification.md)
+for incremental targets and CI coverage.
 
 The Filament SDK provides runtime libraries plus `matc` and `filamesh`. Override
 their locations with `BAZZALT_FILAMENT_DIR`, `BAZZALT_MATC_EXECUTABLE`, and
@@ -53,8 +50,8 @@ their locations with `BAZZALT_FILAMENT_DIR`, `BAZZALT_MATC_EXECUTABLE`, and
 
 ```powershell
 cmake -S . -B build -DBUILD_TESTING=ON
-cmake --build build --config Debug
-ctest --test-dir build -C Debug --output-on-failure
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
 ```
 
 The repository builds a shared `Bazzalt` target, a public API example, and test

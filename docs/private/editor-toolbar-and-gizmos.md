@@ -32,8 +32,8 @@ The toolbar has a localized title, which is also used by Qt's native toolbar vis
 
 `EditorToolbar` exposes `PlayAction`, `PauseAction`, `StepAction`, and `StopAction`. User input
 updates its local `PlayState` and emits `PlayRequested`, `PauseRequested(bool)`,
-`StepRequested`, or `StopRequested`. `GetPlayState()` and `SetPlayState(state)` let the future
-editor runtime synchronize authoritative state. No engine initialization, ticking, or scene
+`StepRequested`, or `StopRequested`. `GetPlayState()` and `SetPlayState(state)` let the
+editor controller synchronize authoritative runtime state. No engine initialization, ticking, or scene
 mutation is performed by this toolbar.
 
 ## Gizmo mode
@@ -81,8 +81,8 @@ remain in View rather than appearing again inside Object.
 - `GizmoDrag`, which captures an immutable drag start and returns a `GizmoDelta` from each
   subsequent pointer ray.
 
-The Scene viewport should create its camera ray from the cursor, call `PickAxis` (or its future
-render-handle picker), construct `GizmoDrag` on pointer press, and apply each calculated delta
-to a preview transform. Commit that preview through the editor command/undo system on pointer
-release. This separation keeps manipulation deterministic and testable before renderer and
-engine integration.
+`Editor/gui/panels/viewport.py` constructs camera rays, picks transform handles,
+and starts `GizmoDrag`. The controller applies deltas through the runtime bridge
+and commits the drag using history. Preserve this separation when changing hit
+tolerances, free movement or local/pivot modes. Geometry helpers stay usable in
+unit tests without creating a native render surface.

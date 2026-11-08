@@ -1,74 +1,90 @@
 # Architecture and ownership
 
-## Editor-first runtime model
-
-BAZZALT separates authoring from execution without creating two engines. The
-editor and shipped game host the same runtime core; the editor adds tools and UI
-around it. Game modules contribute data components, systems, and serializers.
-
-The host owns:
-
-- engine construction and shutdown;
-- project opening/saving and scene saving;
-- active-scene lifetime and frame timing;
-- renderer initialization and GPU resource destruction;
-- asset scanning, importing, and cache maintenance.
-
-Game code owns:
-
-- custom component and system definitions;
-- behavior executed through lifecycle hooks;
-- requests to load a scene at a safe boundary;
-- read-only asset queries by UUID or source path.
-
-## Layers
+## Dependency direction
 
 ```text
-Game/editor extensions
-        |
-        v
-include/Bazzalt             Public renderer-independent API
-        |
-        v
-src/Runtime                 Private orchestration and persistence
-        |
-        +--> src/Rendering  Private Filament integration
-        +--> EnTT           ECS storage
-        +--> rapidyaml      YAML parsing
+Game code                 Editor / Hub             Native game host
+    |                          |                          |
+include/Bazzalt          Python runtime bridge            |
+    |                          |                          |
+    +------------------- core runtime -------------------+
+                              |
+             public-value adapters and dispatch tables
+                              |
+        Physics / AI / GUI / networking implementations
 ```
 
-Filament, gltfio, filameshio, cache artifacts, and EnTT handles are not stable
-persistence APIs. `Entity::Id` values are transient; use `UUID` for identity
-that must survive serialization or reload.
+`include/Bazzalt` defines gameplay values and operations. It must not require Qt
+or include private solver/renderer headers. `src/EditorBridge` adapts runtime
+operations for tools. The compiler cooks and packages content against a supplied
+runtime. Final games use native hosts and have no Python/editor requirement.
 
-## Frame lifecycle
+## Lifetime owners
 
-The private host conceptually:
+| Owner | Owns |
+| --- | --- |
+| Host | Window/surface, application startup and final shutdown |
+| `Runtime::Engine` | Active project, loaded scenes, service instances, timing and transitions |
+| `Scene` | Entity registry, stable UUID identity, systems and scene settings |
+| Provider/service | Backend handles, per-scene caches, worker/GPU/solver resources |
+| Gameplay script | Its state and registrations associated with its owner |
+| Editor | Selection, history, authoring dialogs, layouts, source tools |
+| Hub | Installed products, project discovery and editor launching |
 
-1. Applies a deferred scene-load request.
-2. Calculates delta time.
-3. Dispatches enabled systems in registration order.
-4. Lets private rendering systems synchronize ECS state to Filament.
-5. Presents or embeds output through the owning application.
+The editor and standalone host use the same runtime contracts. Game scripts use
+Application controls, scene operations and lifecycle hooks. Engine construction,
+project saving and frame-loop implementation stay private.
 
-There is no public engine initialization, frame update, or overridable
-application loop. This prevents game code from creating a second renderer,
-loading a project during iteration, or destroying resources out of order.
+Only `include/Bazzalt` is the public include boundary. `src/Runtime`,
+`src/Rendering`, provider headers and editor bridge internals remain private even
+when tests include them. `Entity::Id` is transient. Persist UUIDs, component values
+and asset references.
 
-## Scene transitions and ownership
+## Frame and scene contracts
 
-`SceneManager::LoadScene` queues a transition. The host applies it at the next
-safe frame boundary, so it can be called from `OnUpdate` without destroying the
-scene currently being iterated.
+Read `Engine::Tick` and the scene/system methods before changing ordering. The
+engine coordinates pending loads, input, scripts, fixed simulation, scene systems,
+render synchronization and presentation. Audio, physics, input and global
+subsystem phases have explicit event ordering. Details are in
+[global events](global-events.md) and [subsystems](global-subsystems.md).
 
-The render backend owns the Filament engine, renderer, scene, gltfio loaders,
-texture providers, materials, buffers, and render entities. ECS components hold
-only serializable settings and asset UUIDs. Destruction happens in reverse
-dependency order before the Filament engine is released.
+Scene loading requests are applied at safe boundaries. Stop callbacks and release
+scene caches before tearing down referenced services and entity storage. Release
+render resources while their backend is alive. Native gameplay module leases
+must outlive callbacks, serializer functions and script objects using that code.
 
-## Threading
+`Scene::Clear` retains the Scene object while replacing entity contents. Caches
+must clear there as well as on destruction. An entity recreated with the same
+UUID is a new generation. Compare the stored Entity handle, not just its UUID.
 
-Scene mutation and system lifecycle are foreground-thread APIs. Filament's stb
-provider may decode on worker threads, but the private renderer services its
-queue. Do not mutate a scene concurrently unless a future API explicitly marks
-an operation thread-safe.
+## Native implementation modules
+
+Physics, AI, GUI and networking are sibling shared libraries behind private
+version/size checked tables. CMake providers select their implementations. The
+[provider guide](module-development.md) covers dependency isolation, lifetime,
+replacement and packaging. C++ types cross these tables, so core/provider builds
+must match their toolchain and architecture.
+
+Filament also has core-owned rendering integration. Replacing it requires adapting
+that resource/render contract. A provider boundary alone does not decouple all
+renderer-specific code.
+
+## Threads and work queues
+
+Scene mutation and system lifecycle run on their owning thread unless an API
+explicitly promises otherwise. Use the existing job system for background work,
+keep input/output snapshots bounded and immutable where possible, and apply
+results at the owner boundary. Do not let jobs capture destroyed scenes or code
+from an unloaded gameplay module. See [jobs/profiler](jobs-profiler.md),
+[streaming](streaming-instancing.md) and [hot reload](hot-reload.md).
+
+## Authored data and tooling
+
+Serialization IDs, property meanings, asset UUIDs and file formats are compatibility
+contracts. Caches and import outputs are rebuildable. Version/migrate authored
+formats and invalidate importer caches when their interpretation changes.
+Inspector constraints complement runtime validation. Read-only UI refresh must
+preserve selection and dirty state.
+
+Use the [code map](maintenance-map.md) to find entry points and the
+[change recipes](contributor-workflows.md) to maintain a complete vertical slice.

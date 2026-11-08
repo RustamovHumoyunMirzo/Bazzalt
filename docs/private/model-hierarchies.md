@@ -42,8 +42,8 @@ template<> struct Bazzalt::ComponentInheritance<MySettings> {
 
 `Scene::TryGetInheritedComponent<MySettings>(entity)` then returns the local value or the
 nearest ancestor value. Normal `HasComponent`, `GetComponent`, systems, and serialization stay
-local. A future rigid-body hierarchy can select an explicit policy rather than silently making
-all components inheritable.
+local. Physics has its own body/transform ownership rules. Follow the
+[physics guide](physics.md) when changing rigidbody parenting or synchronization.
 
 ## Rendering behavior
 
