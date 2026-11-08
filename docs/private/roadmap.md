@@ -1,8 +1,8 @@
 # Roadmap and compatibility planning
 
-[TODO.md](../../TODO.md) is the current source of planned feature work. Use issues
-and pull requests for detailed proposals. This handbook describes implemented
-maintenance contracts.
+Use [repository issues](https://github.com/RustamovHumoyunMirzo/Bazzalt/issues)
+and pull requests to discuss planned feature work and detailed proposals. This
+handbook describes implemented maintenance contracts.
 
 ## Current foundation
 
