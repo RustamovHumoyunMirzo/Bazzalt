@@ -13,7 +13,7 @@ from xml.sax.saxutils import escape
 
 from .resources import BrandingPNG
 from .android_tools import Validate
-from .build import (BuildLock, BuildWorkspace, CheckCancelled, CompileScripts, CookShaders,
+from .build import (BuildLock, BuildWorkspace, CheckCancelled, CompileScripts, CookRuntimeAssets,
                     Emit, KeyFor, Pack, Publish, Run, ValidateCooker, ValidateRuntime)
 
 
@@ -255,7 +255,7 @@ def BuildAndroid(project, runtime, cooker, settings, configuration, launch, canc
             environment = dict(os.environ, BAZZALT_FILAMENT_TOOLS=str(cooker.parent / 'filament'))
             Run([cooker, project, cooked, manifest], cwd=cooker.parent, env=environment)
             check()
-            CookShaders(cooked, cooker, check, platform='mobile')
+            CookRuntimeAssets(cooked, cooker, check, platform='mobile')
             FilterCooked(cooked, settings['packaging'])
             StageGame(project, cooked, 'android', arch, runtime)
             forbidden={'.py','.pyc','.pyd','.cpp','.hpp','.h','.cc','.cxx','.lua'}

@@ -75,6 +75,10 @@ class EditorController(QObject):
         window.VFXGraph.History.canUndoChanged.connect(self._HistoryChanged)
         window.VFXGraph.History.canRedoChanged.connect(self._HistoryChanged)
         window.VFXGraph.Canvas.scene().selectionChanged.connect(window.RefreshEditActions)
+        window.BehaviorTree.AssetChanged.connect(self._GraphChanged)
+        window.BehaviorTree.History.canUndoChanged.connect(self._HistoryChanged)
+        window.BehaviorTree.History.canRedoChanged.connect(self._HistoryChanged)
+        window.BehaviorTree.Workspace.SelectionChanged.connect(window.RefreshEditActions)
         window.ShaderGraph.AssetProvider=self._ProjectAssets
         window.ShaderGraph.AssetChanged.connect(self._GraphChanged)
         window.ShaderGraph.History.canUndoChanged.connect(self._HistoryChanged)
@@ -450,7 +454,7 @@ class EditorController(QObject):
 
     def _FocusedGraph(self):
         focus=QApplication.focusWidget()
-        for name in ('Timeline','ShaderGraph','VFXGraph','Animation'):
+        for name in ('Timeline','ShaderGraph','VFXGraph','Animation','BehaviorTree'):
             graph=getattr(self.Window,name,None)
             if name=='Animation' and graph and (not graph.Path or graph.Tabs.currentWidget() not in (graph.GraphPage,graph.Author)):continue
             if graph and isValid(graph) and focus and (graph is focus or graph.isAncestorOf(focus)):return graph
@@ -900,6 +904,7 @@ class EditorController(QObject):
         if component=="Navigation Obstacle" and name=="Shape":
             editor=EnumInput();editor.SetOptions([(self.Window.Localization.Translate("navigation.box"),0),(self.Window.Localization.Translate("navigation.cylinder"),1)]);editor.SetValue(value);editor.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
         if component=="NavMesh Surface" and name=="Data":return self._AssetPicker(value,{".bnavmesh"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
+        if component=="Behavior Tree Agent" and name=="Tree":return self._AssetPicker(value,{".bbtree"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
         if component=="Timeline Director" and name=="Sequence":return self._AssetPicker(value,{".btimeline"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
         if component=="Animator" and name in {"Model","Controller"}:return self._AssetPicker(value,{".glb",".gltf"} if name=="Model" else {".banim"},lambda v:self._CommitComponent(entity_id,component,name,v or ZERO))
         if component=="Animator" and name=="Root Motion":
@@ -1239,10 +1244,15 @@ class EditorController(QObject):
                 if not self.Window.Docking.is_panel_open("animation"):self.Window.Docking.dock("animation","center",relative_to="asset_browser")
                 self.Window.Docking.activate_panel("animation")
         elif path.suffix.lower()==".vfx":self.OpenVFXGraph(path)
+        elif path.suffix.lower()==".bbtree":self.OpenBehaviorTree(path)
         elif path.suffix.lower()==".shadg":self.OpenShaderGraph(path)
         elif path.suffix.lower() in AUDIO_EXTENSIONS:
             self.SelectAsset(path)
             if self._audio_preview is not None:self._audio_preview.Play()
+    def OpenBehaviorTree(self,path):
+        if self.Window.BehaviorTree.Open(path):
+            if not self.Window.Docking.is_panel_open("behavior_tree"):self.Window.Docking.dock("behavior_tree","center",relative_to="asset_browser")
+            self.Window.Docking.activate_panel("behavior_tree")
     def OpenVFXGraph(self,path):
         if self.Window.VFXGraph.Open(path):
             if not self.Window.Docking.is_panel_open("vfx_graph"):self.Window.Docking.dock("vfx_graph","center",relative_to="asset_browser")
@@ -1252,11 +1262,15 @@ class EditorController(QObject):
             if not self.Window.Docking.is_panel_open("shader_graph"):self.Window.Docking.dock("shader_graph","center",relative_to="asset_browser")
             self.Window.Docking.activate_panel("shader_graph")
     def UnlockShaderGraph(self,path):
+        if Path(path).suffix.lower()==".bbtree":
+            self.OpenBehaviorTree(path)
+            if self.Window.BehaviorTree.Path==Path(path):self.Window.BehaviorTree.Unlock()
+            return
         self.OpenShaderGraph(path,True)
         if self.Window.ShaderGraph.Path==Path(path):self.Window.ShaderGraph.Unlock()
     def _GraphChanged(self,path):
         browser=self.Window.AssetBrowser;item=browser.Browser.currentItem();selected=Path(item.data(Qt.ItemDataRole.UserRole)) if item else None
-        if Path(path).suffix.lower() in {".vfx",".banim",".btimeline"}:self.Runtime.RefreshAsset(path)
+        if Path(path).suffix.lower() in {".vfx",".banim",".btimeline",".bbtree"}:self.Runtime.RefreshAsset(path)
         else:self.Runtime.RefreshAssets()
         converted=bool(selected and not selected.exists() and selected.with_suffix('.shad')==Path(path) or selected and not selected.exists() and selected.with_suffix('.shadg')==Path(path))
         browser.Refresh(path if converted else None)

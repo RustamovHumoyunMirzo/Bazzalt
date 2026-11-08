@@ -9,6 +9,27 @@ from scripts.stage_game_runtime import Stage
 ROOT=Path(__file__).resolve().parents[2]
 @unittest.skipUnless(os.name=='nt' and (ROOT/'build/Editor/Release/BazzaltPlayer.exe').is_file() and (ROOT/'build/Editor/Release/BazzaltCooker.exe').is_file(),'Prebuilt native player/cooker are required')
 class NativeBuildTests(unittest.TestCase):
+    def test_behavior_tree_is_cooked_and_retained_from_agent_reference(self):
+        import yaml
+        from Editor.behavior_tree import Load
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);assets=root/'Assets';assets.mkdir();project=root/'Game.bproject'
+            identity='34567890-1234-4234-8234-123456789abc'
+            (assets/'NPC.bbtree').write_text('<BehaviorTree version="1" locked="true"><Tree><SetVector key="target" x="1" y="2" z="3" editor-x="120" comment="editor note"/></Tree></BehaviorTree>')
+            (assets/'NPC.bbtree.meta').write_text(yaml.safe_dump(dict(FormatVersion=1,UUID=identity,Importer='Bazzalt.BehaviorTree',ImporterVersion=1,SourceHash='',CachePath='',Settings={})))
+            scene=dict(FormatVersion=1,SceneUUID='12345678-1234-4234-8234-123456789abc',Entities=[dict(UUID='45678901-1234-4234-8234-123456789abc',Parent='00000000-0000-0000-0000-000000000000',Name='NPC',Components=[dict(Type='Bazzalt.BehaviorTreeAgent',Version=1,Properties={'Enabled':'true','Tree':identity,'Loop':'true'})])])
+            (assets/'Main.bscene').write_text(yaml.safe_dump(scene))
+            (assets/'Unused.bbtree').write_text('<BehaviorTree version="1"><Tree><Succeed/></Tree></BehaviorTree>')
+            project.write_text('FormatVersion: 1\nProjectUUID: "23456789-1234-4234-8234-123456789abc"\nName: AI\nAssetDirectory: Assets\nStartupScene: Assets/Main.bscene\nProperties: {}\n')
+            settings=ApplyPreset(DEFAULTS,'low');settings['packaging']['format']='loose';settings['packaging']['include_assets']='Assets/Main.bscene';Save(project,settings)
+            runtime=Stage(ROOT/'build',root/'Runtime','x64');output=Build(project,runtime,ROOT/'build/Editor/Release/BazzaltCooker.exe')
+            records=yaml.safe_load((output/'Data/.bazzalt/CookedAssets.yaml').read_text())['Assets']
+            record=next(row for row in records if row['UUID']==identity)
+            self.assertEqual(record['Importer'],'Bazzalt.BehaviorTree')
+            tree=Load(output/'Data'/record['Cache']);self.assertEqual(tree.get('locked'),'false')
+            node=tree.find('Tree')[0];self.assertEqual(node.get('x'),'1');self.assertNotIn('editor-x',node.attrib);self.assertNotIn('comment',node.attrib)
+            self.assertFalse((output/'Data/Assets/Unused.bbtree').exists())
+
     def test_remote_worker_cooks_and_returns_verified_archive(self):
         import hashlib
         from Compiler.remote_worker import Execute,Info

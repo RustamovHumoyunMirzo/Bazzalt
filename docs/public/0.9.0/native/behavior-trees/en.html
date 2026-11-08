@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Include Bazzalt/AI.h, Bazzalt/Components/BehaviorTreeAgent.h and Bazzalt/Systems/BehaviorTreeSystem.h. Public types live in Bazzalt::AI; the component and scene system live in Bazzalt. Jolt implementation types remain private. Read the authoring guide and complete XML/block catalog for the file contract.">
+  <title>AI behavior trees in C++ | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / C++ / AI behavior trees in C++</nav>
+      <article class="doc"><h1 id="behavior-trees">AI behavior trees in C++</h1>
+<p>Include Bazzalt/AI.h, Bazzalt/Components/BehaviorTreeAgent.h and Bazzalt/Systems/BehaviorTreeSystem.h. Public types live in Bazzalt::AI; the component and scene system live in Bazzalt. Jolt implementation types remain private. Read the <a href="../../manual/behavior-trees/en.html">authoring guide and complete XML/block catalog</a> for the file contract.</p>
+<h2 id="agents">Scene-owned agents</h2>
+<pre><code class="language-cpp">auto npc = scene.CreateEntity("Guard");
+auto&amp; agent = npc.AddComponent&lt;Bazzalt::BehaviorTreeAgent&gt;();
+agent.Tree = treeAssetUUID;
+agent.Loop = true;
+auto&amp; ai = scene.GetSystem&lt;Bazzalt::BehaviorTreeSystem&gt;();
+auto&amp; memory = ai.GetBlackboard(npc);
+memory.Set("target", Bazzalt::Vec3{10, 1, 0});
+memory.Set("alert", 0.8); // numeric values are double
+ai.SetHandlers(npc,
+  [](const std::string&amp; name, Bazzalt::AI::Context&amp; c, bool cancelled) {
+    if (cancelled) return Bazzalt::AI::Status::Failure;
+    if (name == "Watch") {
+      c.Memory.Set("watching", true);
+      return Bazzalt::AI::Status::Running;
+    }
+    return Bazzalt::AI::Status::Failure;
+  },
+  [](const std::string&amp; name, Bazzalt::AI::Context&amp; c) {
+    return name == "Alert" &amp;&amp; c.Memory.Number("alert") &gt; 0.5;
+  });</code></pre>
+<p>BehaviorTreeSystem is installed on every scene. Agents tick automatically before physics on fixed gameplay updates. Scene clearing cancels agents and removes blackboards, callbacks and traversal state. Recreated entity UUIDs begin with fresh state. System Action/Condition fields are assignment-compatible ownership-aware callback slots. GetBlackboard requires a live BehaviorTreeAgent in this system's scene. Its returned reference is owned by the system; do not retain it after component/entity removal, scene teardown or system replacement. Loop=false stops after a terminal result. Reset(entity) cancels running work, clears traversal/cooldown state, preserves memory and permits another run.</p>
+<h2 id="handlers">Handlers, cancellation and lifetime</h2>
+<p>SetHandlers(entity, action, condition, owner=nullptr) installs per-agent callbacks, cancelling old work first. Null callbacks fall back to the system's Action and Condition fields. ClearHandlers(owner) cancels and disconnects all per-agent handlers with that owner token, retaining blackboards and allowing future execution. Native script registrations automatically inherit the script owner, retain the gameplay module, and disconnect before script destruction, streamed unload, or hot reload. Explicit owner tokens are also supported. Call ClearHandlers for non-script owners before destroying them. A callback receives the node name, Context and, for actions, a cancellation flag. Context contains Self, Memory, DeltaTime, Action and Condition. Actions return Status; conditions return bool. Missing handlers fail. Self can be invalid during entity cleanup: check it before touching components. Callbacks run on the engine thread; avoid structural entity changes during a system traversal.</p>
+<p>Running custom actions own their cleanup. On cancellation, release movement, animation, subscriptions and other resources; the cancellation return status is ignored. Completed actions are not sent a cancellation notification. Explicit Reset, reactive/utility preemption, timeout, component disable and scene stop cancel running branches. Do not use a raw Lua callback as a C++ module callback; use the Lua registration API, which tracks VM lifetime.</p>
+<h2 id="standalone">Standalone trees</h2>
+<pre><code class="language-cpp">auto tree = Bazzalt::AI::BehaviorTree::FromSource(
+  "&lt;BehaviorTree version='1'&gt;&lt;Tree&gt;"
+  "&lt;Sequence&gt;&lt;Wait seconds='.5'/&gt;&lt;Succeed/&gt;&lt;/Sequence&gt;"
+  "&lt;/Tree&gt;&lt;/BehaviorTree&gt;");
+Bazzalt::AI::Blackboard memory;
+tree.Initialize(memory);
+Bazzalt::AI::Context context{npc, memory, fixedDeltaTime};
+auto status = tree.Tick(context);
+tree.Reset(context); // cancels active work, keeps memory</code></pre>
+<p>BehaviorTree::Load(UUID) resolves a ready .bbtree asset through AssetManager, using its runtime cache. FromSource parses and validates XML. Trees are move-only; construct one execution instance per independently ticking NPC. Initialize fills missing blackboard defaults. Tick rejects negative or non-finite delta time. Standalone callers supply the same blackboard and handlers when resetting, and must call Reset before releasing a tree with active resource-owning actions. Destroying a tree cannot invent the Context required for cancellation. Invalid source or unavailable assets throw std::invalid_argument.</p>
+<h2 id="memory">Blackboard API</h2>
+<p>AI::Value is variant&lt;bool,double,std::string,Vec3&gt;. Blackboard::Set replaces a key; Contains checks presence; Erase removes it. Get&lt;T&gt; returns a pointer of the exact stored type, or nullptr. Number(key, fallback=0) reads only double values. Values exposes the map for C++ iteration. Use std::string for text and double for numbers; pointers/references into Values can be invalidated by replacement or removal. Initialize never overwrites an existing key. Blackboard access is an engine-thread operation.</p>
+<h2 id="reference">API reference</h2>
+<ul><li><a href="../reference/BehaviorTree/en.html">BehaviorTree</a></li><li><a href="../reference/Blackboard/en.html">Blackboard</a></li><li><a href="../reference/Context/en.html">Context</a></li><li><a href="../reference/BehaviorTreeAgent/en.html">BehaviorTreeAgent</a></li><li><a href="../reference/BehaviorTreeSystem/en.html">BehaviorTreeSystem</a></li></ul><p>Behavior parsing, tree execution, utility selection and per-agent runtime state live in the same <code>bazzalt_ai.dll</code> module as navigation (<code>libbazzalt_ai.so</code> on Linux/Android, <code>libbazzalt_ai.dylib</code> on macOS). The core engine keeps the public API and Lua bindings and forwards through a versioned private module table. Ship the matching AI module beside the core runtime; existing runtime staging includes it.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../reference/WorldCell/en.html"><small>Previous</small>WorldCell</a>
+<a class="next" href="../application/en.html"><small>Next</small>Application controls</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#agents">Scene-owned agents</a><a class="toc-link" href="#handlers">Handlers, cancellation and lifetime</a><a class="toc-link" href="#standalone">Standalone trees</a><a class="toc-link" href="#memory">Blackboard API</a><a class="toc-link" href="#reference">API reference</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

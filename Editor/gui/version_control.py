@@ -50,14 +50,14 @@ class WorktreeUpdate:
         editor = self.Editor
         if editor.Runtime.IsPlaying() or editor.Controller.IsDirty:
             raise GitError("save_stop_first")
-        for panel in (editor.Timeline, editor.Animation, editor.VFXGraph, editor.ShaderGraph, editor.AudioMixer):
+        for panel in (editor.Timeline, editor.Animation, editor.VFXGraph, editor.ShaderGraph, editor.BehaviorTree, editor.AudioMixer):
             if not panel.Flush():
                 raise GitError("save_stop_first")
         editor.Animation.EndPreview()
         editor.Controller.Timer.stop()
         try:
             editor.Runtime.SetSceneFileLocksSuspended(True)
-            for panel in (editor.Timeline, editor.Animation, editor.VFXGraph, editor.ShaderGraph, editor.AudioMixer):
+            for panel in (editor.Timeline, editor.Animation, editor.VFXGraph, editor.ShaderGraph, editor.BehaviorTree, editor.AudioMixer):
                 panel.ResetDocument()
         except Exception:
             editor.Runtime.SetSceneFileLocksSuspended(False)

@@ -1,4 +1,6 @@
 #include <Bazzalt/GlobalEvent.h>
+#include <Bazzalt/Components/BehaviorTreeAgent.h>
+#include <Bazzalt/Systems/BehaviorTreeSystem.h>
 #include <Bazzalt/Script.h>
 #include <Bazzalt/Material.h>
 #include <cstring>
@@ -14,12 +16,18 @@ public:
     std::string OnSaveReloadState()const override{return std::to_string(ReloadState);}
     void OnRestoreReloadState(const std::string& state)override{ReloadState=std::stoi(state);}
     void Write(const char* value){std::ofstream(LogPath,std::ios::app)<<value<<':'<<GetEntityUUID()<<'\n';}
-    void OnCreate() override { ReloadState=99;if(!Bazzalt::Detail::BoundMaterialServices)throw std::runtime_error("Material host service was not bound");if(Surface.IsValid())Surface.SetFloat("roughness",0.1f);Bazzalt::Time::SetSlowMotion(0.25f);if(Signal.IsValid())Signal.Fire({5.0,std::string("hit")});Write("create"); }
+    void BindAI(){
+        auto entity=GetEntity();if(!entity||!entity.HasComponent<Bazzalt::BehaviorTreeAgent>())return;
+        auto& ai=entity.GetScene()->GetSystem<Bazzalt::BehaviorTreeSystem>();
+        ai.SetHandlers(entity,[this](const std::string&,Bazzalt::AI::Context&,bool cancel){Write(cancel?"ai_cancel":"ai_tick");return Bazzalt::AI::Status::Running;},{});
+        ai.Action=[this](const std::string&,Bazzalt::AI::Context&,bool cancel){Write(cancel?"default_cancel":"default_tick");return Bazzalt::AI::Status::Running;};
+    }
+    void OnCreate() override { ReloadState=99;if(!Bazzalt::Detail::BoundMaterialServices)throw std::runtime_error("Material host service was not bound");if(Surface.IsValid())Surface.SetFloat("roughness",0.1f);Bazzalt::Time::SetSlowMotion(0.25f);if(Signal.IsValid())Signal.Fire({5.0,std::string("hit")});Write("create");BindAI(); }
     void OnUpdate(float delta) override { if(Bazzalt::Time::GetDeltaTime()!=delta)throw std::runtime_error("Module clock was not shared");Write("update");if(Bazzalt::Input::GetKeyDown(Bazzalt::KeyCode::W))Write("input_w"); }
     void OnFixedUpdate(float delta) override { if(!Bazzalt::Time::IsInFixedTimeStep()||Bazzalt::Time::GetDeltaTime()!=delta)throw std::runtime_error("Module fixed clock was not shared");Write("fixed"); }
     void OnTriggerEnter(const Bazzalt::CollisionEvent& event) override { if(event.Contacts.empty())throw std::runtime_error("Missing trigger contact manifold");Write("trigger"); }
     void OnDestroy() override { Write("destroy"); }
-    void OnReload() override { if(ReloadState!=99)throw std::runtime_error("Custom state was lost");Write("reload"); }
+    void OnReload() override { if(ReloadState!=99)throw std::runtime_error("Custom state was lost");Write("reload");BindAI(); }
     void OnLateUpdate(float) override { Write("late"); }
 };
 

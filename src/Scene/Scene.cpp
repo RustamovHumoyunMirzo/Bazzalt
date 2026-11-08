@@ -13,6 +13,7 @@
 #include "Bazzalt/Components/Mesh.h"
 #include "Bazzalt/Components/ModelInstance.h"
 #include "Bazzalt/Systems/AnimationSystem.h"
+#include "Bazzalt/Systems/BehaviorTreeSystem.h"
 #include "Bazzalt/Systems/TimelineSystem.h"
 #include "Bazzalt/Timeline.h"
 #include "Bazzalt/Components/ModelNode.h"
@@ -24,6 +25,7 @@ Scene::Scene() {
     CreateRootEntity();
     AddSystem<Runtime::GuiSystem>();
     AddSystem<AnimationSystem>();
+    AddSystem<BehaviorTreeSystem>();
     AddSystem<TimelineSystem>();
 }
 
@@ -68,6 +70,7 @@ void Scene::DestroyEntity(Entity entity) {
 }
 
 void Scene::Clear() {
+    if(HasSystem<BehaviorTreeSystem>())GetSystem<BehaviorTreeSystem>().ClearScene(*this);
     Runtime::ReleaseNavigationScene(*this);
     Cinematics::StopAll(*this);
     Runtime::ReleasePhysicsScene(*this);

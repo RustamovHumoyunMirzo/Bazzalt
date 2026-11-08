@@ -43,7 +43,7 @@ struct VM {
     Memory MemoryState;
     lua_State* State=lua_newstate(Allocate,&MemoryState);
     VM(){if(!State)throw std::runtime_error("Could not allocate Lua VM");}
-    ~VM(){auto closing=GlobalEventsAccess::SetClosingOwner(State);GraphicsAccess::DisconnectScope(State);ApplicationEventsAccess::DisconnectOwner(State);lua_close(State);GlobalEventsAccess::SetClosingOwner(closing);}
+    ~VM(){auto closing=GlobalEventsAccess::SetClosingOwner(State);UnbindLuaAI(State);GraphicsAccess::DisconnectScope(State);ApplicationEventsAccess::DisconnectOwner(State);lua_close(State);GlobalEventsAccess::SetClosingOwner(closing);}
 };
 void SetProperty(sol::table object,const std::string& name,const std::string& value){
     // Editor properties are scalars or explicitly declared vector/entity values.
@@ -249,6 +249,7 @@ void LuaRuntime::Stop() noexcept {
     removeOwnedSystems();
     for(auto it=m_impl->Instances.rbegin();it!=m_impl->Instances.rend();++it)try{if(!m_impl->Reloading)(*it)->Call("OnDestroy");}catch(const std::exception& error){std::cerr<<"[Lua] "<<error.what()<<'\n';}
     removeOwnedSystems();
+    for(auto& instance:m_impl->Instances)UnbindLuaAI(instance->Vm->State);
     m_impl->Instances.clear();
 }
 bool LuaRuntime::Import(const std::filesystem::path& source,const std::filesystem::path& output,std::string& error){

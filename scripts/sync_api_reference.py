@@ -205,6 +205,26 @@ def split_arguments(source):
 
 def lua_usage(name, member, binding, signatures):
     """Begin with Lua notation; retain the adapter only as optional detail."""
+    if name=='BehaviorTree' and member=='construction':
+        return '<p>Create a tree with <code>Bazzalt.BehaviorTree.FromSource(xml)</code> or <code>Bazzalt.BehaviorTree.Load(assetUUID)</code>; no default Lua constructor is exposed.</p>'
+    ai_signatures = {
+        ('AI','GetBlackboard'): 'Bazzalt.AI.GetBlackboard(entity: Entity) -> Blackboard',
+        ('AI','SetHandlers'): 'Bazzalt.AI.SetHandlers(entity: Entity, action: function|nil, condition: function|nil)',
+        ('AI','ClearHandlers'): 'Bazzalt.AI.ClearHandlers(entity: Entity)',
+        ('AI','Reset'): 'Bazzalt.AI.Reset(entity: Entity)',
+        ('Blackboard','Set'): 'memory:Set(key: string, value: boolean|number|string|Vec3)',
+        ('Blackboard','Get'): 'memory:Get(key: string) -> boolean|number|string|Vec3|nil',
+        ('Blackboard','Contains'): 'memory:Contains(key: string) -> boolean',
+        ('Blackboard','Erase'): 'memory:Erase(key: string)',
+        ('Blackboard','Number'): 'memory:Number(key: string, fallback: number = 0) -> number',
+        ('BehaviorTree','FromSource'): 'Bazzalt.BehaviorTree.FromSource(xml: string) -> BehaviorTree',
+        ('BehaviorTree','Load'): 'Bazzalt.BehaviorTree.Load(asset: UUID) -> BehaviorTree',
+        ('BehaviorTree','Initialize'): 'tree:Initialize(memory: Blackboard)',
+        ('BehaviorTree','Tick'): 'tree:Tick(self: Entity, memory: Blackboard, dt: number, action: function|nil, condition: function|nil) -> BehaviorStatus',
+        ('BehaviorTree','Reset'): 'tree:Reset(self: Entity, memory: Blackboard, action: function|nil)',
+    }
+    if (name,member) in ai_signatures:
+        return '<pre><code class="language-lua">'+html.escape(ai_signatures[name,member])+'</code></pre>'
     graphics_signatures = {
         'CreateMesh': 'vertices: GraphicsVertex[], indices: number[] (optional), topology: GraphicsTopology (optional)) -> GraphicsMesh',
         'DrawMesh': 'mesh: GraphicsMesh, material: Material (optional), transform: Mat4 (optional), options: GraphicsDrawOptions (optional))',
@@ -262,7 +282,8 @@ def supplement(language, name, record, types):
     if language == 'native':
         header, kind, contract = record
         display_name = name.replace('-', '::')
-        return section('Public declarations', f'<p>Header: <code>{header}</code>. Namespace: <code>Bazzalt</code>. '
+        namespace='Bazzalt::AI' if Path(header).name=='AI.h' else 'Bazzalt'
+        return section('Public declarations', f'<p>Header: <code>{header}</code>. Namespace: <code>{namespace}</code>. '
             'Declarations below list public members, overloads, field types and default values. Inline implementation '
             'bodies and private storage are omitted. Inherited members are declared on the base type. '
             'A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>\n'

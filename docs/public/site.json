@@ -34,7 +34,8 @@
         "version-control",
         "settings",
         "extensions",
-        "glossary"
+        "glossary",
+        "behavior-trees"
       ]
     },
     "manual/panels": {
@@ -69,7 +70,8 @@
         "global-events",
         "gui",
         "extensions",
-        "reference"
+        "reference",
+        "behavior-trees"
       ]
     },
     "lua": {
@@ -90,7 +92,8 @@
         "global-events",
         "gui",
         "extensions",
-        "reference"
+        "reference",
+        "behavior-trees"
       ]
     },
     "bshader": {

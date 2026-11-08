@@ -63,11 +63,15 @@ def FilterCooked(cooked, packaging,editor_sources=()):
         identity=queue.pop()
         if identity in visited:continue
         visited.add(identity);row=by_id[identity];source=Local(row['Source'])
-        dependency_file=Path(str(Local(row['Cache']))+'.dependencies.yml') if row.get('Importer')=='Bazzalt.Stylesheet' else source if source.suffix.lower() in serialized else Path(str(Local(row['Cache']))+'.reflection.json') if source.suffix.lower() in shaders else None
+        dependency_file=Path(str(Local(row['Cache']))+'.dependencies.yml') if row.get('Importer')=='Bazzalt.Stylesheet' else source if source.suffix.lower() in serialized or source.suffix.lower()=='.bbtree' else Path(str(Local(row['Cache']))+'.reflection.json') if source.suffix.lower() in shaders else None
         if row.get('Importer')=='Bazzalt.Stylesheet' and not dependency_file.is_file():raise ValueError('Missing stylesheet dependency manifest: '+row['Source'])
         if dependency_file is None or not dependency_file.is_file():continue
         if dependency_file.stat().st_size>64*1024*1024:raise ValueError('Serialized dependency asset exceeds size limit')
-        for dependency in References(yaml.safe_load(dependency_file.read_text(encoding='utf-8'))):
+        if source.suffix.lower()=='.bbtree':
+            from Editor.behavior_tree import Load
+            document=[value for node in Load(dependency_file).iter() for value in node.attrib.values()]
+        else:document=yaml.safe_load(dependency_file.read_text(encoding='utf-8'))
+        for dependency in References(document):
             if dependency in denied:raise ValueError('Excluded asset is required by '+row['Source']+': '+by_id[dependency]['Source'])
             if dependency not in kept:kept.add(dependency);queue.append(dependency)
     allowed={cooked/'Game.bproject',index}

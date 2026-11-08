@@ -177,6 +177,11 @@ def CompileScripts(project,runtime,architecture,cache,compiler_path='',configura
     result=compiler.Build([p for p in sources if Path(p).suffix.lower()!='.lua'])
     if not result.success:raise ValueError('\n'.join(d.message for d in result.diagnostics))
     return [binding for binding in attachments.RuntimeBindings(result.outputs) if Path(binding['module']).suffix.lower() in {'.dll','.so','.dylib'}]
+def CookRuntimeAssets(cooked,cooker,check=lambda:None,platform='desktop'):
+    from .behavior_trees import CompileBehaviorTrees
+    CompileBehaviorTrees(cooked,check)
+    CookShaders(cooked,cooker,check,platform)
+
 def CookShaders(cooked,cooker,check=lambda:None,platform='desktop'):
     import yaml
     from Editor.materials import MaterialCompiler
@@ -289,7 +294,7 @@ def _Build(project,runtime,cooker,launch=False,compiler_path='',*,cancel=None,co
         if tools.is_dir():environment['BAZZALT_FILAMENT_TOOLS']=str(tools)
         Run([cooker,project,cooked,manifest],cwd=cooker.parent,env=environment)
         from .content import FilterCooked
-        check();CookShaders(cooked,cooker,check);check()
+        check();CookRuntimeAssets(cooked,cooker,check);check()
         macro_registry=project.parent/'.bazzalt/Editor/MacroSources.json';macro_sources=[]
         if macro_registry.exists():
             if macro_registry.stat().st_size>1024*1024:raise ValueError('Editor macro source registry exceeds limits')

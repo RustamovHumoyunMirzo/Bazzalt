@@ -29,6 +29,7 @@ from .cursor_policy import EditorCursorPolicy
 from .wheel_policy import EditorWheelPolicy
 from .object_tools import ObjectTools
 from .panels.audio_mixer import AudioMixerPanel
+from .panels.behavior_tree import BehaviorTreePanel
 from .panels.shader_graph import ShaderGraphPanel
 from .panels.vfx_graph import VFXGraphPanel
 from .panels.animation import AnimationPanel
@@ -97,6 +98,7 @@ class Editor(QMainWindow):
         self.AssetBrowser = AssetBrowserPanel(self.Localization, self.Resources)
         self.AudioMixer=AudioMixerPanel(self.Runtime,self.Localization,self.Resources,self.ThemeManager)
         self.Macros=MacrosPanel(self)
+        self.BehaviorTree=BehaviorTreePanel(self.Runtime,self.Localization,self.Resources,self.ThemeManager)
         self.ShaderGraph=ShaderGraphPanel(self.Runtime,self.Localization,self.Resources,self.ThemeManager)
         self.Timeline=TimelinePanel(self.Runtime,self.Localization,self.Resources,self.ThemeManager)
         self.Animation=AnimationPanel(self.Runtime,self.Localization,self.Resources,self.ThemeManager)
@@ -110,7 +112,7 @@ class Editor(QMainWindow):
             "hierarchy": self.Hierarchy,
             "properties": self.Properties,
             "asset_browser": self.AssetBrowser,
-            "timeline":self.Timeline,"animation":self.Animation,"vfx_graph":self.VFXGraph,"audio_mixer":self.AudioMixer,"shader_graph":self.ShaderGraph,"macros":self.Macros,
+            "behavior_tree":self.BehaviorTree,"timeline":self.Timeline,"animation":self.Animation,"vfx_graph":self.VFXGraph,"audio_mixer":self.AudioMixer,"shader_graph":self.ShaderGraph,"macros":self.Macros,
         }
         self._RegisterPanels()
         self._default_layout=self._LoadDefaultWorkspace()
@@ -260,6 +262,7 @@ class Editor(QMainWindow):
     def _EditContext(self):
         focus=QApplication.focusWidget()
         if isinstance(focus,(QLineEdit,QTextEdit,QPlainTextEdit)):return "text",focus
+        if focus is not None and (focus is self.BehaviorTree or self.BehaviorTree.isAncestorOf(focus)):return "behavior",self.BehaviorTree
         if focus is not None and (focus is self.Timeline or self.Timeline.isAncestorOf(focus)):return "timeline",self.Timeline
         if focus is not None and (focus is self.Animation or self.Animation.isAncestorOf(focus)):return "animation",self.Animation
         if focus is not None and (focus is self.VFXGraph or self.VFXGraph.isAncestorOf(focus)):return "graph",self.VFXGraph
@@ -276,6 +279,8 @@ class Editor(QMainWindow):
             selected=widget.hasSelectedText() if isinstance(widget,QLineEdit) else widget.textCursor().hasSelection()
             writable=not widget.isReadOnly()
             states=dict(copy=selected,paste=writable,delete=selected and writable,rename=False,duplicate=False,select_all=True,deselect_all=selected)
+        elif context=="behavior":
+            ws=widget.Workspace;selected=bool(ws.Selection.Count());states=dict(copy=selected,paste=not ws.Canvas.ReadOnly,delete=selected and not ws.Canvas.ReadOnly,rename=False,duplicate=selected and not ws.Canvas.ReadOnly,select_all=True,deselect_all=selected)
         elif context=="timeline":
             states=dict(copy=bool(self.Timeline.Selected()),paste=True,delete=bool(self.Timeline.Selected()),rename=False,duplicate=bool(self.Timeline.Selected()),select_all=True,deselect_all=True)
         elif context=="animation":
@@ -304,6 +309,13 @@ class Editor(QMainWindow):
             elif command=="deselect_all":
                 if isinstance(widget,QLineEdit):widget.deselect()
                 else:cursor=widget.textCursor();cursor.clearSelection();widget.setTextCursor(cursor)
+        elif context=="behavior":
+            ws=widget.Workspace
+            if widget.Tabs.currentIndex()==1:
+                if command in ("copy","paste","select_all"):getattr(widget.Source,{"select_all":"selectAll"}.get(command,command))()
+            elif command in ("copy","paste","duplicate","select_all","delete"):
+                getattr(ws,{"copy":"Copy","paste":"Paste","duplicate":"Duplicate","select_all":"SelectAll","delete":"DeleteSelection"}[command])()
+            elif command=="deselect_all":ws.Selection.Clear()
         elif context=="timeline":
             if command in ('copy','paste','delete','duplicate'):getattr(self.Timeline,command.capitalize())()
             elif command=='select_all':
@@ -453,6 +465,7 @@ class Editor(QMainWindow):
         )
         self.Docking.add_panel(self.AudioMixer,tr("panel.audio_mixer"),self._PanelIcon("audio_mixer"),relative_to=assets,panel_id="audio_mixer")
         self.Docking.add_panel(self.Macros,tr("panel.macros"),self._PanelIcon("macros"),relative_to=assets,panel_id="macros")
+        self.Docking.add_panel(self.BehaviorTree,tr("panel.behavior_tree"),self._PanelIcon("behavior_tree"),relative_to=assets,panel_id="behavior_tree")
         self.Docking.add_panel(self.ShaderGraph,tr("panel.shader_graph"),self._PanelIcon("shader_graph"),relative_to=assets,panel_id="shader_graph")
         self.Docking.add_panel(self.Timeline,tr("panel.timeline"),self._PanelIcon("timeline"),relative_to=assets,panel_id="timeline")
         self.Docking.add_panel(self.Animation,tr("panel.animation"),self._PanelIcon("animation"),relative_to=assets,panel_id="animation")
@@ -519,6 +532,8 @@ class Editor(QMainWindow):
         self.Animation.EndPreview()
         if not self.VFXGraph.Flush():
             QMessageBox.warning(self,self.Localization.Translate("panel.vfx_graph"),self.VFXGraph.Error.text());event.ignore();return
+        if not self.BehaviorTree.Flush():
+            QMessageBox.warning(self,self.Localization.Translate("panel.behavior_tree"),self.BehaviorTree.Error.text());event.ignore();return
         if not self.ShaderGraph.Flush():
             QMessageBox.warning(self,self.Localization.Translate("panel.shader_graph"),self.ShaderGraph.Error.text());event.ignore();return
         if not self.AudioMixer.Flush():

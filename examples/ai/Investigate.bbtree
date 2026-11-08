@@ -1,0 +1,18 @@
+<BehaviorTree version="1" locked="true">
+  <Blackboard>
+    <Vector key="target" x="10" y="1" z="0"/>
+    <Number key="investigate" value="0.8"/>
+    <Number key="idle" value="0.2"/>
+  </Blackboard>
+  <Tree>
+    <Utility>
+      <Option key="investigate" weight="1">
+        <Sequence>
+          <MoveTo key="target" speed="3" radius="0.3"/>
+          <Wait seconds="1"/>
+        </Sequence>
+      </Option>
+      <Option key="idle" weight="1"><Wait seconds="2"/></Option>
+    </Utility>
+  </Tree>
+</BehaviorTree>

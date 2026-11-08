@@ -1,3 +1,5 @@
+#include "Bazzalt/AI.h"
+#include "AI/BehaviorModuleApi.h"
 #include "Bazzalt/Timeline.h"
 #include "Bazzalt/Navigation.h"
 #include "Bazzalt/Scene.h"
@@ -337,6 +339,26 @@ public:std::string GetName()const override{return "Bazzalt.AnimationController";
  bool Supports(const std::filesystem::path& path)const override{return LowerExtension(path)==".banim";}
  bool Import(const AssetImportContext& c,std::string& error)override{try{auto size=std::filesystem::file_size(c.SourcePath);if(size>1024*1024)throw std::invalid_argument("Animation controller exceeds 1 MiB");std::ifstream file(c.SourcePath,std::ios::binary);std::string source(std::size_t(size),'\0');if(!file.read(source.data(),std::streamsize(size)))throw std::invalid_argument("Cannot read animation controller");AnimationController::FromSource(source);return CopyAsset(c,error);}catch(const std::exception& e){error=e.what();return false;}}
 };
+class BehaviorTreeImporter final:public AssetImporter {
+public:
+ std::string GetName()const override{return "Bazzalt.BehaviorTree";}
+ std::uint32_t GetVersion()const override{return 2;}
+ bool Supports(const std::filesystem::path& path)const override{return LowerExtension(path)==".bbtree";}
+ bool CollectDependencies(const AssetInfo& asset,AssetDependencyReport& report)const override{
+    report.Asset=asset.Id;report.State=AssetDependencyScanState::Partial;
+    const auto size=std::filesystem::file_size(asset.SourcePath);if(size>1024*1024)throw std::invalid_argument("Behavior tree exceeds 1 MiB");
+    std::ifstream input(asset.SourcePath,std::ios::binary);std::string source(std::size_t(size),'\0');if(!input.read(source.data(),std::streamsize(size)))throw std::runtime_error("Cannot read behavior dependencies");
+    for(auto id:BehaviorModule().References(source))report.References.push_back({asset.Id,id,{},"String.Value"});
+    // Custom actions can resolve additional assets by name or computed values.
+    return true;
+ }
+ bool Import(const AssetImportContext& c,std::string& error)override{try{
+    auto size=std::filesystem::file_size(c.SourcePath);if(size>1024*1024)throw std::invalid_argument("Behavior tree exceeds 1 MiB");
+    std::ifstream file(c.SourcePath,std::ios::binary);std::string source(std::size_t(size),'\0');
+    if(!file.read(source.data(),std::streamsize(size)))throw std::invalid_argument("Cannot read behavior tree");
+    AI::BehaviorTree::FromSource(source);return CopyAsset(c,error);
+ }catch(const std::exception& e){error=e.what();return false;}}
+};
 class VFXImporter final : public AssetImporter {
 public:
  std::string GetName()const override{return "Bazzalt.VFX";}
@@ -495,6 +517,7 @@ AssetDatabase::AssetDatabase() {
     };
     RegisterImporter(std::make_unique<RawImporter>());
     RegisterImporter(std::make_unique<VFXImporter>());
+    RegisterImporter(std::make_unique<BehaviorTreeImporter>());
     RegisterImporter(std::make_unique<AnimationControllerImporter>());
     RegisterImporter(std::make_unique<TimelineImporter>());
     RegisterImporter(std::make_unique<NavigationImporter>());

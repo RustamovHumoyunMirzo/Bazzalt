@@ -13,6 +13,7 @@
 #include "Runtime/Engine.h"
 #include "Bazzalt/Systems/ParticleSystem.h"
 #include "Bazzalt/Systems/AnimationSystem.h"
+#include "Bazzalt/Systems/BehaviorTreeSystem.h"
 #include "Bazzalt/Console.h"
 #include "Runtime/GraphicsAccess.h"
 #include "Physics/PhysicsModuleApi.h"
@@ -558,7 +559,7 @@ bool Engine::StartScripts(bool resetTime){
     if(!m_luaRuntime->Start(m_lastError)){m_scriptRuntime->Stop();m_audioRuntime->Stop();ReleaseNavigationScene(*m_scene);PhysicsModule().Stop(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationAccess::SetAudioReady(false);ApplicationAccess::SetServicesReady(false);return false;}
     m_scriptsRunning=true;if(!m_streaming->StartScripts()){StopScripts();return false;}ApplicationEventsAccess::Emit({ApplicationEventType::OnPlay});return true;
 }
-void Engine::StopScripts(){m_streaming->StopScripts();if(m_scriptsRunning){ApplicationEventsAccess::Emit({ApplicationEventType::OnStop});m_scriptsRunning=false;}m_luaRuntime->Stop();m_scriptRuntime->Stop();Cinematics::StopAll(*m_scene);ReleaseNavigationScene(*m_scene);ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforePhysicsShutdown});ReleasePhysicsScene(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterPhysicsShutdown});m_audioRuntime->Stop();ApplicationAccess::SetAudioReady(false);if(m_scene->HasSystem<ParticleSystem>()){m_scene->RemoveSystem<ParticleSystem>();m_scene->AddSystem<ParticleSystem>();}if(m_scene->HasSystem<AnimationSystem>()){m_scene->RemoveSystem<AnimationSystem>();m_scene->AddSystem<AnimationSystem>();}GraphicsAccess::CancelFrame();ResetRuntimeMaterials();ResetRuntimeTextures();}
+void Engine::StopScripts(){m_streaming->StopScripts();if(m_scriptsRunning){ApplicationEventsAccess::Emit({ApplicationEventType::OnStop});m_scriptsRunning=false;}if(m_scene->HasSystem<BehaviorTreeSystem>()){m_scene->RemoveSystem<BehaviorTreeSystem>();m_scene->AddSystem<BehaviorTreeSystem>();}m_luaRuntime->Stop();m_scriptRuntime->Stop();Cinematics::StopAll(*m_scene);ReleaseNavigationScene(*m_scene);ApplicationEventsAccess::Emit({ApplicationEventType::OnBeforePhysicsShutdown});ReleasePhysicsScene(*m_scene);ApplicationAccess::SetPhysicsReady(false);ApplicationEventsAccess::Emit({ApplicationEventType::OnAfterPhysicsShutdown});m_audioRuntime->Stop();ApplicationAccess::SetAudioReady(false);if(m_scene->HasSystem<ParticleSystem>()){m_scene->RemoveSystem<ParticleSystem>();m_scene->AddSystem<ParticleSystem>();}if(m_scene->HasSystem<AnimationSystem>()){m_scene->RemoveSystem<AnimationSystem>();m_scene->AddSystem<AnimationSystem>();}GraphicsAccess::CancelFrame();ResetRuntimeMaterials();ResetRuntimeTextures();}
 
 bool Engine::PrepareApplication(){
     if(m_applicationPrepared)return true;

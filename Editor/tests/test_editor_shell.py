@@ -546,7 +546,7 @@ class EditorShellTests(unittest.TestCase):
     def test_default_workspace_registers_all_builtin_panels(self) -> None:
         self.assertEqual(
             {panel.panel_id for panel in self.Window.Docking.panels()},
-            {"console", "output", "scene", "hierarchy", "properties", "asset_browser", "audio_mixer", "shader_graph", "vfx_graph", "animation", "timeline", "macros"},
+            {"console", "output", "scene", "hierarchy", "properties", "asset_browser", "audio_mixer", "shader_graph", "vfx_graph", "animation", "timeline", "macros", "behavior_tree"},
         )
         self.assertTrue(all(not panel.icon.isNull() for panel in self.Window.Docking.panels()))
 
@@ -564,6 +564,24 @@ class EditorShellTests(unittest.TestCase):
                     with patch.object(self.Window.Controller,'_FocusedGraph',return_value=graph),patch.object(self.Window.Controller,'SaveScene',return_value=True) as scene_save:
                         self.Window.Controller.Undo();self.assertEqual(len(graph.Graph['nodes']),initial+2)
                         self.assertTrue(self.Window.Controller.SaveActiveDocument());scene_save.assert_not_called()
+
+    def test_behavior_document_uses_editor_history_routing(self):
+        import tempfile
+        from unittest.mock import patch
+        from Editor import behavior_tree as B
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'NPC.bbtree';B.Save(path,B.NewTree());panel=self.Window.BehaviorTree
+            panel.AssetChanged.disconnect(self.Window.Controller._GraphChanged)
+            self.Window.Controller.OpenBehaviorTree(path)
+            self.assertEqual(panel.Path,path)
+            wait=next(b for b in panel.Workspace.Blocks() if b.Type=='Wait')
+            panel.Workspace.SetFieldValue(wait,'seconds',2)
+            with patch.object(self.Window.Controller,'_FocusedGraph',return_value=panel),patch.object(self.Window.Controller,'SaveScene') as scene_save:
+                self.Window.Controller.Undo();self.assertEqual(wait.Values['seconds'],1)
+                self.Window.Controller.Redo();self.assertEqual(wait.Values['seconds'],2)
+                self.assertTrue(self.Window.Controller.SaveActiveDocument());scene_save.assert_not_called()
+            self.Window.Controller.UnlockShaderGraph(path);self.assertFalse(panel.Source.isReadOnly())
+            panel.Timer.stop();panel.ResetDocument()
 
     def test_console_api_filters_and_clears_messages(self) -> None:
         self.Window.Console.AddMessage("built", ConsoleLevel.Info)
