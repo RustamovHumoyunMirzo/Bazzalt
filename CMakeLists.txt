@@ -231,6 +231,12 @@ file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 list(FILTER LIB_SOURCES EXCLUDE REGEX "/EditorBridge/")
+set(_canonical_core_sources)
+foreach(_source IN LISTS LIB_SOURCES)
+    get_filename_component(_canonical "${_source}" REALPATH)
+    list(APPEND _canonical_core_sources "${_canonical}")
+endforeach()
+set(LIB_SOURCES ${_canonical_core_sources})
 get_property(_module_sources GLOBAL PROPERTY BAZZALT_RUNTIME_IMPLEMENTATION_SOURCES)
 get_property(_builtin_sources GLOBAL PROPERTY BAZZALT_RUNTIME_EXCLUDED_SOURCES)
 list(REMOVE_ITEM LIB_SOURCES ${_module_sources} ${_builtin_sources})

@@ -49,6 +49,7 @@ class RuntimeProviderTests(unittest.TestCase):
     def Configure(self, folder, body):
         folder = Path(folder)
         (folder / "module.cpp").write_text("int Example() { return 1; }\n")
+        (folder / "original.cpp").write_text("#error The replaced implementation must stay excluded\n")
         (folder / "CMakeLists.txt").write_text(
             'cmake_minimum_required(VERSION 3.16)\nproject(ProviderTest LANGUAGES CXX)\n'
             f'include("{ROOT.as_posix()}/cmake/RuntimeModules.cmake")\n' + body)
@@ -66,9 +67,10 @@ set(BAZZALT_TEST_PROVIDER "${PROJECT_SOURCE_DIR}/provider.cmake" CACHE FILEPATH 
 bazzalt_load_runtime_module(TEST TestModule studio "missing-default.cmake" original.cpp)
 get_property(excluded GLOBAL PROPERTY BAZZALT_RUNTIME_EXCLUDED_SOURCES)
 get_property(owned GLOBAL PROPERTY BAZZALT_RUNTIME_IMPLEMENTATION_SOURCES)
-if(NOT "${PROJECT_SOURCE_DIR}/original.cpp" IN_LIST excluded OR
-   NOT "${PROJECT_SOURCE_DIR}/module.cpp" IN_LIST owned)
-    message(FATAL_ERROR "Provider source ownership was lost")
+get_filename_component(expected_original "${PROJECT_SOURCE_DIR}/original.cpp" REALPATH)
+get_filename_component(expected_implementation "${PROJECT_SOURCE_DIR}/module.cpp" REALPATH)
+if(NOT expected_original IN_LIST excluded OR NOT expected_implementation IN_LIST owned)
+    message(FATAL_ERROR "Provider source ownership was lost: excluded=${excluded}, owned=${owned}, expected=${expected_original},${expected_implementation}")
 endif()
 foreach(core Bazzalt BazzaltCrypto BazzaltLua)
     add_library(${core} SHARED module.cpp)

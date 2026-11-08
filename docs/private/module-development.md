@@ -32,6 +32,8 @@ ordering, errors and data compatibility.
 Default and replacement implementation sources are excluded from the core's
 recursive inventory. A source cannot belong to two registered providers. This
 prevents backend code from silently compiling into both the core and a provider.
+Ownership uses canonical paths, including Windows short-path aliases and source
+symlinks. Keep the core inventory and provider source keys normalized together.
 
 ## Add implementation code
 
