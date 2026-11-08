@@ -19,7 +19,17 @@ if (Test-Path $FilamentDirectory) {
 }
 
 try {
-    Invoke-WebRequest -Uri $DownloadUrl -OutFile $ArchivePath
+    for ($Attempt = 1; $Attempt -le 4; ++$Attempt) {
+        try {
+            Invoke-WebRequest -Uri $DownloadUrl -OutFile $ArchivePath -TimeoutSec 120
+            break
+        } catch {
+            if (Test-Path -LiteralPath $ArchivePath) { Remove-Item -LiteralPath $ArchivePath }
+            if ($Attempt -eq 4) { throw }
+            Write-Warning "Filament download failed (attempt $Attempt/4). Retrying."
+            Start-Sleep -Seconds (2 * $Attempt)
+        }
+    }
     $ActualSha256 = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($ActualSha256 -ne $ExpectedSha256) {
         throw "Filament archive integrity check failed. Expected $ExpectedSha256, got $ActualSha256."

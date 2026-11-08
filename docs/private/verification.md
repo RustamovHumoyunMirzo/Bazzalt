@@ -36,6 +36,10 @@ Provider tests configure/build a tiny fixture without engine dependencies. The
 native loader test uses the actual sibling AI module, including missing entries,
 wrong version/size and changed working directory.
 
+For Windows Filament fetching changes, run `python -m unittest discover -s tests
+-p test_filament_download.py`. It simulates transient/persistent network failures
+and verifies that checksum failures prevent extraction, without downloading the SDK.
+
 ```powershell
 $env:QT_QPA_PLATFORM = 'offscreen'
 $env:PYTHONUTF8 = '1'
