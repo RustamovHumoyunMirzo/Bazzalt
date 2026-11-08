@@ -56,9 +56,11 @@ void* LoadSiblingModuleSymbol(const std::string& library, const std::string& sym
         const auto path = CoreDirectory() / (library + ".dll");
         auto handle = LoadLibraryExW(path.c_str(), nullptr,
             LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
-        if (!handle)
-            throw std::runtime_error("Could not load sibling " + library + " (Windows error " +
-                                     std::to_string(GetLastError()) + ")");
+        if (!handle) {
+            const auto error = GetLastError();
+            throw std::runtime_error("Could not load sibling " + library + ".dll (Windows error " +
+                                     std::to_string(error) + ")");
+        }
         auto module = reinterpret_cast<void*>(handle);
 #else
 #ifdef __APPLE__

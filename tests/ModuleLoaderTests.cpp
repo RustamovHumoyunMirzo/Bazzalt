@@ -20,7 +20,14 @@ int main() {
     using namespace Bazzalt::Runtime;
     Reject([] { LoadSiblingModuleSymbol("../bazzalt_ai", "Entry"); }, "identifiers");
     Reject([] { LoadSiblingModuleSymbol("bazzalt_ai", ""); }, "identifiers");
-    Reject([] { LoadSiblingModuleSymbol("bazzalt_missing_test_module", "Entry"); }, "sibling");
+#ifdef _WIN32
+    const std::string missingFile = "bazzalt_missing_test_module.dll";
+#elif defined(__APPLE__)
+    const std::string missingFile = "libbazzalt_missing_test_module.dylib";
+#else
+    const std::string missingFile = "libbazzalt_missing_test_module.so";
+#endif
+    Reject([] { LoadSiblingModuleSymbol("bazzalt_missing_test_module", "Entry"); }, missingFile);
     Reject([] { LoadSiblingModuleSymbol("bazzalt_ai", "BazzaltMissingTestEntry"); }, "Missing");
     // A failed lookup must leave the real entry usable, including from a different CWD.
     const auto original = std::filesystem::current_path();
