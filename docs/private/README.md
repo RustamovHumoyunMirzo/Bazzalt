@@ -26,7 +26,7 @@ request as its implementation. Gameplay usage and callable reference remain in
 | Assets | [Import pipeline](assets.md), [dependencies](asset-dependencies.md), [model hierarchies](model-hierarchies.md) |
 | Execution | [Time](time.md), [input](input.md), [jobs/profiling](jobs-profiler.md), [optimization work](optimizations-0.8.md) |
 | Physics and AI | [Jolt](physics.md), [replay](physics-replay.md), [navigation](navigation.md), [behavior trees](behavior-trees.md) |
-| Animation and worlds | [Animation](animation.md), [cinematics](cinematics.md), [streaming/instancing](streaming-instancing.md) |
+| Animation and worlds | [Animation](animation.md), [cinematics](cinematics.md), [streaming/instancing](streaming-instancing.md), [terrain](terrain.md) |
 | Audio | [Audio runtime](audio.md), [mixer effects](audio-mixer-effects.md) |
 | Diagnostics | [Developer console](developer-console.md), [scripting console](scripting-console.md) |
 

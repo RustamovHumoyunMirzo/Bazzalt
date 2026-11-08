@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Include Bazzalt/Terrain.h. Terrain is a normal enabled component. Its serialized data contains no editor or renderer handles. Coordinates passed to terrain methods are local to the terrain entity; use its world matrix to convert world positions.">
+  <title>Terrain C++ API | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / C++ / Terrain C++ API</nav>
+      <article class="doc"><h1 id="overview">Terrain C++ API</h1>
+<p>Include <code>Bazzalt/Terrain.h</code>. Terrain is a normal enabled component. Its serialized data contains no editor or renderer handles. Coordinates passed to terrain methods are local to the terrain entity; use its world matrix to convert world positions.</p>
+<h2 id="example">Sculpt through code</h2><pre><code>#include &lt;Bazzalt/Terrain.h&gt;
+auto&amp; terrain = entity.AddComponent&lt;Bazzalt::Terrain&gt;();
+terrain.Size = {10, 10};
+Bazzalt::TerrainBrush brush;
+brush.Radius = 2;
+brush.Strength = 1;
+terrain.ApplyBrush(Bazzalt::TerrainTool::Raise, {0, 0}, brush, 0.5f);
+float height = terrain.GetHeight(0, 0);
+auto hit = Bazzalt::TerrainGeometry::Raycast(terrain, {0, 20, 0}, {0, -1, 0});</code></pre>
+<h2 id="methods">Mutation and sampling</h2><p>IsValid checks all fields and storage budgets. MarkDirty assigns a new render/collision revision. Call it after modifying public fields or sample arrays directly. Methods that change data call it automatically. Resize resamples existing heights, coverage and holes. AddLayer returns a zero-based index; RemoveLayer keeps at least one layer.</p>
+<p>GetHeight samples the composed surface. GetNormal and GetSlope return its local normal and slope in degrees. Sampling outside its XZ extent clamps to its edge. IsHole reads a cell coordinate. ApplyBrush accepts a TerrainTool, local XZ centre, TerrainBrush and elapsed seconds. ImportHeightmap and ImportSplatmap accept finite row-major samples and dimensions; height import has an optional scale.</p>
+<p>ApplySpline applies a saved spline to a layer. ApplyBoolean combines an upright source terrain using its source-to-local matrix. GenerateVegetation rebuilds one prototype's placements; PaintVegetation places or erases a bounded area. Invalid operations throw standard exceptions. Validate direct edits before publishing them to a live component.</p>
+<h2 id="geometry">Geometry and queries</h2><p>TerrainGeometry.BuildChunk returns CPU vertices and triangle indices for chunk coordinates and optional LOD. Vertices include position, normal, UV and blended color. Render skirts are included when SkirtDepth is positive; set it to zero on a copy when baking collision. Raycast returns an optional TerrainHit containing Position, Normal and Distance. It uses the authoritative full-resolution surface, including holes, independently of visual LOD. Ray directions are normalized; the distance is in terrain-local units.</p>
+<h2 id="records">Configuration records</h2><p>TerrainLayer stores Heightmap, Splatmap and Material UUID references, color, tiling, opacity, blend mode and optional Heights/Weights arrays. TerrainBrush stores radius, strength, falloff, target height, layer index and an optional normalized row-major stamp. TerrainVegetation stores model/material references and generation filters. TerrainInstance stores prototype index, position, rotation and uniform scale. TerrainSpline stores local points, width, shoulder, depth, strength and closed state.</p>
+<p>The generated reference pages list every field and signature for these types. See the editor manual for default values, budgets, material-boundary behavior and heightfield limitations.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../subsystems/en.html"><small>Previous</small>Global subsystems</a>
+<a class="next" href="../timeline/en.html"><small>Next</small>Cinematics in C++</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Sculpt through code</a><a class="toc-link" href="#methods">Mutation and sampling</a><a class="toc-link" href="#geometry">Geometry and queries</a><a class="toc-link" href="#records">Configuration records</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

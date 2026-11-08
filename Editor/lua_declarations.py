@@ -32,9 +32,9 @@ def _Rules(tokens):
     except RuleError as error:raise DeclarationError(str(error)) from error
 
 def ReadDeclarations(text):
-    tokens=_Tokens(text);components=[];properties=[];section=""
+    tokens=_Tokens(text);components=[];properties=[];section="";tab=""
     for i,token in enumerate(tokens):
-        if token not in ('COMPONENT','PROPERTY','SECTION') or i+1>=len(tokens) or tokens[i+1]!='(':continue
+        if token not in ('COMPONENT','PROPERTY','SECTION','TAB') or i+1>=len(tokens) or tokens[i+1]!='(':continue
         if i and tokens[i-1] in ('.',':','function'):continue
         depth=0;args=[];start=i+2;end=None
         for j in range(start,len(tokens)):
@@ -44,10 +44,11 @@ def ReadDeclarations(text):
             elif value in (')','}',']'):depth-=1
             elif value==',' and depth==0:args.append(tokens[start:j]);start=j+1
         if end is None:raise DeclarationError('Unclosed Lua declaration')
-        if token=='SECTION':
+        if token in ('SECTION','TAB'):
             if len(args)!=1 or len(args[0])!=1:raise DeclarationError('Use SECTION("Title")')
             section=_String(args[0][0])
-            try:CheckRules({"Section":section})
+            if token=='TAB':tab=section;section=''
+            try:CheckRules({"Section":section,"Tab":tab})
             except RuleError as error:raise DeclarationError(str(error)) from error
         elif token=='COMPONENT':
             if i<3 or tokens[i-1]!='=' or tokens[i-3]!='local' or len(args)!=1 or len(args[0])!=1:raise DeclarationError('Use local Name = COMPONENT("Name")')
@@ -58,6 +59,7 @@ def ReadDeclarations(text):
             if i<4 or tokens[i-1]!='=' or tokens[i-3]!='.' or len(args) not in (2,3) or len(args[0])!=1:raise DeclarationError('Use Name.Field = PROPERTY("type", default, {options})')
             rules=_Rules(args[2]) if len(args)==3 else {}
             if section:rules.setdefault('Section',section)
+            if tab:rules.setdefault('Tab',tab)
             kind=_String(args[0][0]);default=''.join(args[1])
             try:CheckTypeRules(kind,rules)
             except RuleError as error:raise DeclarationError(str(error)) from error
@@ -68,6 +70,12 @@ def ReadDeclarations(text):
                 if not valid:raise DeclarationError('Scalar PROPERTY defaults must be literal values')
                 if kind=='int' and not re.fullmatch(r'[+-]?\d+',default):raise DeclarationError('Integer PROPERTY defaults must be integers')
                 if kind in ('float','double','int') and (not math.isfinite(float(default)) or kind=='int' and not -2147483648<=int(default)<=2147483647):raise DeclarationError('Numeric PROPERTY default is out of range')
+            elif kind in ('FloatList','IntList'):
+                if not default.startswith('{') or not default.endswith('}'):raise DeclarationError('List defaults must be literal numeric tables')
+                parts=default[1:-1].split(',') if default[1:-1] else []
+                if len(parts)>1024 or any(not re.fullmatch(r'[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?',v) or not math.isfinite(float(v)) for v in parts):raise DeclarationError('Invalid list default')
+                if kind=='IntList' and any(not re.fullmatch(r'[+-]?\d+',v) or not -2147483648<=int(v)<=2147483647 for v in parts):raise DeclarationError('Invalid integer list default')
+                default=','.join(parts)
             elif kind in vectors:
                 match=re.fullmatch(r'(?:B|Bazzalt)\.'+kind+r'\.new\((.*)\)',default)
                 values=match[1].split(',') if match else []

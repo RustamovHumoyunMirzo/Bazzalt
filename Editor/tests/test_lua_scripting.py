@@ -61,6 +61,10 @@ return Walk
             expanded=macros[invocation[2]]
             for child in re.findall(r"(BAZZALT_\w+_FIELDS)\(X\)",expanded):expanded=expanded.replace(child+"(X)",macros[child])
             bindings+="\n"+"\n".join("&"+invocation[1]+"::"+field for field in re.findall(r"X\((\w+),",expanded))
+        typed_fields=list(re.finditer(r"\bFIELD\(\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\)",bindings))
+        if typed_fields:
+            self.assertIn('#define FIELD(Type,Value,Name) Value[#Name]=&Type::Name;',bindings)
+            bindings+="\n"+"\n".join("&"+match[1]+"::"+match[3] for match in typed_fields if match[1]!='Type')
         for header in (root/"include/Bazzalt/Components").glob("*.h"):
             text=header.read_text(encoding="utf-8")
             # Data fields are a binding contract; native templates/traits are not.

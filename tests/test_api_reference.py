@@ -33,6 +33,10 @@ class ApiReferenceTests(unittest.TestCase):
         self.assertIn('Volume',types['AudioBusSettings'][1])
         self.assertIn('FadeTo',types['AudioVoice'][1])
         self.assertIn('Length',types['Vec3'][1])
+        self.assertIn('Size',types['Terrain'][1])
+        self.assertIn('Layers',types['Terrain'][1])
+        self.assertIn('Radius',types['TerrainBrush'][1])
+        self.assertIn('Heightmap',types['TerrainLayer'][1])
 
     def test_access_sections_templates_and_initializers(self):
         source='''class Sample {

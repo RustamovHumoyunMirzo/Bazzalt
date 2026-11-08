@@ -7,6 +7,7 @@
 #include "Prefab/PrefabAccess.h"
 #include "Bazzalt/Profiler.h"
 #include "EditorBridge/LODBridge.h"
+#include "EditorBridge/TerrainBridge.h"
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -141,7 +142,7 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
     if (const auto* vignette=entity.TryGetComponent<Vignette>()) { py::dict v;v["Color"]=py::make_tuple(vignette->Color.X,vignette->Color.Y,vignette->Color.Z,vignette->Color.W);v["Intensity"]=vignette->Intensity;v["Smoothness"]=vignette->Smoothness;v["Roundness"]=vignette->Roundness;data["Vignette"]=v; }
     if (const auto* bounds=entity.TryGetComponent<SceneQueryBounds>()) { py::dict v;v["Shape"]=static_cast<int>(bounds->Shape);v["Center"]=py::make_tuple(bounds->Center.X,bounds->Center.Y,bounds->Center.Z);v["Extents"]=py::make_tuple(bounds->Extents.X,bounds->Extents.Y,bounds->Extents.Z);v["Radius"]=bounds->Radius;v["Layer Mask"]=bounds->LayerMask;data["Scene Query Bounds"]=v; }
     InspectGUI(entity,components,enabled,data);
-    InspectAudio(entity,components,enabled,data);InspectPhysics(entity,components,enabled,data);InspectLOD(entity,components,enabled,data);InspectAdvancedLOD(entity,components,enabled,data);
+    InspectAudio(entity,components,enabled,data);InspectPhysics(entity,components,enabled,data);InspectLOD(entity,components,enabled,data);InspectAdvancedLOD(entity,components,enabled,data);InspectTerrain(entity,components,enabled,data);
     result["components"]=components;result["component_enabled"]=enabled;
     result["component_data"] = data;
     return result;
@@ -535,6 +536,7 @@ public:
 
     bool AddComponent(const std::string& id, const std::string& type) {
         Entity entity = RequireEntity(id);
+        if(type=="Terrain"){if(!entity.HasComponent<Terrain>())entity.AddComponent<Terrain>();return true;}
         if(type=="HLOD"&&entity.HasComponent<LOD>())return false;
         if(AdvancedLODDispatch(entity,type,[]<class T>(Entity e){if(!e.HasComponent<T>())e.AddComponent<T>();}))return true;
         if(type=="LOD"){if(entity.HasComponent<HLOD>())return false;if(!entity.HasComponent<LOD>())entity.AddComponent<LOD>();return true;}
@@ -554,6 +556,7 @@ public:
     bool RemoveComponent(const std::string& id, const std::string& type) {
         Entity entity = RequireEntity(id);
         if(AdvancedLODDispatch(entity,type,[]<class T>(Entity e){if(e.HasComponent<T>())e.RemoveComponent<T>();}))return true;
+        if(type=="Terrain"){if(entity.HasComponent<Terrain>())entity.RemoveComponent<Terrain>();return true;}
         if(type=="LOD"){if(entity.HasComponent<LOD>())entity.RemoveComponent<LOD>();return true;}
         if(PhysicsDispatch(entity,type,[]<class T>(Entity e){if(e.HasComponent<T>())e.RemoveComponent<T>();}))return true;
         if(AudioDispatch(entity,type,[]<class T>(Entity e){if(e.HasComponent<T>())e.RemoveComponent<T>();}))return true;
@@ -570,6 +573,7 @@ public:
     bool SetComponentEnabled(const std::string& id, const std::string& type, bool enabled) {
         Entity entity = RequireEntity(id);
         if(AdvancedLODDispatch(entity,type,[enabled]<class T>(Entity e){if(e.HasComponent<T>())e.SetComponentEnabled<T>(enabled);}))return true;
+        if(type=="Terrain"){if(entity.HasComponent<Terrain>())entity.SetComponentEnabled<Terrain>(enabled);return true;}
         if(type=="LOD"){if(entity.HasComponent<LOD>())entity.SetComponentEnabled<LOD>(enabled);return true;}
         if(PhysicsDispatch(entity,type,[enabled]<class T>(Entity e){if(e.HasComponent<T>())e.SetComponentEnabled<T>(enabled);}))return true;
         if(AudioDispatch(entity,type,[enabled]<class T>(Entity e){if(e.HasComponent<T>())e.SetComponentEnabled<T>(enabled);}))return true;
@@ -637,9 +641,10 @@ public:
 
     py::list AnimationRetargetMap(const std::string& id,const std::string& source,bool humanoid=false){auto info=AnimationInfo(id);if(!m_animationRig)throw std::invalid_argument("Select a target model");UUID asset;if(!UUID::TryParse(source,asset))throw std::invalid_argument("Invalid source model");auto rig=AnimationRig::Load(asset);auto mapping=humanoid?Animation::MapHumanoid(rig->Rig,HumanoidAvatar::Detect(rig->Rig),m_animationRig->Rig,HumanoidAvatar::Detect(m_animationRig->Rig)):Animation::MapByName(rig->Rig,m_animationRig->Rig);py::list result;for(auto& bone:mapping.Bones){py::dict row;row["source"]=bone.Source;row["target"]=bone.Target;row["copyTranslation"]=bone.CopyTranslation;result.append(row);}return result;}
     py::dict PreviewAnimationController(const std::string& id,const std::string& source,float delta,const py::dict& parameters,bool reset){BeginAnimationPreview(id);auto e=RequireEntity(id);if(reset){Animation::SetController(e,AnimationController::FromSource(source));Animation::Play(e);}for(auto item:parameters)Animation::SetParameter(e,py::cast<std::string>(item.first),py::cast<float>(item.second));Animation::Evaluate(e,delta);auto status=Animation::GetStatus(e);py::dict out;out["state"]=status.State;out["time"]=status.Time;out["weight"]=status.TransitionWeight;return out;}
+    py::dict EditTerrain(const std::string& id,const std::string& command,py::dict values){if(IsPlaying()&&command!="hit")throw std::logic_error("Stop Play before editing terrain");return TerrainCommand(RequireEntity(id),command,values);}
     py::list ComponentTypes() const {
         py::list result;
-        result.append("Behavior Tree Agent");result.append("NavMesh Surface");result.append("Navigation Agent");result.append("Navigation Obstacle");result.append("NavMesh Modifier");result.append("Timeline Director");result.append("Lightmap");result.append("Reflection Probe");result.append("Light Probe");result.append("World Cell");result.append("Streaming Source");result.append("IK Constraint");result.append("Animator");result.append("Particle Emitter");result.append("HLOD");result.append("LOD Transition");result.append("Impostor");result.append("LOD");result.append("Rigidbody");result.append("Shape Collider");result.append("Mesh Collider");result.append("Joint");result.append("Distance Joint");result.append("Hinge Joint");result.append("Slider Joint");result.append("Ball And Socket Joint");result.append("Fixed Joint");result.append("Cloth");result.append("Rope");result.append("Vehicle");result.append("Vehicle Wheel");result.append("Wheel Suspension");result.append("Wheel Tire");result.append("Wheel Brake");result.append("Wheel Steering");result.append("Vehicle Engine");result.append("Vehicle Transmission");result.append("Vehicle Differential");result.append("Vehicle Anti Roll Bar");result.append("Vehicle Aerodynamics");result.append("Audio Source");result.append("Audio Listener");
+        result.append("Terrain");result.append("Behavior Tree Agent");result.append("NavMesh Surface");result.append("Navigation Agent");result.append("Navigation Obstacle");result.append("NavMesh Modifier");result.append("Timeline Director");result.append("Lightmap");result.append("Reflection Probe");result.append("Light Probe");result.append("World Cell");result.append("Streaming Source");result.append("IK Constraint");result.append("Animator");result.append("Particle Emitter");result.append("HLOD");result.append("LOD Transition");result.append("Impostor");result.append("LOD");result.append("Rigidbody");result.append("Shape Collider");result.append("Mesh Collider");result.append("Joint");result.append("Distance Joint");result.append("Hinge Joint");result.append("Slider Joint");result.append("Ball And Socket Joint");result.append("Fixed Joint");result.append("Cloth");result.append("Rope");result.append("Vehicle");result.append("Vehicle Wheel");result.append("Wheel Suspension");result.append("Wheel Tire");result.append("Wheel Brake");result.append("Wheel Steering");result.append("Vehicle Engine");result.append("Vehicle Transmission");result.append("Vehicle Differential");result.append("Vehicle Anti Roll Bar");result.append("Vehicle Aerodynamics");result.append("Audio Source");result.append("Audio Listener");
         for (const char* name : {"Camera", "Light", "Mesh", "Primitive Object", "Scene Query Bounds", "Gaussian Blur", "Vignette"})
             result.append(name);
         for(auto name:GuiNames)result.append(name);
@@ -709,6 +714,7 @@ public:
         }
         Entity entity=RequireEntity(id);
         if(type=="Behavior Tree Agent"||type=="NavMesh Surface"||type=="Navigation Agent"||type=="Navigation Obstacle"||type=="NavMesh Modifier"||type=="Timeline Director"||type=="Lightmap"||type=="Reflection Probe"||type=="Light Probe"||type=="World Cell"||type=="Streaming Source"||type=="IK Constraint"||type=="Animator"||type=="Particle Emitter"||type=="HLOD"||type=="LOD Transition"||type=="Impostor")return SetAdvancedLODProperty(entity,type,property,value);
+        if(type=="Terrain")return SetTerrainProperty(entity,property,value);
         if(type=="LOD")return SetLODProperty(entity,property,value);
         if(type=="Rigidbody"||type=="Shape Collider"||type=="Mesh Collider"||type=="Joint"||type=="Distance Joint"||type=="Hinge Joint"||type=="Slider Joint"||type=="Ball And Socket Joint"||type=="Fixed Joint"||type=="Cloth"||type=="Rope"||type=="Vehicle"||type=="Vehicle Wheel"||type=="Wheel Suspension"||type=="Wheel Tire"||type=="Wheel Brake"||type=="Wheel Steering"||type=="Vehicle Engine"||type=="Vehicle Transmission"||type=="Vehicle Differential"||type=="Vehicle Anti Roll Bar"||type=="Vehicle Aerodynamics")return SetPhysicsProperty(entity,type,property,value);
         if(type=="Audio Source"||type=="Audio Listener")return SetAudioProperty(entity,type,property,value);
@@ -1068,6 +1074,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("animation_info", &Bazzalt::EditorBridge::EditorHost::AnimationInfo)
         .def("animation_preview", &Bazzalt::EditorBridge::EditorHost::PreviewAnimation)
         .def("animation_end_preview", &Bazzalt::EditorBridge::EditorHost::EndAnimationPreview)
+        .def("terrain_command", &Bazzalt::EditorBridge::EditorHost::EditTerrain)
         .def("component_types", &Bazzalt::EditorBridge::EditorHost::ComponentTypes)
         .def("scene_info", &Bazzalt::EditorBridge::EditorHost::SceneInfo)
         .def("developer_execute", &Bazzalt::EditorBridge::EditorHost::DeveloperExecute)

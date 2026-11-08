@@ -282,7 +282,7 @@ class HierarchyPanel(QWidget):
         parent = item.data(0,Qt.ItemDataRole.UserRole) if item and item.data(0,Qt.ItemDataRole.UserRole+1) in {"entity","scene"} else None
         create_menu=menu.addMenu(self._localization.Translate("hierarchy.add_new"))
         create_menu.setEnabled(not locked)
-        for title,kind in ((self._localization.Translate("hierarchy.empty"),"Entity"),("Camera","Camera"),("Light","Light")):
+        for title,kind in ((self._localization.Translate("hierarchy.empty"),"Entity"),("Camera","Camera"),("Light","Light"),(self._localization.Translate("terrain.title"),"Terrain")):
             action=create_menu.addAction(title);action.triggered.connect(lambda _=False,k=kind:self.CreateTypedRequested.emit(k,parent))
         primitives=create_menu.addMenu(self._localization.Translate("hierarchy.primitives"))
         for index,key in enumerate(("cube","sphere","cylinder","capsule","plane","cone","torus")):

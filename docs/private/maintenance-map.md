@@ -29,6 +29,7 @@ feature through its entry points and extend the owner that already serves it.
 
 | Task | Start here | Follow through |
 | --- | --- | --- |
+| Terrain authoring | `include/Bazzalt/Terrain.h`, `src/Terrain` | TerrainBridge, terrain overlay, collision source collection and LuaTerrain |
 | Component fields | Public `Components/*.h`, feature `*Fields.h` | Serializer, native inspector adapter, Lua bindings |
 | Component serialization | `SceneSerializer` in `src/Serialization/Serialization.cpp` | Feature registration helpers and `AdvancedLODSerialization.cpp` |
 | Inspector operations | `src/EditorBridge/PythonModule.cpp`, feature bridge headers | `Editor/gui/controller.py`, shared field widgets |

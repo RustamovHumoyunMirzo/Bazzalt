@@ -76,6 +76,15 @@ class ScriptCompiler:
         if depth:raise ScriptValidationError(f"{path}: component {match.group(1)} has an incomplete body")
         body=_CodeMask(text,False)[start:end];body_mask=mask[start:end]
         sections=[]
+        tabs=[]
+        for marker in re.finditer(r'\bTAB\s*\(([^)]*)\)',body):
+            if not body_mask[marker.start():].startswith("TAB"):continue
+            try:
+                title=ast.literal_eval(marker.group(1).strip())
+                from Editor.property_rules import CheckRules
+                CheckRules({"Tab":title})
+            except (ValueError,SyntaxError) as error:raise ScriptValidationError(f"{path}: invalid TAB declaration") from error
+            tabs.append((marker.start(),title))
         for marker in re.finditer(r"\bSECTION\s*\(([^)]*)\)",body):
             if not body_mask[marker.start():].startswith("SECTION"):continue
             try:
@@ -88,8 +97,11 @@ class ScriptCompiler:
         for m in _PROPERTY.finditer(body):
             if not body_mask[m.start():].startswith("PROPERTY"):continue
             attributes=tuple(a.strip() for a in (m.group(4) or "").split(",") if a.strip())
-            title=next((title for offset,title in reversed(sections) if offset<m.start()),"")
+            last_tab=next(((offset,title) for offset,title in reversed(tabs) if offset<m.start()),(-1,""))
+            title=next((title for offset,title in reversed(sections) if last_tab[0]<offset<m.start()),"")
             if title and not any(a.split('=',1)[0].strip()=="Section" for a in attributes):attributes+=("Section="+repr(title),)
+            tab=next((title for offset,title in reversed(tabs) if offset<m.start()),"")
+            if tab and not any(a.split('=',1)[0].strip()=="Tab" for a in attributes):attributes+=("Tab="+repr(tab),)
             properties.append(ScriptProperty(m.group(1).strip(),m.group(2),m.group(3).strip(),attributes))
         names=[p.name for p in properties]
         if len(names)!=len(set(names)):raise ScriptValidationError(f"{path}: component {match.group(1)} has duplicate PROPERTY names")
@@ -258,7 +270,8 @@ class ScriptCompiler:
         setters=[]
         for prop in descriptor.properties:
             kind=prop.type.replace("const","").replace("&","").strip()
-            if kind in ("bool",):body=f'self->{prop.name}=std::strcmp(value,"true")==0||std::strcmp(value,"1")==0;return true;'
+            if kind.replace("Bazzalt::","") in ("FloatList","IntList"):body=f'return Bazzalt::Detail::ReadPropertyList(value,self->{prop.name});'
+            elif kind in ("bool",):body=f'self->{prop.name}=std::strcmp(value,"true")==0||std::strcmp(value,"1")==0;return true;'
             elif kind in ("string","std::string"):body=f'self->{prop.name}=value;return true;'
             elif kind in ("EntityReference","Bazzalt::EntityReference"):
                 body=f'{{Bazzalt::UUID id;if(std::strcmp(value,"0")!=0&&std::strcmp(value,"")!=0&&!Bazzalt::UUID::TryParse(value,id))return false;self->{prop.name}=Bazzalt::EntityReference(id);return true;}}'
@@ -290,6 +303,7 @@ class ScriptCompiler:
             if kind in ("Vec2","Vec3","Vec4","Quaternion"):
                 axes="XY" if kind=="Vec2" else "XYZ" if kind=="Vec3" else "XYZW"
                 expr=' << "," << '.join(value+'.'+axis for axis in axes)
+            elif kind in ("FloatList","IntList"):expr=f'Bazzalt::Detail::WritePropertyList({value})'
             elif kind=="bool":expr=f'({value}?"true":"false")'
             elif kind=="Entity":expr=f'{value}.GetUUID().ToString()'
             elif kind=="EntityReference":expr=f'{value}.GetUUID().ToString()'
@@ -399,6 +413,10 @@ class ScriptAttachments:
 
 def _PropertyDefault(prop):
     kind=prop.type.replace("Bazzalt::","").strip()
+    if kind in ("FloatList","IntList"):
+        if prop.default.strip() in ("{}", ""):return []
+        try:return [(int(v) if kind=="IntList" else float(v)) for v in prop.default.split(",")]
+        except ValueError:return []
     if kind in ("float","double"):
         value=_Literal(prop.default)
         if isinstance(value,(int,float)):return float(value)

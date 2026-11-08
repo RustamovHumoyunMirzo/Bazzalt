@@ -8,7 +8,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QIcon, QPaintEvent
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton, QScrollArea, QSizePolicy, QStyle, QStyleOptionButton, QStylePainter, QToolButton, QVBoxLayout,
-    QWidget,
+    QWidget,QTabWidget,
 )
 
 from ...localization import LocalizationManager
@@ -67,6 +67,14 @@ class ComponentSection(QFrame):
     def SetExpanded(self, expanded: bool) -> None:
         self.Toggle.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
         self.Body.setVisible(expanded)
+
+    def TabSection(self,title):
+        if not hasattr(self,'_tabs'):
+            self._tabs={};self.TabWidget=QTabWidget(self.Body);self.AddWideWidget(self.TabWidget)
+        if title not in self._tabs:
+            section=ComponentSection('',expanded=True,removable=False,localization=self._localization,parent=self.TabWidget,subsection=True)
+            section.Toggle.parentWidget().hide();self.TabWidget.addTab(section,title);self._tabs[title]=section
+        return self._tabs[title]
 
     def AddSubsection(self, title: str) -> "ComponentSection":
         if title not in self._subsections:

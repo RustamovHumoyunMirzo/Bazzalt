@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Terrain types are available in the global Bazzalt namespace. Methods use colons; stateless TerrainGeometry functions use dots. Entity component operations copy values, so write the changed Terrain back with SetComponent.">
+  <title>Terrain Lua API | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Lua / Terrain Lua API</nav>
+      <article class="doc"><h1 id="overview">Terrain Lua API</h1>
+<p>Terrain types are available in the global Bazzalt namespace. Methods use colons; stateless TerrainGeometry functions use dots. Entity component operations copy values, so write the changed Terrain back with SetComponent.</p>
+<h2 id="example">Edit a terrain value</h2><pre><code>local B = Bazzalt
+local terrain = entity:GetComponent("Terrain")
+local brush = B.TerrainBrush.new()
+brush.Radius = 2
+brush.Strength = 1
+terrain:ApplyBrush(B.TerrainTool.Raise, B.Vec2.new(0, 0), brush, 0.5)
+entity:SetComponent("Terrain", terrain)
+local hit = B.TerrainGeometry.Raycast(terrain,
+    B.Vec3.new(0, 20, 0), B.Vec3.new(0, -1, 0))
+if hit then print(hit.Position.Y) end</code></pre>
+<h2 id="surface">Surface API</h2><p>Terrain exposes the same configuration records and methods as C++: IsValid, MarkDirty, Resize, AddLayer, RemoveLayer, GetHeight, GetNormal, GetSlope, IsHole, ApplyBrush, ImportHeightmap, ImportSplatmap, ApplySpline, ApplyBoolean, GenerateVegetation and PaintVegetation. Layer, chunk, spline and prototype identifiers are zero-based, even though ordinary Lua tables use one-based array positions.</p>
+<p>Construct Terrain, TerrainLayer, TerrainBrush, TerrainVegetation, TerrainInstance and TerrainSpline with .new(). GetComponent, AddComponent, SetComponent, RemoveComponent and component enable/disable operations accept Terrain. SetComponent validates the value and advances its revision. Invalid input becomes a Lua script error.</p>
+<h2 id="geometry">Geometry and imports</h2><p>TerrainGeometry.BuildChunk returns a TerrainMesh whose Vertices expose Position, Normal, UV and Color, with an Indices collection. TerrainGeometry.Raycast returns a TerrainHit or nil. Imported numeric sample tables are row-major with explicit width and height. Height import optionally multiplies samples by a scale. Image decoding remains an asset/import concern; gameplay can supply its own finite sample values.</p>
+<h2 id="enums">Enums</h2><p>TerrainBlend contains Add, Replace, Maximum and Minimum. TerrainTool contains Raise, Lower, Smooth, Flatten, Paint, ErasePaint, Hole and FillHole. TerrainBoolean contains Union, Intersection and Subtract. The C++ guide and editor manual describe coordinate conventions and budgets; generated Lua reference pages list every exposed binding.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../prefabs/en.html"><small>Previous</small>Lua prefab assets</a>
+<a class="next" href="../timeline/en.html"><small>Next</small>Cinematics in Lua</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#example">Edit a terrain value</a><a class="toc-link" href="#surface">Surface API</a><a class="toc-link" href="#geometry">Geometry and imports</a><a class="toc-link" href="#enums">Enums</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

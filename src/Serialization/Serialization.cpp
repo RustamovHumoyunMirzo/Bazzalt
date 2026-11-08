@@ -1,3 +1,4 @@
+#include "Terrain/TerrainSerialization.h"
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -247,6 +248,7 @@ namespace Bazzalt
     {
         Runtime::PrefabAccess::Register(m_components);
         Runtime::RegisterAdvancedLODComponents(m_components);
+        Runtime::RegisterTerrainComponents(m_components);
         Runtime::RegisterAudioComponents(m_components);
         Runtime::RegisterPhysicsComponents(m_components);
         Runtime::RegisterGuiComponents(m_components);

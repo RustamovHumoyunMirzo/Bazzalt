@@ -1,3 +1,5 @@
+#include "Bazzalt/Terrain.h"
+#include "Terrain/TerrainRenderer.h"
 #include "Bazzalt/Systems/TimelineSystem.h"
 #include "Bazzalt/Timeline.h"
 #include "Navigation/NavigationModuleApi.h"
@@ -228,6 +230,7 @@ void Engine::RenderEditorFrame()
     {ProfileScope scope("LightSystem");m_scene->UpdateSystem<LightSystem>();}
     {ProfileScope scope("MeshSystem");m_scene->UpdateSystem<MeshSystem>();}
     {ProfileScope scope("PrimitiveSystem");m_scene->UpdateSystem<PrimitiveSystem>();}
+    {ProfileScope scope("TerrainSystem");m_scene->UpdateSystem<TerrainSystem>();}
     const auto systems=std::chrono::steady_clock::now();
     UpdateEditorOverlays();
     const auto overlays=std::chrono::steady_clock::now();
@@ -336,11 +339,16 @@ UUID Engine::PickEditorPrimitive(Vec3 origin,Vec3 direction,Vec3* hitPosition,co
         if(geometry->Picking&&geometry->Picking->Raycast(o,d,nearest,1e-8f))result=entity.GetUUID();
     }
 
+    for(auto handle:m_scene->GetRegistry().view<Terrain>()){
+        auto entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));auto id=entity.GetUUID();const auto& terrain=entity.GetComponent<Terrain>();if(!terrain.Enabled||!terrain.Visible||m_editorUnselectable.contains(id)||m_editorHidden.contains(id)||ignored(id))continue;Mat4 inverse;if(!entity.GetWorldMatrix().TryInverse(inverse))continue;
+        if(auto hit=TerrainGeometry::Raycast(terrain,inverse.TransformPoint(origin),inverse.TransformDirection(direction))){auto position=entity.GetWorldMatrix().TransformPoint(hit->Position);float distance=Vec3::Dot(position-origin,direction);if(distance>=0&&distance<nearest){nearest=distance;result=id;}}
+    }
     if(m_isInitialized)if(auto camera=m_renderBackend->GetEditorCameraWorld())for(auto handle:m_scene->GetRegistry().view<Impostor>()){
         auto entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));const auto id=entity.GetUUID();const auto& c=entity.GetComponent<Impostor>();if(!c.Enabled||!c.Visible||!c.IsValid()||!c.Atlas||m_editorUnselectable.contains(id)||m_editorHidden.contains(id)||m_renderBackend->IsEditorLODHidden(id)||ignored(id))continue;
         Mat4 inverse;if(!c.GetMatrix(PhysicsRenderMatrix(*m_scene,entity),*camera).TryInverse(inverse))continue;auto point=inverse.TransformPoint(origin),ray=inverse.TransformDirection(direction);if(std::abs(ray.Z)<1e-8f)continue;float distance=-point.Z/ray.Z;auto hit=point+ray*distance;if(distance>=0&&distance<nearest&&hit.X>=0&&hit.X<=1&&hit.Y>=0&&hit.Y<=1){nearest=distance;result=id;}
     }
     if(m_isInitialized)for(const auto& mesh:m_renderBackend->GetAssets().GetEditorMeshes()){
+        if(auto object=m_scene->GetEntity(mesh.Owner);object&&object.HasComponent<Terrain>())continue;
         if(m_renderBackend->IsEditorLODHidden(mesh.Owner)||m_editorHidden.contains(mesh.Owner)||m_editorUnselectable.contains(mesh.Owner)||ignored(mesh.Owner)||GraphicsAccess::IsDeformed(mesh.Owner))continue;
         Mat4 inverse;if(!mesh.World.TryInverse(inverse))continue;
         if(mesh.Geometry->Raycast(inverse.TransformPoint(origin),inverse.TransformDirection(direction),nearest))result=mesh.Owner;
@@ -679,12 +687,14 @@ void Engine::AttachRenderSystems()
     m_scene->AddSystem<LightSystem>(*m_renderBackend);
     m_scene->AddSystem<MeshSystem>(*m_renderBackend);
     m_scene->AddSystem<PrimitiveSystem>(*m_renderBackend);
+    m_scene->AddSystem<TerrainSystem>(*m_renderBackend);
 }
 
 void Engine::DetachRenderSystems()
 {
     if (!m_scene || !m_renderBackend->IsInitialized()) return;
     m_renderBackend->SetGuiScene(nullptr);
+    m_scene->RemoveSystem<TerrainSystem>();
     m_scene->RemoveSystem<PrimitiveSystem>();
     m_scene->RemoveSystem<MeshSystem>();
     m_scene->RemoveSystem<LightSystem>();

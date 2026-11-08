@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A terrain is an entity with a Terrain component. Its surface is a heightfield: each position on its local XZ plane has one height. The default terrain covers 10 by 10 metres. Its built-in white material has metre grid lines.">
+  <title>Terrain editing | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Editor manual / Terrain editing</nav>
+      <article class="doc"><h1 id="overview">Terrain editing</h1>
+<p>A terrain is an entity with a Terrain component. Its surface is a heightfield: each position on its local XZ plane has one height. The default terrain covers 10 by 10 metres. Its built-in white material has metre grid lines.</p>
+<h2 id="create">Create and select a terrain</h2><ol><li>In Hierarchy, open Add New and choose Terrain.</li><li>Select the entity. Expand Terrain in Inspector to set Size, sample Resolution and Chunk Size.</li><li>Open Terrain at the right of the Scene toolbar and enable Edit terrain. This starts disabled each session.</li><li>Choose the terrain in the overlay. This target remains independent of ordinary scene selection.</li></ol>
+<p>The overlay is confined to Scene, below its toolbar. Drag the six-dot handle to reposition it. Its position and brush settings save automatically. The separate Terrain settings button opens a nonmodal window, so you can keep sculpting while adjusting the brush.</p>
+<h2 id="sculpt">Sculpt a surface</h2><p>Choose Raise, Lower, Smooth or Flatten and hold the left mouse button on terrain. Radius is measured in terrain-local metres. Strength controls metres per second for height changes. Falloff controls softness at the brush edge. Flatten approaches Target height. A full press/drag/release stroke is one undo command. Shift reverses Raise, erases Paint or fills Holes. Right-button scene navigation remains available.</p>
+<p>A brush heightmap is an optional project image picked in Terrain settings. Bright pixels apply more of the brush. The editor keeps a bounded, cached stamp rather than decoding the image on every sample.</p>
+<h2 id="layers">Height and splat layers</h2><p>Expand Layers in Inspector. Add, remove and reorder entries with the list controls. Each layer has an enable switch, opacity, height blend mode, heightmap, splatmap, material, color and tiling. Reordering existing entries preserves their samples. At least one layer must remain.</p>
+<p>Add accumulates height. Replace interpolates toward that layer's height. Maximum and Minimum keep the higher or lower surface, weighted by opacity. These operations are evaluated in list order. Flatten and spline tools edit the chosen layer, so layers above it may still affect the final height.</p>
+<p>In Terrain settings choose a zero-based Layer index, then Import heightmap or Import splatmap. Height import multiplies normalized image values by Import height scale. Splat values control surface coverage. Painting redistributes other layers' weights so coverage stays normalized. Image imports support linear 8-bit and 16-bit values, plus HDR floats; importing is explicit so a reference change cannot silently overwrite hand edits.</p>
+<p>Paint blends built-in layer colors continuously. When assigning custom material assets, each triangle uses its dominant layer's material, with its Tiling value. Arbitrary shader programs are not blended together. Use higher sample resolution for finer custom-material boundaries.</p>
+<h2 id="vegetation">Vegetation</h2><p>Add entries under Vegetation. Pick an imported Model and optional Material with the same filtered asset pickers used elsewhere. Configure density, height/slope bounds, spacing, scale range, normal alignment, seed and instance limit. Choose the zero-based Vegetation prototype in Terrain settings. Generate vegetation distributes placements across the terrain; the Vegetation brush places instances locally and Shift erases them.</p>
+<p>The generation seed is repeatable for the same terrain and existing placements. Models use the renderer's existing asset and material pipeline. Holes reject placements. Generated instances belong to terrain data, rather than creating thousands of hierarchy entities. Regenerate after sculpting to snap existing placements to the changed surface.</p>
+<h2 id="splines">Roads, rivers and surface booleans</h2><p>Add a Spline in Inspector. Enter local-space control points in its expandable Points list, or select Spline in the overlay and click terrain to append points. Width defines the centre strip, Shoulder adds smooth falloff and Depth lowers the strip for a river bed. Select its zero-based index in Terrain settings and choose Apply spline. Closed connects the last point to the first. This edits the selected height layer; a spline does not create water or a separate road mesh.</p>
+<p>Choose another upright terrain as Boolean source. Union keeps the higher surface; Intersection keeps the lower; Subtract carves by the source's positive height. These are heightfield operations on the overlap, not volumetric CSG: caves and overhangs require meshes. Rotation around the up axis is supported; tilted source transforms are rejected because they cannot describe an upright heightfield.</p>
+<h2 id="runtime">Rendering, collision and saving</h2><p>The renderer uses independent chunks with distance-based LOD and skirts covering LOD seams. Chunks containing holes keep full detail. Only changed chunk geometry is uploaded after edits. Filament handles chunk frustum culling, materials, shadows and editor selection outlines. Runtime cameras and Scene share the terrain surface.</p>
+<p>Add a non-convex Mesh Collider to use the full-resolution terrain in Jolt. The collision bake omits rendering skirts and respects holes. Vegetation does not automatically gain individual physics bodies. Save the scene normally; terrain samples, layers, splines and placements are included in the scene's YAML. Referenced textures, models and materials participate in asset dependency tracking and game cooking.</p>
+<h2 id="budgets">Authoring budgets</h2><p>Resolution must be 2^n + 1, from 3 to 257. Chunk Size is a power of two from 2 to 64 and cannot exceed Resolution minus one. Each terrain allows eight layers, 64 vegetation prototypes, 10,000 placements and 128 splines with up to 1,024 points each. Use multiple terrain entities for a larger world. Automatic edge welding between separate terrain entities is not performed; match their border samples and transforms when tiling.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../remote-builds/en.html"><small>Previous</small>SSH build workers</a>
+<a class="next" href="../timeline/en.html"><small>Next</small>Cinematics and Timeline</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#create">Create and select a terrain</a><a class="toc-link" href="#sculpt">Sculpt a surface</a><a class="toc-link" href="#layers">Height and splat layers</a><a class="toc-link" href="#vegetation">Vegetation</a><a class="toc-link" href="#splines">Roads, rivers and surface booleans</a><a class="toc-link" href="#runtime">Rendering, collision and saving</a><a class="toc-link" href="#budgets">Authoring budgets</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

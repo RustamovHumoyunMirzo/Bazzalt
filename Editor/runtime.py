@@ -451,6 +451,11 @@ class RuntimeService(QObject):
     def SetSceneCamera(self, viewport_id: int, eye, target) -> None:
         if self._host is not None and hasattr(self._host, "set_scene_camera"): self._host.set_scene_camera(viewport_id, eye, target)
 
+    def TerrainCommand(self,entity_id,command,values):
+        if self.IsEditorLocked(entity_id) and command!='hit':return {}
+        if not self._host or not hasattr(self._host,'terrain_command'):return {}
+        return dict(self._host.terrain_command(entity_id,command,values))
+
     def SetComponentProperty(self, entity_id: str, component: str,
                              property_name: str, value) -> bool:
         if self.IsEditorLocked(entity_id):return False

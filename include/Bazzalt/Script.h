@@ -1,3 +1,4 @@
+#include "Bazzalt/Detail/PropertyList.h"
 #pragma once
 
 #include <cstdint>
@@ -86,3 +87,6 @@ using GetScriptModuleApi = const ScriptModuleApi* (*)();
 #define PROPERTY(Type, Name, DefaultValue, ...) Type Name = DefaultValue;
 // Inspector-only grouping for subsequent properties. SECTION("") returns to the root.
 #define SECTION(Name)
+
+// Inspector-only tab grouping. TAB("") returns subsequent fields to the root.
+#define TAB(Name)

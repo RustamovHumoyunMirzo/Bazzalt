@@ -59,6 +59,10 @@ void SetProperty(sol::table object,const std::string& name,const std::string& va
     else if(current.is<AudioClip>())object[name]=AudioClip::Load(assetId());
     else if(current.is<Font>())object[name]=Font::Load(assetId());
     else if(current.is<GlobalEvent>())object[name]=GlobalEvent::Load(assetId());
+    else if(current.get_type()==sol::type::table){auto previous=current.as<sol::table>();sol::object metadata=previous[sol::metatable_key];std::string kind;if(metadata.is<sol::table>())kind=metadata.as<sol::table>().get_or("__bazzaltListType",std::string{});sol::state_view lua(object.lua_state());auto list=lua.create_table();
+        if(kind=="IntList"){IntList values;if(!Detail::ReadPropertyList(value.c_str(),values))throw std::invalid_argument("Invalid Lua integer list property");for(std::size_t i=0;i<values.size();++i)list[i+1]=values[i];}
+        else {FloatList values;if(!Detail::ReadPropertyList(value.c_str(),values))throw std::invalid_argument("Invalid Lua float list property");for(std::size_t i=0;i<values.size();++i)list[i+1]=values[i];}
+        if(metadata.valid()&&metadata!=sol::lua_nil)list[sol::metatable_key]=metadata;object[name]=list;}
     else if(current.get_type()==sol::type::boolean){if(value!="true"&&value!="false")throw std::invalid_argument("Invalid Lua boolean property");object[name]=(value=="true");}
     else if(current.get_type()==sol::type::number){std::size_t used=0;double number=std::stod(value,&used);if(used!=value.size()||!std::isfinite(number))throw std::invalid_argument("Invalid Lua number property");object[name]=number;}
     else if(current.is<Vec2>()){auto n=numbers(2);object[name]=Vec2{n[0],n[1]};}
@@ -129,6 +133,7 @@ bool LuaRuntime::Start(std::string& error,bool reloading){
             if(declared->valid()||name!=typeName)throw std::invalid_argument("COMPONENT must declare the attached type exactly once");
             *declared=lua.create_table();return *declared;
         });
+        lua.set_function("TAB",[](const std::string&){ /* Inspector metadata only. */ });
         lua.set_function("SECTION",[](const std::string&){ /* Inspector metadata only. */ });
         lua.set_function("PROPERTY",[](const std::string& type,sol::object value,sol::optional<sol::table> inspectorOptions){
             // Options belong to editor authoring only; gameplay values are unrestricted.
@@ -137,6 +142,9 @@ bool LuaRuntime::Start(std::string& error,bool reloading){
             if(type=="float"||type=="double"||type=="int"){
                 valid=value.get_type()==sol::type::number;
                 if(valid){double number=value.as<double>();valid=std::isfinite(number)&&(type!="int"||(std::trunc(number)==number&&number>=-2147483648.0&&number<=2147483647.0));}
+            }else if(type=="FloatList"||type=="IntList"){
+                valid=value.get_type()==sol::type::table;
+                if(valid){auto list=value.as<sol::table>();valid=list.size()<=1024;std::size_t count=0;for(auto pair:list){++count;auto key=pair.first;auto item=pair.second;if(key.get_type()!=sol::type::number||item.get_type()!=sol::type::number){valid=false;break;}double index=key.as<double>(),number=item.as<double>();if(index<1||index>double(list.size())||std::trunc(index)!=index||!std::isfinite(number)||(type=="IntList"&&(std::trunc(number)!=number||number<-2147483648.0||number>2147483647.0))){valid=false;break;}}valid=valid&&count==list.size();}
             }else if(type=="bool")valid=value.get_type()==sol::type::boolean;
             else if(type=="string"||type=="std::string")valid=value.get_type()==sol::type::string;
             else if(type=="Vec2")valid=value.is<Vec2>();
@@ -147,6 +155,7 @@ bool LuaRuntime::Start(std::string& error,bool reloading){
             else if(type=="Font")valid=value.is<Font>();
             else if(type=="GlobalEvent")valid=value.is<GlobalEvent>();
             if(!valid)throw std::invalid_argument("Invalid PROPERTY type/default: "+type);
+            if(type=="FloatList"||type=="IntList"){sol::state_view state(value.lua_state());auto meta=state.create_table();meta["__bazzaltListType"]=type;value.as<sol::table>()[sol::metatable_key]=meta;}
             return value;
         });
         m_impl->Instances.push_back(std::move(instance));auto& active=*m_impl->Instances.back();

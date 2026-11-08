@@ -4,6 +4,7 @@
 #include "Bazzalt/AssetManager.h"
 #include "Bazzalt/Components/Mesh.h"
 #include "Bazzalt/Components/PrimitiveObject.h"
+#include "Bazzalt/Terrain.h"
 #include "Bazzalt/Components/ModelNode.h"
 #include "Rendering/ModelGeometry.h"
 #include "Rendering/PrimitiveGeometry.h"
@@ -24,6 +25,7 @@ void Parts(Entity entity,UUID asset,std::vector<Part>& parts,const Mat4& local={
         else parts.push_back({entity,asset,Mesh::EntireAsset,local});
         return;
     }
+    if(entity.HasComponent<Terrain>()){parts.push_back({entity,{},Mesh::EntireAsset,local});return;}
     if(entity.HasComponent<PrimitiveObject>()){parts.push_back({entity,{},Mesh::EntireAsset,local});return;}
     if(auto* mesh=entity.TryGetComponent<Mesh>();mesh&&mesh->MeshAsset){parts.push_back({entity,mesh->MeshAsset,mesh->ModelNodeIndex,local});return;}
     if(auto* node=entity.TryGetComponent<ModelNode>();node&&node->HasMesh&&node->ModelAsset){parts.push_back({entity,node->ModelAsset,node->SourceIndex,local});return;}
@@ -56,6 +58,7 @@ std::string PhysicsMeshSignature(Entity entity,UUID asset,PhysicsMeshRevisions& 
     std::vector<Part> parts;Parts(entity,asset,parts);std::string key;
     for(auto& part:parts){AppendPhysicsKey(key,part.Local);AppendPhysicsKey(key,part.Asset);AppendPhysicsKey(key,part.Node);AppendPhysicsKey(key,part.Subtree);
         if(part.Asset){auto found=revisions.find(part.Asset);if(found==revisions.end())found=revisions.emplace(part.Asset,Revision(part.Asset)).first;AppendPhysicsKey(key,found->second.size());key+=found->second;}
+        else if(auto* terrain=part.Object.TryGetComponent<Terrain>()){AppendPhysicsKey(key,terrain->Revision);AppendPhysicsKey(key,terrain->Size.X);AppendPhysicsKey(key,terrain->Size.Y);}
         else key+=PrimitiveKey(part.Object.GetComponent<PrimitiveObject>());
     }return key;
 }
@@ -65,6 +68,7 @@ bool ReadPhysicsMesh(Entity entity,UUID assetId,const std::string& signature,std
     std::vector<Part> parts;Parts(entity,assetId,parts);
     const auto add=[&](Vec3 point){if(vertices.size()>=3000000)throw std::length_error("MeshCollider exceeds one million triangles");indices.push_back(std::uint32_t(vertices.size()));vertices.push_back(point);};
     for(auto& part:parts){
+        if(!part.Asset&&part.Object.HasComponent<Terrain>()){auto terrain=part.Object.GetComponent<Terrain>();terrain.SkirtDepth=0;terrain.MaxLOD=0;auto side=(terrain.Resolution-1)/terrain.ChunkSize;for(unsigned z=0;z<side;++z)for(unsigned x=0;x<side;++x){auto geometry=TerrainGeometry::BuildChunk(terrain,x,z);for(auto index:geometry.Indices)add(part.Local.TransformPoint(geometry.Vertices[index].Position));}continue;}
         if(!part.Asset){const auto cached=GetCachedPrimitiveGeometry(part.Object.GetComponent<PrimitiveObject>());const auto& geometry=*cached;for(auto index:geometry.Indices){const auto& p=geometry.Vertices.at(index).Position;add(part.Local.TransformPoint({p[0],p[1],p[2]}));}continue;}
         auto geometry=Model(part.Asset);if(!geometry)return false;
         const auto append=[&](std::uint32_t node,const Mat4& transform){if(node>=geometry->SourceNodes.size()||!geometry->SourceNodes[node])return;for(auto& triangle:geometry->SourceNodes[node]->Triangles)for(auto point:{triangle.A,triangle.B,triangle.C})add(transform.TransformPoint(point));};
@@ -88,6 +92,7 @@ bool ReadSoftMesh(Entity entity,std::vector<SoftMeshPart>& output){
     for(auto& part:sources){
         Mat4 inverse;if(!part.Local.TryInverse(inverse))throw std::invalid_argument("Cloth mesh has a singular source transform");const auto normals=inverse.Transposed();
         if(!part.Asset){
+            if(part.Object.HasComponent<Terrain>())continue;
             const auto& primitive=part.Object.GetComponent<PrimitiveObject>();const auto cached=GetCachedPrimitiveGeometry(primitive);const auto& source=*cached;SoftMeshPart mesh;mesh.Owner=part.Object.GetUUID();mesh.Indices=source.Indices;
             for(auto& v:source.Vertices){auto& t=v.TangentFrame;auto normal=Quaternion{t[0],t[1],t[2],t[3]}.Rotate({0,0,1});mesh.Vertices.push_back({part.Local.TransformPoint({v.Position[0],v.Position[1],v.Position[2]}),normals.TransformDirection(normal).Normalized(),{v.UV[0],v.UV[1]},{1,1,1,1}});}
             total+=mesh.Indices.size();output.push_back(std::move(mesh));continue;

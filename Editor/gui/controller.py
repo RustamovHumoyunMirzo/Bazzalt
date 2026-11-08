@@ -115,6 +115,8 @@ class EditorController(QObject):
         window.Scene.ShadingMode.currentIndexChanged.connect(lambda index:self.SetRenderMode(("lit","unlit","wireframe","lighting_only","overdraw")[index]))
         window.Scene.LocalToggle.toggled.connect(lambda checked:setattr(self,"_local_space",checked))
         window.Scene.PivotMode.currentIndexChanged.connect(lambda index:(setattr(self,"_pivot_center",index==1),self._UpdateGizmo()))
+        from .terrain import TerrainEditor
+        self.TerrainEditor=TerrainEditor(self)
         window.Scene.GizmoToggle.toggled.connect(self.SetGizmosVisible);window.Scene.StatsToggle.toggled.connect(window.Scene.StatsLabel.setVisible)
         window.Toolbar.PlayRequested.connect(self.Play)
         window.Toolbar.StopRequested.connect(self.Stop)
@@ -346,7 +348,7 @@ class EditorController(QObject):
                 for property_name, value in dict(component_data.get(component, {})).items():
                     editor = self._ComponentEditor(inspected_entity, component, property_name, value)
                     if editor is not None:
-                        if (component=="Camera" and property_name=="Post Process Materials") or (component=="LOD" and property_name=="Levels") or (component=="HLOD" and property_name in ("Sources","Proxies")):section.FieldSection(FieldGroup(str(component),property_name)).AddWideWidget(editor);section._fields[property_name]=editor
+                        if (component=="Terrain" and property_name in {"Layers","Vegetation","Splines"}) or (component=="Camera" and property_name=="Post Process Materials") or (component=="LOD" and property_name=="Levels") or (component=="HLOD" and property_name in ("Sources","Proxies")):section.FieldSection(FieldGroup(str(component),property_name)).AddWideWidget(editor);section._fields[property_name]=editor
                         else:section.AddField(property_name,editor,FieldGroup(str(component),property_name))
                 if component=="NavMesh Surface":
                     bake=QPushButton(self.Window.Localization.Translate("navigation.bake"))
@@ -368,7 +370,9 @@ class EditorController(QObject):
                 for property_name,value in script.get("properties",{}).items():
                     editor=self._ScriptEditor(script,property_name,value)
                     if editor is not None:
-                        section.AddField(property_name,editor,getattr(editor,"_inspector_rules",{}).get("Section",""))
+                        rules=getattr(editor,"_inspector_rules",{});owner=section.TabSection(rules["Tab"]) if rules.get("Tab") else section
+                        owner.AddField(property_name,editor,rules.get("Section",""))
+                        if owner is not section:section._fields[property_name]=editor;section._captions[property_name]=owner._captions[property_name];section._fieldowners[property_name]=owner
                         if getattr(editor,"_inspector_rules",{}).get("Label"):section.SetFieldTitle(property_name,editor._inspector_rules["Label"])
                         self._script_rule_rows.append((script,property_name,section,editor,getattr(editor,"_inspector_rules",{})))
         self._RefreshScriptRules()
@@ -876,6 +880,10 @@ class EditorController(QObject):
         return self.Window.Resources.Icon(f"icons/{filename}") if filename else None
 
     def _ComponentEditor(self, entity_id: str, component: str, name: str, value):  # type: ignore[no-untyped-def]
+        if component=='Terrain':
+            from .terrain_fields import TerrainField
+            field=TerrainField(self,entity_id,name,value)
+            if field is not None:return field
         if component=="IK Constraint" and name=="Solver":
             editor=EnumInput();editor.SetOptions([(self.Window.Localization.Translate('animation.ik_'+key),i) for i,key in enumerate(('two_bone','ccd','fabrik'))]);editor.SetValue(value);editor.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
         if component=="IK Constraint" and name in {"Animator Entity","Target","Pole Target"}:
@@ -1064,6 +1072,16 @@ class EditorController(QObject):
         commit=lambda v:self._SetScriptProperty(script,name,v)
         descriptor=self._ScriptDescriptor(script)
         prop=next((p for p in descriptor.properties if p.name==name),None) if descriptor else None
+        if prop and prop.type.replace("Bazzalt::","").strip() in ("FloatList","IntList"):
+            from .widgets.collections import ListInput
+            integer=prop.type.replace("Bazzalt::","").strip()=="IntList"
+            def make_item(current,changed):
+                rules=prop.rules;lo=rules.get('Min',-2147483648 if integer else -1.e12);hi=rules.get('Max',2147483647 if integer else 1.e12)
+                field=IntInput(minimum=min(lo,current),maximum=max(hi,current),value=current) if integer else FloatInput(minimum=min(lo,current),maximum=max(hi,current),value=current)
+                if 'Step' in rules:field.setSingleStep(int(rules['Step']) if integer else rules['Step'])
+                field.valueChanged.connect(changed);return field
+            default=min(max(0,prop.rules.get('Min',float('-inf'))),prop.rules.get('Max',float('inf')));default=int(default) if integer else float(default)
+            editor=ListInput(value if isinstance(value,list) else [],factory=make_item,default=default,maximum=1024,translate=self.Window.Localization.Translate);editor.ValueChanged.connect(commit);return editor
         if prop and prop.type.replace("Bazzalt::","").strip() in ("EntityReference","Entity"):
             entities={str(item["uuid"]):item for item in self.Runtime.Entities()}
             editor=ObjectPickerInput(validator=lambda v:v in entities)
@@ -1132,6 +1150,7 @@ class EditorController(QObject):
 
     def _CommitComponent(self, entity_id: str, component: str, name: str, value) -> None:  # type: ignore[no-untyped-def]
         if self._updating_inspector or entity_id!=self.SelectedEntity:return
+        if component=='Terrain' and self.Runtime.EntityDetails(entity_id).get('scene_uuid')!=self.Runtime.SceneInfo().get('uuid'):self.History.BeginScenes('Edit Terrain')
         if not self._Mutate(f"Edit {component}",lambda:self.Runtime.SetComponentProperty(entity_id,component,name,value)):
             self._RefreshInspectorValues();return
         self.SetDirty(True)

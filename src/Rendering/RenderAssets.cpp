@@ -70,6 +70,7 @@ extern "C" void stbi_image_free(void*);
 #include "editor_overdraw_filamat.h"
 #include "editor_wireframe_filamat.h"
 #include "primitive_lit_filamat.h"
+#include "terrain_lit_filamat.h"
 #include "graphics_unlit_filamat.h"
 #include "particle_unlit_filamat.h"
 #include "particle_lit_filamat.h"
@@ -238,6 +239,7 @@ struct RenderAssets::Impl {
     struct Instance {
         struct Original { utils::Entity Entity;std::size_t Primitive;filament::MaterialInstance* Material; };
         Kind Type = Kind::Gltf;
+        bool TerrainGeometry=false;
         UUID Asset{};
         UUID EditorOwner{},ModelOwner{};
         std::vector<UUID> Materials;
@@ -280,7 +282,7 @@ struct RenderAssets::Impl {
     std::unordered_map<UUID, CachedModel> Models;
     struct CachedGeometry { std::filesystem::path Path;std::weak_ptr<ModelGeometryAsset> Geometry; };
     std::unordered_map<UUID,CachedGeometry> GeometryCache;
-    std::map<PrimitiveGeometryKey,std::weak_ptr<PrimitiveBuffers>> PrimitiveBufferCache;
+    std::map<std::weak_ptr<const PrimitiveGeometry>,std::weak_ptr<PrimitiveBuffers>,std::owner_less<std::weak_ptr<const PrimitiveGeometry>>> PrimitiveBufferCache;
     std::map<std::array<std::uint32_t,4>,std::weak_ptr<filament::MaterialInstance>> PrimitiveColorCache;
     std::map<std::tuple<UUID,filament::Material*,bool>,std::weak_ptr<filament::MaterialInstance>> SharedMaterials;
     std::shared_ptr<filament::MaterialInstance> ColorMaterial(Vec4 color) {
@@ -362,6 +364,7 @@ struct RenderAssets::Impl {
 
     filament::Material* DebugUnlit=nullptr;filament::Material* DebugLighting=nullptr;filament::Material* DebugOverdraw=nullptr;filament::Material* DebugWireframe=nullptr;
     filament::Material* PrimitiveMaterial=nullptr;
+    filament::Material* TerrainMaterial=nullptr;
     filament::Material* GraphicsMaterial=nullptr;
     filament::Material* ParticleMaterial=nullptr;
     filament::Material *ParticleLitMaterial=nullptr,*ParticleGPUMaterial=nullptr,*ParticleGPULitMaterial=nullptr;
@@ -387,6 +390,8 @@ struct RenderAssets::Impl {
         if(DebugUnlit)DebugUnlitInstance=DebugUnlit->createInstance();if(DebugLighting)DebugLightingInstance=DebugLighting->createInstance();if(DebugOverdraw)DebugOverdrawInstance=DebugOverdraw->createInstance();if(DebugWireframe)DebugWireframeInstance=DebugWireframe->createInstance();
         PrimitiveMaterial=filament::Material::Builder().package(Embedded::PrimitiveLitFilamat,Embedded::PrimitiveLitFilamatSize).build(Engine);
         if(PrimitiveMaterial)BindProbes(PrimitiveMaterial->getDefaultInstance());
+        TerrainMaterial=filament::Material::Builder().package(Embedded::TerrainLitFilamat,Embedded::TerrainLitFilamatSize).build(Engine);
+        if(TerrainMaterial)BindProbes(TerrainMaterial->getDefaultInstance());
         ParticleLitMaterial=filament::Material::Builder().package(Embedded::ParticleLitFilamat,Embedded::ParticleLitFilamatSize).build(Engine);
         ParticleGPUMaterial=filament::Material::Builder().package(Embedded::ParticleGpuFilamat,Embedded::ParticleGpuFilamatSize).build(Engine);
         ParticleGPULitMaterial=filament::Material::Builder().package(Embedded::ParticleGpuLitFilamat,Embedded::ParticleGpuLitFilamatSize).build(Engine);
@@ -857,22 +862,33 @@ void RenderAssets::DestroyMesh(Handle handle) {
 }
 
 RenderAssets::Handle RenderAssets::CreatePrimitive(const PrimitiveObject& component){
-    if(!m_impl||!m_impl->PrimitiveMaterial)return InvalidHandle;const auto prototype=GetCachedPrimitiveGeometry(component);const auto& geometry=*prototype;if(geometry.Vertices.empty()||geometry.Indices.empty())return InvalidHandle;
-    Impl::Instance instance;instance.Type=Impl::Kind::Primitive;
-    instance.SharedColor=m_impl->ColorMaterial(component.Color);instance.PrimitiveMaterial=instance.SharedColor.get();
-    const auto key=GetPrimitiveGeometryKey(component);
-    instance.SharedBuffers=m_impl->PrimitiveBufferCache[key].lock();
+    return CreateGeometry(GetCachedPrimitiveGeometry(component),component);
+}
+RenderAssets::Handle RenderAssets::CreateGeometry(std::shared_ptr<const PrimitiveGeometry> prototype,const PrimitiveObject& component,bool terrainGrid,bool terrain){
+    if(!m_impl||!m_impl->PrimitiveMaterial||!prototype)return InvalidHandle;const auto& geometry=*prototype;if(geometry.Vertices.empty()||geometry.Indices.empty())return InvalidHandle;
+    Impl::Instance instance;instance.Type=Impl::Kind::Primitive;instance.TerrainGeometry=terrain;
+    if(terrain&&m_impl->TerrainMaterial){
+        instance.SharedColor=std::shared_ptr<filament::MaterialInstance>(m_impl->TerrainMaterial->createInstance(),[impl=m_impl.get()](auto* material){impl->Engine.destroy(material);});
+        instance.SharedColor->setParameter("baseColor",filament::math::float4{1,1,1,1});instance.SharedColor->setParameter("showGrid",terrainGrid?1.f:0.f);m_impl->BindProbes(instance.SharedColor.get());instance.LastColor=component.Color;instance.ColorReady=true;
+    }else instance.SharedColor=m_impl->ColorMaterial(component.Color);
+    instance.PrimitiveMaterial=instance.SharedColor.get();
+    instance.SharedBuffers=m_impl->PrimitiveBufferCache[prototype].lock();
     if(!instance.SharedBuffers){
         instance.SharedBuffers=std::make_shared<Impl::PrimitiveBuffers>(m_impl->Engine);
         auto& buffers=*instance.SharedBuffers;buffers.Geometry=prototype;
-        buffers.Vertices=filament::VertexBuffer::Builder().vertexCount(static_cast<std::uint32_t>(geometry.Vertices.size())).bufferCount(1).attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3,0,sizeof(PrimitiveVertex)).attribute(filament::VertexAttribute::TANGENTS,0,filament::VertexBuffer::AttributeType::FLOAT4,12,sizeof(PrimitiveVertex)).attribute(filament::VertexAttribute::UV0,0,filament::VertexBuffer::AttributeType::FLOAT2,28,sizeof(PrimitiveVertex)).build(m_impl->Engine);
+        auto builder=filament::VertexBuffer::Builder().vertexCount(static_cast<std::uint32_t>(geometry.Vertices.size())).bufferCount(geometry.Colors.empty()?1:2).attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3,0,sizeof(PrimitiveVertex)).attribute(filament::VertexAttribute::TANGENTS,0,filament::VertexBuffer::AttributeType::FLOAT4,12,sizeof(PrimitiveVertex)).attribute(filament::VertexAttribute::UV0,0,filament::VertexBuffer::AttributeType::FLOAT2,28,sizeof(PrimitiveVertex));
+        if(!geometry.Colors.empty())builder.attribute(filament::VertexAttribute::COLOR,1,filament::VertexBuffer::AttributeType::FLOAT4,0,sizeof(Vec4));
+        buffers.Vertices=builder.build(m_impl->Engine);
         auto* vertices=new std::shared_ptr<const PrimitiveGeometry>(prototype);buffers.Vertices->setBufferAt(m_impl->Engine,0,{const_cast<PrimitiveVertex*>(geometry.Vertices.data()),geometry.Vertices.size()*sizeof(PrimitiveVertex),[](void*,size_t,void* user){delete static_cast<std::shared_ptr<const PrimitiveGeometry>*>(user);},vertices});
         buffers.Indices=filament::IndexBuffer::Builder().indexCount(static_cast<std::uint32_t>(geometry.Indices.size())).bufferType(filament::IndexBuffer::IndexType::UINT).build(m_impl->Engine);
+        if(!geometry.Colors.empty()){auto* colors=new std::shared_ptr<const PrimitiveGeometry>(prototype);buffers.Vertices->setBufferAt(m_impl->Engine,1,{const_cast<Vec4*>(geometry.Colors.data()),geometry.Colors.size()*sizeof(Vec4),[](void*,size_t,void* user){delete static_cast<std::shared_ptr<const PrimitiveGeometry>*>(user);},colors});}
         auto* indices=new std::shared_ptr<const PrimitiveGeometry>(prototype);buffers.Indices->setBuffer(m_impl->Engine,{const_cast<std::uint32_t*>(geometry.Indices.data()),geometry.Indices.size()*sizeof(std::uint32_t),[](void*,size_t,void* user){delete static_cast<std::shared_ptr<const PrimitiveGeometry>*>(user);},indices});
-        m_impl->PrimitiveBufferCache[key]=instance.SharedBuffers;
+
     }
+    m_impl->PrimitiveBufferCache[prototype]=instance.SharedBuffers;
+    std::erase_if(m_impl->PrimitiveBufferCache,[](const auto& pair){return pair.first.expired()&&pair.second.expired();});
     instance.PrimitiveVertices=instance.SharedBuffers->Vertices;instance.PrimitiveIndices=instance.SharedBuffers->Indices;
-    instance.PrimitiveEntity=m_impl->Engine.getEntityManager().create();m_impl->Engine.getTransformManager().create(instance.PrimitiveEntity);filament::RenderableManager::Builder(1).boundingBox({{0,0,0},{geometry.Extents.X,geometry.Extents.Y,geometry.Extents.Z}}).material(0,instance.PrimitiveMaterial).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,instance.PrimitiveVertices,instance.PrimitiveIndices).castShadows(component.CastShadows).receiveShadows(component.ReceiveShadows).build(m_impl->Engine,instance.PrimitiveEntity);m_impl->Scene.addEntity(instance.PrimitiveEntity);instance.AddedToScene=true;m_impl->ApplyRenderable(instance.PrimitiveEntity,component);
+    instance.PrimitiveEntity=m_impl->Engine.getEntityManager().create();m_impl->Engine.getTransformManager().create(instance.PrimitiveEntity);filament::RenderableManager::Builder(1).boundingBox({{geometry.Center.X,geometry.Center.Y,geometry.Center.Z},{geometry.Extents.X,geometry.Extents.Y,geometry.Extents.Z}}).material(0,instance.PrimitiveMaterial).geometry(0,filament::RenderableManager::PrimitiveType::TRIANGLES,instance.PrimitiveVertices,instance.PrimitiveIndices).castShadows(component.CastShadows).receiveShadows(component.ReceiveShadows).build(m_impl->Engine,instance.PrimitiveEntity);m_impl->Scene.addEntity(instance.PrimitiveEntity);instance.AddedToScene=true;m_impl->ApplyRenderable(instance.PrimitiveEntity,component);
     auto handle=m_impl->NextHandle++;auto [stored,_]=m_impl->Instances.emplace(handle,std::move(instance));Mesh material;material.MaterialAsset=component.MaterialAsset;m_impl->RegisterOverrides(stored->second,material);m_impl->UpdateMaterials(stored->second);m_impl->ApplyDebug(stored->second);return handle;
 }
 
@@ -956,6 +972,7 @@ std::vector<RenderAssets::EditorMeshGeometry> RenderAssets::GetEditorMeshes() co
     std::vector<EditorMeshGeometry> result;if(!m_impl)return result;
     auto& transforms=m_impl->Engine.getTransformManager();
     for(const auto& [_,value]:m_impl->Instances){
+        if(value.Type==Impl::Kind::Primitive&&value.TerrainGeometry&&value.AddedToScene&&value.SharedBuffers&&value.SharedBuffers->Geometry&&value.SharedBuffers->Geometry->Picking){result.push_back({value.EditorOwner,value.LastTransform,value.SharedBuffers->Geometry->Picking});continue;}
         if(value.Type!=Impl::Kind::Gltf||!value.AddedToScene||!value.Geometry)continue;
         const auto append=[&](std::uint32_t index){
             if(index>=value.Geometry->SourceNodes.size())return;
@@ -1120,6 +1137,7 @@ void RenderAssets::UpdateBakedLighting(Bazzalt::Scene& scene){
         ++material;
     }
     // Refresh prototypes as well as live instances before retiring a resized atlas.
+    if(m_impl->TerrainMaterial)m_impl->BindProbes(m_impl->TerrainMaterial->getDefaultInstance());
     if(m_impl->PrimitiveMaterial)m_impl->BindProbes(m_impl->PrimitiveMaterial->getDefaultInstance());for(const auto& [id,material]:m_impl->Materials)m_impl->BindProbes(material->getDefaultInstance());
     if(retired)m_impl->Engine.destroy(retired);
 }
@@ -1143,6 +1161,7 @@ void RenderAssets::Shutdown() {
     for(auto* material:{m_impl->DebugUnlit,m_impl->DebugLighting,m_impl->DebugOverdraw,m_impl->DebugWireframe})if(material)m_impl->Engine.destroy(material);
     for(auto* material:{m_impl->ParticleMaterial,m_impl->ParticleLitMaterial,m_impl->ParticleGPUMaterial,m_impl->ParticleGPULitMaterial})if(material)m_impl->Engine.destroy(material);
     if(m_impl->GraphicsMaterial)m_impl->Engine.destroy(m_impl->GraphicsMaterial);
+    if(m_impl->TerrainMaterial)m_impl->Engine.destroy(m_impl->TerrainMaterial);
     if(m_impl->PrimitiveMaterial)m_impl->Engine.destroy(m_impl->PrimitiveMaterial);
     m_impl->Textures.clear(); m_impl->Materials.clear();
     if (m_impl->GltfLoader) filament::gltfio::AssetLoader::destroy(&m_impl->GltfLoader);

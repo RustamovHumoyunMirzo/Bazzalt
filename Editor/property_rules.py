@@ -74,7 +74,7 @@ def Evaluate(expression,properties,value=None):
     except (TypeError,ValueError,ZeroDivisionError,OverflowError,AttributeError) as error:raise RuleError(str(error)) from error
 
 def CheckRules(rules):
-    known={'Min','Max','Step','MaxLength','MinLength','Trim','Filter','Pattern','ReadOnly','VisibleIf','EnabledIf','Validate','Message','Tooltip','Label','Section'}
+    known={'Min','Max','Step','MaxLength','MinLength','Trim','Filter','Pattern','ReadOnly','VisibleIf','EnabledIf','Validate','Message','Tooltip','Label','Section','Tab'}
     if not isinstance(rules,dict) or set(rules)-known:raise RuleError('Unknown inspector property rule')
     for key,value in rules.items():
         if key in ('Min','Max','Step','MaxLength','MinLength'):
@@ -86,17 +86,17 @@ def CheckRules(rules):
         else:
             if not isinstance(value,str) or len(value)>512:raise RuleError(key+' must be a short string')
             if key in ('VisibleIf','EnabledIf','Validate'):_Tree(value)
-            if key=='Section' and value and (len(value.split('/'))>8 or any(not part.strip() or len(part)>80 for part in value.split('/'))):raise RuleError('Section requires up to eight nonempty path segments of at most 80 characters')
+            if key in ('Section','Tab') and value and (len(value.split('/'))>8 or any(not part.strip() or len(part)>80 for part in value.split('/'))):raise RuleError('Section requires up to eight nonempty path segments of at most 80 characters')
             if key=='Filter' and value not in ('Digits','Letters','Alphanumeric','Identifier'):raise RuleError('Unknown string filter')
     if rules.get('Min',-math.inf)>rules.get('Max',math.inf) or rules.get('MinLength',0)>rules.get('MaxLength',4096):raise RuleError('Minimum exceeds maximum')
     return rules
 
 def CheckTypeRules(kind,rules):
     CheckRules(rules);kind=kind.replace('Bazzalt::','').strip()
-    if set(rules)&{'Min','Max','Step'} and kind not in ('float','double','int','Vec2','Vec3','Vec4','Quaternion'):raise RuleError('Numeric rules require a numeric property')
+    if set(rules)&{'Min','Max','Step'} and kind not in ('float','double','int','Vec2','Vec3','Vec4','Quaternion','FloatList','IntList'):raise RuleError('Numeric rules require a numeric property')
     if set(rules)&{'MinLength','MaxLength','Trim','Filter','Pattern'} and kind not in ('string','std::string'):raise RuleError('String rules require a string property')
-    if kind=='int' and any(int(rules[k])!=rules[k] for k in ('Min','Max','Step') if k in rules):raise RuleError('Integer bounds and steps must be integers')
-    if kind=='int' and (any(not -2147483648<=rules[k]<=2147483647 for k in ('Min','Max') if k in rules) or rules.get('Step',1)>2147483647):raise RuleError('Integer rules exceed the supported range')
+    if kind in ('int','IntList') and any(int(rules[k])!=rules[k] for k in ('Min','Max','Step') if k in rules):raise RuleError('Integer bounds and steps must be integers')
+    if kind in ('int','IntList') and (any(not -2147483648<=rules[k]<=2147483647 for k in ('Min','Max') if k in rules) or rules.get('Step',1)>2147483647):raise RuleError('Integer rules exceed the supported range')
     return rules
 
 def State(rules,properties):

@@ -228,7 +228,7 @@ class NativeRenderSurface(QWidget):
             if hasattr(self.Runtime,"IsEditorSelectable") and not self.Runtime.IsEditorSelectable(str(entity.get("uuid",""))):continue
             entity_id=str(entity.get("uuid","") or "")
             components=entity.get("components",())
-            if "Mesh" in components:
+            if "Mesh" in components or "Terrain" in components:
                 bounds=entity.get("mesh_bounds")
                 if bounds:
                     minimum,maximum=bounds
@@ -580,7 +580,10 @@ class ViewportPanel(QFrame):
                 button.setObjectName("SceneToolChip");button.setCheckable(True);button.setChecked(checked);button.setToolTip(tooltip)
             self.StatsLabel=StatisticsText(runtime)
             for widget in (self.LocalToggle,self.PivotMode,self.HighLevelToggle,self.ShadingMode,plane,grid,self.GizmoToggle):row.addWidget(widget)
-            row.addStretch();self.Controls=QToolButton();self.Controls.setText(localization.Translate("viewport.controls"));self.Controls.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup);self.ControlsMenu=SceneControlsMenu("",themes,self.Controls) if themes else QMenu(self.Controls);self.Controls.setMenu(self.ControlsMenu);row.addWidget(self.Controls);localization.LocaleChanged.connect(lambda *_:self.Controls.setText(localization.Translate("viewport.controls")));layout.addWidget(controls)
+            self.TerrainMenuButton=QToolButton();self.TerrainMenuButton.setText(localization.Translate('terrain.title'));self.TerrainMenuButton.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+            terrain_menu=SceneControlsMenu('',themes,self.TerrainMenuButton) if themes else QMenu(self.TerrainMenuButton);self.TerrainAction=terrain_menu.addAction(localization.Translate('terrain.edit'));self.TerrainAction.setCheckable(True);self.TerrainAction.setChecked(False);self.TerrainMenuButton.setMenu(terrain_menu);row.addStretch();row.addWidget(self.TerrainMenuButton)
+            localization.LocaleChanged.connect(lambda *_:(self.TerrainMenuButton.setText(localization.Translate('terrain.title')),self.TerrainAction.setText(localization.Translate('terrain.edit'))))
+            self.Controls=QToolButton();self.Controls.setText(localization.Translate("viewport.controls"));self.Controls.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup);self.ControlsMenu=SceneControlsMenu("",themes,self.Controls) if themes else QMenu(self.Controls);self.Controls.setMenu(self.ControlsMenu);row.addWidget(self.Controls);localization.LocaleChanged.connect(lambda *_:self.Controls.setText(localization.Translate("viewport.controls")));layout.addWidget(controls)
             update_selection_text()
             def update_icons(_theme=None):
                 theme="light" if themes and themes.GetTheme().background=="#d4d4d4" else "dark"

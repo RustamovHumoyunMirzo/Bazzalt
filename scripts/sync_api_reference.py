@@ -136,6 +136,12 @@ def lua_types():
             name = previous[-1][2]
             if name not in result: result[name]=(path.relative_to(ROOT).as_posix(),{})
             result[name][1][m[2]] = source[m.end():statement_end(m.end())].strip().rstrip(';')
+        # Direct typed field macros retain the native member identity for docs.
+        for match in re.finditer(r'\bFIELD\(\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\)',source):
+            native_type,variable,field=match.groups()
+            previous=[v for v in owners if v[0]<match.start() and v[1]==variable]
+            if previous and previous[-1][2] in result:
+                result[previous[-1][2]][1].setdefault(field,'&'+native_type+'::'+field)
         if path.name == 'LuaAudio.cpp':
             for m in re.finditer(r'AUDIO_FIELD\(AudioBusSettings,(\w+)\)',source):
                 result['AudioBusSettings'][1][m[1]]='&AudioBusSettings::'+m[1]

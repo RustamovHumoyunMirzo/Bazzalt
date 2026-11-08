@@ -1,5 +1,6 @@
 """Presentation-only grouping. Property identifiers and serialization stay stable."""
 GROUPS = {
+    "Terrain": {"Geometry": ("Size","Resolution","ChunkSize"), "Rendering": ("Visible","ShowGrid","CastShadows","ReceiveShadows","MaxLOD","LODDistance","SkirtDepth")},
     "NavMeshSurface": {
         "Bounds": ("Center", "Size"),
         "Voxelization": ("CellSize", "CellHeight", "TileSize", "MaxSimplificationError"),
