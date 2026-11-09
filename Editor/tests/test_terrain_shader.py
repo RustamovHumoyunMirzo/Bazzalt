@@ -15,6 +15,10 @@ class TerrainShaderTests(unittest.TestCase):
         self.assertIn('void bazzaltTerrainMaterial(inout MaterialInputs p)',result)
         self.assertIn('bazzaltTerrainMaterial(p);',result)
         self.assertLess(result.index('fwidth('),result.index('vec2 bazzaltRange'))
+    def test_sampling_clock_is_independent_of_gameplay_time(self):
+        result=TerrainVariant('material {} fragment {void material(inout MaterialInputs m){}}')
+        self.assertIn('getTime()',result)
+        self.assertNotIn('getUserTime()',result)
     def test_existing_uv1_is_not_duplicated(self):
         source='material {requires: [ uv0, uv1 ]} fragment {void material(inout MaterialInputs material){}}'
         self.assertEqual(TerrainVariant(source).count('uv1'),1)

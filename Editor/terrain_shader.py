@@ -5,7 +5,7 @@ from .lod_shader import _Code
 COVERAGE = """
         vec2 bazzaltRange = vec2(getUV1().x, 1.0 - getUV1().y);
         vec2 bazzaltPixel = floor(getNormalizedViewportCoord().xy * getResolution().xy);
-        float bazzaltThreshold = fract(52.9829189 * fract(dot(bazzaltPixel, vec2(0.06711056, 0.00583715))) + mod(floor(getUserTime().x * 60.0), 256.0) * 0.61803398875);
+        float bazzaltThreshold = fract(52.9829189 * fract(dot(bazzaltPixel, vec2(0.06711056, 0.00583715))) + floor(getTime() * 60.0) * 0.61803398875);
         if (bazzaltThreshold < bazzaltRange.x || bazzaltThreshold >= bazzaltRange.y) discard;
 """
 

@@ -112,7 +112,7 @@ static void Rendering(bool gpu){
             if(redPixels<=50||bluePixels<=50)std::cerr<<"Terrain blend pixels red="<<redPixels<<" blue="<<bluePixels<<" renderables="<<backend.GetAssets().GetEditorMeshes().size()<<"\n";
             assert(redPixels>50&&bluePixels>50);
             for(unsigned sample=1;sample<=48;++sample){
-                backend.Render(double(sample)/60);backend.WaitForViewportFrame(101);engine.pumpMessageQueues();
+                backend.Render(0);backend.WaitForViewportFrame(101);engine.pumpMessageQueues();std::this_thread::sleep_for(std::chrono::milliseconds(17));
                 if(auto updated=backend.CapturedFrame(101,frame->Sequence))frame=std::move(updated);
             }
             unsigned mixedPixels=0;

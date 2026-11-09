@@ -50,7 +50,8 @@ weights. Each layer keeps its material, UV tiling, shading model and render stat
 Intervals partition [0,1], so opaque layers fill each pixel exactly once. TAA
 resolves the sampled distribution. Scene views enable TAA when layered terrain
 is present. Game views retain their camera anti-aliasing settings. Coverage grain is visible with anti-aliasing
-disabled. Both UV-flip settings are handled during shader lowering.
+disabled. Sampling uses Filament getTime(), the independent one-second frame
+clock, so gameplay pause and time scale preserve convergence. Both UV-flip settings are handled during shader lowering.
 
 Editor/terrain_shader.py lowers imported surface shaders and embedded variants.
 CMake invokes scripts/generate_terrain_material.py for built-in materials.
