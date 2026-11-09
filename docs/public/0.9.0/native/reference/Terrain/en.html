@@ -41,9 +41,14 @@ std::vector&lt;std::uint8_t&gt; Holes;
 std::vector&lt;TerrainVegetation&gt; Vegetation;
 std::vector&lt;TerrainInstance&gt; Instances;
 std::vector&lt;TerrainSpline&gt; Splines;
+// Ellipsoidal CSG volumes produce caves and overhangs in affected chunks.
+    std::vector&lt;TerrainVolume&gt; Volumes;
+Vec2 VerticalRange{-20,20};
+std::uint32_t VerticalSamples=32;
 std::uint64_t Revision=0;
-static constexpr std::uint32_t MaxResolution=257;
-static constexpr std::uint32_t MaxLayers=8;
+static constexpr std::uint32_t MaxResolution=2049;
+static constexpr std::uint32_t MaxLayers=32;
+static constexpr std::size_t MaxSampleValues=64u*1024u*1024u;
 static constexpr std::uint32_t MaxInstances=10000;
 bool IsValid() const;
 void MarkDirty();
@@ -60,6 +65,9 @@ void ApplyBrush(TerrainTool tool,Vec2 center,const TerrainBrush&amp; brush,float
 void ImportHeightmap(std::uint32_t layer,const std::vector&lt;float&gt;&amp; samples,std::uint32_t width,std::uint32_t height,float scale=1);
 void ImportSplatmap(std::uint32_t layer,const std::vector&lt;float&gt;&amp; samples,std::uint32_t width,std::uint32_t height);
 void ApplySpline(std::uint32_t spline,std::uint32_t layer=0);
+// Copies a neighbour&#x27;s composed edge into this terrain, resampling as needed.
+    // Transform maps neighbour-local coordinates into this terrain&#x27;s space.
+    void MatchEdge(const Terrain&amp; neighbour,TerrainEdge edge,const Mat4&amp; neighbourToLocal,std::uint32_t layer=0);
 void ApplyBoolean(const Terrain&amp; other,const Mat4&amp; otherToLocal,TerrainBoolean operation,std::uint32_t layer=0);
 void GenerateVegetation(std::uint32_t prototype);
 void PaintVegetation(std::uint32_t prototype,Vec2 center,float radius,std::uint32_t count,bool erase=false);

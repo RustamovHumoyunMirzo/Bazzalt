@@ -9,7 +9,7 @@ namespace Bazzalt::Runtime {
 // Filament stores the normal frame as a quaternion in its TANGENTS attribute.
 struct PrimitiveVertex { float Position[3]; float TangentFrame[4]; float UV[2]; };
 struct ModelGeometry;
-struct PrimitiveGeometry { std::vector<PrimitiveVertex> Vertices; std::vector<Vec4> Colors; std::vector<std::uint32_t> Indices; Vec3 Extents{};Vec3 Center{};std::shared_ptr<const ModelGeometry> Picking; };
+struct PrimitiveGeometry { std::vector<PrimitiveVertex> Vertices; std::vector<Vec4> Colors; std::vector<Vec2> BlendRanges; std::vector<std::uint32_t> Indices; Vec3 Extents{};Vec3 Center{};std::shared_ptr<const ModelGeometry> Picking; };
 using PrimitiveGeometryKey = std::array<std::uint32_t,12>;
 PrimitiveGeometryKey GetPrimitiveGeometryKey(const PrimitiveObject& primitive);
 std::shared_ptr<const PrimitiveGeometry> GetCachedPrimitiveGeometry(const PrimitiveObject& primitive);

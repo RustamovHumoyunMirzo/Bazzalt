@@ -19,7 +19,7 @@ protected:
 private:
     struct Chunk {std::uint64_t Fingerprint=0;unsigned LOD=0;std::vector<RenderAssets::Handle> Handles;};
     using VegetationKey=std::tuple<UUID,UUID,bool,std::array<std::uint32_t,8>,std::filesystem::path>;
-    struct Resource {std::uint64_t Revision=0;std::vector<Chunk> Chunks;std::vector<RenderAssets::Handle> Vegetation;std::vector<VegetationKey> VegetationKeys;std::vector<std::filesystem::path> ModelPaths;};
+    struct Resource {std::uint64_t Revision=0,ValidationRevision=0;bool Valid=false;std::vector<Chunk> Chunks;std::vector<RenderAssets::Handle> Surfaces;std::vector<RenderAssets::Handle> Vegetation;std::vector<VegetationKey> VegetationKeys;std::vector<std::filesystem::path> ModelPaths;};
     void Destroy(Resource&);
     RenderBackend& m_backend;
     std::unordered_map<UUID,Resource> m_resources;

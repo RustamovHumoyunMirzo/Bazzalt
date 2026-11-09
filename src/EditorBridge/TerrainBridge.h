@@ -22,10 +22,12 @@ inline py::dict TerrainVegetationInfo(const TerrainVegetation& v,unsigned index)
 }
 inline void InspectTerrain(Entity e,py::list& components,py::dict& enabled,py::dict& data){const auto* t=e.TryGetComponent<Terrain>();if(!t)return;components.append("Terrain");enabled["Terrain"]=t->Enabled;py::dict d;d["Size"]=py::make_tuple(t->Size.X,t->Size.Y);
 #define F(Name) d[#Name]=t->Name;
-    F(Resolution) F(ChunkSize) F(MaxLOD) F(LODDistance) F(SkirtDepth) F(Visible) F(ShowGrid) F(CastShadows) F(ReceiveShadows)
+    F(VerticalSamples) F(Resolution) F(ChunkSize) F(MaxLOD) F(LODDistance) F(SkirtDepth) F(Visible) F(ShowGrid) F(CastShadows) F(ReceiveShadows)
 #undef F
+    d["VerticalRange"]=py::make_tuple(t->VerticalRange.X,t->VerticalRange.Y);
+    py::list volumes;for(const auto& volume:t->Volumes){py::dict row;row["Name"]=volume.Name;row["Enabled"]=volume.Enabled;row["Operation"]=int(volume.Operation);row["Center"]=py::make_tuple(volume.Center.X,volume.Center.Y,volume.Center.Z);row["Radius"]=py::make_tuple(volume.Radius.X,volume.Radius.Y,volume.Radius.Z);volumes.append(row);}d["Volumes"]=volumes;
     py::list layers,vegetation,splines;for(unsigned i=0;i<t->Layers.size();++i)layers.append(TerrainLayerInfo(t->Layers[i],i));for(unsigned i=0;i<t->Vegetation.size();++i)vegetation.append(TerrainVegetationInfo(t->Vegetation[i],i));
-    for(const auto& s:t->Splines){py::dict row;row["Name"]=s.Name;row["Width"]=s.Width;row["Shoulder"]=s.Shoulder;row["Depth"]=s.Depth;row["Strength"]=s.Strength;row["Closed"]=s.Closed;py::list points;for(auto p:s.Points)points.append(py::make_tuple(p.X,p.Y,p.Z));row["Points"]=points;splines.append(row);}
+    for(const auto& s:t->Splines){py::dict row;row["Name"]=s.Name;row["Width"]=s.Width;row["Shoulder"]=s.Shoulder;row["Depth"]=s.Depth;row["Strength"]=s.Strength;row["Closed"]=s.Closed;row["GenerateSurface"]=s.GenerateSurface;row["SurfaceCollision"]=s.SurfaceCollision;row["SurfaceOffset"]=s.SurfaceOffset;row["TextureScale"]=s.TextureScale;row["Material"]=s.Material.ToString();row["Color"]=py::make_tuple(s.Color.X,s.Color.Y,s.Color.Z,s.Color.W);py::list points;for(auto p:s.Points)points.append(py::make_tuple(p.X,p.Y,p.Z));row["Points"]=points;splines.append(row);}
     d["Layers"]=layers;d["Vegetation"]=vegetation;d["Splines"]=splines;data["Terrain"]=d;
 }
 inline UUID TerrainAsset(py::handle value,const std::set<std::string>& extensions){auto text=py::cast<std::string>(value);UUID id;if(text.empty()||text=="0")return id;if(!UUID::TryParse(text,id))throw std::invalid_argument("Invalid terrain asset UUID");if(id){auto asset=AssetManager::GetAsset(id);auto extension=asset?asset->SourcePath.extension().string():std::string{};std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){return char(std::tolower(c));});if(!asset||!extensions.contains(extension))throw std::invalid_argument("Wrong asset type for terrain field");}return id;}
@@ -35,8 +37,20 @@ inline bool SetTerrainProperty(Entity e,const std::string& name,py::handle input
         if(name=="Size"){auto v=py::cast<std::array<float,2>>(input);next.Size={v[0],v[1]};}
         else if(name=="Resolution")next.Resize(py::cast<unsigned>(input));
 #define F(Name) else if(name==#Name)next.Name=py::cast<decltype(next.Name)>(input);
-        F(ChunkSize) F(MaxLOD) F(LODDistance) F(SkirtDepth) F(Visible) F(ShowGrid) F(CastShadows) F(ReceiveShadows)
+        F(VerticalSamples) F(ChunkSize) F(MaxLOD) F(LODDistance) F(SkirtDepth) F(Visible) F(ShowGrid) F(CastShadows) F(ReceiveShadows)
 #undef F
+        else if(name=="VerticalRange"){auto range=py::cast<std::array<float,2>>(input);next.VerticalRange={range[0],range[1]};}
+        else if(name=="Volumes"){
+            auto rows=py::cast<py::list>(input);if(rows.size()>64)return false;
+            next.Volumes.clear();
+            for(auto row:rows){auto d=py::cast<py::dict>(row);TerrainVolume volume;
+                TerrainRead(d,"Name",volume.Name);TerrainRead(d,"Enabled",volume.Enabled);
+                if(d.contains("Operation"))volume.Operation=TerrainVolumeOperation(py::cast<int>(d["Operation"]));
+                if(d.contains("Center")){auto v=py::cast<std::array<float,3>>(d["Center"]);volume.Center={v[0],v[1],v[2]};}
+                if(d.contains("Radius")){auto v=py::cast<std::array<float,3>>(d["Radius"]);volume.Radius={v[0],v[1],v[2]};}
+                next.Volumes.push_back(volume);
+            }
+        }
         else if(name=="Layers"){auto rows=py::cast<py::list>(input);if(rows.empty()||rows.size()>Terrain::MaxLayers)return false;std::vector<TerrainLayer> result;std::set<unsigned> seen;
             for(auto row:rows){auto d=py::cast<py::dict>(row);TerrainLayer l;if(d.contains("_Index")){auto index=py::cast<unsigned>(d["_Index"]);if(index>=next.Layers.size()||!seen.insert(index).second)return false;l=next.Layers[index];}
 #define F(Name) TerrainRead(d,#Name,l.Name);
@@ -51,8 +65,10 @@ inline bool SetTerrainProperty(Entity e,const std::string& name,py::handle input
                 if(d.contains("Model"))v.Model=TerrainAsset(d["Model"],{".gltf",".glb",".obj",".fbx",".filamesh"});if(d.contains("Material"))v.Material=TerrainAsset(d["Material"],{".matinst"});result.push_back(v);}next.Vegetation=std::move(result);std::erase_if(next.Instances,[&](const auto& instance){return !remap.contains(instance.Prototype);});for(auto& instance:next.Instances)instance.Prototype=remap.at(instance.Prototype);
         }else if(name=="Splines"){auto rows=py::cast<py::list>(input);if(rows.size()>128)return false;next.Splines.clear();for(auto row:rows){auto d=py::cast<py::dict>(row);TerrainSpline s;
 #define F(Name) TerrainRead(d,#Name,s.Name);
-                F(Name) F(Width) F(Shoulder) F(Depth) F(Strength) F(Closed)
+                F(Name) F(Width) F(Shoulder) F(Depth) F(Strength) F(Closed) F(GenerateSurface) F(SurfaceCollision) F(SurfaceOffset) F(TextureScale)
 #undef F
+                if(d.contains("Material"))s.Material=TerrainAsset(d["Material"],{".matinst"});
+                if(d.contains("Color")){auto c=py::cast<std::array<float,4>>(d["Color"]);s.Color={c[0],c[1],c[2],c[3]};}
                 if(d.contains("Points")){auto points=py::cast<std::vector<std::array<float,3>>>(d["Points"]);if(points.size()>1024)return false;for(auto p:points)s.Points.push_back({p[0],p[1],p[2]});}next.Splines.push_back(s);}
         }else return false;
         if(!next.IsValid())return false;next.MarkDirty();*t=std::move(next);return true;
@@ -78,6 +94,16 @@ inline py::dict TerrainCommand(Entity e,const std::string& command,py::dict d){a
         else {unsigned index=0;TerrainRead(d,"spline",index);if(index>=t->Splines.size()||t->Splines[index].Points.size()>=1024)throw std::invalid_argument("Create a spline with capacity first");t->Splines[index].Points.push_back(hit->Position);t->MarkDirty();}
     }else if(command=="import_height"||command=="import_splat"){if(layer>=t->Layers.size())throw std::out_of_range("Terrain layer");auto id=command=="import_height"?t->Layers[layer].Heightmap:t->Layers[layer].Splatmap;auto [data,w,h]=ReadTerrainImage(id);if(command=="import_height"){float scale=10;TerrainRead(d,"scale",scale);t->ImportHeightmap(layer,data,w,h,scale);}else t->ImportSplatmap(layer,data,w,h);}
     else if(command=="generate"){unsigned prototype=0;TerrainRead(d,"prototype",prototype);t->GenerateVegetation(prototype);}
+    else if(command=="match_edge"){
+        UUID source;
+        if(!UUID::TryParse(py::cast<std::string>(d["source"]),source))throw std::invalid_argument("Invalid terrain neighbour");
+        auto neighbour=e.GetScene()->GetEntity(source);
+        if(!neighbour||!neighbour.HasComponent<Terrain>())throw std::invalid_argument("Missing terrain neighbour");
+        Mat4 inverse;
+        if(!e.GetWorldMatrix().TryInverse(inverse))throw std::invalid_argument("Singular terrain transform");
+        unsigned edge=0;TerrainRead(d,"edge",edge);
+        t->MatchEdge(neighbour.GetComponent<Terrain>(),TerrainEdge(edge),inverse*neighbour.GetWorldMatrix(),layer);
+    }
     else if(command=="spline"){unsigned index=0;TerrainRead(d,"spline",index);t->ApplySpline(index,layer);}
     else if(command=="boolean"){UUID id;if(!UUID::TryParse(py::cast<std::string>(d["source"]),id))throw std::invalid_argument("Invalid boolean source");auto other=e.GetScene()->GetEntity(id);if(!other||!other.HasComponent<Terrain>())throw std::invalid_argument("Boolean source needs Terrain in the same scene");Mat4 inverse;if(!e.GetWorldMatrix().TryInverse(inverse))throw std::invalid_argument("Singular terrain transform");t->ApplyBoolean(other.GetComponent<Terrain>(),inverse*other.GetWorldMatrix(),TerrainBoolean(py::cast<int>(d["operation"])),layer);}
     else throw std::invalid_argument("Unknown terrain command");result["changed"]=true;return result;

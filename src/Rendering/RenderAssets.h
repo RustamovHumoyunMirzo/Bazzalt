@@ -42,7 +42,7 @@ public:
     void UpdateMesh(Handle handle, const Mat4& transform, const Mesh& component);
     void DestroyMesh(Handle handle);
     [[nodiscard]] Handle CreatePrimitive(const PrimitiveObject& component);
-    [[nodiscard]] Handle CreateGeometry(std::shared_ptr<const struct PrimitiveGeometry> geometry,const PrimitiveObject& component,bool terrainGrid=false,bool terrain=false);
+    [[nodiscard]] Handle CreateGeometry(std::shared_ptr<const struct PrimitiveGeometry> geometry,const PrimitiveObject& component,bool terrainGrid=false,bool terrain=false,bool terrainBlend=false);
     void UpdatePrimitive(Handle handle, const Mat4& transform, const PrimitiveObject& component);
     void DestroyPrimitive(Handle handle) { DestroyMesh(handle); }
     [[nodiscard]] bool PreparePostProcessEffect(const CustomPostProcessEffect& effect);
@@ -52,6 +52,7 @@ public:
     void SetEditorOwner(Handle handle,UUID owner);
     struct EditorMeshGeometry { UUID Owner;Mat4 World;std::shared_ptr<const ModelGeometry> Geometry; };
     [[nodiscard]] std::vector<EditorMeshGeometry> GetEditorMeshes() const;
+    [[nodiscard]] bool HasTerrainBlending() const;
     [[nodiscard]] std::size_t GetMaterialSlotCount(Handle handle) const;
     bool BeginSelectionMask(filament::Scene& scene,const std::unordered_set<UUID>& selected,const std::unordered_set<UUID>& hovered,
                             filament::MaterialInstance* selectedMaterial,filament::MaterialInstance* hoverMaterial);

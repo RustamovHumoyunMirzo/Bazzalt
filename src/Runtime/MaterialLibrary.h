@@ -2,7 +2,7 @@
 #include "Bazzalt/Material.h"
 namespace Bazzalt::Runtime {
 struct MaterialShaderPackage { const std::uint8_t* Data=nullptr;std::size_t Size=0; };
-MaterialShaderPackage GetBuiltinMaterialPackage(UUID shader);
+MaterialShaderPackage GetBuiltinMaterialPackage(UUID shader,bool terrainBlend=false);
 Detail::MaterialServices* GetMaterialServices();
 void ResetMaterialLibrary();
 void ResetRuntimeMaterials();

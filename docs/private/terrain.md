@@ -44,9 +44,21 @@ foliage. Model cache-path changes invalidate only the affected model instances.
 debug shading, visibility and resource lifetime paths. Terrain adds a separate
 vertex-color stream; ordinary primitive vertex stride stays unchanged. Immutable
 prototype identity shares buffers. The built-in `terrain_lit.mat` renders smooth
-coverage colors and metre grid lines. Custom material programs select the
-dominant splat layer per triangle and receive that layer's UV tiling. Cross-program
-shader blending is not implemented; do not advertise it as smooth material blending.
+coverage colors and metre grid lines. Custom surface programs use disjoint
+per-pixel stochastic coverage intervals, interpolated from normalized splat
+weights. Each layer keeps its material, UV tiling, shading model and render state.
+Intervals partition [0,1], so opaque layers fill each pixel exactly once. TAA
+resolves the sampled distribution. Scene views enable TAA when layered terrain
+is present. Game views retain their camera anti-aliasing settings. Coverage grain is visible with anti-aliasing
+disabled. Both UV-flip settings are handled during shader lowering.
+
+Editor/terrain_shader.py lowers imported surface shaders and embedded variants.
+CMake invokes scripts/generate_terrain_material.py for built-in materials.
+Import compilation emits .terrain.filamat beside the regular package. Graph
+preview publication and Compiler/content.py retain that binary. The renderer
+selects it for layered terrain. UV1 carries private coverage intervals. Ordinary
+primitives retain their existing vertex stride. Lowering changes require a
+material cache-version bump and matching built-in variants.
 
 Editor ray picking uses authoritative full-resolution heightfield traversal, not
 LOD triangles or skirts. `GetEditorMeshes` still exposes terrain chunk bounds to
@@ -83,8 +95,25 @@ Run `BazzaltTerrainTests`, the existing rendering/LOD/physics tests, and
 tests after rebuilding the bridge. Refresh API references and public navigation
 with the normal documentation scripts.
 
-This is a heightfield system: holes open cells, but do not produce caves, water,
-volumetric CSG or automatic border welding across terrain entities. Spline tools
-shape the ground; a road/water renderer is a separate consumer. Surface booleans
-require upright transforms and have documented heightfield arithmetic semantics.
-Keep budgets explicit and add versioned codecs before changing array layout.
+Heightfield cells intersecting enabled TerrainVolume ellipsoids use marching
+tetrahedra. Density starts from composed ground height minus Y. Add uses maximum
+and Subtract uses minimum with the negated ellipsoid density. A fixed global
+vertical grid and identical tetrahedra keep adjacent chunk extraction consistent.
+BuildTerrainChunk, scene picking and physics consume this geometry. Volume edits
+must preserve a valid vertical range. Sculpt/import operations validate a copy
+before publishing changes. Current extraction work is bounded to four million
+vertical cells per terrain.
+
+Spline GenerateSurface creates material-backed ribbons. SurfaceCollision controls
+physics inclusion. Optional serialized fields retain defaults when loading older
+version-one scenes. Spline material references participate in asset dependency
+tracking. MatchEdge validates adjacency and computes composed heights in the
+neighbour transform, then publishes the edited terrain atomically. It upsamples
+the destination when the source has a higher resolution.
+
+Sample dimensions now reach 2049 and layer count reaches 32. The combined dense
+height/weight capacity must fit 64 million float values. Keep these allocations
+bounded when adding new editing methods or codec fields.
+
+Source-authored custom surface programs blend through stochastic coverage.
+Binary-only packages require a matching terrain coverage variant.

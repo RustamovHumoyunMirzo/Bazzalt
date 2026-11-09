@@ -4,10 +4,15 @@
 #include "Bazzalt/Components/Mesh.h"
 #include "Bazzalt/Components/PrimitiveObject.h"
 #include "runtime_lit_filamat.h"
+#include "runtime_lit_terrain_filamat.h"
 #include "runtime_unlit_filamat.h"
+#include "runtime_unlit_terrain_filamat.h"
 #include "runtime_lit_transparent_filamat.h"
+#include "runtime_lit_transparent_terrain_filamat.h"
 #include "runtime_unlit_transparent_filamat.h"
+#include "runtime_unlit_transparent_terrain_filamat.h"
 #include "runtime_canvas_filamat.h"
+#include "runtime_canvas_terrain_filamat.h"
 #include "Bazzalt/GUI.h"
 #include <ryml.hpp>
 #include <ryml_std.hpp>
@@ -136,13 +141,13 @@ UUID GetMaterialCameraTexture(UUID material,const std::string& parameter){
     auto found=definition->CameraTextures.find(parameter);
     return found==definition->CameraTextures.end()?UUID{}:found->second;
 }
-MaterialShaderPackage GetBuiltinMaterialPackage(UUID shader){
+MaterialShaderPackage GetBuiltinMaterialPackage(UUID shader,bool terrainBlend){
     switch(PresetIndex(shader)){
-    case 0:return {Embedded::RuntimeLitFilamat,Embedded::RuntimeLitFilamatSize};
-    case 1:return {Embedded::RuntimeUnlitFilamat,Embedded::RuntimeUnlitFilamatSize};
-    case 2:return {Embedded::RuntimeLitTransparentFilamat,Embedded::RuntimeLitTransparentFilamatSize};
-    case 3:return {Embedded::RuntimeUnlitTransparentFilamat,Embedded::RuntimeUnlitTransparentFilamatSize};
-    case 4:return {Embedded::RuntimeCanvasFilamat,Embedded::RuntimeCanvasFilamatSize};
+    case 0:return terrainBlend?MaterialShaderPackage{Embedded::RuntimeLitTerrainFilamat,Embedded::RuntimeLitTerrainFilamatSize}:MaterialShaderPackage{Embedded::RuntimeLitFilamat,Embedded::RuntimeLitFilamatSize};
+    case 1:return terrainBlend?MaterialShaderPackage{Embedded::RuntimeUnlitTerrainFilamat,Embedded::RuntimeUnlitTerrainFilamatSize}:MaterialShaderPackage{Embedded::RuntimeUnlitFilamat,Embedded::RuntimeUnlitFilamatSize};
+    case 2:return terrainBlend?MaterialShaderPackage{Embedded::RuntimeLitTransparentTerrainFilamat,Embedded::RuntimeLitTransparentTerrainFilamatSize}:MaterialShaderPackage{Embedded::RuntimeLitTransparentFilamat,Embedded::RuntimeLitTransparentFilamatSize};
+    case 3:return terrainBlend?MaterialShaderPackage{Embedded::RuntimeUnlitTransparentTerrainFilamat,Embedded::RuntimeUnlitTransparentTerrainFilamatSize}:MaterialShaderPackage{Embedded::RuntimeUnlitTransparentFilamat,Embedded::RuntimeUnlitTransparentFilamatSize};
+    case 4:return terrainBlend?MaterialShaderPackage{Embedded::RuntimeCanvasTerrainFilamat,Embedded::RuntimeCanvasTerrainFilamatSize}:MaterialShaderPackage{Embedded::RuntimeCanvasFilamat,Embedded::RuntimeCanvasFilamatSize};
     default:return {};
     }
 }

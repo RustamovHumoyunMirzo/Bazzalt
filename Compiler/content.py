@@ -79,7 +79,7 @@ def FilterCooked(cooked, packaging,editor_sources=()):
         row=by_id[identity];source=Local(row['Source']);cache=Local(row['Cache'])
         allowed.update((source,Path(str(source)+'.meta'),cache))
         if row.get('Importer')=='Bazzalt.Stylesheet':allowed.add(Path(str(cache)+'.dependencies.yml'))
-        if source.suffix.lower() in shaders:allowed.update((Path(str(cache)+'.filamat'),Path(str(cache)+'.reflection.json')))
+        if source.suffix.lower() in shaders:allowed.update((Path(str(cache)+'.filamat'),Path(str(cache)+'.terrain.filamat'),Path(str(cache)+'.reflection.json')))
         if row.get('Importer')=='Bazzalt.Environment':
             allowed.update(p for p in Path(str(cache)+'.environment').rglob('*') if p.is_file())
         if row.get('Importer')=='Bazzalt.glTF':

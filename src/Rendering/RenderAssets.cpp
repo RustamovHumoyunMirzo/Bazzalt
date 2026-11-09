@@ -70,7 +70,7 @@ extern "C" void stbi_image_free(void*);
 #include "editor_overdraw_filamat.h"
 #include "editor_wireframe_filamat.h"
 #include "primitive_lit_filamat.h"
-#include "terrain_lit_filamat.h"
+#include "terrain_lit_terrain_filamat.h"
 #include "graphics_unlit_filamat.h"
 #include "particle_unlit_filamat.h"
 #include "particle_lit_filamat.h"
@@ -239,7 +239,7 @@ struct RenderAssets::Impl {
     struct Instance {
         struct Original { utils::Entity Entity;std::size_t Primitive;filament::MaterialInstance* Material; };
         Kind Type = Kind::Gltf;
-        bool TerrainGeometry=false;
+        bool TerrainGeometry=false,TerrainBlend=false;
         UUID Asset{};
         UUID EditorOwner{},ModelOwner{};
         std::vector<UUID> Materials;
@@ -318,9 +318,9 @@ struct RenderAssets::Impl {
     std::unordered_set<UUID> DeformedSources;
     std::vector<Instance::Original> MaskOriginals;
     std::vector<utils::Entity> MaskEntities;
-    std::unordered_map<UUID, filament::Material*> Materials;
-    std::unordered_map<UUID, std::vector<std::uint8_t>> MaterialPackages;
-    std::unordered_map<UUID, std::filesystem::file_time_type> MaterialModified;
+    std::map<std::pair<UUID,bool>, filament::Material*> Materials;
+    std::map<std::pair<UUID,bool>, std::vector<std::uint8_t>> MaterialPackages;
+    std::map<std::pair<UUID,bool>, std::filesystem::file_time_type> MaterialModified;
     std::vector<filament::Material*> RetiredMaterials;
     std::unordered_map<UUID, filament::Texture*> Textures;
     std::unordered_map<UUID,ResourceLoadHandle> TextureReads;
@@ -399,11 +399,12 @@ struct RenderAssets::Impl {
         GraphicsMaterial=filament::Material::Builder().package(Embedded::GraphicsUnlitFilamat,Embedded::GraphicsUnlitFilamatSize).build(Engine);
     }
 
-    filament::Material* LoadMaterial(UUID id) {
+    filament::Material* LoadMaterial(UUID id,bool terrainBlend=false) {
         if (!id) return nullptr;
+        const auto key=std::make_pair(id,terrainBlend);
         std::vector<std::uint8_t> ownedBytes;
         const auto embedded = GetEmbeddedPostProcessShader(id);
-        const auto builtin = GetBuiltinMaterialPackage(id);
+        const auto builtin = GetBuiltinMaterialPackage(id,terrainBlend);
         const std::uint8_t* data = builtin.Data ? builtin.Data : embedded.Data;
         std::size_t size = builtin.Data ? builtin.Size : embedded.Size;
         if (data == nullptr) {
@@ -411,21 +412,21 @@ struct RenderAssets::Impl {
             if (!asset || asset->State != AssetState::Ready) return nullptr;
             auto path=asset->CachePath;
             const auto extension=LowerExtension(asset->SourcePath);
-            if(extension==".mat"||extension==".shad"||extension==".shadg"||extension==".bshader")path+=".filamat";
+            if(extension==".mat"||extension==".shad"||extension==".shadg"||extension==".bshader")path+=terrainBlend?".terrain.filamat":".filamat";
             else if(extension!=".filamat")return nullptr;
             std::error_code error;const auto modified=std::filesystem::last_write_time(path,error);
             if(error)return nullptr;
-            if(auto found=Materials.find(id);found!=Materials.end()&&MaterialModified[id]==modified)return found->second;
-            MaterialModified[id]=modified;
+            if(auto found=Materials.find(key);found!=Materials.end()&&MaterialModified[key]==modified)return found->second;
+            MaterialModified[key]=modified;
             ownedBytes = ReadBytes(path);
             data = ownedBytes.data(); size = ownedBytes.size();
         }
         if (data == nullptr || size == 0) return nullptr;
-        if(auto found=Materials.find(id);found!=Materials.end()) {
-            if(builtin.Data || embedded.Data || MaterialPackages[id]==ownedBytes)return found->second;
+        if(auto found=Materials.find(key);found!=Materials.end()) {
+            if(builtin.Data || embedded.Data || MaterialPackages[key]==ownedBytes)return found->second;
         }
         auto* material = filament::Material::Builder().package(data, size).build(Engine);
-        if (material) {ProbeMaterials.erase(material);BindProbes(material->getDefaultInstance());if(auto found=Materials.find(id);found!=Materials.end())RetiredMaterials.push_back(found->second);Materials[id]=material;MaterialPackages[id]=std::move(ownedBytes);}
+        if (material) {ProbeMaterials.erase(material);BindProbes(material->getDefaultInstance());if(auto found=Materials.find(key);found!=Materials.end())RetiredMaterials.push_back(found->second);Materials[key]=material;MaterialPackages[key]=std::move(ownedBytes);}
         return material;
     }
 
@@ -583,7 +584,7 @@ struct RenderAssets::Impl {
     void UpdateMaterials(Instance& value) {
         for(auto& override:value.Overrides){
             const auto material=Bazzalt::Material::Load(override.Asset);
-            auto* shader=material.IsValid()?LoadMaterial(material.GetShader().GetAssetUUID()):LoadMaterial(override.Asset);
+            auto* shader=material.IsValid()?LoadMaterial(material.GetShader().GetAssetUUID(),value.TerrainBlend):LoadMaterial(override.Asset,value.TerrainBlend);
             if(shader&&shader->getMaterialDomain()!=filament::MaterialDomain::SURFACE)shader=nullptr;
             if(shader){auto& manager=Engine.getRenderableManager();auto enabled=manager.getEnabledAttributesAt(manager.getInstance(override.Entity),override.Primitive);auto required=shader->getRequiredAttributes();if((enabled & required)!=required)shader=nullptr;}
             const bool stateOverride=material.IsValid()&&material.GetRenderState().Override;
@@ -864,9 +865,9 @@ void RenderAssets::DestroyMesh(Handle handle) {
 RenderAssets::Handle RenderAssets::CreatePrimitive(const PrimitiveObject& component){
     return CreateGeometry(GetCachedPrimitiveGeometry(component),component);
 }
-RenderAssets::Handle RenderAssets::CreateGeometry(std::shared_ptr<const PrimitiveGeometry> prototype,const PrimitiveObject& component,bool terrainGrid,bool terrain){
+RenderAssets::Handle RenderAssets::CreateGeometry(std::shared_ptr<const PrimitiveGeometry> prototype,const PrimitiveObject& component,bool terrainGrid,bool terrain,bool terrainBlend){
     if(!m_impl||!m_impl->PrimitiveMaterial||!prototype)return InvalidHandle;const auto& geometry=*prototype;if(geometry.Vertices.empty()||geometry.Indices.empty())return InvalidHandle;
-    Impl::Instance instance;instance.Type=Impl::Kind::Primitive;instance.TerrainGeometry=terrain;
+    Impl::Instance instance;instance.Type=Impl::Kind::Primitive;instance.TerrainGeometry=terrain;instance.TerrainBlend=terrainBlend;
     if(terrain&&m_impl->TerrainMaterial){
         instance.SharedColor=std::shared_ptr<filament::MaterialInstance>(m_impl->TerrainMaterial->createInstance(),[impl=m_impl.get()](auto* material){impl->Engine.destroy(material);});
         instance.SharedColor->setParameter("baseColor",filament::math::float4{1,1,1,1});instance.SharedColor->setParameter("showGrid",terrainGrid?1.f:0.f);m_impl->BindProbes(instance.SharedColor.get());instance.LastColor=component.Color;instance.ColorReady=true;
@@ -876,12 +877,17 @@ RenderAssets::Handle RenderAssets::CreateGeometry(std::shared_ptr<const Primitiv
     if(!instance.SharedBuffers){
         instance.SharedBuffers=std::make_shared<Impl::PrimitiveBuffers>(m_impl->Engine);
         auto& buffers=*instance.SharedBuffers;buffers.Geometry=prototype;
-        auto builder=filament::VertexBuffer::Builder().vertexCount(static_cast<std::uint32_t>(geometry.Vertices.size())).bufferCount(geometry.Colors.empty()?1:2).attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3,0,sizeof(PrimitiveVertex)).attribute(filament::VertexAttribute::TANGENTS,0,filament::VertexBuffer::AttributeType::FLOAT4,12,sizeof(PrimitiveVertex)).attribute(filament::VertexAttribute::UV0,0,filament::VertexBuffer::AttributeType::FLOAT2,28,sizeof(PrimitiveVertex));
+        auto builder=filament::VertexBuffer::Builder().vertexCount(static_cast<std::uint32_t>(geometry.Vertices.size())).bufferCount(1+(!geometry.Colors.empty()?1:0)+(!geometry.BlendRanges.empty()?1:0)).attribute(filament::VertexAttribute::POSITION,0,filament::VertexBuffer::AttributeType::FLOAT3,0,sizeof(PrimitiveVertex)).attribute(filament::VertexAttribute::TANGENTS,0,filament::VertexBuffer::AttributeType::FLOAT4,12,sizeof(PrimitiveVertex)).attribute(filament::VertexAttribute::UV0,0,filament::VertexBuffer::AttributeType::FLOAT2,28,sizeof(PrimitiveVertex));
         if(!geometry.Colors.empty())builder.attribute(filament::VertexAttribute::COLOR,1,filament::VertexBuffer::AttributeType::FLOAT4,0,sizeof(Vec4));
+        if(!geometry.BlendRanges.empty())builder.attribute(filament::VertexAttribute::UV1,geometry.Colors.empty()?1:2,filament::VertexBuffer::AttributeType::FLOAT2,0,sizeof(Vec2));
         buffers.Vertices=builder.build(m_impl->Engine);
         auto* vertices=new std::shared_ptr<const PrimitiveGeometry>(prototype);buffers.Vertices->setBufferAt(m_impl->Engine,0,{const_cast<PrimitiveVertex*>(geometry.Vertices.data()),geometry.Vertices.size()*sizeof(PrimitiveVertex),[](void*,size_t,void* user){delete static_cast<std::shared_ptr<const PrimitiveGeometry>*>(user);},vertices});
         buffers.Indices=filament::IndexBuffer::Builder().indexCount(static_cast<std::uint32_t>(geometry.Indices.size())).bufferType(filament::IndexBuffer::IndexType::UINT).build(m_impl->Engine);
         if(!geometry.Colors.empty()){auto* colors=new std::shared_ptr<const PrimitiveGeometry>(prototype);buffers.Vertices->setBufferAt(m_impl->Engine,1,{const_cast<Vec4*>(geometry.Colors.data()),geometry.Colors.size()*sizeof(Vec4),[](void*,size_t,void* user){delete static_cast<std::shared_ptr<const PrimitiveGeometry>*>(user);},colors});}
+        if(!geometry.BlendRanges.empty()){
+            auto* ranges=new std::shared_ptr<const PrimitiveGeometry>(prototype);
+            buffers.Vertices->setBufferAt(m_impl->Engine,geometry.Colors.empty()?1:2,{const_cast<Vec2*>(geometry.BlendRanges.data()),geometry.BlendRanges.size()*sizeof(Vec2),[](void*,size_t,void* user){delete static_cast<std::shared_ptr<const PrimitiveGeometry>*>(user);},ranges});
+        }
         auto* indices=new std::shared_ptr<const PrimitiveGeometry>(prototype);buffers.Indices->setBuffer(m_impl->Engine,{const_cast<std::uint32_t*>(geometry.Indices.data()),geometry.Indices.size()*sizeof(std::uint32_t),[](void*,size_t,void* user){delete static_cast<std::shared_ptr<const PrimitiveGeometry>*>(user);},indices});
 
     }
@@ -959,6 +965,9 @@ void RenderAssets::EndSelectionMask(filament::Scene& scene){
     for(const auto& original:m_impl->MaskOriginals){auto ri=manager.getInstance(original.Entity);if(ri)manager.setMaterialInstanceAt(ri,original.Primitive,original.Material);}
     for(auto entity:m_impl->MaskEntities)scene.remove(entity);
     m_impl->MaskOriginals.clear();m_impl->MaskEntities.clear();
+}
+bool RenderAssets::HasTerrainBlending() const {
+    return m_impl&&std::any_of(m_impl->Instances.begin(),m_impl->Instances.end(),[](const auto& entry){return entry.second.TerrainBlend&&entry.second.AddedToScene;});
 }
 std::size_t RenderAssets::GetMaterialSlotCount(Handle handle) const {
     if(!m_impl)return 0;auto found=m_impl->Instances.find(handle);if(found==m_impl->Instances.end())return 0;

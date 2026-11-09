@@ -29,6 +29,23 @@ class TerrainRuntimeEditorTests(unittest.TestCase):
         self.assertAlmostEqual(r.TerrainCommand(e,'hit',ray)['position'][1],2.,places=4)
         self.assertEqual(listing.GetValue()[0]['_Index'],0)
         w.Controller.Undo();self.assertAlmostEqual(r.TerrainCommand(e,'hit',ray)['position'][1],2.,places=4)
+    def test_volume_and_spline_inspector_geometry_roundtrip(self):
+        w=self.Window;r=w.Runtime
+        entity=r.CreateEntity('Cave');self.assertTrue(r.AddComponent(entity,'Terrain'));w.Controller.SelectEntity(entity)
+        fields=w.Properties._sections['runtime.Terrain']._fields
+        self.assertIn('Volumes',fields);self.assertIn('VerticalSamples',fields)
+        volumes=fields['Volumes'];volumes.Add()
+        volumes._Changed(0,dict(volumes.GetValue()[0],Center=(0.,-1.,0.),Radius=(2.,2.,2.)))
+        ray={'origin':(.1,10.,.1),'direction':(0.,-1.,0.)}
+        self.assertLess(r.TerrainCommand(entity,'hit',ray)['position'][1],-2.8)
+        w.Controller.Undo()
+        self.assertAlmostEqual(r.TerrainCommand(entity,'hit',ray)['position'][1],0.,delta=.02)
+        fields=w.Properties._sections['runtime.Terrain']._fields
+        splines=fields['Splines'];splines.Add()
+        splines._Changed(0,dict(splines.GetValue()[0],GenerateSurface=True,Points=[(-4.,2.,0.),(4.,2.,0.)]))
+        self.assertAlmostEqual(r.TerrainCommand(entity,'hit',ray)['position'][1],2.02,delta=.02)
+        self.assertIn(b'GenerateSurface',r.CaptureScene())
+
     def test_vegetation_metadata_edits_keep_other_prototype_placements(self):
         w=self.Window;r=w.Runtime
         temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)

@@ -77,7 +77,7 @@ void AssetDatabase::ScanDependencies(UUID id){
                         const bool camera=component=="Bazzalt.Camera"&&(key=="RenderTarget"||key=="Post.Material"||(key.starts_with("Post.Materials.")&&key.ends_with(".Asset"))||(key.starts_with("Post.Custom.")&&(key.ends_with(".Shader")||key.ends_with(".Texture"))));
                         const bool prefab=component=="Bazzalt.PrefabInstance"&&key=="Asset";
                         const bool image=component=="Bazzalt.GuiImage"&&key=="Texture";
-                        const bool terrain=component=="Bazzalt.Terrain"&&((key.starts_with("Layers.")&&(key.ends_with(".Material")||key.ends_with(".Heightmap")||key.ends_with(".Splatmap")))||(key.starts_with("Vegetation.")&&(key.ends_with(".Model")||key.ends_with(".Material"))));
+                        const bool terrain=component=="Bazzalt.Terrain"&&((key.starts_with("Layers.")&&(key.ends_with(".Material")||key.ends_with(".Heightmap")||key.ends_with(".Splatmap")))||(key.starts_with("Splines.")&&key.ends_with(".Material"))||(key.starts_with("Vegetation.")&&(key.ends_with(".Model")||key.ends_with(".Material"))));
                         if(environment||named||camera||prefab||image||terrain||key.starts_with("AssetReference."))add(value,field);
                         if(component=="Bazzalt.ScriptComponents"&&key.ends_with(".Value")){
                             const auto typeKey=key.substr(0,key.size()-5)+"Type";

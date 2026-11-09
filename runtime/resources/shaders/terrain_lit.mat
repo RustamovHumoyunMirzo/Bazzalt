@@ -2,7 +2,7 @@ material {
     name : BazzaltTerrain,
     shadingModel : lit,
     parameters : [ { type : sampler2d, name : bazzaltLightingData, precision : high }, { type : float, name : bazzaltLightingEnabled }, { type : float4, name : bazzaltLodFade }, { type : float4, name : baseColor }, { type : float, name : showGrid } ],
-    requires : [ tangents, uv0, color ]
+    requires : [ tangents, uv0, uv1, color ]
 }
 fragment {
 #include "baked_lighting.glsl"

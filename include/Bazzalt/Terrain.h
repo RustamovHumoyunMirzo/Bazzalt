@@ -10,6 +10,7 @@ struct TerrainMesh { std::vector<TerrainVertex> Vertices;std::vector<std::uint32
 class BAZZALT_API TerrainGeometry final {
 public:
     static TerrainMesh BuildChunk(const Terrain& terrain,std::uint32_t x,std::uint32_t z,std::uint32_t lod=0);
+    static TerrainMesh BuildSpline(const Terrain& terrain,std::uint32_t spline);
     static std::optional<TerrainHit> Raycast(const Terrain& terrain,Vec3 origin,Vec3 direction,float maxDistance=100000);
 };
 }

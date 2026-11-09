@@ -348,7 +348,7 @@ class EditorController(QObject):
                 for property_name, value in dict(component_data.get(component, {})).items():
                     editor = self._ComponentEditor(inspected_entity, component, property_name, value)
                     if editor is not None:
-                        if (component=="Terrain" and property_name in {"Layers","Vegetation","Splines"}) or (component=="Camera" and property_name=="Post Process Materials") or (component=="LOD" and property_name=="Levels") or (component=="HLOD" and property_name in ("Sources","Proxies")):section.FieldSection(FieldGroup(str(component),property_name)).AddWideWidget(editor);section._fields[property_name]=editor
+                        if (component=="Terrain" and property_name in {"Layers","Vegetation","Splines","Volumes"}) or (component=="Camera" and property_name=="Post Process Materials") or (component=="LOD" and property_name=="Levels") or (component=="HLOD" and property_name in ("Sources","Proxies")):section.FieldSection(FieldGroup(str(component),property_name)).AddWideWidget(editor);section._fields[property_name]=editor
                         else:section.AddField(property_name,editor,FieldGroup(str(component),property_name))
                 if component=="NavMesh Surface":
                     bake=QPushButton(self.Window.Localization.Translate("navigation.bake"))
@@ -778,6 +778,12 @@ class EditorController(QObject):
                 if details.get("component_enabled",{}).get("Camera",True):
                     for effect in details.get("component_data",{}).get("Camera",{}).get("Post Process Materials",[]):
                         if effect.get("enabled",True) and effect.get("asset",ZERO) not in (ZERO,"0","",None):used.add(effect["asset"])
+                if details.get("component_enabled",{}).get("Terrain",True):
+                    terrain=details.get("component_data",{}).get("Terrain",{})
+                    for group in ('Layers','Vegetation','Splines'):
+                        for row in terrain.get(group,[]):
+                            material=row.get('Material',ZERO)
+                            if row.get('Enabled',True) and material not in (ZERO,'0','',None):used.add(material)
                 primitive=details.get("component_data",{}).get("Primitive Object",{})
                 if details.get("component_enabled",{}).get("Primitive Object",True) and primitive.get("Material Asset",ZERO)!=ZERO:used.add(primitive["Material Asset"])
                 if not details.get("component_enabled",{}).get("Mesh",True):continue

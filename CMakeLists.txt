@@ -143,6 +143,9 @@ set(BAZZALT_CMGEN_EXECUTABLE "${BAZZALT_FILAMENT_DIR}/bin/cmgen${_bazzalt_tool_s
 set(_bazzalt_generated_dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
 function(bazzalt_embed_post_process name symbol)
     set(_source "${CMAKE_CURRENT_SOURCE_DIR}/runtime/resources/shaders/${name}.mat")
+    if(ARGC GREATER 2)
+        set(_source "${ARGV2}")
+    endif()
     set(_binary "${_bazzalt_generated_dir}/${name}.filamat")
     set(_header "${_bazzalt_generated_dir}/${name}_filamat.h")
     add_custom_command(
@@ -157,6 +160,23 @@ function(bazzalt_embed_post_process name symbol)
         COMMENT "Compiling and embedding ${name}.mat"
     )
     set(BAZZALT_EMBEDDED_HEADERS ${BAZZALT_EMBEDDED_HEADERS} "${_header}" PARENT_SCOPE)
+endfunction()
+
+function(bazzalt_embed_terrain_material name symbol)
+    set(_variant "${_bazzalt_generated_dir}/${name}_terrain.mat")
+    add_custom_command(
+        OUTPUT "${_variant}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${_bazzalt_generated_dir}"
+        COMMAND "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_terrain_material.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/runtime/resources/shaders/${name}.mat" "${_variant}"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/runtime/resources/shaders/${name}.mat"
+            "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_terrain_material.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/Editor/terrain_shader.py" "${CMAKE_CURRENT_SOURCE_DIR}/Editor/lod_shader.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/runtime/resources/shaders/baked_lighting.glsl" "${CMAKE_CURRENT_SOURCE_DIR}/runtime/resources/shaders/baked_reflections.glsl"
+        VERBATIM
+    )
+    bazzalt_embed_post_process(${name}_terrain ${symbol} "${_variant}")
+    set(BAZZALT_EMBEDDED_HEADERS ${BAZZALT_EMBEDDED_HEADERS} PARENT_SCOPE)
 endfunction()
 
 function(bazzalt_embed_binary source symbol output_name)
@@ -188,7 +208,12 @@ bazzalt_embed_post_process(editor_lighting_only EditorLightingOnlyFilamat)
 bazzalt_embed_post_process(editor_overdraw EditorOverdrawFilamat)
 bazzalt_embed_post_process(editor_wireframe EditorWireframeFilamat)
 bazzalt_embed_post_process(primitive_lit PrimitiveLitFilamat)
-bazzalt_embed_post_process(terrain_lit TerrainLitFilamat)
+bazzalt_embed_terrain_material(terrain_lit TerrainLitFilamat)
+bazzalt_embed_terrain_material(runtime_lit RuntimeLitTerrainFilamat)
+bazzalt_embed_terrain_material(runtime_unlit RuntimeUnlitTerrainFilamat)
+bazzalt_embed_terrain_material(runtime_lit_transparent RuntimeLitTransparentTerrainFilamat)
+bazzalt_embed_terrain_material(runtime_unlit_transparent RuntimeUnlitTransparentTerrainFilamat)
+bazzalt_embed_terrain_material(runtime_canvas RuntimeCanvasTerrainFilamat)
 bazzalt_embed_post_process(lod_impostor LodImpostorFilamat)
 bazzalt_embed_post_process(particle_unlit ParticleUnlitFilamat)
 bazzalt_embed_post_process(particle_lit ParticleLitFilamat)

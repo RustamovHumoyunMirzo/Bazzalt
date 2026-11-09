@@ -751,6 +751,7 @@ void RenderBackend::Render(double materialTime) {
     // Scripts may change camera targets/descriptors after Scene.Update systems.
     if(m_guiScene&&m_guiScene->HasSystem<CameraSystem>())m_guiScene->GetSystem<CameraSystem>().Synchronize(*m_guiScene);
     m_assets->ResetLODMaterials();
+    const bool terrainBlending=m_assets->HasTerrainBlending();
     m_assets->SynchronizeTextures();
     if(m_guiScene)SynchronizeBakedLighting(*m_guiScene);
     if(m_guiScene)m_assets->SynchronizeAnimation(*m_guiScene);
@@ -760,7 +761,11 @@ void RenderBackend::Render(double materialTime) {
     auto cameraId=[&](filament::View* view){for(const auto& [id,stored]:m_cameraViews)if(stored==view)return id;return UUID{};};
     for(auto* view:m_activeViews)if(view&&view->getRenderTarget())m_graphics->AddCamera(view,cameraId(view),0,false);
     for(const auto& [id,resource]:m_viewports){
-        if(resource->Kind==ViewportKind::Scene)m_graphics->AddCamera(resource->View,{},id,true);
+        if(resource->Kind==ViewportKind::Scene){
+            auto temporal=resource->View->getTemporalAntiAliasingOptions();
+            if(temporal.enabled!=terrainBlending){temporal.enabled=terrainBlending;resource->View->setTemporalAntiAliasingOptions(temporal);}
+            m_graphics->AddCamera(resource->View,{},id,true);
+        }
         else for(auto* view:m_activeViews)if(view&&!view->getRenderTarget())m_graphics->AddCamera(view,cameraId(view),id,false);
     }
     m_graphics->Prepare();

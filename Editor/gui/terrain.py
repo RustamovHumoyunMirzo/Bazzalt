@@ -35,7 +35,7 @@ class TerrainEditor(QObject):
         for key in self.State:
             value=saved.get(key)
             if type(value)==type(self.State[key]) and (not isinstance(value,(int,float)) or isfinite(value)):self.State[key]=value
-        for key,(low,high) in {'radius':(.01,10000),'strength':(0,10000),'falloff':(0,1),'height':(-100000,100000),'scale':(-100000,100000),'layer':(0,7),'prototype':(0,63),'spline':(0,127)}.items():self.State[key]=max(low,min(high,self.State[key]))
+        for key,(low,high) in {'radius':(.01,10000),'strength':(0,10000),'falloff':(0,1),'height':(-100000,100000),'scale':(-100000,100000),'layer':(0,31),'prototype':(0,63),'spline':(0,127)}.items():self.State[key]=max(low,min(high,self.State[key]))
         if self.State['stamp']=='0':self.State['stamp']=ZERO
         self.Window.ThemeManager.ThemeChanged.connect(self.ApplyTheme);self.ApplyTheme();self.RefreshTargets();self.Place()
     def _CreateOverlay(self):
@@ -165,7 +165,7 @@ class TerrainEditor(QObject):
             field=FloatInput(minimum=lo,maximum=hi,value=self.State[key]);field.valueChanged.connect(lambda value,k=key:(self.State.update({k:value}),self._Save()));brush.addRow(self.Tr('terrain.'+key),field)
         picker=self.Controller._AssetPicker(self.State['stamp'],{'.png','.jpg','.jpeg','.bmp','.tga','.hdr'},lambda value:(self.State.update(stamp=value or ZERO),self._Save()));brush.addRow(self.Tr('terrain.stamp'),picker)
         for key in ('layer','prototype','spline'):
-            field=IntInput(0,{'layer':7,'prototype':63,'spline':127}[key],self.State[key]);field.valueChanged.connect(lambda value,k=key:(self.State.update({k:value}),self._Save()));brush.addRow(self.Tr('terrain.'+key),field)
+            field=IntInput(0,{'layer':31,'prototype':63,'spline':127}[key],self.State[key]);field.valueChanged.connect(lambda value,k=key:(self.State.update({k:value}),self._Save()));brush.addRow(self.Tr('terrain.'+key),field)
         actions=section('tools')
         for label,command in (('import_height','import_height'),('import_splat','import_splat'),('generate','generate'),('apply_spline','spline')):
             button=QPushButton(self.Tr('terrain.'+label));button.clicked.connect(lambda _,c=command:self.Command(c));actions.addRow(button)
@@ -175,4 +175,6 @@ class TerrainEditor(QObject):
         actions.addRow(self.Tr('terrain.boolean_source'),source)
         for operation,key in enumerate(('union','intersection','subtract')):
             button=QPushButton(self.Tr('terrain.'+key));button.setEnabled(source.count()>0);button.clicked.connect(lambda _,op=operation:self.Command('boolean',source=source.currentData(),operation=op));actions.addRow(button)
+        edge=QComboBox();edge.addItems([self.Tr('terrain.edge_'+name) for name in ('left','right','front','back')]);actions.addRow(self.Tr('terrain.edge'),edge)
+        match=QPushButton(self.Tr('terrain.match_edge'));match.setEnabled(source.count()>0);match.clicked.connect(lambda:self.Command('match_edge',source=source.currentData(),edge=edge.currentIndex()));actions.addRow(match)
         dialog.destroyed.connect(lambda *_:setattr(self,'Dialog',None));dialog.show()

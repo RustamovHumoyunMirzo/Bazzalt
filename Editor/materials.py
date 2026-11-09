@@ -204,12 +204,15 @@ class MaterialCompiler:
         if str(reference)==CANVAS_SHADER:return self.InspectShader(reference)
         reflection=self.InspectShader(reference);asset=self.runtime.AssetInfo(reference);cache=Path(asset["cache"])
         source=Path(str(cache)+".translated.mat");output=Path(str(cache)+".filamat");state=Path(str(cache)+".build.json");tool=self._Tool("matc")
-        digest=hashlib.sha256(source.read_bytes()+str(tool.stat().st_mtime_ns).encode()+getattr(self,"TargetPlatform","desktop").encode()+b"bazzalt-material-v3").hexdigest()
+        digest=hashlib.sha256(source.read_bytes()+str(tool.stat().st_mtime_ns).encode()+getattr(self,"TargetPlatform","desktop").encode()+b"bazzalt-material-v7-terrain").hexdigest()
         try:previous=json.loads(state.read_text(encoding="utf-8"))
         except (OSError,ValueError):previous={}
-        if previous.get("hash")==digest and output.is_file():
+        if previous.get("hash")==digest and output.is_file() and (Path(str(cache)+".terrain.filamat").is_file() or not previous.get("terrain",False)):
             _Write(Path(str(cache)+'.reflection.json'),json.dumps(reflection,indent=2));return reflection
         if self._failures.get(asset["uuid"],(None,None))[0]==digest:raise MaterialError(self._failures[asset["uuid"]][1])
+        from .terrain_shader import TerrainVariant
+        variant=TerrainVariant(source.read_text(encoding='utf-8'))
+        terrain_output=Path(str(cache)+'.terrain.filamat')
         temporary=Path(str(output)+".pending")
         try:
             # matc narrows Windows argv, just like cmgen. Keep all input/output
@@ -221,10 +224,21 @@ class MaterialCompiler:
                 if process.returncode or not staged_output.is_file():
                     message=(process.stdout+process.stderr).strip() or "Filament material compilation failed";self._failures[asset["uuid"]]=(digest,message);raise MaterialError(message)
                 shutil.copyfile(staged_output,temporary)
-            os.replace(temporary,output);_Write(Path(str(cache)+'.reflection.json'),json.dumps(reflection,indent=2));_Write(state,json.dumps({"hash":digest,"version":1}))
+                if variant is not None:
+                    staged_source.write_text(variant,encoding='utf-8')
+                    staged_output.unlink()
+                    process=subprocess.run([str(tool),'--platform',getattr(self,'TargetPlatform','desktop'),'--api','all','--output',str(staged_output),str(staged_source)],capture_output=True,text=True,encoding='utf-8',errors='replace',creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
+                    if process.returncode or not staged_output.is_file():
+                        raise MaterialError((process.stdout+process.stderr).strip() or 'Terrain material compilation failed')
+                    shutil.copyfile(staged_output,Path(str(terrain_output)+'.pending'))
+            if variant is not None:os.replace(Path(str(terrain_output)+'.pending'),terrain_output)
+            elif terrain_output.exists():terrain_output.unlink()
+            os.replace(temporary,output);_Write(Path(str(cache)+'.reflection.json'),json.dumps(reflection,indent=2));_Write(state,json.dumps({"hash":digest,"version":1,"terrain":variant is not None}))
             self._failures.pop(asset["uuid"],None)
         finally:
             if temporary.exists():temporary.unlink()
+            pending=Path(str(terrain_output)+'.pending')
+            if pending.exists():pending.unlink()
         return reflection
     def ReadMaterial(self,path:Path)->dict:
         data=json.loads(Path(path).read_text(encoding="utf-8"))

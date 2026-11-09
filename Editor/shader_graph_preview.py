@@ -62,7 +62,7 @@ class ShaderGraphPreview(QObject):
                     snapshot=Path(folder)/'source.shadg';snapshot.write_bytes(source);staged=dict(record,path=str(snapshot),cache=str(Path(folder)/'shader'))
                     for suffix,data in self.Products.items():Path(staged['cache']+suffix).write_bytes(data)
                     compiler=MaterialCompiler(SimpleNamespace(AssetInfo=lambda _:staged));reflection=compiler.CompileShader(record['uuid'])
-                    self.Products={suffix:Path(staged['cache']+suffix).read_bytes() for suffix in ('.filamat','.reflection.json','.translated.mat','.build.json')}
+                    self.Products={suffix:Path(staged['cache']+suffix).read_bytes() for suffix in ('.filamat','.terrain.filamat','.reflection.json','.translated.mat','.build.json') if suffix!='.terrain.filamat' or Path(staged['cache']+suffix).is_file()}
                     publication=(record,source,dict(self.Products))
                 from .runtime import _LoadNativeModule
                 module=_LoadNativeModule()
@@ -98,7 +98,7 @@ class ShaderGraphPreview(QObject):
         # matching reflection together before the next material synchronization.
         for suffix,data in products.items():
             path=Path(record['cache']+suffix)
-            if suffix!='.filamat':_Write(path,data.decode('utf-8'));continue
+            if not suffix.endswith('.filamat'):_Write(path,data.decode('utf-8'));continue
             if path.is_file() and path.stat().st_size==len(data) and path.read_bytes()==data:continue
             path.parent.mkdir(parents=True,exist_ok=True);name=None
             try:
