@@ -14,11 +14,28 @@ GITHUB_HASH = '037711bab2600009d396dd83df7c64e51eb402447196e71b56ee9d70ae022115'
 RUNTIME_SOURCES = set("lapi lauxlib lbaselib lcode lcorolib lctype ldblib ldebug ldo ldump lfunc lgc linit liolib llex lmathlib lmem loadlib lobject lopcodes loslib lparser lstate lstring lstrlib ltable ltablib ltm lua lundump lutf8lib lvm lzio".split())
 
 
+def EnsureNotices(root):
+    header=(root/'src/lua.h').read_text(encoding='utf-8')
+    permission_at=header.find('Permission is hereby granted')
+    start=header.rfind('/*',0,permission_at)
+    end=header.find('*/',permission_at)
+    if permission_at<0 or start<0 or end<0 or 'Copyright (C)' not in header[start:end]:
+        raise ValueError('Pinned Lua source is missing its license notice')
+    notice=header[start:end+2]
+    readme=root/'README'
+    if readme.exists():text=readme.read_text(encoding='utf-8')
+    elif (root/'README.md').exists():text=(root/'README.md').read_text(encoding='utf-8')
+    else:text='Lua '+VERSION+'\n'
+    if notice not in text:text=text.rstrip()+'\n\n'+notice+'\n'
+    readme.write_text(text,encoding='utf-8')
+
+
 def Install(destination, github_only=False):
     destination = Path(destination)
     if (destination/'src/lua.h').is_file():
         if (destination/'.bazzalt-source-sha256').read_text().strip() != RELEASE_HASH:
             raise ValueError('Lua source pin mismatch')
+        EnsureNotices(destination)
         return
     if destination.exists():
         raise ValueError('Lua destination already exists')
@@ -43,7 +60,18 @@ def Install(destination, github_only=False):
                     if not member.isfile():
                         continue
                     relative = member.name.split('/',1)[-1]
+                    parts=Path(relative).parts
+                    if Path(relative).is_absolute() or '..' in parts:
+                        continue
                     name = Path(relative).name
+                    if not github:
+                        target=stage/relative
+                        target.parent.mkdir(parents=True,exist_ok=True)
+                        target.write_bytes(archive.extractfile(member).read())
+                        continue
+                    if relative=='README.md':
+                        (stage/'README.md').write_bytes(archive.extractfile(member).read())
+                        continue
                     if github:
                         wanted = '/' not in relative and ((name.endswith('.c') and Path(name).stem in RUNTIME_SOURCES) or (name.endswith('.h') and name != 'ltests.h'))
                     else:
@@ -57,6 +85,7 @@ def Install(destination, github_only=False):
             required += [stage/'src/lua.h', stage/'src/lua.hpp', stage/'src/luaconf.h']
             if not all(path.is_file() for path in required):
                 raise ValueError('Pinned Lua archive has an unexpected layout')
+            EnsureNotices(stage)
             (stage/'.bazzalt-source-sha256').write_text(RELEASE_HASH+'\n')
             (stage/'.bazzalt-source-origin').write_text(('github:'+COMMIT if github else 'release:'+RELEASE_HASH)+'\n')
             stage.rename(destination)

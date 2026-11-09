@@ -27,3 +27,10 @@ upstream test-only C sources. Installation stages and validates all required
 files before publishing the dependency directory. The compatibility hash marker
 identifies the Lua release, while .bazzalt-source-origin records the actual
 archive or Git commit. Never replace checksum checks with availability checks.
+
+Lua installation also preserves the release README and documentation layout.
+The Git fallback normalizes its README.md and appends the complete upstream MIT
+notice from lua.h. Cached source installs repair a missing README without a
+network fetch. Keep this file present because release packaging copies it into
+licenses/Lua.txt. The fetch tests exercise the license collector as well as
+source installation.
