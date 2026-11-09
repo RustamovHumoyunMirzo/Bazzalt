@@ -15,3 +15,15 @@ macOS SDKs must enable Filament RTTI and exceptions. The stock no-RTTI archive c
 The macOS CI artifact contains deps/filament including bazzalt-rtti-x86_64 or bazzalt-rtti-arm64. Retain this marker when installing the SDK. Custom SDK providers must build with RTTI/exceptions enabled throughout and run the native exception tests before writing the corresponding marker; the marker is a compatibility assertion, not a signature. Core game ScriptSDK consumers do not need these renderer headers or archives.
 
 Mac player content roots are Contents/Resources, separately from the code directory Contents/MacOS. PosixCrypto::GameDataFolder centralizes this split; Linux still uses the executable directory. Keep native libraries locked and verify the complete Apple bundle signature before dlopen. Seal resource inventories after signing code, then finalize the bundle signature. Never put license/data directories into MacOS or ownership markers into the .app root.
+
+## Pinned Lua source recovery
+
+The platform get_lua wrappers call scripts/get_lua.py. The official release
+archive remains the primary source. An independently checksum-pinned archive of
+the official GitHub release commit supplies identical runtime C/header files
+when the primary endpoint is unavailable. The Git repository omits the release
+C++ wrapper, so the installer supplies that extern-C include wrapper. It excludes
+upstream test-only C sources. Installation stages and validates all required
+files before publishing the dependency directory. The compatibility hash marker
+identifies the Lua release, while .bazzalt-source-origin records the actual
+archive or Git commit. Never replace checksum checks with availability checks.
