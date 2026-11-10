@@ -12,11 +12,11 @@ template<class T> void ComponentOperations(sol::table operations,const char* nam
     value["Set"]=[](Entity entity,T value){
         if constexpr(std::is_same_v<T,Identity> || std::is_same_v<T,Hierarchy>)throw std::invalid_argument("Use UUID/hierarchy APIs rather than replacing identity or hierarchy");
         else {
-            if constexpr(std::is_same_v<T,Name> || std::is_same_v<T,Transform>)value.Enabled=true;
+            if constexpr(std::is_same_v<T,Name> || std::is_same_v<T,Tags> || std::is_same_v<T,Transform>)value.Enabled=true;
             entity.GetComponent<T>()=std::move(value);
         }
     };
-    if constexpr(!std::is_same_v<T,Identity> && !std::is_same_v<T,Hierarchy> && !std::is_same_v<T,Name> && !std::is_same_v<T,Transform>){
+    if constexpr(!std::is_same_v<T,Identity> && !std::is_same_v<T,Hierarchy> && !std::is_same_v<T,Name> && !std::is_same_v<T,Tags> && !std::is_same_v<T,Transform>){
         value["Remove"]=[](Entity entity){entity.RemoveComponent<T>();};
         value["SetEnabled"]=[](Entity entity,bool enabled){entity.SetComponentEnabled<T>(enabled);};
         value["IsEnabled"]=[](Entity entity){return entity.IsComponentEnabled<T>();};
@@ -41,6 +41,8 @@ void BindLuaComponents(sol::table api){
      type["Value"]=&Name::Value;
     }
     ComponentOperations<Name>(operations,"Name");
+    {auto type=api.new_usertype<Tags>("Tags",sol::constructors<Tags()>(),sol::base_classes,sol::bases<Component>());type["Value"]=&Tags::Value;}
+    ComponentOperations<Tags>(operations,"Tags");
     {auto type=api.new_usertype<Identity>("Identity",sol::constructors<Identity()>(),sol::base_classes,sol::bases<Component>());
      type["Value"]=&Identity::Value;
     }

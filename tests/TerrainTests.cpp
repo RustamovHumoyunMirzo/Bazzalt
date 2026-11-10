@@ -13,6 +13,8 @@
 #include <filament/Engine.h>
 #include <filament/Scene.h>
 #include <filament/LightManager.h>
+#include <filament/RenderableManager.h>
+#include <filament/MaterialInstance.h>
 #include <utils/EntityManager.h>
 #include <thread>
 #include <fstream>
@@ -21,7 +23,43 @@
 #include <iostream>
 using namespace Bazzalt;
 struct SystemAccess:System {static void Tick(System& system,Scene& scene){constexpr auto method=&SystemAccess::OnUpdate;(system.*method)(scene,0);}};
+static void CurvedSplines(){
+    Terrain terrain;
+    TerrainSpline spline;
+    spline.Points={{-4,2,0},{4,2,0}};
+    spline.OutTangents={{2,0,4},{}};
+    spline.InTangents={{},{-2,0,4}};
+    spline.GenerateSurface=true;
+    terrain.Splines.push_back(spline);
+    auto path=TerrainGeometry::SampleSpline(spline);
+    assert(path.size()==17&&std::abs(path[8].Z-3)<.001f);
+    assert((path.front()-spline.Points.front()).Length()<.001f);
+    assert((path.back()-spline.Points.back()).Length()<.001f);
+    auto ribbon=TerrainGeometry::BuildSpline(terrain,0);
+    assert(ribbon.Vertices.size()==path.size()*2);
+    terrain.ApplySpline(0);
+    assert(terrain.GetHeight(0,3)>1.9f);
+    ComponentSerializationRegistry registry;Runtime::RegisterTerrainComponents(registry);
+    Scene scene;auto source=scene.CreateEntity("Curve");source.AddComponent<Terrain>()=terrain;
+    auto target=scene.CreateEntity("Roundtrip");PropertyMap fields;
+    auto descriptor=registry.Find("Bazzalt.Terrain");assert(descriptor->Serialize(source,fields));
+    assert(descriptor->Deserialize(target,fields,1));
+    auto& restored=target.GetComponent<Terrain>().Splines.front();
+    assert((restored.OutTangents.front()-spline.OutTangents.front()).Length()<.001f);
+    for(auto it=fields.begin();it!=fields.end();){
+        if(it->first.ends_with(".In")||it->first.ends_with(".Out"))it=fields.erase(it);else ++it;
+    }
+    assert(descriptor->Deserialize(target,fields,1));
+    assert(TerrainGeometry::SampleSpline(target.GetComponent<Terrain>().Splines.front()).size()==2);
+    terrain.Splines.front().InTangents.pop_back();assert(!terrain.IsValid());
+}
 static void ExtendedTerrain(){
+    Terrain edgeCave;
+    TerrainVolume tunnel;tunnel.Center={5,-1,0};tunnel.Radius={2,2,2};edgeCave.Volumes.push_back(tunnel);
+    auto tunnelHit=TerrainGeometry::Raycast(edgeCave,{10,-1,0},{-1,0,0});
+    assert(tunnelHit&&tunnelHit->Position.X<3.2f&&tunnelHit->Position.X>2.8f);
+    auto baseHit=TerrainGeometry::Raycast(edgeCave,{4,-30,0},{0,1,0});
+    assert(baseHit&&std::abs(baseHit->Position.Y+20)<.001f);
     Terrain terrain;
     terrain.Resize(513);
     assert(terrain.Resolution==513&&terrain.IsValid());
@@ -97,6 +135,16 @@ static void Rendering(bool gpu){
         t.Vegetation.emplace_back();t.MarkDirty();SystemAccess::Tick(system,scene); // Empty picker is a valid authoring state.
         t.Vegetation[0].Model=UUID::Generate();t.Instances.push_back({});t.MarkDirty();SystemAccess::Tick(system,scene);assert(backend.GetAssets().GetEditorMeshes().size()==16); // Missing model never aborts rendering.
         t.Enabled=false;SystemAccess::Tick(system,scene);assert(backend.GetAssets().GetEditorMeshes().empty());t.Enabled=true;SystemAccess::Tick(system,scene);assert(backend.GetAssets().GetEditorMeshes().size()==16);
+        // Underside must draw the heightfield, not just a grid of LOD skirts.
+        auto checkTwoSided=[&](){
+            auto& manager=backend.GetEngine().getRenderableManager();unsigned checked=0;
+            backend.GetScene().forEach([&](utils::Entity entity){if(auto renderable=manager.getInstance(entity)){
+                auto* material=manager.getMaterialInstanceAt(renderable,0);
+                assert(material->isDoubleSided());
+                assert(material->getCullingMode()==filament::backend::CullingMode::NONE);++checked;
+            }});assert(checked>=16);
+        };
+        checkTwoSided();
         if(gpu){
             auto red=Material::Create(ShaderPreset::Unlit),blue=Material::Create(ShaderPreset::Unlit);
             red.SetColor("baseColor",{1,0,0,1});blue.SetColor("baseColor",{0,0,1,1});
@@ -104,6 +152,7 @@ static void Rendering(bool gpu){
             t.Layers[0].Weights.resize(t.Resolution*t.Resolution);t.Layers[1].Weights.resize(t.Resolution*t.Resolution);
             for(unsigned z=0;z<t.Resolution;++z)for(unsigned x=0;x<t.Resolution;++x){float weight=.5f;t.Layers[0].Weights[z*t.Resolution+x]=1-weight;t.Layers[1].Weights[z*t.Resolution+x]=weight;}
             TerrainVolume opening;opening.Center={0,-1,0};opening.Radius={2,2,2};t.Volumes.push_back(opening);t.MarkDirty();SystemAccess::Tick(system,scene);
+            checkTwoSided();
             auto& engine=backend.GetEngine();auto light=engine.getEntityManager().create();filament::LightManager::Builder(filament::LightManager::Type::SUN).color({1,1,1}).intensity(50000).direction({0,-1,-.4f}).build(engine,light);backend.GetScene().addEntity(light);
             assert(backend.CreateViewport(101,0,Runtime::RenderBackend::ViewportKind::Scene,256,256,1,true));backend.SetSceneCamera(101,8,7,8,0,0,0);backend.SetEditorGrid(false,1);backend.SetEditorOrientationVisible(false);
             std::optional<Runtime::ViewportFrame> frame;for(unsigned i=0;i<120&&!frame;++i){backend.Render();backend.WaitForViewportFrame(101);engine.pumpMessageQueues();std::this_thread::sleep_for(std::chrono::milliseconds(10));frame=backend.CapturedFrame(101,0);}assert(frame&&frame->Pixels.size()==256*256*4);
@@ -121,7 +170,29 @@ static void Rendering(bool gpu){
             unsigned low=255,high=0;for(std::size_t i=0;i<frame->Pixels.size();i+=4){low=std::min(low,unsigned(frame->Pixels[i]));high=std::max(high,unsigned(frame->Pixels[i]));}assert(high>low+20);
             std::ofstream image("dist/terrain-preview.ppm",std::ios::binary);image<<"P6\n256 256\n255\n";for(int y=255;y>=0;--y)for(unsigned x=0;x<256;++x)image.write(reinterpret_cast<const char*>(frame->Pixels.data()+(y*256+x)*4),3);
             image.close();assert(redPixels>50&&bluePixels>50);float redFraction=float(redPixels)/(redPixels+bluePixels);assert(redFraction>.35f&&redFraction<.65f);
+            auto capture=[&](){
+                for(unsigned sample=0;sample<3;++sample){
+                    auto sequence=frame->Sequence;backend.Render(0);backend.WaitForViewportFrame(101);engine.pumpMessageQueues();
+                    auto updated=backend.CapturedFrame(101,sequence);assert(updated);frame=std::move(updated);
+                }
+            };
+            auto borderPixels=[&](bool hover){unsigned pixels=0;
+                for(std::size_t i=0;i<frame->Pixels.size();i+=4){auto r=frame->Pixels[i],g=frame->Pixels[i+1],b=frame->Pixels[i+2];
+                    if(b>230&&(hover?(r>90&&r<160&&g>175&&g<225):(r<65&&g>70&&g<130)))++pixels;
+                }return pixels;
+            };
+            backend.SetEditorOutline({e.GetUUID()},{});capture();assert(borderPixels(false)>50);
+            backend.SetEditorOutline({}, {e.GetUUID()});capture();assert(borderPixels(true)>50);
+            backend.SetEditorOutline({},{});
             backend.DestroyViewport(101);backend.GetScene().remove(light);engine.destroy(light);engine.getEntityManager().destroy(light);
+            // A fresh underside view with no skirts cannot pass by drawing only
+            // the chunk walls or reusing the previous camera's TAA history.
+            t.Volumes.clear();t.SkirtDepth=0;t.MarkDirty();SystemAccess::Tick(system,scene);
+            assert(backend.CreateViewport(102,0,Runtime::RenderBackend::ViewportKind::Scene,256,256,1,true));backend.SetSceneCamera(102,8,-30,8,0,-20,0);
+            frame.reset();for(unsigned sample=0;sample<3;++sample){backend.Render(0);backend.WaitForViewportFrame(102);engine.pumpMessageQueues();frame=backend.CapturedFrame(102,0);}
+            assert(frame);unsigned underside=0;
+            for(std::size_t i=0;i<frame->Pixels.size();i+=4)if((frame->Pixels[i]>100||frame->Pixels[i+2]>100)&&frame->Pixels[i+1]<80)++underside;
+            assert(underside>2000);backend.DestroyViewport(102);
         }
     }
     backend.Shutdown();
@@ -154,6 +225,11 @@ function Tool:OnCreate()
   local ribbon = B.TerrainSpline.new()
   ribbon.Points:add(B.Vec3.new(-2,3,0))
   ribbon.Points:add(B.Vec3.new(2,3,0))
+  ribbon.InTangents:add(B.Vec3.new(0,0,0))
+  ribbon.InTangents:add(B.Vec3.new(-1,0,2))
+  ribbon.OutTangents:add(B.Vec3.new(1,0,2))
+  ribbon.OutTangents:add(B.Vec3.new(0,0,0))
+  assert(#B.TerrainGeometry.SampleSpline(ribbon,8) == 9)
   ribbon.GenerateSurface = true
   t.Splines:add(ribbon)
   assert(#B.TerrainGeometry.BuildSpline(t,0).Indices > 0)
@@ -179,6 +255,8 @@ int main(int argc,char** argv){
     auto mesh=TerrainGeometry::BuildChunk(t,0,0);auto coarse=TerrainGeometry::BuildChunk(t,0,0,3);assert(mesh.Vertices.size()>coarse.Vertices.size());
     for(std::size_t i=0;i<mesh.Indices.size();i+=3){const auto& a=mesh.Vertices[mesh.Indices[i]];const auto& b=mesh.Vertices[mesh.Indices[i+1]];const auto& c=mesh.Vertices[mesh.Indices[i+2]];auto normal=Vec3::Cross(b.Position-a.Position,c.Position-a.Position).Normalized();if(std::abs(a.Normal.Y)<.01f)assert(Vec3::Dot(normal,a.Normal)>.99f);}
     const auto hit=TerrainGeometry::Raycast(t,{0,20,0},{0,-1,0});assert(hit&&std::abs(hit->Position.Y-2)<1e-5f);assert(!TerrainGeometry::Raycast(t,{20,20,0},{0,-1,0}));
+    const auto side=TerrainGeometry::Raycast(t,{10,-5,0},{-1,0,0});assert(side&&std::abs(side->Position.X-t.Size.X*.5f)<.001f&&side->Normal.X>.99f);
+    const auto bottom=TerrainGeometry::Raycast(t,{0,-30,0},{0,1,0});assert(bottom&&std::abs(bottom->Position.Y-t.VerticalRange.X)<.001f&&bottom->Normal.Y<-.99f);
     b.Layer=0;b.Radius=1;t.ApplyBrush(TerrainTool::Hole,{},b);assert(!TerrainGeometry::Raycast(t,{.01f,20,.01f},{0,-1,0}));t.ApplyBrush(TerrainTool::FillHole,{},b);assert(TerrainGeometry::Raycast(t,{.01f,20,.01f},{0,-1,0}));
     TerrainSpline road;road.Points={{-4,1,0},{4,1,0}};road.Width=2;t.Splines.push_back(road);t.ApplySpline(0);assert(std::abs(t.GetHeight(0,0)-1)<1e-5f);
     Terrain other;other.ImportHeightmap(0,{5},1,1);t.ApplyBoolean(other,Mat4{},TerrainBoolean::Union);assert(std::abs(t.GetHeight(0,0)-5)<1e-5f);
@@ -191,6 +269,8 @@ int main(int argc,char** argv){
         Runtime::Engine host;auto& scene=host.GetScene();auto ground=scene.CreateEntity("Terrain collision");auto& terrain=ground.AddComponent<Terrain>();ground.AddComponent<MeshCollider>().Convex=false;
         auto hit=scene.GetPhysics().Raycast({0,10,0},{0,-1,0},20);assert(hit&&hit.Object==ground&&std::abs(hit.Point.Y)<.01f);
         terrain.ImportHeightmap(0,{2},1,1);hit=scene.GetPhysics().Raycast({0,10,0},{0,-1,0},20);assert(hit&&std::abs(hit.Point.Y-2)<.01f);
+        hit=scene.GetPhysics().Raycast({10,-5,0},{-1,0,0},20);assert(hit&&hit.Object==ground&&std::abs(hit.Point.X-5)<.01f);
+        hit=scene.GetPhysics().Raycast({0,-30,0},{0,1,0},20);assert(hit&&hit.Object==ground&&std::abs(hit.Point.Y+20)<.01f);
     }
-    ExtendedTerrain();Rendering(argc>1&&std::string(argv[1])=="--gpu");LuaAndScene();std::cout<<"Terrain tests passed\n";
+    CurvedSplines();ExtendedTerrain();Rendering(argc>1&&std::string(argv[1])=="--gpu");LuaAndScene();std::cout<<"Terrain tests passed\n";
 }

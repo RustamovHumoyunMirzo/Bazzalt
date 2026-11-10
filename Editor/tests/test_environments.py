@@ -72,7 +72,7 @@ class EnvironmentTests(unittest.TestCase):
             snapshot=window.Runtime.CaptureScene();self.assertIn(b"Mode: 1",snapshot)
             window.Runtime.SetSceneEnvironment(scene,{"mode":0});self.assertTrue(window.Runtime.RestoreScene(snapshot));self.assertEqual(window.Runtime.SceneEnvironment(scene)["mode"],1)
             self.assertFalse(window.Runtime.SetSceneEnvironment(scene,{"mode":99}))
-            legacy=snapshot.replace(b"Version: 2\n  Mode: 1",b"Version: 1");self.assertTrue(window.Runtime.RestoreScene(legacy));self.assertEqual(window.Runtime.SceneEnvironment(scene)["mode"],0)
+            legacy=snapshot.replace(b"Version: 3\n  Mode: 1",b"Version: 1");self.assertTrue(window.Runtime.RestoreScene(legacy));self.assertEqual(window.Runtime.SceneEnvironment(scene)["mode"],0)
             legacy=legacy.replace(b'  Material: "00000000-0000-0000-0000-000000000000"',b'  Material: "00000000-0000-0001-0000-000000000001"');self.assertTrue(window.Runtime.RestoreScene(legacy));self.assertEqual(window.Runtime.SceneEnvironment(scene)["mode"],1)
         finally:
             window.Controller.SetDirty(False);window.close();window.deleteLater();self.App.sendPostedEvents(None,QEvent.Type.DeferredDelete)

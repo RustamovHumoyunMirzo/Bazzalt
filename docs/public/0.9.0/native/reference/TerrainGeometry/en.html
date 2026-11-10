@@ -32,6 +32,8 @@
 <pre><code class="language-cpp">class TerrainGeometry {
 static TerrainMesh BuildChunk(const Terrain&amp; terrain,std::uint32_t x,std::uint32_t z,std::uint32_t lod=0);
 static TerrainMesh BuildSpline(const Terrain&amp; terrain,std::uint32_t spline);
+// Samples cubic Bézier spans. Zero tangent offsets retain straight spans.
+    static std::vector&lt;Vec3&gt; SampleSpline(const TerrainSpline&amp; spline,std::uint32_t subdivisions=16);
 static std::optional&lt;TerrainHit&gt; Raycast(const Terrain&amp; terrain,Vec3 origin,Vec3 direction,float maxDistance=100000);
 };</code></pre>
 <!-- API-SOURCE-END --></article>

@@ -44,8 +44,16 @@ void BindLuaAssets(sol::table api){
      type["Nodes"]=&ModelAsset::Nodes;
      type["Roots"]=&ModelAsset::Roots;
     }
+    {auto mode=api.create_named("FogMode");mode["Exponential"]=FogMode::Exponential;mode["Height"]=FogMode::Height;mode["Volumetric"]=FogMode::Volumetric;}
+    {auto type=api.new_usertype<FogSettings>("FogSettings",sol::constructors<FogSettings()>());
+#define F(Name) type[#Name]=&FogSettings::Name;
+        F(Enabled) F(Mode) F(AffectSky) F(Color) F(Density) F(StartDistance) F(MaxDistance) F(MaximumOpacity) F(Height) F(HeightFalloff) F(NoiseAmount) F(NoiseScale) F(Anisotropy) F(Wind) F(Steps)
+#undef F
+        type["IsValid"]=&FogSettings::IsValid;
+    }
     {auto type=api.new_usertype<SceneEnvironment>("SceneEnvironment",sol::constructors<SceneEnvironment()>());
      type["Mode"]=&SceneEnvironment::Mode;
+     type["Fog"]=&SceneEnvironment::Fog;
      type["SourceAsset"]=&SceneEnvironment::SourceAsset;
      type["MaterialAsset"]=&SceneEnvironment::MaterialAsset;
      type["ClearColor"]=&SceneEnvironment::ClearColor;

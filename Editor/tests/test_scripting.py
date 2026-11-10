@@ -7,6 +7,20 @@ from Editor.localization import LocalizationManager
 from Editor.resources import ResourceManager
 
 class ScriptingTests(unittest.TestCase):
+    def test_tag_set_property_generates_real_typed_access(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source=Path(folder)/'Tagged.cpp'
+            source.write_text('#include <Bazzalt/Script.h>\nCOMPONENT(Tagged) { PROPERTY(Bazzalt::TagSet, Targets, {}) };',encoding='utf-8')
+            descriptor=ScriptCompiler.Inspect(source)
+            wrapper=ScriptCompiler._Wrapper(descriptor)
+            self.assertIn('Bazzalt::TagSet::TryParse(value,self->Targets)',wrapper)
+            self.assertIn('self->Targets.ToString()',wrapper)
+            source.write_text('#include <Bazzalt/Script.h>\nCOMPONENT(Tagged) { PROPERTY(Bazzalt::TagSet, Targets, Bazzalt::TagSet({"Flying","Enemy"})) };',encoding='utf-8')
+            descriptor=ScriptCompiler.Inspect(source)
+            store=ScriptAttachments(folder);self.assertTrue(store.Attach('entity',descriptor))
+            self.assertEqual(store.For('entity')[0]['properties']['Targets'],'Enemy,Flying')
+
+
     def test_walk_uses_real_entity_property(self):
         descriptor=ScriptCompiler.Inspect(Path(__file__).resolve().parents[2]/"examples"/"Walk.cpp")
         self.assertEqual(descriptor.name,"Walk")

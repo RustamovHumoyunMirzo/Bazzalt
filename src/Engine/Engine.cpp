@@ -302,7 +302,7 @@ for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id
     for(auto handle:objects){
         Entity object=m_scene->GetEntity(static_cast<Entity::Id>(handle));
         const UUID owner=object.GetUUID();
-        if(!object.HasComponent<Mesh>()&&!object.HasComponent<PrimitiveObject>())continue;
+        if(!object.HasComponent<Mesh>()&&!object.HasComponent<PrimitiveObject>()&&!object.HasComponent<Terrain>())continue;
         if(m_editorHidden.contains(owner)||m_editorUnselectable.contains(owner))continue;
         bool selected=false,hovered=false;
         for(auto entity=object;entity;entity=entity.GetParent()){
@@ -318,13 +318,13 @@ for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id
     }
     m_renderBackend->SetEditorOutline(std::move(selectedOwners),std::move(hoveredOwners));
     for(const auto& p:m_editorTransformTrail)guides.push_back({p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9],true});
-    for(const auto& p:m_editorToolGuides)guides.push_back({p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9],false});
+    for(const auto& p:m_editorToolGuides)guides.push_back({p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9],true});
     if(m_editorIconsVisible)for(auto selected:m_selectedObjects)for(const auto& p:NavigationGuides(*m_scene,selected))guides.push_back({p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9],true});
     m_renderBackend->SetEditorGuides(guides);
 }
 void Engine::SetGamePreview(int mode,UUID camera){m_renderBackend->SetGamePreview(mode,camera);}
 void Engine::SetEditorToolGuides(std::vector<std::array<float,10>> lines){
-    if(lines.size()>2048||std::any_of(lines.begin(),lines.end(),[](const auto& line){return std::any_of(line.begin(),line.end(),[](float v){return !std::isfinite(v);});}))throw std::invalid_argument("Invalid editor tool guides");m_editorToolGuides=std::move(lines);
+    if(lines.size()>8192||std::any_of(lines.begin(),lines.end(),[](const auto& line){return std::any_of(line.begin(),line.end(),[](float v){return !std::isfinite(v);});}))throw std::invalid_argument("Invalid editor tool guides");m_editorToolGuides=std::move(lines);
 }
 void Engine::SetEditorTransformTrail(std::vector<std::array<float,10>> lines){
     if(lines.size()>2048||std::any_of(lines.begin(),lines.end(),[](const auto& line){return std::any_of(line.begin(),line.end(),[](float value){return !std::isfinite(value);});}))lines.clear();

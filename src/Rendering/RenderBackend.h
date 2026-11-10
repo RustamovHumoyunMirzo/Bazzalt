@@ -136,6 +136,8 @@ public:
 private:
     friend struct EditorOutlineTestAccess;
     struct ViewportResource;
+    std::unique_ptr<class FogRenderer> m_fogRenderer;
+    FogSettings m_fogSettings;
     struct GizmoResource;
     struct EnvironmentResource;
     std::unique_ptr<EnvironmentResource> m_environment;

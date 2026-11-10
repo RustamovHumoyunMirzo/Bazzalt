@@ -15,6 +15,7 @@
 #include <entt/entity/registry.hpp>
 
 #include "Bazzalt/Components/Name.h"
+#include "Bazzalt/Components/Tags.h"
 #include "Bazzalt/Components/Hierarchy.h"
 #include "Bazzalt/Components/Identity.h"
 #include "Bazzalt/Components/Transform.h"
@@ -55,6 +56,10 @@ public:
     void Clear();
 
     [[nodiscard]] Entity FindEntityByName(const std::string& name);
+    [[nodiscard]] Entity FindEntityWithTag(const std::string& tag);
+    [[nodiscard]] std::vector<Entity> FindEntitiesWithTag(const std::string& tag);
+    [[nodiscard]] std::vector<Entity> FindEntitiesWithAnyTag(const TagSet& tags);
+    [[nodiscard]] std::vector<Entity> FindEntitiesWithAllTags(const TagSet& tags);
     [[nodiscard]] Entity GetEntity(Entity::Id id);
     [[nodiscard]] Entity GetEntity(UUID uuid);
     [[nodiscard]] Entity GetRootEntity();

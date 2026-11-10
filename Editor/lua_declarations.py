@@ -2,6 +2,8 @@
 import math
 import re
 import ast
+import json
+from Editor.tags import IsValidTagName
 from Editor.property_rules import CheckRules,CheckTypeRules,RuleError
 
 class DeclarationError(ValueError):pass
@@ -70,6 +72,20 @@ def ReadDeclarations(text):
                 if not valid:raise DeclarationError('Scalar PROPERTY defaults must be literal values')
                 if kind=='int' and not re.fullmatch(r'[+-]?\d+',default):raise DeclarationError('Integer PROPERTY defaults must be integers')
                 if kind in ('float','double','int') and (not math.isfinite(float(default)) or kind=='int' and not -2147483648<=int(default)<=2147483647):raise DeclarationError('Numeric PROPERTY default is out of range')
+            elif kind=='TagSet':
+                constructor=re.fullmatch(r'(?:[A-Za-z_]\w*\.)?TagSet\.new\((\{.*\})?\)',default)
+                if not constructor:raise DeclarationError('TagSet default must use TagSet.new() or a literal string table')
+                items=_Tokens(constructor.group(1))[1:-1] if constructor.group(1) else []
+                names=[]
+                for index,item in enumerate(items):
+                    if index%2:
+                        if item!=',':raise DeclarationError('TagSet defaults must be a literal string table')
+                    else:
+                        name=_String(item)
+                        if not IsValidTagName(name):raise DeclarationError('Invalid tag name')
+                        names.append(name)
+                if len(set(names))>64:raise DeclarationError('A TagSet supports at most 64 tags')
+                default=','.join(json.dumps(name,ensure_ascii=False) for name in sorted(set(names)))
             elif kind in ('FloatList','IntList'):
                 if not default.startswith('{') or not default.endswith('}'):raise DeclarationError('List defaults must be literal numeric tables')
                 parts=default[1:-1].split(',') if default[1:-1] else []

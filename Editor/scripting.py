@@ -4,6 +4,7 @@ from bazzalt.platforms import HostPlatform,HostArchitecture
 from dataclasses import dataclass, field
 import ast, hashlib, json, os, re, subprocess, sys
 from pathlib import Path
+from Editor.tags import IsValidTagName
 
 _COMPONENT=re.compile(r"\b(?:COMPONENT|APPLICATION|SUBSYSTEM)\s*\(\s*([A-Za-z_]\w*)\s*\)")
 _PROPERTY=re.compile(r"\bPROPERTY\s*\(\s*([^,]+?)\s*,\s*([A-Za-z_]\w*)\s*,\s*([^,\)]+)(?:,([^\)]*))?\)")
@@ -13,6 +14,30 @@ class ScriptValidationError(ValueError):pass
 def _CodeMask(text, strings=True):
     pattern=r'//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\''
     return re.sub(pattern,lambda m:re.sub(r"[^\n]"," ",m.group()) if strings or m.group().startswith(("//","/*")) else m.group(),text)
+
+def _NativeProperties(body, mask):
+    """Read macro arguments while preserving constructor calls and quoted commas."""
+    for match in re.finditer(r'\bPROPERTY\s*\(', mask):
+        arguments=[]
+        start=match.end()
+        depth=0
+        for offset in range(start,len(mask)):
+            character=mask[offset]
+            if character in '([{':
+                depth+=1
+            elif character==')' and depth==0:
+                arguments.append(body[start:offset].strip())
+                break
+            elif character in ')]}':
+                depth-=1
+            elif character==',' and depth==0:
+                arguments.append(body[start:offset].strip())
+                start=offset+1
+        else:
+            raise ScriptValidationError('Unclosed PROPERTY declaration')
+        if len(arguments)<3 or not arguments[0] or not re.fullmatch(r'[A-Za-z_]\w*',arguments[1]):
+            raise ScriptValidationError('Use PROPERTY(Type, Name, Default, options...)')
+        yield match.start(),arguments[0],arguments[1],arguments[2],tuple(arguments[3:])
 
 @dataclass(frozen=True)
 class ScriptProperty:
@@ -94,15 +119,13 @@ class ScriptCompiler:
             except (ValueError,SyntaxError) as error:raise ScriptValidationError(f"{path}: invalid SECTION declaration") from error
             sections.append((marker.start(),title))
         properties=[]
-        for m in _PROPERTY.finditer(body):
-            if not body_mask[m.start():].startswith("PROPERTY"):continue
-            attributes=tuple(a.strip() for a in (m.group(4) or "").split(",") if a.strip())
-            last_tab=next(((offset,title) for offset,title in reversed(tabs) if offset<m.start()),(-1,""))
-            title=next((title for offset,title in reversed(sections) if last_tab[0]<offset<m.start()),"")
+        for position,kind,name,default,attributes in _NativeProperties(body,body_mask):
+            last_tab=next(((offset,title) for offset,title in reversed(tabs) if offset<position),(-1,""))
+            title=next((title for offset,title in reversed(sections) if last_tab[0]<offset<position),"")
             if title and not any(a.split('=',1)[0].strip()=="Section" for a in attributes):attributes+=("Section="+repr(title),)
-            tab=next((title for offset,title in reversed(tabs) if offset<m.start()),"")
+            tab=next((title for offset,title in reversed(tabs) if offset<position),"")
             if tab and not any(a.split('=',1)[0].strip()=="Tab" for a in attributes):attributes+=("Tab="+repr(tab),)
-            properties.append(ScriptProperty(m.group(1).strip(),m.group(2),m.group(3).strip(),attributes))
+            properties.append(ScriptProperty(kind,name,default,attributes))
         names=[p.name for p in properties]
         if len(names)!=len(set(names)):raise ScriptValidationError(f"{path}: component {match.group(1)} has duplicate PROPERTY names")
         from Editor.property_rules import CheckTypeRules,RuleError
@@ -271,6 +294,7 @@ class ScriptCompiler:
         for prop in descriptor.properties:
             kind=prop.type.replace("const","").replace("&","").strip()
             if kind.replace("Bazzalt::","") in ("FloatList","IntList"):body=f'return Bazzalt::Detail::ReadPropertyList(value,self->{prop.name});'
+            elif kind.replace("Bazzalt::","")=="TagSet":body=f'return Bazzalt::TagSet::TryParse(value,self->{prop.name});'
             elif kind in ("bool",):body=f'self->{prop.name}=std::strcmp(value,"true")==0||std::strcmp(value,"1")==0;return true;'
             elif kind in ("string","std::string"):body=f'self->{prop.name}=value;return true;'
             elif kind in ("EntityReference","Bazzalt::EntityReference"):
@@ -303,6 +327,7 @@ class ScriptCompiler:
             if kind in ("Vec2","Vec3","Vec4","Quaternion"):
                 axes="XY" if kind=="Vec2" else "XYZ" if kind=="Vec3" else "XYZW"
                 expr=' << "," << '.join(value+'.'+axis for axis in axes)
+            elif kind=="TagSet":expr=f'{value}.ToString()'
             elif kind in ("FloatList","IntList"):expr=f'Bazzalt::Detail::WritePropertyList({value})'
             elif kind=="bool":expr=f'({value}?"true":"false")'
             elif kind=="Entity":expr=f'{value}.GetUUID().ToString()'
@@ -413,6 +438,12 @@ class ScriptAttachments:
 
 def _PropertyDefault(prop):
     kind=prop.type.replace("Bazzalt::","").strip()
+    if kind=="TagSet":
+        literals=re.findall(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'',prop.default)
+        try:names=[ast.literal_eval(value) for value in literals]
+        except (ValueError,SyntaxError) as error:raise ScriptValidationError('Invalid tag default') from error
+        if any(not IsValidTagName(name) for name in names) or len(set(names))>64:raise ScriptValidationError('Invalid TagSet default')
+        return ','.join(sorted(set(names)))
     if kind in ("FloatList","IntList"):
         if prop.default.strip() in ("{}", ""):return []
         try:return [(int(v) if kind=="IntList" else float(v)) for v in prop.default.split(",")]

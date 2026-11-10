@@ -43,7 +43,7 @@ class ComponentSection(QFrame):
         self.Toggle.setObjectName("ComponentHeader")
         self._subsections={};self._fieldowners={};self._fields:dict[str,QWidget]={};self._localization=localization;self._removable=removable;self._title=title;self._captions={}
         if localization:localization.LocaleChanged.connect(self._RetranslateLabels)
-        self.Body=QWidget(self);self.Form=QGridLayout(self.Body);self.Form.setContentsMargins(8,6,8,6)
+        self.Body=QWidget(self);self.Body.setObjectName('ComponentBody');self.Form=QGridLayout(self.Body);self.Form.setContentsMargins(8,8,8,8)
         self.Form.setHorizontalSpacing(14);self.Form.setVerticalSpacing(6);self.Form.setColumnStretch(1,1)
         self.Form.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.IconLabel=QLabel(header);self.IconLabel.setObjectName("ComponentIcon");self.IconLabel.setFixedSize(16,16);self.IconLabel.setVisible(icon is not None and not icon.isNull())
@@ -60,7 +60,7 @@ class ComponentSection(QFrame):
         if subsection:
             options.hide();enabledSlot.hide();self.IconLabel.hide()
             self.Toggle.setObjectName("ComponentSubheader")
-            header.setObjectName("ComponentSubheaderRow")
+            header.setObjectName("ComponentSubheaderRow");headerLayout.setContentsMargins(4,1,4,1)
         layout.addWidget(header);layout.addWidget(self.Body)
         self.Toggle.toggled.connect(self.SetExpanded);self.SetExpanded(expanded)
 

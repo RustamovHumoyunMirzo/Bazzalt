@@ -54,6 +54,8 @@ struct TerrainInstance {
 struct TerrainSpline {
     std::string Name="Road";
     std::vector<Vec3> Points;
+    // Local offsets from each anchor. Empty arrays describe a linear spline.
+    std::vector<Vec3> InTangents, OutTangents;
     float Width=1, Shoulder=1, Depth=0, Strength=1;
     bool Closed=false;
     bool GenerateSurface=false, SurfaceCollision=true;
@@ -77,6 +79,7 @@ struct BAZZALT_API Terrain : Component {
     std::vector<TerrainSpline> Splines;
     // Ellipsoidal CSG volumes produce caves and overhangs in affected chunks.
     std::vector<TerrainVolume> Volumes;
+    // Lower bound is the solid terrain base; both bounds limit CSG extraction.
     Vec2 VerticalRange{-20,20};
     std::uint32_t VerticalSamples=32;
     std::uint64_t Revision=0;

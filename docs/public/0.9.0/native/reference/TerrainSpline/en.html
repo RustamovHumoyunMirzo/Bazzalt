@@ -32,6 +32,8 @@
 <pre><code class="language-cpp">struct TerrainSpline {
 std::string Name=&quot;Road&quot;;
 std::vector&lt;Vec3&gt; Points;
+// Local offsets from each anchor. Empty arrays describe a linear spline.
+    std::vector&lt;Vec3&gt; InTangents, OutTangents;
 float Width=1, Shoulder=1, Depth=0, Strength=1;
 bool Closed=false;
 bool GenerateSurface=false, SurfaceCollision=true;

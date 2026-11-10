@@ -69,6 +69,7 @@ scene-&gt;SetEnvironment(environment);</code></pre>
 <h2 id="source-contract">Public declarations</h2>
 <p>Header: <code>Bazzalt/SceneEnvironment.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
 <pre><code class="language-cpp">struct SceneEnvironment {
+FogSettings Fog;
 SceneEnvironmentMode Mode=SceneEnvironmentMode::Map;
 UUID SourceAsset{};
 UUID MaterialAsset{};

@@ -60,6 +60,7 @@ Entity Scene::CreateEntity(UUID uuid, std::string name) {
     entity.AddComponent<Hierarchy>();
     entity.AddComponent<Transform>();
     entity.AddComponent<Name>(std::move(name));
+    entity.AddComponent<Tags>();
     m_uuidLookup.emplace(uuid, handle);
     SetParent(entity, GetRootEntity());
     return entity;
@@ -356,6 +357,7 @@ Entity Scene::CreateRootEntity() {
     root.AddComponent<Hierarchy>();
     root.AddComponent<Transform>();
     root.AddComponent<Name>("Root");
+    root.AddComponent<Tags>();
     m_uuidLookup.emplace(UUID::Root(), handle);
     return root;
 }

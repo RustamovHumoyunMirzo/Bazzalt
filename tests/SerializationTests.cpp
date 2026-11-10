@@ -42,12 +42,14 @@ int main() {
     Runtime::Engine sourceEngine;
     Scene& source = sourceEngine.GetScene();
     SceneEnvironment environment;environment.SourceAsset=UUID{20,21};environment.MaterialAsset=UUID{22,23};environment.Intensity=1234;environment.Rotation={.1f,.2f,.3f};environment.ClearColor={.1f,.2f,.3f,1};environment.ImageBasedLighting=false;
+    environment.Fog.Mode=FogMode::Volumetric;environment.Fog.Density=.04f;environment.Fog.Wind={1,2,3};environment.Fog.Steps=48;
     assert(source.SetEnvironment(environment));auto invalid=environment;invalid.Intensity=-1;assert(!source.SetEnvironment(invalid));
     invalid=environment;invalid.Mode=static_cast<SceneEnvironmentMode>(99);assert(!source.SetEnvironment(invalid));
     assert(source.GetRootEntity().GetUUID().IsRoot());
     Entity parent = source.CreateEntity(UUID{1, 1}, "Parent entity");
     Entity child = source.CreateEntity(UUID{2, 2}, "Child entity");
     child.SetParent(parent);
+    parent.AddTag("Player");parent.AddTag("Persistent");
     parent.AddComponent<ModelInstance>().ModelAsset = UUID{8, 8};
     auto& modelNode = child.AddComponent<ModelNode>();
     modelNode.ModelAsset = UUID{8, 8};
@@ -97,6 +99,11 @@ int main() {
     assert(restoredEngine.GetScene().GetEnvironment().Intensity==1234);
     assert(restoredEngine.GetScene().GetEnvironment().Rotation==environment.Rotation);
     assert(!restoredEngine.GetScene().GetEnvironment().ImageBasedLighting);
+    assert(restoredEngine.GetScene().GetEnvironment().Fog.Mode==FogMode::Volumetric);
+    assert(restoredEngine.GetScene().GetEnvironment().Fog.Steps==48);
+    assert(restoredEngine.GetScene().GetEnvironment().Fog.Wind==Vec3(1,2,3));
+    assert(restoredEngine.GetScene().FindEntityWithTag("Player").GetUUID()==parent.GetUUID());
+
     Entity restoredChild = restoredEngine.GetScene().GetEntity(UUID{2, 2});
     assert(restoredChild.GetParent().GetUUID() == UUID(1, 1));
     assert(restoredChild.GetComponent<Health>().Value == 42.5f);

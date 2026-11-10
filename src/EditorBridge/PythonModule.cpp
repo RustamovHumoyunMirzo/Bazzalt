@@ -8,10 +8,12 @@
 #include "Bazzalt/Profiler.h"
 #include "EditorBridge/LODBridge.h"
 #include "EditorBridge/TerrainBridge.h"
+#include "EditorBridge/MaterialUsage.h"
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <array>
+#include <set>
 #include <cmath>
 #include <functional>
 #include <sstream>
@@ -89,6 +91,7 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
     py::dict result;
     result["uuid"] = entity.GetUUID().ToString();
     result["name"] = entity.GetComponent<Name>().Value;
+    result["tags"]=entity.GetTags().GetValues();
     if(auto* link=entity.TryGetComponent<Runtime::PrefabLink>())result["prefab_source"]=link->Asset.ToString();
     const Entity parent = entity.GetParent();
     result["parent"] = parent ? parent.GetUUID().ToString() : std::string{};
@@ -341,6 +344,13 @@ public:
         else {unsigned levels=1,size=std::max(d.Width,d.Height);while(size>1){++levels;size>>=1;}d.MipLevels=static_cast<std::uint8_t>(std::min<unsigned>(levels,d.MipLevels));}
         if(!Runtime::SaveTextureDescriptor(path,d,error)){m_bridgeError=error;return false;}return m_engine->RefreshTextureAsset(path);
     }
+    std::vector<std::string> UsedMaterialAssets(){
+        std::set<UUID> materials;
+        for(std::size_t i=0;i<m_loadedScenes.size();++i)CollectMaterialUsage(SceneAt(i),materials);
+        std::vector<std::string> result;
+        for(auto id:materials)result.push_back(id.ToString());
+        return result;
+    }
     py::list UsedShaderAssets() {
         py::list result;
         for(std::size_t i=0;i<m_loadedScenes.size();++i){auto view=SceneAt(i).GetRegistry().view<Camera>();for(auto handle:view){const auto& camera=view.get<Camera>(handle);if(!camera.IsEnabled())continue;for(const auto& effect:camera.PostProcessing.CustomEffects.GetEffects())if(effect.Enabled&&effect.ShaderAsset)result.append(effect.ShaderAsset.ToString());}}
@@ -393,6 +403,13 @@ public:
         return result;
     }
     py::list Entities() { return SceneEntities(m_engine->GetScene()); }
+    std::vector<std::string> TagNames(){
+        std::set<std::string> names;
+        for(std::size_t i=0;i<m_loadedScenes.size();++i)for(auto handle:SceneAt(i).GetRegistry().view<Tags>()){
+            const auto& values=SceneAt(i).GetRegistry().get<Tags>(handle).Value.GetValues();names.insert(values.begin(),values.end());
+        }
+        return {names.begin(),names.end()};
+    }
     py::list LoadedScenes() {
         py::list result;
         for(std::size_t index=0;index<m_loadedScenes.size();++index){Scene& scene=SceneAt(index);py::dict item;item["uuid"]=scene.GetUUID().ToString();item["name"]=m_loadedScenes[index].Path.empty()?py::str("Untitled"):PathText(m_loadedScenes[index].Path.stem());item["path"]=m_loadedScenes[index].Path.empty()?py::str():PathText(m_loadedScenes[index].Path);item["active"]=index==m_activeScene;item["entities"]=SceneEntities(scene);result.append(item);}return result;
@@ -409,6 +426,9 @@ public:
         const auto position=entity.GetWorldMatrix().TransformPoint({});py::dict result;
         result["world_position"]=py::make_tuple(position.X,position.Y,position.Z);
         result["position"]=result["world_position"];result["scene_active"]=(scene==&m_engine->GetScene());
+        const auto world=entity.GetWorldTransform();
+        result["world_rotation"]=py::make_tuple(world.Rotation.X,world.Rotation.Y,world.Rotation.Z,world.Rotation.W);
+        result["world_scale"]=py::make_tuple(world.Scale.X,world.Scale.Y,world.Scale.Z);
         const auto& local=entity.GetComponent<Transform>();
         result["local_position"]=py::make_tuple(local.Position.X,local.Position.Y,local.Position.Z);
         result["local_rotation"]=py::make_tuple(local.Rotation.X,local.Rotation.Y,local.Rotation.Z,local.Rotation.W);
@@ -665,6 +685,12 @@ public:
         UUID resolved=value.Mode==SceneEnvironmentMode::Map?value.SourceAsset:UUID{};
         if(value.Mode==SceneEnvironmentMode::Material&&value.MaterialAsset){const auto material=Material::Load(value.MaterialAsset);for(const auto& parameter:material.GetParameters())if(parameter.Type==ShaderParameterType::Texture2D){const auto texture=material.GetTexture(parameter.Name);const auto asset=AssetManager::GetAsset(texture);if(asset&&(asset->SourcePath.extension()==".hdr"||asset->SourcePath.extension()==".exr"||asset->SourcePath.extension()==".ktx")){resolved=texture;break;}}}
         result["resolved_source"]=resolved.ToString();
+        const auto& fog=value.Fog;
+        result["fog_enabled"]=fog.Enabled;result["fog_mode"]=int(fog.Mode);result["fog_sky"]=fog.AffectSky;result["fog_steps"]=fog.Steps;
+        result["fog_color"]=py::make_tuple(fog.Color.X,fog.Color.Y,fog.Color.Z);result["fog_wind"]=py::make_tuple(fog.Wind.X,fog.Wind.Y,fog.Wind.Z);
+#define F(Name) result["fog_" #Name]=fog.Name;
+        F(Density) F(StartDistance) F(MaxDistance) F(MaximumOpacity) F(Height) F(HeightFalloff) F(NoiseAmount) F(NoiseScale) F(Anisotropy)
+#undef F
         result["mode"]=static_cast<int>(value.Mode);result["source"]=value.SourceAsset.ToString();result["material"]=value.MaterialAsset.ToString();result["intensity"]=value.Intensity;result["rotation"]=py::make_tuple(value.Rotation.X,value.Rotation.Y,value.Rotation.Z);result["clear_color"]=py::make_tuple(value.ClearColor.X,value.ClearColor.Y,value.ClearColor.Z,value.ClearColor.W);result["ibl"]=value.ImageBasedLighting;result["skybox"]=value.SkyboxVisible;result["show_sun"]=value.ShowSun;result["lighting_ready"]=*index==m_activeScene&&m_engine->HasEnvironmentLighting();result["skybox_ready"]=*index==m_activeScene&&m_engine->HasEnvironmentSkybox();return result;
     }
     std::map<std::string,std::string> SceneExtensionProperties(const std::string& id){auto index=FindLoadedScene(id);return index?SceneAt(*index).GetExtensionProperties():std::map<std::string,std::string>{};}
@@ -680,6 +706,15 @@ public:
         if(data.contains("intensity"))value.Intensity=data["intensity"].cast<float>();
         if(data.contains("rotation")){const auto v=data["rotation"].cast<std::array<float,3>>();value.Rotation={v[0],v[1],v[2]};}
         if(data.contains("clear_color")){const auto v=data["clear_color"].cast<std::array<float,4>>();value.ClearColor={v[0],v[1],v[2],v[3]};}
+        if(data.contains("fog_enabled"))value.Fog.Enabled=data["fog_enabled"].cast<bool>();
+        if(data.contains("fog_mode"))value.Fog.Mode=FogMode(data["fog_mode"].cast<int>());
+        if(data.contains("fog_sky"))value.Fog.AffectSky=data["fog_sky"].cast<bool>();
+        if(data.contains("fog_steps"))value.Fog.Steps=data["fog_steps"].cast<unsigned>();
+        if(data.contains("fog_color")){auto c=data["fog_color"].cast<std::array<float,3>>();value.Fog.Color={c[0],c[1],c[2]};}
+        if(data.contains("fog_wind")){auto c=data["fog_wind"].cast<std::array<float,3>>();value.Fog.Wind={c[0],c[1],c[2]};}
+#define F(Name) if(data.contains("fog_" #Name))value.Fog.Name=data["fog_" #Name].cast<float>();
+        F(Density) F(StartDistance) F(MaxDistance) F(MaximumOpacity) F(Height) F(HeightFalloff) F(NoiseAmount) F(NoiseScale) F(Anisotropy)
+#undef F
         if(data.contains("ibl"))value.ImageBasedLighting=data["ibl"].cast<bool>();
         if(data.contains("skybox"))value.SkyboxVisible=data["skybox"].cast<bool>();
         if(data.contains("show_sun"))value.ShowSun=data["show_sun"].cast<bool>();
@@ -769,6 +804,7 @@ public:
     void SetTransformTrail(std::vector<std::array<float,10>> lines){m_engine->SetEditorTransformTrail(std::move(lines));}
     std::string PickPrimitive(const std::array<float,3>& origin,const std::array<float,3>& direction){auto id=m_engine->PickEditorPrimitive({origin[0],origin[1],origin[2]},{direction[0],direction[1],direction[2]});return id.IsRoot()?std::string{}:id.ToString();}
     py::object RaycastEditor(const std::array<float,3>& origin,const std::array<float,3>& direction,const std::vector<std::string>& excluded){std::unordered_set<UUID> ignored;for(const auto& value:excluded)if(!value.empty())ignored.insert(ParseUuid(value));Vec3 position;const auto id=m_engine->PickEditorPrimitive({origin[0],origin[1],origin[2]},{direction[0],direction[1],direction[2]},&position,ignored);if(id.IsRoot())return py::none();return py::make_tuple(position.X,position.Y,position.Z);}
+    bool SetEntityTags(const std::string& id,const std::vector<std::string>& values){RequireEntity(id).SetTags(TagSet(values));return true;}
     void SetObjectHover(const std::string& id,const std::array<float,3>& eye){m_engine->SetEditorObjectHover(id.empty()?UUID{}:ParseUuid(id),{eye[0],eye[1],eye[2]});}
     void SetSelectionOutline(const std::vector<std::string>& ids){std::vector<UUID> selected;for(const auto& id:ids)if(!id.empty())selected.push_back(ParseUuid(id));m_engine->SetEditorSelection(std::move(selected));}
     void SetGrid(bool visible, int plane) { m_engine->SetEditorGrid(visible, plane); }
@@ -1022,6 +1058,7 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("refresh_asset", &Bazzalt::EditorBridge::EditorHost::RefreshAsset)
         .def("texture_asset_info", &Bazzalt::EditorBridge::EditorHost::TextureAssetInfo)
         .def("save_texture_asset", &Bazzalt::EditorBridge::EditorHost::SaveTextureAsset)
+        .def("used_material_assets", &Bazzalt::EditorBridge::EditorHost::UsedMaterialAssets)
         .def("used_shader_assets", &Bazzalt::EditorBridge::EditorHost::UsedShaderAssets)
         .def("entities", &Bazzalt::EditorBridge::EditorHost::Entities)
         .def("loaded_scenes", &Bazzalt::EditorBridge::EditorHost::LoadedScenes)
@@ -1124,6 +1161,8 @@ PYBIND11_MODULE(_bazzalt_runtime, module) {
         .def("set_transform_trail", &Bazzalt::EditorBridge::EditorHost::SetTransformTrail)
         .def("pick_primitive", &Bazzalt::EditorBridge::EditorHost::PickPrimitive)
         .def("raycast_editor", &Bazzalt::EditorBridge::EditorHost::RaycastEditor)
+        .def("tag_names", &Bazzalt::EditorBridge::EditorHost::TagNames)
+        .def("set_entity_tags", &Bazzalt::EditorBridge::EditorHost::SetEntityTags)
         .def("set_object_hover", &Bazzalt::EditorBridge::EditorHost::SetObjectHover)
         .def("set_selection_outline", &Bazzalt::EditorBridge::EditorHost::SetSelectionOutline)
         .def("set_grid", &Bazzalt::EditorBridge::EditorHost::SetGrid)

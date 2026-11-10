@@ -11,9 +11,37 @@ from Editor.gui.gizmos import GizmoHandle, GizmoMode, Vec3
 
 
 class ViewportGesturePriorityTests(unittest.TestCase):
+    def test_captured_pixels_match_scene_coordinate_orientation(self):
+        runtime=Mock()
+        runtime.CapturedViewportFrame.return_value={'sequence':1,'width':1,'height':2,'pixels':bytes((255,0,0,255,0,0,255,255))}
+        surface=NativeRenderSurface(runtime,True)
+        surface._attached=True
+        surface.isVisible=lambda:True
+        surface._PollFrame()
+        self.assertEqual(surface._frame_image.pixelColor(0,0).getRgb(),(255,0,0,255))
+        self.assertEqual(surface._frame_image.pixelColor(0,1).getRgb(),(0,0,255,255))
+        surface._attached=False
+        surface.close()
     @classmethod
     def setUpClass(cls):
         cls.App = QApplication.instance() or QApplication([])
+
+    def test_axis_guides_remain_visible_without_trajectory_and_clear_on_apply(self):
+        from Editor.gui.gizmos import GizmoDrag
+        from PySide6.QtCore import QEvent
+        from PySide6.QtGui import QKeyEvent
+        runtime=Mock()
+        surface=NativeRenderSurface(runtime,True);surface.resize(640,480)
+        surface.SetSelection((0,0,0));surface._scene_pointer=QPoint(320,240)
+        surface._trail_options['trail_translate']=False
+        self.assertTrue(surface.BeginGrab())
+        surface.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress,Qt.Key.Key_X,Qt.KeyboardModifier.NoModifier))
+        lines=runtime.SetTransformTrail.call_args.args[0]
+        self.assertEqual(len(lines),3)
+        self.assertTrue(all(line[6]>line[7] for line in lines))
+        surface._grab_active=False;surface._EndTransformDrag()
+        self.assertEqual(runtime.SetTransformTrail.call_args.args[0],[])
+        surface.close()
 
     def test_model_marquee_uses_mesh_bounds_not_distant_node_origin(self):
         runtime=Mock();runtime.IsEditorSelectable.return_value=True

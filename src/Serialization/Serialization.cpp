@@ -104,8 +104,14 @@ namespace Bazzalt
         std::string EnvironmentYaml(const SceneEnvironment &v)
         {
             std::ostringstream out;
-            out << "Environment:\n  Version: 2\n  Mode: " << static_cast<int>(v.Mode) << "\n  Source: " << Quote(v.SourceAsset.ToString()) << "\n  Material: " << Quote(v.MaterialAsset.ToString()) << "\n  Intensity: " << Float(v.Intensity) << "\n  IBL: " << (v.ImageBasedLighting ? "true" : "false") << "\n  Skybox: " << (v.SkyboxVisible ? "true" : "false") << "\n  ShowSun: " << (v.ShowSun ? "true" : "false") << "\n";
+            out << "Environment:\n  Version: 3\n  Mode: " << static_cast<int>(v.Mode) << "\n  Source: " << Quote(v.SourceAsset.ToString()) << "\n  Material: " << Quote(v.MaterialAsset.ToString()) << "\n  Intensity: " << Float(v.Intensity) << "\n  IBL: " << (v.ImageBasedLighting ? "true" : "false") << "\n  Skybox: " << (v.SkyboxVisible ? "true" : "false") << "\n  ShowSun: " << (v.ShowSun ? "true" : "false") << "\n";
             out << "  RotationX: " << Float(v.Rotation.X) << "\n  RotationY: " << Float(v.Rotation.Y) << "\n  RotationZ: " << Float(v.Rotation.Z) << "\n  ClearR: " << Float(v.ClearColor.X) << "\n  ClearG: " << Float(v.ClearColor.Y) << "\n  ClearB: " << Float(v.ClearColor.Z) << "\n  ClearA: " << Float(v.ClearColor.W) << "\n";
+            const auto& fog=v.Fog;
+            out<<"  Fog.Enabled: "<<(fog.Enabled?"true":"false")<<"\n  Fog.Mode: "<<int(fog.Mode)<<"\n  Fog.AffectSky: "<<(fog.AffectSky?"true":"false")<<"\n  Fog.Steps: "<<fog.Steps<<'\n';
+#define FOG_FLOAT(Name) out<<"  Fog." #Name ": "<<Float(fog.Name)<<'\n';
+            FOG_FLOAT(Density) FOG_FLOAT(StartDistance) FOG_FLOAT(MaxDistance) FOG_FLOAT(MaximumOpacity) FOG_FLOAT(Height) FOG_FLOAT(HeightFalloff) FOG_FLOAT(NoiseAmount) FOG_FLOAT(NoiseScale) FOG_FLOAT(Anisotropy)
+#undef FOG_FLOAT
+            out<<"  Fog.ColorX: "<<Float(fog.Color.X)<<"\n  Fog.ColorY: "<<Float(fog.Color.Y)<<"\n  Fog.ColorZ: "<<Float(fog.Color.Z)<<"\n  Fog.WindX: "<<Float(fog.Wind.X)<<"\n  Fog.WindY: "<<Float(fog.Wind.Y)<<"\n  Fog.WindZ: "<<Float(fog.Wind.Z)<<'\n';
             return out.str();
         }
         bool Float(const PropertyMap &p, const char *k, float &v)
@@ -189,9 +195,9 @@ namespace Bazzalt
             int version = 0;
             const auto *source = Property(p, "Source");
             const auto *material = Property(p, "Material");
-            if (!Enum(p, "Version", version) || (version != 1 && version != 2))
+            if (!Enum(p, "Version", version) || (version != 1 && version != 2 && version != 3))
                 return false;
-            if (version == 2)
+            if (version >= 2)
             {
                 if (!EnumRange(p, "Mode", v.Mode, 0, 1))
                     return false;
@@ -201,6 +207,15 @@ namespace Bazzalt
                 UUID legacyMaterial;
                 if (material && UUID::TryParse(*material, legacyMaterial) && legacyMaterial)
                     v.Mode = SceneEnvironmentMode::Material;
+            }
+            if(version>=3){
+                auto& fog=v.Fog;int steps=0;
+                if(!Bool(p,"Fog.Enabled",fog.Enabled)||!Bool(p,"Fog.AffectSky",fog.AffectSky)||!EnumRange(p,"Fog.Mode",fog.Mode,0,2)||!Enum(p,"Fog.Steps",steps)||steps<4||steps>128)return false;
+                fog.Steps=unsigned(steps);
+#define FOG_FLOAT(Name) if(!Float(p,"Fog." #Name,fog.Name))return false;
+                FOG_FLOAT(Density) FOG_FLOAT(StartDistance) FOG_FLOAT(MaxDistance) FOG_FLOAT(MaximumOpacity) FOG_FLOAT(Height) FOG_FLOAT(HeightFalloff) FOG_FLOAT(NoiseAmount) FOG_FLOAT(NoiseScale) FOG_FLOAT(Anisotropy)
+#undef FOG_FLOAT
+                if(!Float(p,"Fog.ColorX",fog.Color.X)||!Float(p,"Fog.ColorY",fog.Color.Y)||!Float(p,"Fog.ColorZ",fog.Color.Z)||!Float(p,"Fog.WindX",fog.Wind.X)||!Float(p,"Fog.WindY",fog.Wind.Y)||!Float(p,"Fog.WindZ",fog.Wind.Z))return false;
             }
             return source && material && UUID::TryParse(*source, v.SourceAsset) && UUID::TryParse(*material, v.MaterialAsset) && Float(p, "Intensity", v.Intensity) && Bool(p, "IBL", v.ImageBasedLighting) && Bool(p, "Skybox", v.SkyboxVisible) && Bool(p, "ShowSun", v.ShowSun) && Float(p, "RotationX", v.Rotation.X) && Float(p, "RotationY", v.Rotation.Y) && Float(p, "RotationZ", v.Rotation.Z) && Float(p, "ClearR", v.ClearColor.X) && Float(p, "ClearG", v.ClearColor.Y) && Float(p, "ClearB", v.ClearColor.Z) && Float(p, "ClearA", v.ClearColor.W) && v.IsValid();
         }
@@ -274,6 +289,12 @@ namespace Bazzalt
                 value.Values.push_back(std::move(script));
             }return true;
         }catch(const std::exception&){return false;} });
+        m_components.Register<Tags>("Bazzalt.Tags",1,
+            [](const Tags& tags,PropertyMap& fields){fields["Value"]=tags.Value.ToString();},
+            [](Tags& tags,const PropertyMap& fields,std::uint32_t version){
+                const auto* value=Property(fields,"Value");
+                return version==1 && value && TagSet::TryParse(*value,tags.Value);
+            });
         m_components.Register<Transform>("Bazzalt.Transform", 1, [](const Transform &v, PropertyMap &o)
                                          {o["Position.X"]=Float(v.Position.X);o["Position.Y"]=Float(v.Position.Y);o["Position.Z"]=Float(v.Position.Z);o["Rotation.X"]=Float(v.Rotation.X);o["Rotation.Y"]=Float(v.Rotation.Y);o["Rotation.Z"]=Float(v.Rotation.Z);o["Rotation.W"]=Float(v.Rotation.W);o["Scale.X"]=Float(v.Scale.X);o["Scale.Y"]=Float(v.Scale.Y);o["Scale.Z"]=Float(v.Scale.Z); }, [](Transform &v, const PropertyMap &i, std::uint32_t n)
                                          { return n == 1 && Float(i, "Position.X", v.Position.X) && Float(i, "Position.Y", v.Position.Y) && Float(i, "Position.Z", v.Position.Z) && Float(i, "Rotation.X", v.Rotation.X) && Float(i, "Rotation.Y", v.Rotation.Y) && Float(i, "Rotation.Z", v.Rotation.Z) && Float(i, "Rotation.W", v.Rotation.W) && Float(i, "Scale.X", v.Scale.X) && Float(i, "Scale.Y", v.Scale.Y) && Float(i, "Scale.Z", v.Scale.Z); });

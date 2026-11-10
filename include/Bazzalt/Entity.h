@@ -15,6 +15,7 @@
 #include "Bazzalt/Component.h"
 #include "Bazzalt/Math.h"
 #include "Bazzalt/UUID.h"
+#include "Bazzalt/Tags.h"
 
 namespace Bazzalt {
 
@@ -22,6 +23,7 @@ class Scene;
 struct Hierarchy;
 struct Identity;
 struct Name;
+struct Tags;
 struct Transform;
 
 class BAZZALT_API Entity final {
@@ -84,6 +86,7 @@ public:
         static_assert(!std::is_same_v<Component, Identity> &&
                       !std::is_same_v<Component, Hierarchy> &&
                       !std::is_same_v<Component, Name> &&
+                      !std::is_same_v<Component, Tags> &&
                       !std::is_same_v<Component, Transform>,
                       "Core entity components cannot be removed");
         RequireValid("RemoveComponent");
@@ -97,6 +100,7 @@ public:
         static_assert(!std::is_same_v<ComponentType, Identity> &&
                       !std::is_same_v<ComponentType, Hierarchy> &&
                       !std::is_same_v<ComponentType, Name> &&
+                      !std::is_same_v<ComponentType, Tags> &&
                       !std::is_same_v<ComponentType, Transform>,
                       "Core entity components cannot be disabled");
         return GetComponent<ComponentType>().IsEnabled();
@@ -109,6 +113,7 @@ public:
         static_assert(!std::is_same_v<ComponentType, Identity> &&
                       !std::is_same_v<ComponentType, Hierarchy> &&
                       !std::is_same_v<ComponentType, Name> &&
+                      !std::is_same_v<ComponentType, Tags> &&
                       !std::is_same_v<ComponentType, Transform>,
                       "Core entity components cannot be disabled");
         GetComponent<ComponentType>().SetEnabled(enabled);
@@ -122,6 +127,15 @@ public:
     [[nodiscard]] Id GetId() const { return static_cast<Id>(m_handle); }
     [[nodiscard]] UUID GetUUID() const;
     [[nodiscard]] Scene* GetScene() const { return m_scene; }
+
+    bool AddTag(const std::string& tag) const;
+    bool RemoveTag(const std::string& tag) const;
+    void ClearTags() const;
+    TagSet GetTags() const;
+    void SetTags(const TagSet& tags) const;
+    bool HasTag(const std::string& tag) const;
+    bool HasAnyTag(const TagSet& tags) const;
+    bool HasAllTags(const TagSet& tags) const;
 
     [[nodiscard]] Entity GetParent() const;
     [[nodiscard]] bool HasParent() const;

@@ -1,4 +1,5 @@
 #include "Bazzalt/Terrain.h"
+#include "Bazzalt/Spline.h"
 #include "Terrain/TerrainGeometryInternal.h"
 #include <algorithm>
 #include <atomic>
@@ -41,8 +42,10 @@ bool VolumeCell(const Terrain& terrain,unsigned x,unsigned z){
     }
     return false;
 }
+float BaseHeight(const Terrain& terrain,float x,float z){return std::min(terrain.VerticalRange.X,terrain.GetHeight(x,z)-.01f);}
 float Density(const Terrain& terrain,Vec3 point){
-    float density=terrain.GetHeight(point.X,point.Z)-point.Y;
+    const float height=terrain.GetHeight(point.X,point.Z);
+    float density=std::min(height-point.Y,point.Y-std::min(terrain.VerticalRange.X,height-.01f));
     for(const auto& volume:terrain.Volumes){
         if(!volume.Enabled)continue;
         auto delta=point-volume.Center;
@@ -85,9 +88,10 @@ void VolumeMesh(const Terrain& terrain,unsigned x,unsigned z,TerrainMesh& mesh){
         }
         mesh.Indices.insert(mesh.Indices.end(),{index,index+1,index+2});
     };
-    for(unsigned y=0;y<terrain.VerticalSamples;++y){
+    // Include the slab below the base so the CSG extractor emits the bottom.
+    for(int y=-1;y<int(terrain.VerticalSamples);++y){
         Vec3 points[8];float values[8];
-        for(unsigned i=0;i<8;++i){points[i]=base+Vec3{float(i&1)*dx,float(y+((i>>2)&1))*dy,float((i>>1)&1)*dz};values[i]=Density(terrain,points[i]);}
+        for(unsigned i=0;i<8;++i){points[i]=base+Vec3{float(i&1)*dx,float(y+int((i>>2)&1))*dy,float((i>>1)&1)*dz};values[i]=Density(terrain,points[i]);}
         for(const auto& tetra:tetrahedra){
             unsigned inside[4],outside[4],count=0,empty=0;
             for(auto corner:tetra){if(values[corner]>=0)inside[count++]=corner;else outside[empty++]=corner;}
@@ -101,6 +105,46 @@ void VolumeMesh(const Terrain& terrain,unsigned x,unsigned z,TerrainMesh& mesh){
             }
         }
     }
+}
+
+// Real exterior faces are distinct from internal LOD skirts. Rendering, editor
+// picking and MeshCollider baking all consume these same faces.
+void CellShell(const Terrain& t,unsigned x,unsigned z,unsigned step,TerrainMesh& mesh,bool includeBottom=true){
+    if(t.IsHole(x,z))return;
+    const unsigned cells=t.Resolution-1;
+    const bool front=z==0||t.IsHole(x,z-1),right=x+step==cells||t.IsHole(x+step,z),back=z+step==cells||t.IsHole(x,z+step),left=x==0||t.IsHole(x-1,z);
+    if(!includeBottom&&!front&&!right&&!back&&!left)return;
+    auto point=[&](unsigned gx,unsigned gz){float px=(float(gx)/cells-.5f)*t.Size.X,pz=(float(gz)/cells-.5f)*t.Size.Y;return Vec3{px,t.GetHeight(px,pz),pz};};
+    auto a=point(x,z),b=point(x+step,z),c=point(x+step,z+step),d=point(x,z+step);
+    auto bottom=[&](Vec3 p){p.Y=BaseHeight(t,p.X,p.Z);return p;};
+    auto emit=[&](Vec3 p,Vec3 q,Vec3 r,Vec3 normal){
+        if(Vec3::Cross(q-p,r-p).LengthSquared()<1e-16f)return;
+        if(Vec3::Dot(Vec3::Cross(q-p,r-p),normal)<0)std::swap(q,r);
+        auto base=unsigned(mesh.Vertices.size());
+        for(auto v:{p,q,r})mesh.Vertices.push_back({v,normal,std::abs(normal.Y)>.5f?Vec2{v.X,v.Z}:Vec2{v.X+v.Z,v.Y},SurfaceColor(t,v)});
+        mesh.Indices.insert(mesh.Indices.end(),{base,base+1,base+2});
+    };
+    const bool volume=VolumeCell(t,x,z);
+    if(includeBottom&&!volume){emit(bottom(a),bottom(b),bottom(c),{0,-1,0});emit(bottom(a),bottom(c),bottom(d),{0,-1,0});}
+    auto wall=[&](Vec3 p,Vec3 q,Vec3 normal){
+        if(!volume){auto lo=bottom(p),hi=bottom(q);emit(p,q,hi,normal);emit(p,hi,lo,normal);return;}
+        // Clip each boundary strip against the same density field as caves,
+        // keeping tunnels through terrain edges open.
+        auto clipped=[&](Vec3 u,Vec3 v,Vec3 w){
+            std::vector<Vec3> polygon;std::array<Vec3,3> input{u,v,w};
+            for(unsigned i=0;i<3;++i){auto start=input[i],end=input[(i+1)%3];float first=Density(t,start),last=Density(t,end);
+                if(first>=0)polygon.push_back(start);
+                if((first>=0)!=(last>=0))polygon.push_back(start+(end-start)*(first/(first-last)));
+            }
+            for(unsigned i=1;i+1<polygon.size();++i)emit(polygon[0],polygon[i],polygon[i+1],normal);
+        };
+        const float low=t.VerticalRange.X,dy=(t.VerticalRange.Y-low)/t.VerticalSamples;
+        for(unsigned i=0;i<t.VerticalSamples;++i){auto u=p,v=q,w=q,r=p;u.Y=v.Y=low+dy*i;w.Y=r.Y=low+dy*(i+1);clipped(u,v,w);clipped(u,w,r);}
+    };
+    if(front)wall(a,b,{0,0,-1});
+    if(right)wall(b,c,{1,0,0});
+    if(back)wall(c,d,{0,0,1});
+    if(left)wall(d,a,{-1,0,0});
 }
 }
 Terrain::Terrain(){MarkDirty();}
@@ -128,6 +172,12 @@ bool Terrain::IsValid() const {
     for(const auto& v:Vegetation)if(v.Name.size()>128||!Finite(v.Density)||v.Density<0||v.Density>1000||!Finite(v.Spacing)||v.Spacing<.01f||!Finite(v.MinHeight)||!Finite(v.MaxHeight)||v.MinHeight>v.MaxHeight||!Finite(v.MinSlope)||!Finite(v.MaxSlope)||v.MinSlope<0||v.MaxSlope>90||v.MinSlope>v.MaxSlope||!Finite(v.MinScale)||!Finite(v.MaxScale)||v.MinScale<=0||v.MinScale>v.MaxScale||v.MaxScale>1000||v.MaxInstances>MaxInstances)return false;
     for(const auto& i:Instances)if(i.Prototype>=Vegetation.size()||!Finite(i.Position)||std::abs(i.Position.X)>1000000||std::abs(i.Position.Y)>1000000||std::abs(i.Position.Z)>1000000||!Finite(i.Scale)||i.Scale<=0||i.Scale>1000||!Finite(i.Rotation.X)||!Finite(i.Rotation.Y)||!Finite(i.Rotation.Z)||!Finite(i.Rotation.W))return false;
     for(const auto& s:Splines)if(s.Name.size()>128||s.Points.size()>1024||!Finite(s.Width)||s.Width<=0||s.Width>100000||!Finite(s.Shoulder)||s.Shoulder<0||s.Shoulder>100000||!Finite(s.Depth)||std::abs(s.Depth)>100000||!Finite(s.Strength)||s.Strength<0||s.Strength>1||!std::all_of(s.Points.begin(),s.Points.end(),[](Vec3 p){return Finite(p)&&std::abs(p.X)<=1000000&&std::abs(p.Y)<=1000000&&std::abs(p.Z)<=1000000;}))return false;
+    for(const auto& spline:Splines){
+        for(const auto* tangents:{&spline.InTangents,&spline.OutTangents}){
+            if(!tangents->empty()&&tangents->size()!=spline.Points.size())return false;
+            for(auto tangent:*tangents)if(!Finite(tangent)||tangent.Length()>1000000)return false;
+        }
+    }
     for(const auto& spline:Splines)if(!Finite(spline.SurfaceOffset)||!Finite(spline.TextureScale)||spline.TextureScale<=0||!Finite(spline.Color.X)||!Finite(spline.Color.Y)||!Finite(spline.Color.Z)||!Finite(spline.Color.W))return false;
     return true;
 }
@@ -188,8 +238,8 @@ void Terrain::ApplySpline(unsigned index,unsigned layerIndex){Require(*this);
         *this=std::move(next);
         return;
     }
-if(index>=Splines.size()||Splines[index].Points.size()<2)throw std::invalid_argument("A terrain spline needs at least two points");auto& layer=Layer(*this,layerIndex);Allocate(layer.Heights,Resolution);const auto& s=Splines[index];auto segments=s.Points.size()-(s.Closed?0:1);
-    for(unsigned z=0;z<Resolution;++z)for(unsigned x=0;x<Resolution;++x){Vec3 p{float(x)/(Resolution-1)*Size.X-Size.X*.5f,0,float(z)/(Resolution-1)*Size.Y-Size.Y*.5f};float closest=std::numeric_limits<float>::max(),height=0;for(std::size_t i=0;i<segments;++i){auto a=s.Points[i],b=s.Points[(i+1)%s.Points.size()],d=b-a;float length=d.X*d.X+d.Z*d.Z,t=length<Epsilon?0:std::clamp(((p.X-a.X)*d.X+(p.Z-a.Z)*d.Z)/length,0.f,1.f);auto q=a+d*t;float distance=std::hypot(p.X-q.X,p.Z-q.Z);if(distance<closest){closest=distance;height=q.Y-s.Depth;}}
+if(index>=Splines.size()||Splines[index].Points.size()<2)throw std::invalid_argument("A terrain spline needs at least two points");auto& layer=Layer(*this,layerIndex);Allocate(layer.Heights,Resolution);const auto& s=Splines[index];const auto path=TerrainGeometry::SampleSpline(s);auto segments=path.size()-1;
+    for(unsigned z=0;z<Resolution;++z)for(unsigned x=0;x<Resolution;++x){Vec3 p{float(x)/(Resolution-1)*Size.X-Size.X*.5f,0,float(z)/(Resolution-1)*Size.Y-Size.Y*.5f};float closest=std::numeric_limits<float>::max(),height=0;for(std::size_t i=0;i<segments;++i){auto a=path[i],b=path[i+1],d=b-a;float length=d.X*d.X+d.Z*d.Z,t=length<Epsilon?0:std::clamp(((p.X-a.X)*d.X+(p.Z-a.Z)*d.Z)/length,0.f,1.f);auto q=a+d*t;float distance=std::hypot(p.X-q.X,p.Z-q.Z);if(distance<closest){closest=distance;height=q.Y-s.Depth;}}
         float blend=closest<=s.Width*.5f?1:s.Shoulder<=Epsilon?0:std::clamp(1-(closest-s.Width*.5f)/s.Shoulder,0.f,1.f);blend=blend*blend*(3-2*blend)*s.Strength;layer.Heights[z*Resolution+x]=std::clamp(layer.Heights[z*Resolution+x]+(height-GetHeight(p.X,p.Z))*blend/layer.Opacity,-100000.f,100000.f);
     }MarkDirty();
 }
@@ -260,6 +310,23 @@ void Terrain::MatchEdge(const Terrain& neighbour,TerrainEdge edge,const Mat4& ne
     *this=std::move(next);
 }
 
+std::vector<Vec3> TerrainGeometry::SampleSpline(const TerrainSpline& spline,unsigned subdivisions){
+    if(subdivisions<1||subdivisions>64||spline.Points.size()>1024)throw std::invalid_argument("Invalid spline sampling limits");
+    for(const auto* tangents:{&spline.InTangents,&spline.OutTangents}){
+        if(!tangents->empty()&&tangents->size()!=spline.Points.size())throw std::invalid_argument("Spline tangent count must match anchors");
+        for(auto value:*tangents)if(!Finite(value)||value.Length()>1000000)throw std::invalid_argument("Invalid spline tangent");
+    }
+    for(auto value:spline.Points)if(!Finite(value))throw std::invalid_argument("Invalid spline anchor");
+    std::vector<SplinePoint> points;
+    points.reserve(spline.Points.size());
+    for(std::size_t i=0;i<spline.Points.size();++i){
+        SplinePoint point;point.Position=spline.Points[i];
+        if(!spline.InTangents.empty())point.InTangent=spline.InTangents[i];
+        if(!spline.OutTangents.empty())point.OutTangent=spline.OutTangents[i];
+        points.push_back(point);
+    }
+    return Spline(std::move(points),spline.Closed).Sample(subdivisions);
+}
 TerrainMesh TerrainGeometry::BuildSpline(const Terrain& terrain,unsigned index){Require(terrain);return Runtime::BuildTerrainSpline(terrain,index);}
 TerrainMesh Runtime::BuildTerrainSpline(const Terrain& terrain,unsigned index){
     if(index>=terrain.Splines.size())throw std::out_of_range("Terrain spline");
@@ -267,7 +334,7 @@ TerrainMesh Runtime::BuildTerrainSpline(const Terrain& terrain,unsigned index){
     TerrainMesh mesh;
     if(!spline.GenerateSurface||spline.Points.size()<2)return mesh;
     std::vector<Vec3> points;
-    for(auto point:spline.Points){
+    for(auto point:TerrainGeometry::SampleSpline(spline)){
         if(points.empty()||std::hypot(point.X-points.back().X,point.Z-points.back().Z)>Epsilon)points.push_back(point);
     }
     if(spline.Closed&&points.size()>1&&std::hypot(points.front().X-points.back().X,points.front().Z-points.back().Z)<=Epsilon)points.pop_back();
@@ -307,13 +374,18 @@ TerrainMesh Runtime::BuildTerrainSpline(const Terrain& terrain,unsigned index){
 TerrainMesh TerrainGeometry::BuildChunk(const Terrain& t,unsigned x,unsigned z,unsigned lod){Require(t);return Runtime::BuildTerrainChunk(t,x,z,lod);}
 TerrainMesh Runtime::BuildTerrainChunk(const Terrain& t,unsigned chunkX,unsigned chunkZ,unsigned lod){TerrainMesh mesh;unsigned cells=t.Resolution-1,startX=chunkX*t.ChunkSize,startZ=chunkZ*t.ChunkSize;if(chunkX>=cells/t.ChunkSize||chunkZ>=cells/t.ChunkSize)throw std::out_of_range("Terrain chunk");unsigned step=1u<<std::min({lod,t.MaxLOD,unsigned(std::log2(t.ChunkSize))});unsigned endX=startX+t.ChunkSize,endZ=startZ+t.ChunkSize;
     // Cells containing holes stay at full detail, preserving their exact boundary.
-    for(unsigned z=startZ;z<endZ;++z)for(unsigned x=startX;x<endX;++x)if(t.IsHole(x,z)||VolumeCell(t,x,z))step=1;
+    for(unsigned z=startZ?startZ-1:0;z<std::min(endZ+1,cells);++z)for(unsigned x=startX?startX-1:0;x<std::min(endX+1,cells);++x)if(t.IsHole(x,z)||VolumeCell(t,x,z))step=1;
     auto vertex=[&](unsigned x,unsigned z){float u=float(x)/cells,v=float(z)/cells;TerrainVertex a;a.Position={u*t.Size.X-t.Size.X*.5f,Height(t,u,v),v*t.Size.Y-t.Size.Y*.5f};a.Normal=t.GetNormal(a.Position.X,a.Position.Z);a.UV={u*t.Size.X,v*t.Size.Y};Vec4 color{};float total=0;for(std::size_t i=0;i<t.Layers.size();++i){const auto& l=t.Layers[i];if(!l.Enabled)continue;float weight=Sample(l.Weights,t.Resolution,t.Resolution,u,v,i==0?1.f:0.f)*l.Opacity;color=color+l.Color*weight;total+=weight;}a.Color=total>Epsilon?color*(1/total):Vec4{1,1,1,1};mesh.Vertices.push_back(a);};
     unsigned row=t.ChunkSize/step+1;for(unsigned z=startZ;z<=endZ;z+=step)for(unsigned x=startX;x<=endX;x+=step)vertex(x,z);
     for(unsigned z=0;z<row-1;++z)for(unsigned x=0;x<row-1;++x){if(t.IsHole(startX+x*step,startZ+z*step)||VolumeCell(t,startX+x*step,startZ+z*step))continue;auto a=z*row+x,b=a+1,c=a+row+1,d=a+row;mesh.Indices.insert(mesh.Indices.end(),{a,d,c,a,c,b});}
     for(unsigned z=startZ;z<endZ;++z)for(unsigned x=startX;x<endX;++x)if(!t.IsHole(x,z)&&VolumeCell(t,x,z))VolumeMesh(t,x,z,mesh);
+    // Share bottom-grid vertices just like the top, preserving chunk LOD.
+    const unsigned bottomStart=unsigned(mesh.Vertices.size());
+    for(unsigned i=0;i<row*row;++i){auto v=mesh.Vertices[i];v.Position.Y=BaseHeight(t,v.Position.X,v.Position.Z);v.Normal={0,-1,0};mesh.Vertices.push_back(v);}
+    for(unsigned z=0;z<row-1;++z)for(unsigned x=0;x<row-1;++x){if(t.IsHole(startX+x*step,startZ+z*step)||VolumeCell(t,startX+x*step,startZ+z*step))continue;auto a=bottomStart+z*row+x,b=a+1,c=a+row+1,d=a+row;mesh.Indices.insert(mesh.Indices.end(),{a,b,c,a,c,d});}
+    for(unsigned z=startZ;z<endZ;z+=step)for(unsigned x=startX;x<endX;x+=step)CellShell(t,x,z,step,mesh,false);
     if(t.SkirtDepth>0){
-        auto skirt=[&](unsigned a,unsigned b){auto topA=mesh.Vertices[a],topB=mesh.Vertices[b],bottomA=topA,bottomB=topB;bottomA.Position.Y-=t.SkirtDepth;bottomB.Position.Y-=t.SkirtDepth;
+        auto skirt=[&](unsigned a,unsigned b){auto topA=mesh.Vertices[a],topB=mesh.Vertices[b],bottomA=topA,bottomB=topB;bottomA.Position.Y=std::max(topA.Position.Y-t.SkirtDepth,BaseHeight(t,topA.Position.X,topA.Position.Z));bottomB.Position.Y=std::max(topB.Position.Y-t.SkirtDepth,BaseHeight(t,topB.Position.X,topB.Position.Z));
             auto normal=Vec3::Cross(topB.Position-topA.Position,bottomA.Position-topA.Position).Normalized();topA.Normal=topB.Normal=bottomA.Normal=bottomB.Normal=normal;
             auto base=unsigned(mesh.Vertices.size());mesh.Vertices.insert(mesh.Vertices.end(),{topA,topB,bottomB,bottomA});mesh.Indices.insert(mesh.Indices.end(),{base,base+1,base+2,base,base+2,base+3});};
         for(unsigned i=0;i<row-1;++i){if(!t.IsHole(startX+i*step,startZ)&&!VolumeCell(t,startX+i*step,startZ))skirt(i,i+1);if(!t.IsHole(startX+i*step,endZ-1)&&!VolumeCell(t,startX+i*step,endZ-1))skirt((row-1)*row+i+1,(row-1)*row+i);if(!t.IsHole(startX,startZ+i*step)&&!VolumeCell(t,startX,startZ+i*step))skirt((i+1)*row,i*row);if(!t.IsHole(endX-1,startZ+i*step)&&!VolumeCell(t,endX-1,startZ+i*step))skirt(i*row+row-1,(i+1)*row+row-1);}
@@ -321,7 +393,7 @@ TerrainMesh Runtime::BuildTerrainChunk(const Terrain& t,unsigned chunkX,unsigned
     return mesh;
 }
 std::optional<TerrainHit> TerrainGeometry::Raycast(const Terrain& t,Vec3 origin,Vec3 direction,float maximum){Require(t);if(!Finite(origin)||!Finite(direction)||direction.LengthSquared()<Epsilon||!Finite(maximum)||maximum<0)throw std::invalid_argument("Invalid terrain ray");direction=direction.Normalized();std::optional<TerrainHit> result;float closest=maximum;unsigned n=t.Resolution;
-    // Authoritative full-resolution surface, independent of camera LOD and skirts.
+    // Authoritative full-resolution surface and exterior, independent of LOD skirts.
     auto point=[&](unsigned x,unsigned z){float px=float(x)/(n-1)*t.Size.X-t.Size.X*.5f,pz=float(z)/(n-1)*t.Size.Y-t.Size.Y*.5f;return Vec3{px,t.GetHeight(px,pz),pz};};
     auto triangle=[&](Vec3 a,Vec3 b,Vec3 c,bool heightfield=true){auto e=b-a,f=c-a,p=Vec3::Cross(direction,f);float det=Vec3::Dot(e,p);if(std::abs(det)<1e-8f)return;float inv=1/det;auto s=origin-a;float u=Vec3::Dot(s,p)*inv;if(u<0||u>1)return;auto q=Vec3::Cross(s,e);float v=Vec3::Dot(direction,q)*inv;if(v<0||u+v>1)return;float d=Vec3::Dot(f,q)*inv;if(d>=0&&d<=closest){closest=d;auto pos=origin+direction*d;result=TerrainHit{pos,heightfield?t.GetNormal(pos.X,pos.Z):Vec3::Cross(e,f).Normalized(),d};}};
     for(unsigned index=0;index<t.Splines.size();++index){
@@ -337,6 +409,8 @@ std::optional<TerrainHit> TerrainGeometry::Raycast(const Terrain& t,Vec3 origin,
     const float infinity=std::numeric_limits<float>::infinity();float deltaX=sx?cellX/std::abs(direction.X):infinity,deltaZ=sz?cellZ/std::abs(direction.Z):infinity;
     float nextX=sx?((float(x+(sx>0))*cellX-t.Size.X*.5f)-origin.X)/direction.X:infinity,nextZ=sz?((float(z+(sz>0))*cellZ-t.Size.Y*.5f)-origin.Z)/direction.Z:infinity;
     for(unsigned visited=0;visited<2*n&&x>=0&&z>=0&&x<int(n)-1&&z<int(n)-1;++visited){
+        TerrainMesh shell;CellShell(t,unsigned(x),unsigned(z),1,shell);
+        for(std::size_t i=0;i<shell.Indices.size();i+=3)triangle(shell.Vertices[shell.Indices[i]].Position,shell.Vertices[shell.Indices[i+1]].Position,shell.Vertices[shell.Indices[i+2]].Position,false);
         if(!t.IsHole(unsigned(x),unsigned(z))&&VolumeCell(t,unsigned(x),unsigned(z))){
             TerrainMesh volume;VolumeMesh(t,unsigned(x),unsigned(z),volume);
             for(std::size_t i=0;i<volume.Indices.size();i+=3)triangle(volume.Vertices[volume.Indices[i]].Position,volume.Vertices[volume.Indices[i+1]].Position,volume.Vertices[volume.Indices[i+2]].Position,false);

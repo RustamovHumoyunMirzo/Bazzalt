@@ -7,6 +7,7 @@
 #include "Bazzalt/Components/Mesh.h"
 #include "Bazzalt/Components/GaussianBlur.h"
 #include "Bazzalt/Components/Vignette.h"
+#include "Bazzalt/Terrain.h"
 #include "Runtime/Engine.h"
 #include "Rendering/PrimitiveGeometry.h"
 #include "Rendering/LightGuides.h"
@@ -21,6 +22,8 @@ struct EditorOutlineTestAccess {
 };
 }
 #include "Rendering/LightParameters.h"
+#include "Rendering/FogRenderer.h"
+#include <filament/SwapChain.h>
 #include "Rendering/RenderSystems.h"
 #include "Rendering/AntiAliasingSettings.h"
 #include "Rendering/RenderBackend.h"
@@ -28,6 +31,7 @@ struct EditorOutlineTestAccess {
 #include <filament/Scene.h>
 #include <filament/Engine.h>
 #include <filament/View.h>
+#include <filament/Viewport.h>
 #include <filament/Material.h>
 #include <filament/MaterialInstance.h>
 #include <filament/RenderableManager.h>
@@ -92,7 +96,51 @@ int CheckDofPixels(){
     }backend.Shutdown();return 0;
 }
 
+int CheckFogPixels(){
+    using namespace Bazzalt;using namespace Bazzalt::Runtime;
+    RenderBackend backend;assert(backend.ConfigureBackend("vulkan"));assert(backend.Initialize(false));backend.SetPresentationSize(320,240);
+    {
+        Scene scene;auto& cameras=scene.AddSystem<CameraSystem>(backend);
+        auto entity=scene.CreateEntity("Fog camera");auto& camera=entity.AddComponent<Camera>();camera.PostProcessing.Enabled=false;
+        SystemTestAccess::Tick(cameras,scene);auto* view=backend.GetActiveViews().front();
+        PrimitiveObject object;auto handle=backend.GetAssets().CreatePrimitive(object);
+        backend.GetAssets().UpdatePrimitive(handle,Mat4::Translation({0,0,-5})*Mat4::Scaling({3,3,1}),object);
+        auto& engine=backend.GetEngine();auto& renderer=backend.GetRenderer();
+        auto* color=filament::Texture::Builder().width(320).height(240).levels(1).format(filament::Texture::InternalFormat::RGBA8).usage(filament::Texture::Usage::COLOR_ATTACHMENT|filament::Texture::Usage::BLIT_SRC|filament::Texture::Usage::SAMPLEABLE).build(engine);
+        auto* target=filament::RenderTarget::Builder().texture(filament::RenderTarget::AttachmentPoint::COLOR,color).build(engine);
+        auto* swap=engine.createSwapChain(320u,240u);
+        view->setRenderTarget(target);view->setViewport({0,0,320,240});
+        FogRenderer fogRenderer(engine,renderer);fogRenderer.Prepare({view});
+        FogSettings fog;fog.Mode=FogMode::Volumetric;fog.Color={1,0,0};fog.Density=.5f;fog.StartDistance=0;fog.HeightFalloff=0;fog.NoiseAmount=0;
+        const auto capture=[&](bool enabled){
+            for(unsigned frame=0;frame<3;++frame){if(renderer.beginFrame(swap)){if(enabled)fogRenderer.Render(*view,fog,&scene,0);else renderer.render(view);renderer.endFrame();}engine.flushAndWait();engine.pumpMessageQueues();}
+            std::vector<std::uint8_t> pixels(320*240*4);bool done=false;
+            renderer.readPixels(target,0,0,320,240,{pixels.data(),pixels.size(),filament::Texture::Format::RGBA,filament::Texture::Type::UBYTE,[](void*,size_t,void* user){*static_cast<bool*>(user)=true;},&done});
+            engine.flushAndWait();engine.pumpMessageQueues();assert(done);assert(view->getRenderTarget()==target);return pixels;
+        };
+        auto baseline=capture(false),volume=capture(true),restored=capture(false);
+        auto center=(120*320+160)*4;auto corner=(10*320+10)*4;
+        std::cout<<"Fog red baseline="<<int(baseline[center])<<" fog="<<int(volume[center])<<" sky="<<int(volume[corner])<<std::endl;
+        assert(volume[center]>baseline[center]+40);assert(volume[center]>volume[center+1]+40);
+        assert(std::abs(int(volume[corner])-int(baseline[corner]))<4);
+        assert(std::abs(int(restored[center])-int(baseline[center]))<4);
+        view->setPostProcessingEnabled(true);
+        const auto graded=capture(false),gradedFog=capture(true);
+        assert(gradedFog[center]>graded[center]+40);
+        std::cout<<"Post-processed sky baseline="<<int(graded[corner])<<" fog="<<int(gradedFog[corner])<<std::endl;
+        assert(std::abs(int(gradedFog[corner])-int(graded[corner]))<4);
+        // Vulkan readback is top-down while viewport coordinates start at bottom-left.
+        view->setViewport({0,0,160,120});fogRenderer.Prepare({view});
+        const auto resized=capture(true);assert(resized[(180*320+80)*4]>40);
+        fogRenderer.Prepare({});fogRenderer.Prepare({view});
+        const auto recreated=capture(true);assert(recreated[(180*320+80)*4]>40);
+        view->setRenderTarget(nullptr);engine.destroy(target);engine.destroy(color);engine.destroy(swap);backend.GetAssets().DestroyPrimitive(handle);
+    }
+    backend.Shutdown();return 0;
+}
+
 int main(int argc,char** argv) {
+    if(argc>1&&std::string_view(argv[1])=="--gpu-fog")return CheckFogPixels();
     if(argc>1&&std::string_view(argv[1])=="--gpu-dof")return CheckDofPixels();
     {
         using namespace Bazzalt;
@@ -198,6 +246,24 @@ int main(int argc,char** argv) {
     engine.SetEditorSelection({Bazzalt::UUID{}});
     OutlineCheck::Check(engine,{},{}); // Root cannot select all descendants.
     engine.SetEditorSelection({});
+    auto terrain=scene.CreateEntity("Raised terrain outline");
+    auto& heightfield=terrain.AddComponent<Bazzalt::Terrain>();
+    Bazzalt::TerrainBrush brush;brush.Radius=3;brush.Strength=8;
+    heightfield.ApplyBrush(Bazzalt::TerrainTool::Raise,{},brush,1);
+    Bazzalt::Vec3 surface;
+    assert(engine.PickEditorPrimitive({0,6,10},{0,0,-1},&surface)==terrain.GetUUID());
+    assert(std::abs(surface.Y-6)<.001f&&surface.Z>0);
+    assert(engine.PickEditorPrimitive({0,20,0},{0,-1,0},&surface)==terrain.GetUUID());
+    assert(std::abs(surface.Y-8)<.001f);
+    assert(engine.PickEditorPrimitive({10,-5,0},{-1,0,0},&surface)==terrain.GetUUID());
+    assert(std::abs(surface.X-5)<.001f);
+    assert(engine.PickEditorPrimitive({0,-30,0},{0,1,0},&surface)==terrain.GetUUID());
+    assert(std::abs(surface.Y+20)<.001f);
+    engine.SetEditorObjectHover(terrain.GetUUID(),{});
+    OutlineCheck::Check(engine,{}, {terrain.GetUUID()});
+    engine.SetEditorSelection({terrain.GetUUID()});
+    OutlineCheck::Check(engine,{terrain.GetUUID()},{});
+    engine.SetEditorObjectHover({},{});engine.SetEditorSelection({});
     engine.Shutdown();
     Bazzalt::Runtime::RenderBackend backend;assert(backend.Initialize(true));auto& assets=backend.GetAssets();
     {
@@ -263,7 +329,7 @@ int main(int argc,char** argv) {
     }
     auto* editorView=backend.GetEngine().createView();auto* gameView=backend.GetEngine().createView();
     Bazzalt::Runtime::RenderBackend::ConfigureEditorFog(*editorView,1);
-    const auto fog=editorView->getFogOptions();assert(fog.enabled);assert(std::isfinite(fog.cutOffDistance));assert(fog.cutOffDistance>180&&fog.cutOffDistance<1e19f);
+    const auto fog=editorView->getFogOptions();assert(!fog.enabled);
     assert(editorView->getAmbientOcclusionOptions().enabled);
     assert(!gameView->getFogOptions().enabled);backend.GetEngine().destroy(editorView);backend.GetEngine().destroy(gameView);
     Bazzalt::PrimitiveObject object;const auto owner=Bazzalt::UUID::Generate();const auto handle=assets.CreatePrimitive(object);assets.SetEditorOwner(handle,owner);

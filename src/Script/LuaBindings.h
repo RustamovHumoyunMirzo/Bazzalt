@@ -20,6 +20,7 @@ namespace Bazzalt::Runtime {
 ExtensionValue LuaExtensionValue(sol::object value);
 void BindLuaExtensions(sol::table api);
 void BindLuaMath(sol::table api);
+void BindLuaSpline(sol::table api);
 void BindLuaComponents(sol::table api);
 void BindLuaGUI(sol::table api);
 void BindLuaServices(sol::table api);

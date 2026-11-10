@@ -7,6 +7,20 @@ from unittest.mock import patch
 from Editor.scripting import ScriptCompiler,ScriptAttachments,ScriptValidationError
 
 class LuaScriptingTests(unittest.TestCase):
+    def test_tag_set_property_is_typed_without_executing_lua(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source=Path(folder)/'Tagged.lua'
+            source.write_text('local W=COMPONENT("Tagged")\nW.Targets=PROPERTY("TagSet", Bazzalt.TagSet.new())\nreturn W',encoding='utf-8')
+            descriptor=ScriptCompiler.Inspect(source)
+            self.assertEqual(descriptor.properties[0].type,'TagSet')
+            store=ScriptAttachments(folder);self.assertTrue(store.Attach('entity',descriptor))
+            self.assertEqual(store.For('entity')[0]['properties']['Targets'],'')
+            source.write_text('local W=COMPONENT("Tagged")\nW.Targets=PROPERTY("TagSet", Bazzalt.TagSet.new({"Flying", "Enemy"}))\nreturn W',encoding='utf-8')
+            descriptor=ScriptCompiler.Inspect(source)
+            self.assertTrue(store.Attach('other',descriptor))
+            self.assertEqual(store.For('other')[0]['properties']['Targets'],'Enemy,Flying')
+
+
     def test_function_declarations_are_inspected_without_execution(self):
         with tempfile.TemporaryDirectory() as folder:
             source=Path(folder)/"DifferentFilename.lua"

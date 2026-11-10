@@ -2,11 +2,13 @@
 #include <cmath>
 #include "Bazzalt/Math.h"
 #include "Bazzalt/UUID.h"
+#include "Bazzalt/Fog.h"
 
 namespace Bazzalt {
 enum class SceneEnvironmentMode { Map=0, Material=1 };
 // Scene-owned authoring data; no graphics objects or editor state cross this API.
 struct SceneEnvironment {
+    FogSettings Fog;
     SceneEnvironmentMode Mode=SceneEnvironmentMode::Map;
     UUID SourceAsset{};
     UUID MaterialAsset{};
@@ -17,7 +19,7 @@ struct SceneEnvironment {
     bool SkyboxVisible=true;
     bool ShowSun=false;
     [[nodiscard]] bool IsValid() const {
-        return (Mode==SceneEnvironmentMode::Map||Mode==SceneEnvironmentMode::Material)&&std::isfinite(Intensity)&&Intensity>=0 &&
+        return Fog.IsValid() && (Mode==SceneEnvironmentMode::Map||Mode==SceneEnvironmentMode::Material)&&std::isfinite(Intensity)&&Intensity>=0 &&
             std::isfinite(Rotation.X)&&std::isfinite(Rotation.Y)&&std::isfinite(Rotation.Z)&&
             std::isfinite(ClearColor.X)&&std::isfinite(ClearColor.Y)&&std::isfinite(ClearColor.Z)&&std::isfinite(ClearColor.W)&&
             ClearColor.X>=0&&ClearColor.Y>=0&&ClearColor.Z>=0&&ClearColor.W>=0&&ClearColor.W<=1;

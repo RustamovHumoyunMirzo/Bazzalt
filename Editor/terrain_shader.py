@@ -43,4 +43,13 @@ def TerrainVariant(source):
             raise ValueError('Missing surface material configuration')
         at = block.end()
         source = source[:at] + '\n    requires: [uv1],' + source[at:]
+    # Heightfields and their cave/spline surfaces are visible from either side.
+    # Otherwise only the chunk skirts survive back-face culling from below.
+    code = _Code(source)
+    sided = re.search(r'\bdoubleSided\s*:\s*(true|false)', code)
+    if sided:
+        source = source[:sided.start(1)]+'true'+source[sided.end(1):]
+    else:
+        at = re.search(r'material\s*\{', code).end()
+        source = source[:at]+'\n    doubleSided: true,'+source[at:]
     return source

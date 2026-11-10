@@ -3,7 +3,7 @@
 ## Entities and defaults
 
 `Scene::CreateEntity` returns a lightweight `Entity` facade. Every ordinary
-entity receives `Identity`, `Name`, `Transform`, and `Hierarchy` components.
+entity receives `Identity`, `Name`, `Tags`, `Transform`, and `Hierarchy` components.
 
 ```cpp
 Bazzalt::Scene scene;
@@ -101,3 +101,9 @@ scene.RemoveSystem<LifetimeSystem>();
 `Scene::GetRegistry()` supports advanced EnTT queries. Do not manually create
 entities, edit `Identity`/`Hierarchy`, bypass scene destruction, or persist
 `entt::entity` values; this can break UUID and hierarchy invariants.
+
+## Semantic tags
+
+`Tags` is a required identity component created for normal entities and the root. Its `TagSet` is bounded, sorted and case-sensitive. Core removal/enable guards include Tags in both Entity templates and Lua component operations. Root tags are excluded from Scene queries. Scene serialization registers `Bazzalt.Tags` version 1. Older scenes receive empty sets during entity creation. Keep tags separate from renderer and physics layer masks.
+
+The editor reads tag names through a compact native catalogue query instead of full entity snapshots. Project-wide choices persist in the `Editor.Tags` project property. The widget serves both identity and reflected `TagSet` script fields. C++ wrappers serialize it using `ToString` and atomic `TryParse`. Lua uses explicit table adapters and preserves TagSet values during hot reload. Changes to this type require matching serializer, declaration parser, wrapper, Lua binding and inspector updates.

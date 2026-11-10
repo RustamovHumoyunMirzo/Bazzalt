@@ -7,6 +7,7 @@
 #include <Windows.h>
 #endif
 #include "Rendering/RenderBackend.h"
+#include "Rendering/FogRenderer.h"
 #include "Rendering/GraphicsRenderer.h"
 #include "Rendering/ImpostorRenderer.h"
 #include "Bazzalt/Components/HLOD.h"
@@ -167,17 +168,7 @@ const std::uint8_t* GlbBinary(const std::uint8_t* bytes, std::size_t size) {
 } // namespace
 void RenderBackend::ConfigureEditorFog(filament::View& view, float gridScale) {
     filament::View::FogOptions fog;
-    fog.enabled = true;
-    // Keep the useful editing area clear, then blend distant scene geometry
-    // into the editor background before the adaptive grid can reach its edge.
-    fog.distance = 60.0f * gridScale;
-    // Filament places skybox fragments around 1e19 units away. Infinite fog
-    // cutoff was completely covering the sky while Game views stayed clear.
-    fog.cutOffDistance = 1000000.0f * gridScale;
-    fog.density = 0.025f / gridScale;
-    fog.maximumOpacity = 1.0f;
-    fog.heightFalloff = 0.0f;
-    fog.color = {0.055f, 0.065f, 0.085f};
+    fog.enabled = false;
     view.setFogOptions(fog);
     // Local contact shading for IBL; projected shadows remain owned by lights.
     view.setAmbientOcclusionOptions({.enabled=true});
@@ -605,6 +596,7 @@ void RenderBackend::SetEditorGuides(const std::vector<EditorGuide>& guides){
 void RenderBackend::SetEnvironment(const SceneEnvironment& value) {
     if(!m_engine||!value.IsValid())return;
     m_clearColor=value.ClearColor;
+    m_fogSettings=value.Fog;
     UUID source=value.Mode==SceneEnvironmentMode::Map?value.SourceAsset:UUID{};
     if(value.Mode==SceneEnvironmentMode::Material&&value.MaterialAsset){
         const auto material=Material::Load(value.MaterialAsset);
@@ -713,7 +705,21 @@ void RenderBackend::RenderCameraView(filament::View* view,std::uint64_t viewport
     auto* scene=view->getScene();auto* sky=scene?scene->getSkybox():nullptr;
     const bool clearTarget=view->getRenderTarget()&&scene&&!sky;
     if(clearTarget){if(!m_targetClearSky)m_targetClearSky=filament::Skybox::Builder().color({0,0,0,1}).showSun(false).build(*m_engine);scene->setSkybox(m_targetClearSky);}
-    try{m_renderer->render(view);}catch(...){if(clearTarget)scene->setSkybox(sky);throw;}
+    filament::View::FogOptions nativeFog;
+    nativeFog.enabled=m_fogSettings.Enabled&&m_fogSettings.Mode!=FogMode::Volumetric;
+    nativeFog.density=m_fogSettings.Density;nativeFog.distance=m_fogSettings.StartDistance;
+    nativeFog.cutOffDistance=m_fogSettings.AffectSky?std::numeric_limits<float>::infinity():view->getCamera().getCullingFar();
+    nativeFog.maximumOpacity=m_fogSettings.MaximumOpacity;nativeFog.height=m_fogSettings.Height;
+    nativeFog.heightFalloff=m_fogSettings.Mode==FogMode::Height?m_fogSettings.HeightFalloff:0;
+    nativeFog.color={m_fogSettings.Color.X,m_fogSettings.Color.Y,m_fogSettings.Color.Z};
+    view->setFogOptions(nativeFog);
+    try{
+        if(m_fogSettings.Enabled&&m_fogSettings.Mode==FogMode::Volumetric){
+            if(!m_fogRenderer)m_fogRenderer=std::make_unique<FogRenderer>(*m_engine,*m_renderer);
+            float time=m_materialTime>=0?float(m_materialTime):float(std::chrono::duration<double>(std::chrono::steady_clock::now()-m_previewEpoch).count());
+            m_fogRenderer->Render(*view,m_fogSettings,m_guiScene,time);
+        }else m_renderer->render(view);
+    }catch(...){if(clearTarget)scene->setSkybox(sky);throw;}
     if(clearTarget)scene->setSkybox(sky);
     if(m_graphics)m_graphics->AfterCamera(view,viewport);
 }
@@ -777,6 +783,12 @@ void RenderBackend::Render(double materialTime) {
     for(const auto& [_,resource]:m_viewports)if(resource->Kind==ViewportKind::Scene)prepareLOD(resource->View);
     // Capture once per tick, independent of visible Qt / game windows. Prepare
     // all mutable resources before beginFrame, as required by Filament.
+    if(m_fogSettings.Enabled&&m_fogSettings.Mode==FogMode::Volumetric){
+        if(!m_fogRenderer)m_fogRenderer=std::make_unique<FogRenderer>(*m_engine,*m_renderer);
+        auto fogViews=m_activeViews;
+        for(const auto& [_,viewport]:m_viewports)if(viewport->View)fogViews.push_back(viewport->View);
+        m_fogRenderer->Prepare(fogViews);
+    }
     const bool captures=std::any_of(m_activeViews.begin(),m_activeViews.end(),[](auto* view){return view&&view->getRenderTarget();});
     if(captures){
         if(!m_captureSwapChain)m_captureSwapChain=m_engine->createSwapChain(1u,1u);
@@ -922,6 +934,9 @@ void RenderBackend::Render(double materialTime) {
 }
 
 std::optional<ViewportFrame> RenderBackend::CapturedFrame(std::uint64_t id,std::uint64_t after){
+    // Readback completion callbacks run on the engine's message queue. Service
+    // it before taking the frame mutex so polling also works between renders.
+    if(m_engine)m_engine->pumpMessageQueues();
     const auto found=m_viewports.find(id);if(found==m_viewports.end()||!found->second->Capture)return std::nullopt;auto state=found->second->Capture;std::lock_guard lock(state->Mutex);if(state->Frame.Sequence<=after)return std::nullopt;state->Consumed=true;return state->Frame;
 }
 
@@ -933,6 +948,7 @@ bool RenderBackend::WaitForViewportFrame(std::uint64_t id){
 void RenderBackend::Shutdown() {
     m_lodViews.clear();m_currentLODHidden=nullptr;m_currentLODState=nullptr;
     m_impostors.reset();
+    m_fogRenderer.reset();
     if (m_engine == nullptr) return;
     GraphicsAccess::BindScene(nullptr);m_graphics.reset();
     m_developerConsole.reset();

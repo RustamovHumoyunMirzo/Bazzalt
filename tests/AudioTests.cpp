@@ -39,6 +39,19 @@ int main(){
     listener.GetComponent<AudioListener>().Enabled=false;runtime.Update(.01f);assert(!Audio::GetActiveListener());Render(runtime);assert(Render(runtime)<.0001f);listener.GetComponent<AudioListener>().Enabled=true;
     settings.SpatialBlend=1;settings.MinDistance=1;settings.MaxDistance=10;settings.RolloffCurve=AudioRolloff::Linear;entity.GetComponent<Transform>().Position={0,0,-20};runtime.Update(.01f);Render(runtime);assert(Render(runtime)<.0001f);
     entity.GetComponent<Transform>().Position={0,0,-1};runtime.Update(.01f);assert(Render(runtime)>.1f);
+    // Inspect real decoded PCM. Approaching and receding sources must shift pitch,
+    // while zero Doppler must restore the original tone.
+    settings.MinDistance=100;settings.MaxDistance=1000;settings.DopplerLevel=1;
+    auto frequency=[&](float speed,float doppler){
+        settings.DopplerLevel=doppler;
+        entity.GetComponent<Transform>().Position={0,0,-20};runtime.Update(0);Render(runtime,8192);
+        entity.GetComponent<Transform>().Position.Z+=speed*.01f;runtime.Update(.01f);Render(runtime,4096);
+        std::vector<float> pcm(24000*2);assert(runtime.ReadFrames(pcm.data(),24000));
+        unsigned crossings=0;for(unsigned i=1;i<24000;++i)if(pcm[(i-1)*2]<=0&&pcm[i*2]>0)++crossings;
+        return crossings*2.f;
+    };
+    float neutral=frequency(0,1),approaching=frequency(50,1),receding=frequency(-50,1),disabled=frequency(50,0);
+    assert(std::abs(neutral-440)<6&&approaching>neutral+30&&receding<neutral-30&&std::abs(disabled-neutral)<6);
     settings.Muted=true;runtime.Update(.01f);Render(runtime);assert(Render(runtime)<.0001f);settings.Muted=false;
     auto custom=AudioMixer::CreateBus("Impacts",sfx);assert(custom.IsValid());auto busSettings=sfx.GetSettings();busSettings.Parent=custom.GetUUID();assert(!sfx.SetSettings(busSettings));assert(!AudioMixer::RemoveBus({}));assert(AudioMixer::RemoveBus(custom));
     auto buses=AudioMixer::GetBuses();std::string error;auto mixerPath=folder/"Assets"/std::filesystem::u8path("Микшер.bmixer");assert(Runtime::SaveAudioMixer(mixerPath,buses,error));std::vector<AudioBusSettings> parsed;assert(Runtime::ReadAudioMixer(mixerPath,parsed,error)&&parsed.size()==3);assert(engine.RefreshTextureAsset(mixerPath));auto mixerAsset=AssetManager::GetAsset(mixerPath);assert(mixerAsset&&mixerAsset->Importer=="Bazzalt.AudioMixer");assert(AudioMixer::Load(mixerAsset->Id));

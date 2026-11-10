@@ -28,6 +28,18 @@ class TerrainAuthoringTests(unittest.TestCase):
         declared=ReadDeclarations('local Tool = COMPONENT("Tool")\nTool.Values = PROPERTY("IntList", {1,2,3})')
         self.assertEqual(declared[1][0][2],'1,2,3')
 
+    def test_collection_actions_describe_items_and_preserve_open_card(self):
+        field=ListInput([{'Name':'First'},{'Name':'Second'}],factory=lambda value,changed:QLabel(value['Name']),default=lambda:{'Name':'New layer'},title='Layers',item_name='Layer',add_text='Add layer')
+        self.assertEqual(field.AddButton.text(),'Add layer')
+        field._headers[0].setChecked(True);field.Move(0,1)
+        self.assertEqual(field._Expanded(),[False,True])
+        field.Remove(0);self.assertEqual(field._Expanded(),[True])
+        field.Add();self.assertEqual(field._Expanded(),[True,True])
+        self.assertEqual(field._headers[-1].text(),'New layer')
+        field._Changed(1,{'Name':''});self.assertEqual(field._headers[-1].text(),'Layer 2')
+        field._ExpandAll(False);self.assertEqual(field._Expanded(),[False,False])
+        field.deleteLater()
+
     def test_tab_container(self):
         tabs=TabInput();tabs.AddSection('Brush',QLabel('Radius'));tabs.AddSection('Paint',QLabel('Layer'));self.assertEqual(tabs.count(),2);tabs.deleteLater()
     def test_overlay_is_a_scene_child_and_position_is_clamped(self):
@@ -47,6 +59,12 @@ class TerrainAuthoringTests(unittest.TestCase):
         controller=QObject(window);controller.Window=window;controller.Runtime=Runtime();controller.SelectedEntity='terrain'
         editor=TerrainEditor(controller);self.assertFalse(editor.Active);self.assertIsNone(editor.Target);self.assertEqual(surface.findChildren(QWidget),[])
         action.setChecked(True);self.assertTrue(editor.Active);self.assertFalse(editor.Overlay.isWindow());self.assertIs(editor.Overlay.parentWidget(),surface);self.assertEqual(editor.Target.currentData(),'terrain')
+        self.assertIs(editor.Island.parentWidget(),editor.Overlay)
+        self.App.processEvents();settings_position=editor.Island.pos()
+        for button,_,_ in editor.Buttons:
+            self.assertEqual(button.text(),'');self.assertFalse(button.icon().isNull());self.assertTrue(button.toolTip())
+        self.assertEqual(editor.Island.text(),'');self.assertFalse(editor.Island.icon().isNull())
+        editor.Place(QPoint(20,20));self.App.processEvents();self.assertEqual(editor.Island.pos(),settings_position)
         editor.Place(QPoint(10000,10000));self.assertLessEqual(editor.Island.geometry().bottom(),surface.height());editor.SavePosition();self.assertTrue(saves)
         action.setChecked(False);self.assertTrue(editor.Overlay.isHidden());window.deleteLater()
     def test_native_and_lua_tab_metadata(self):

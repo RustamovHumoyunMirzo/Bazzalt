@@ -1,12 +1,13 @@
 """Scene-local terrain authoring. One stroke is one undo command."""
 from math import cos,sin,pi,isfinite
 from time import monotonic
-from PySide6.QtCore import QObject,QEvent,QPoint,Qt,QTimer
-from PySide6.QtGui import QPainter,QColor
-from PySide6.QtWidgets import QWidget,QFrame,QVBoxLayout,QHBoxLayout,QFormLayout,QToolButton,QComboBox,QDialog,QLabel,QPushButton,QScrollArea
+from PySide6.QtCore import QObject,QEvent,QPoint,Qt,QTimer,QSize
+from PySide6.QtGui import QPainter,QColor,QIcon
+from PySide6.QtWidgets import QWidget,QFrame,QVBoxLayout,QHBoxLayout,QGridLayout,QFormLayout,QToolButton,QComboBox,QDialog,QLabel,QPushButton,QScrollArea
 from .widgets.collections import TabInput
 from ..materials import ZERO
 from .widgets.fields import FloatInput,IntInput
+from ..resources import ResourceManager
 
 class TerrainHandle(QWidget):
     def __init__(self,owner):super().__init__(owner.Overlay);self.Owner=owner;self.setFixedHeight(16);self._start=None
@@ -27,6 +28,8 @@ class TerrainEditor(QObject):
         self._stroke_timer=QTimer(self);self._stroke_timer.setInterval(33);self._stroke_timer.timeout.connect(self.StrokeTick)
         self.Active=False;self.Stroke=False;self._last=0.;self.Tool=0;self.Dialog=None
         self.Overlay=None;self.Island=None;self.Target=None;self.Buttons=[]
+        self.SplineEditor=None
+        self.Resources=ResourceManager()
         self.Surface.installEventFilter(self)
         self.Window.Scene.TerrainAction.toggled.connect(self.SetActive);self.Runtime.SceneChanged.connect(self.RefreshTargets);self.Runtime.ProjectChanging.connect(self.Stop)
         self.Window.Localization.LocaleChanged.connect(self.Retranslate)
@@ -42,24 +45,56 @@ class TerrainEditor(QObject):
         self.Overlay=QFrame(self.Surface);self.Overlay.setObjectName('TerrainOverlay');self.Overlay.setMaximumWidth(152)
         outer=QVBoxLayout(self.Overlay);outer.setContentsMargins(6,3,6,6);outer.setSpacing(3);outer.addWidget(TerrainHandle(self))
         body=QWidget();layout=QVBoxLayout(body);layout.setContentsMargins(0,0,0,0);layout.setSpacing(3)
-        self.ToolScroll=QScrollArea();self.ToolScroll.setFrameShape(QFrame.Shape.NoFrame);self.ToolScroll.setWidgetResizable(True);self.ToolScroll.setWidget(body);self.ToolScroll.setStyleSheet('QScrollArea{background:transparent;border:0;} QScrollArea>QWidget>QWidget{background:transparent;}');outer.addWidget(self.ToolScroll)
-        self.Target=QComboBox();layout.addWidget(self.Target)
+        self.ToolScroll=QScrollArea();self.ToolScroll.setFrameShape(QFrame.Shape.NoFrame);self.ToolScroll.setWidgetResizable(True);self.ToolScroll.setWidget(body);outer.addWidget(self.ToolScroll)
+        self.Target=QComboBox();self.Target.currentIndexChanged.connect(self._SplineTargetChanged);layout.addWidget(self.Target)
+        tools=QWidget(body);grid=QGridLayout(tools);grid.setContentsMargins(0,0,0,0);grid.setSpacing(3);layout.addWidget(tools)
         self.Buttons=[]
         for key,tool in (('raise',0),('lower',1),('smooth',2),('flatten',3),('paint',4),('hole',6),('vegetation',8),('spline',9)):
-            button=QToolButton();button.setText(self.Tr('terrain.'+key));button.setCheckable(True);button.setChecked(tool==0);button.clicked.connect(lambda _,t=tool:self.SetTool(t));layout.addWidget(button);self.Buttons.append((button,key,tool))
-        self.Island=QToolButton(self.Surface);self.Island.setText(self.Tr('terrain.settings'));self.Island.clicked.connect(self.OpenSettings);self.Island.setFixedSize(152,25)
-        self.Overlay.resize(152,280);self.Overlay.hide();self.Island.hide();
+            button=QToolButton(tools);button.setObjectName('TerrainTool');button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly);button.setToolTip(self.Tr('terrain.'+key));button.setAccessibleName(self.Tr('terrain.'+key));button.setCheckable(True);button.setChecked(tool==self.Tool);button.setIconSize(QSize(20,20));button.setFixedSize(32,32);button.clicked.connect(lambda _,t=tool:self.SetTool(t));grid.addWidget(button,len(self.Buttons)//4,len(self.Buttons)%4);self.Buttons.append((button,key,tool))
+        self.Island=QToolButton(self.Overlay);self.Island.setObjectName('TerrainSettings');self.Island.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly);self.Island.setIconSize(QSize(20,20));self.Island.setToolTip(self.Tr('terrain.settings'));self.Island.setAccessibleName(self.Tr('terrain.settings'));self.Island.clicked.connect(self.OpenSettings);self.Island.setFixedSize(32,28);footer=QHBoxLayout();footer.setContentsMargins(0,0,0,0)
+        self.SplineControls=QToolButton(self.Overlay);self.SplineControls.setObjectName('TerrainSettings');self.SplineControls.setFixedSize(32,28);self.SplineControls.setIconSize(QSize(20,20));self.SplineControls.setToolTip(self.Tr('terrain.toggle_spline_controls'));self.SplineControls.clicked.connect(lambda:self.SplineEditor.ToggleControls() if self.SplineEditor else None);self.SplineControls.setVisible(self.Tool==9)
+        footer.addWidget(self.SplineControls);footer.addStretch();footer.addWidget(self.Island);outer.addLayout(footer)
+        self.Overlay.resize(152,156);self.Overlay.hide()
         self.ApplyTheme()
 
     def ApplyTheme(self,*_):
         if self.Overlay is None:return
-        palette=self.Window.palette();color=palette.window().color();text=palette.text().color().name();self.Overlay.setStyleSheet(f'QFrame#TerrainOverlay {{background:rgba({color.red()},{color.green()},{color.blue()},235);border:1px solid {palette.mid().color().name()};border-radius:5px;}}');self.Island.setProperty('editorOptionsButton',True)
+        theme=self.Window.ThemeManager.GetTheme() if hasattr(self.Window.ThemeManager,'GetTheme') else None
+        text=QColor(theme.text) if theme else self.Window.palette().text().color()
+        accent=QColor(theme.accent) if theme else self.Window.palette().highlight().color()
+        def icon(name):
+            base=self.Resources.Icon('icons/terrain/'+name+'.svg')
+            def tinted(color):
+                pixmap=base.pixmap(40,40);painter=QPainter(pixmap);painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn);painter.fillRect(pixmap.rect(),color);painter.end();return pixmap
+            result=QIcon(tinted(text));result.addPixmap(tinted(accent),QIcon.Mode.Normal,QIcon.State.On);return result
+        for button,key,_ in self.Buttons:button.setIcon(icon(key))
+        self.Island.setIcon(icon('settings'))
+        self.SplineControls.setIcon(icon('controls'))
+        if self.SplineEditor is not None:
+            for widget,name in ((self.SplineEditor.New,'new'),(self.SplineEditor.Continue,'continue'),(self.SplineEditor.Remove,'remove'),(self.SplineEditor.Finish,'finish')):widget.setIcon(icon(name));widget.setIconSize(QSize(18,18))
     def Retranslate(self,*_):
-        for button,key,_ in self.Buttons:button.setText(self.Tr('terrain.'+key))
-        if self.Island:self.Island.setText(self.Tr('terrain.settings'))
+        for button,key,_ in self.Buttons:button.setToolTip(self.Tr('terrain.'+key));button.setAccessibleName(self.Tr('terrain.'+key))
+        if self.Island:self.Island.setToolTip(self.Tr('terrain.settings'));self.Island.setAccessibleName(self.Tr('terrain.settings'))
+        if self.Overlay is not None:self.SplineControls.setToolTip(self.Tr("terrain.toggle_spline_controls"))
+        if self.SplineEditor is not None:self.SplineEditor.Retranslate()
+    def _SplineTargetChanged(self,*_):
+        if self.SplineEditor is not None and self.Active and self.Tool==9:
+            self.SplineEditor.Refresh()
+            self.Controller._UpdateGizmo()
+
     def SetTool(self,tool):
-        self.FinishStroke();self.Tool=tool
+        self.FinishStroke()
+        if self.Tool==9 and tool!=9 and self.SplineEditor is not None:self.SplineEditor.Deactivate()
+        self.Tool=tool
+        if self.Overlay is not None:self.SplineControls.setVisible(tool==9)
         for button,_,value in self.Buttons:button.setChecked(value==tool)
+        if tool==9 and self.Active:
+            if self.SplineEditor is None:
+                from .terrain_spline import TerrainSplineEditor
+                self.SplineEditor=TerrainSplineEditor(self)
+            self.ApplyTheme()
+            self.SplineEditor.Activate()
+        else:self.Controller._UpdateGizmo()
     def RefreshTargets(self,*_):
         if not self.Active or self.Target is None:return
         previous=self.Target.currentData();self.Target.blockSignals(True);self.Target.clear()
@@ -71,18 +106,23 @@ class TerrainEditor(QObject):
         index=self.Target.findData(self.Controller.SelectedEntity or previous)
         if index>=0:self.Target.setCurrentIndex(index)
         self.Target.blockSignals(False)
+        self._SplineTargetChanged()
     def SetActive(self,active):
-        self.FinishStroke();self.Active=bool(active)
+        self.FinishStroke()
+        if not active and self.SplineEditor is not None:self.SplineEditor.Deactivate()
+        self.Active=bool(active)
         if self.Active and self.Overlay is None:self._CreateOverlay()
         if self.Overlay is None:return
-        self.Overlay.setVisible(self.Active);self.Island.setVisible(self.Active)
         if active:
             if self.Surface._attached and not self.Surface._captured:
-                for widget in (self.Overlay,self.Island):widget.setAttribute(Qt.WidgetAttribute.WA_DontCreateNativeAncestors);widget.setAttribute(Qt.WidgetAttribute.WA_NativeWindow)
-            self.RefreshTargets();self.Place();self.Overlay.raise_();self.Island.raise_()
+                self.Overlay.setAttribute(Qt.WidgetAttribute.WA_DontCreateNativeAncestors);self.Overlay.setAttribute(Qt.WidgetAttribute.WA_NativeWindow)
+            self.RefreshTargets();self.Place();self.Overlay.show();self.Overlay.raise_()
+            if self.Tool==9:self.SetTool(9)
         else:
+            self.Overlay.hide()
             self.Runtime.SetToolGuides([])
             if self.Dialog:self.Dialog.close()
+            if hasattr(self.Controller,"_UpdateGizmo"):self.Controller._UpdateGizmo()
     def Stop(self,*_):self.Window.Scene.TerrainAction.setChecked(False)
     def Place(self,position=None):
         if self.Overlay is None:return
@@ -90,9 +130,11 @@ class TerrainEditor(QObject):
             saved=self.Window._settings.get('terrain_overlay',{})
             try:position=QPoint(int(saved.get('x',self.Surface.width()-self.Overlay.width()-14)),int(saved.get('y',86)))
             except (TypeError,ValueError,OverflowError):position=QPoint(self.Surface.width()-self.Overlay.width()-14,86)
-        self.Overlay.resize(min(152,max(80,self.Surface.width()-8)),min(280,max(60,self.Surface.height()-self.Island.height()-16)));self.Island.setFixedWidth(self.Overlay.width())
-        max_x=max(0,self.Surface.width()-self.Overlay.width()-8);max_y=max(0,self.Surface.height()-self.Overlay.height()-self.Island.height()-16)
-        self.Overlay.move(max(0,min(max_x,position.x())),max(0,min(max_y,position.y())));self.Island.move(self.Overlay.x(),self.Overlay.y()+self.Overlay.height()+6)
+        size=QSize(min(152,max(80,self.Surface.width()-8)),min(156,max(60,self.Surface.height()-16)))
+        if self.Overlay.size()!=size:self.Overlay.resize(size)
+        max_x=max(0,self.Surface.width()-self.Overlay.width()-8);max_y=max(0,self.Surface.height()-self.Overlay.height()-8)
+        self.Overlay.move(max(0,min(max_x,position.x())),max(0,min(max_y,position.y())))
+        if self.SplineEditor is not None:self.SplineEditor.Place()
     def SavePosition(self):
         if self.Overlay is None:return
         self.Window._settings['terrain_overlay']={'x':self.Overlay.x(),'y':self.Overlay.y()};self._Save()
@@ -132,6 +174,7 @@ class TerrainEditor(QObject):
     def eventFilter(self,watched,event):
         if event.type()==QEvent.Type.Resize:self.Place(self.Overlay.pos() if self.Overlay else None)
         if not self.Active:return False
+        if self.Tool==9 and self.SplineEditor is not None:return self.SplineEditor.HandleEvent(event)
         if event.type() in (QEvent.Type.Hide,QEvent.Type.FocusOut):self.FinishStroke()
         if event.type()==QEvent.Type.MouseButtonPress and event.button()==Qt.MouseButton.LeftButton and self._Target():
             if self.Runtime.IsPlaying():return False

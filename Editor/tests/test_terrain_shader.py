@@ -27,3 +27,8 @@ class TerrainShaderTests(unittest.TestCase):
         self.assertIn('vec2(getUV1().x, getUV1().y)',TerrainVariant(source))
     def test_post_processing_has_no_terrain_variant(self):
         self.assertIsNone(TerrainVariant('material {domain:postProcess} fragment {void postProcess(inout PostProcessInputs p){}}'))
+    def test_terrain_variants_are_two_sided_without_duplicate_options(self):
+        for config in ('', 'doubleSided:false,', 'doubleSided:true,'):
+            result=TerrainVariant('material {'+config+'} fragment {void material(inout MaterialInputs p){}}')
+            self.assertEqual(result.count('doubleSided'),1)
+            self.assertRegex(result,r'doubleSided\s*:\s*true')

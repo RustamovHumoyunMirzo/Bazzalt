@@ -46,6 +46,27 @@ class TerrainRuntimeEditorTests(unittest.TestCase):
         self.assertAlmostEqual(r.TerrainCommand(entity,'hit',ray)['position'][1],2.02,delta=.02)
         self.assertIn(b'GenerateSurface',r.CaptureScene())
 
+    def test_editor_picks_raised_surface_from_side_and_below_after_edits(self):
+        r=self.Window.Runtime
+        entity=r.CreateEntity('Raised ground');self.assertTrue(r.AddComponent(entity,'Terrain'))
+        r.TerrainCommand(entity,'brush',dict(origin=(0.,20.,0.),direction=(0.,-1.,0.),tool=0,layer=0,radius=3.,strength=8.,seconds=1.))
+        for origin,direction in (((0.,20.,0.),(0.,-1.,0.)),((0.,6.,10.),(0.,0.,-1.)),((0.,-10.,0.),(0.,1.,0.))):
+            self.assertEqual(r.PickPrimitive(origin,direction),entity)
+            hit=r.RaycastEditor(origin,direction);self.assertIsNotNone(hit)
+            self.assertGreater(hit[1],5.9)
+        self.assertEqual(r.PickPrimitive((20.,20.,0.),(0.,-1.,0.)),'')
+        r.TerrainCommand(entity,'brush',dict(origin=(0.,20.,0.),direction=(0.,-1.,0.),tool=0,layer=0,radius=3.,strength=2.,seconds=1.))
+        self.assertAlmostEqual(r.RaycastEditor((0.,20.,0.),(0.,-1.,0.))[1],10.,places=4)
+        self.assertEqual(r.PickPrimitive((10.,-5.,0.),(-1.,0.,0.)),entity)
+        self.assertAlmostEqual(r.RaycastEditor((10.,-5.,0.),(-1.,0.,0.))[0],5.,places=4)
+        self.assertAlmostEqual(r.RaycastEditor((0.,-30.,0.),(0.,1.,0.))[1],-20.,places=4)
+        self.Window.Controller.SelectEntity(entity)
+        fields=self.Window.Properties._sections['runtime.Terrain']._fields
+        for name,caption in (('Layers','Add layer'),('Volumes','Add volume'),('Splines','Add spline'),('Vegetation','Add vegetation prototype')):
+            self.assertEqual(fields[name].AddButton.text(),caption)
+        self.assertIn(self.Window.Scene.TerrainAction,self.Window.Scene.ControlsMenu.actions())
+        self.assertFalse(hasattr(self.Window.Scene,'TerrainMenuButton'))
+
     def test_vegetation_metadata_edits_keep_other_prototype_placements(self):
         w=self.Window;r=w.Runtime
         temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)

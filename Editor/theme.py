@@ -222,17 +222,38 @@ QWidget#MixerSidebar {{ background: {t.surface}; }}
     #SceneViewControls QToolButton#SceneToolChip:checked {{ background: {t.selection}; border-color: {t.border_focus}; }}
     #SceneViewControls QComboBox#ScenePivotMode {{ min-width: 72px; max-width: 84px; }}
     #SceneViewControls QCheckBox, #SceneViewControls QLabel {{ min-height: 20px; max-height: 20px; font-size: 11px; }}
+    QFrame#TerrainOverlay, QFrame#TerrainSplineOverlay {{ background: {t.surface}; border: 1px solid {t.border}; border-radius: 5px; }}
+    #TerrainOverlay QScrollArea, #TerrainOverlay QScrollArea > QWidget > QWidget,
+    #TerrainSplineOverlay QScrollArea, #TerrainSplineOverlay QScrollArea > QWidget > QWidget {{ background: transparent; border: 0; }}
+    #TerrainOverlay QToolButton#TerrainTool, #TerrainOverlay QToolButton#TerrainSettings {{ background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 0; }}
+    #TerrainOverlay QToolButton#TerrainTool:hover, #TerrainOverlay QToolButton#TerrainSettings:hover {{ background: {t.surface_hover}; border-color: {t.border}; }}
+    #TerrainOverlay QToolButton#TerrainTool:checked {{ background: {t.surface_pressed}; border-color: {t.accent}; }}
+    #TerrainOverlay QToolButton#TerrainSettings:pressed {{ background: {t.surface_pressed}; }}
     #ComponentSection {{ background: {t.surface}; border: 1px solid {t.border}; border-radius: 2px; }}
     #ComponentHeader {{ background: {t.surface}; border: 0; border-bottom: 1px solid {t.border};
                         border-radius: 0; min-height: 21px; max-height: 21px;
                         padding: 0 5px; text-align: left; font-size: 11px; font-weight: 600; }}
-    #ComponentSubsection {{ background: transparent; border: 0; }}
-    #ComponentSubheaderRow {{ background: transparent; border: 0; }}
-    #ComponentSubheader {{ background: transparent; border: 0; padding: 3px 2px;
+    #ComponentBody {{ background: transparent; }}
+    #ComponentSubsection {{ background: {t.surface_alt}; border: 1px solid {t.border}; border-radius: 4px; }}
+    #ComponentSubheaderRow {{ background: {t.surface_alt}; border: 0; border-radius: 4px; }}
+    #ComponentSubheader {{ background: transparent; border: 0; min-height: 24px; max-height: 24px; padding: 0 4px;
                            text-align: left; font-size: 11px; font-weight: 600; }}
     #ComponentSubheader:hover {{ background: {t.surface_hover}; }}
     #ComponentHeader:hover {{ background: {t.surface_hover}; }}
     #ComponentHeaderRow {{ background: {t.surface}; border-bottom: 1px solid {t.border}; }}
+    #InspectorCollection, #CollectionToolbar {{ background: transparent; border: 0; }}
+    #CollectionTitle {{ background: transparent; color: {t.text}; font-size: 11px; font-weight: 600; }}
+    #CollectionCount {{ background: {t.input_background}; color: {t.text_muted}; border-radius: 7px; padding: 1px 6px; font-size: 10px; }}
+    #CollectionCard {{ background: {t.surface_alt}; border: 1px solid {t.border}; border-radius: 4px; }}
+    #CollectionHeader {{ background: {t.surface_hover}; border: 0; border-radius: 4px; }}
+    #CollectionToggle {{ background: transparent; border: 0; min-height: 24px; max-height: 24px; padding: 0 4px; text-align: left; font-size: 11px; font-weight: 600; }}
+    #CollectionToggle:hover {{ background: {t.surface_pressed}; }}
+    #CollectionAction {{ background: transparent; border: 0; border-radius: 3px; min-width: 22px; max-width: 22px; min-height: 22px; max-height: 22px; padding: 0; }}
+    #CollectionAction:hover {{ background: {t.surface_pressed}; }}
+    #CollectionAction:disabled {{ color: {t.text_disabled}; }}
+    #CollectionEmpty {{ background: {t.input_background}; color: {t.text_muted}; border: 1px dashed {t.border}; border-radius: 4px; padding: 9px; font-size: 11px; }}
+    #PropertiesPanel QPushButton#CollectionAdd {{ min-height: 24px; max-height: 24px; background: {t.surface_alt}; color: {t.text}; border: 1px solid {t.border}; border-radius: 4px; padding: 0 8px; text-align: left; }}
+    #PropertiesPanel QPushButton#CollectionAdd:hover {{ background: {t.surface_hover}; border-color: {t.border_focus}; }}
     QToolButton[editorOptionsButton="true"] {{ background: transparent; color: {t.text_muted};
         border: 0; border-radius: 3px; padding: 0; min-width: 0; min-height: 0; }}
     QToolButton[editorOptionsButton="true"]:hover {{ background: {t.surface_hover}; }}

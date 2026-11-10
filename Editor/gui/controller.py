@@ -158,7 +158,8 @@ class EditorController(QObject):
         window.Scene.Surface.RotationDragged.connect(self.ApplyGizmoRotation)
         window.Scene.Surface.ScaleDragged.connect(self.ApplyGizmoScale)
         window.Scene.Surface.GizmoDragFinished.connect(self._FinishGizmoDrag)
-        window.Scene.Surface.GizmoDragStarted.connect(lambda:self.History.BeginTransforms("Transform selection",self.SelectedEntities))
+        window.Scene.Surface.GizmoDragStarted.connect(self._BeginGizmoDrag)
+        window.Scene.Surface.GizmoDragCanceled.connect(self._CancelGizmoDrag)
         window.Scene.Surface.EntityPicked.connect(self.SelectSceneEntity)
         window.Scene.Surface.EntitiesBoxSelected.connect(self.SelectSceneBox)
         window.Scene.Surface.SelectionBoxStarted.connect(self.BeginSceneBoxSelection)
@@ -187,6 +188,7 @@ class EditorController(QObject):
     def _Tick(self) -> None:
         if getattr(self,'GuiAssets',None) and monotonic()-getattr(self,'_gui_asset_check',0)>=1:
             self._gui_asset_check=monotonic();self.GuiAssets.Track()
+        if getattr(self.TerrainEditor,"SplineEditor",None):self.TerrainEditor.SplineEditor.Tick()
         self.Window.Console.RefreshNative(False)
         self.GameInput.SyncFocus()
         surface=self.Window.Scene.Surface
@@ -214,7 +216,11 @@ class EditorController(QObject):
         # Editor gizmos follow the authoritative world transform every frame.
         # This also covers transforms changed by systems or native user code.
         if self.SelectedEntity:self._UpdateGizmo()
-        if self.SelectedEntity and self.Runtime.IsPlaying():self._RefreshInspectorValues(preserve_editing=True)
+        # Inspector snapshots include complete component data. Sample those at
+        # 10 Hz during play while gizmos and rendering continue every frame.
+        if self.SelectedEntity and self.Runtime.IsPlaying() and now-getattr(self,'_inspector_sample',0)>=.1:
+            self._inspector_sample=now
+            self._RefreshInspectorValues(preserve_editing=True)
         self.FrameCompleted.emit()
 
     def SaveActiveDocument(self) -> bool:
@@ -320,6 +326,10 @@ class EditorController(QObject):
         inspected_entity=self.SelectedEntity
         name = StringInput(str(details["name"]));name.editingFinished.connect(lambda:self._Rename(inspected_entity,name.text()))
         identity.AddField("Name", name)
+        from .widgets.tags import TagInput
+        def SetTags(values):
+            if self._Mutate(self.Window.Localization.Translate("tags.edit"),lambda:self.Runtime.SetEntityTags(inspected_entity,values)):self.SetDirty(True)
+        identity.AddField(self.Window.Localization.Translate("field.Tags"),TagInput(self,details.get('tags',[]),SetTags))
         self.Prefabs.Inspect(self.SelectedEntity)
         transform = self.Window.Properties.AddComponentSection("transform", "Transform", removable=False,
             icon=self.Window.Resources.Icon("icons/comp_transform.svg"))
@@ -478,6 +488,7 @@ class EditorController(QObject):
         except Exception:self.History.Cancel();raise
         if result:self.History.Commit()
         else:self.History.Cancel()
+        if result and label=="Edit Transform" and getattr(self.TerrainEditor,'SplineEditor',None):self.TerrainEditor.SplineEditor.Refresh()
         return result
 
     def Undo(self)->None:
@@ -641,6 +652,24 @@ class EditorController(QObject):
             except OSError:pass
         section.AddViewport(preview)
 
+        fog=self.Window.Properties.AddComponentSection("scene.fog",tr("fog.section"),removable=False,enabled=data.get("fog_enabled",True))
+        fog.EnabledChanged.connect(lambda value:commit("fog_enabled",value))
+        fog_mode=EnumInput();fog_mode.SetOptions([(tr("fog."+name),index) for index,name in enumerate(("exponential","height","volumetric"))]);fog_mode.SetValue(data.get("fog_mode",1));fog_mode.currentIndexChanged.connect(lambda _:commit("fog_mode",fog_mode.GetValue()));fog.AddField(tr("fog.mode"),fog_mode)
+        color=ColorInput(QColor.fromRgbF(*data.get("fog_color",(.55,.62,.7))))
+        color.ValueChanged.connect(lambda c:commit("fog_color",[c.redF(),c.greenF(),c.blueF()]));fog.AddField(tr("fog.color"),color)
+        settings=(("Density",0,10),("StartDistance",0,1000000),("MaxDistance",.001,1000000),("MaximumOpacity",0,1),("Height",-100000,100000),("HeightFalloff",0,10),("NoiseAmount",0,1),("NoiseScale",.0001,1000),("Anisotropy",-.98,.98))
+        for name,low,high in settings:
+            if name=="MaxDistance" and data.get("fog_mode")!=2:continue
+            if name in {"Height","HeightFalloff"} and data.get("fog_mode")==0:continue
+            if name in {"NoiseAmount","NoiseScale","Anisotropy"} and data.get("fog_mode")!=2:continue
+            if name=="StartDistance":high=min(high,data.get("fog_MaxDistance",1000)-.001)
+            if name=="MaxDistance":low=max(low,data.get("fog_StartDistance",0)+.001)
+            field=FloatInput(low,high,data.get("fog_"+name,0));field.valueChanged.connect(lambda value,key=name:commit("fog_"+key,value));fog.AddField(tr("fog."+name),field)
+        sky=BoolInput(data.get("fog_sky",False));sky.ValueChanged.connect(lambda value:commit("fog_sky",value));fog.AddField(tr("fog.sky"),sky)
+        if data.get("fog_mode")==2:
+            steps=IntInput(4,128,data.get("fog_steps",32));steps.valueChanged.connect(lambda value:commit("fog_steps",value));fog.AddField(tr("fog.steps"),steps)
+            wind=Vec3Input(data.get("fog_wind",(0,0,0)));wind.ValueChanged.connect(lambda value:commit("fog_wind",value));fog.AddField(tr("fog.wind"),wind)
+
         from .physics import InspectScene
         InspectScene(self,scene_id)
         if getattr(self.Window,'Extensions',None):self.Window.Extensions.InspectScene(scene_id)
@@ -661,8 +690,9 @@ class EditorController(QObject):
         if active:self.History.Begin(self.Window.Localization.Translate("environment.history"))
         if self.Runtime.SetSceneEnvironment(scene_id,{key:value}):
             if active:self.History.Commit()
-            self.SetDirty(True,[scene_id]);self._PrepareUsedMaterials()
-            if key in {"mode","source","material"}:QTimer.singleShot(0,self,lambda:self.SelectEntity(scene_id,force=True) if self.InspectedScene==scene_id else None)
+            self.SetDirty(True,[scene_id])
+            if key in {"mode","source","material"}:self._PrepareUsedMaterials()
+            if key in {"mode","source","material","fog_mode"}:QTimer.singleShot(0,self,lambda:self.SelectEntity(scene_id,force=True) if self.InspectedScene==scene_id else None)
         elif active:self.History.Cancel()
 
     def _InspectEnvironment(self,path):
@@ -764,33 +794,36 @@ class EditorController(QObject):
             if self._asset_database_dirty:
                 self.Runtime.RefreshAssets();self._asset_database_dirty=False;self.Window.AssetBrowser.UpdateAssetIssues()
             used=set();shaders=set(getattr(self.Runtime,"UsedShaderAssets",lambda:[])())
-            if self._material_scenes is None or self.Runtime.IsPlaying():self._material_scenes=self.Runtime.LoadedScenes()
-            scenes=self._material_scenes
-            for scene in scenes:
-                environment=self.Runtime.SceneEnvironment(str(scene.get("uuid","")));material=environment.get("material",ZERO)
-                if environment.get("mode",0)==1 and material!=ZERO:used.add(material)
-            entities=[entity for scene in scenes for entity in scene.get("entities",[])] if scenes else self.Runtime.Entities()
-            for entity in entities:
-                details=entity
-                for component,field in (("GuiElement","MaterialAsset"),("Camera","Post Process Material")):
-                    material=details.get("component_data",{}).get(component,{}).get(field,ZERO)
-                    if details.get("component_enabled",{}).get(component,True) and material not in (ZERO,"0","",None):used.add(material)
-                if details.get("component_enabled",{}).get("Camera",True):
-                    for effect in details.get("component_data",{}).get("Camera",{}).get("Post Process Materials",[]):
-                        if effect.get("enabled",True) and effect.get("asset",ZERO) not in (ZERO,"0","",None):used.add(effect["asset"])
-                if details.get("component_enabled",{}).get("Terrain",True):
-                    terrain=details.get("component_data",{}).get("Terrain",{})
-                    for group in ('Layers','Vegetation','Splines'):
-                        for row in terrain.get(group,[]):
-                            material=row.get('Material',ZERO)
-                            if row.get('Enabled',True) and material not in (ZERO,'0','',None):used.add(material)
-                primitive=details.get("component_data",{}).get("Primitive Object",{})
-                if details.get("component_enabled",{}).get("Primitive Object",True) and primitive.get("Material Asset",ZERO)!=ZERO:used.add(primitive["Material Asset"])
-                if not details.get("component_enabled",{}).get("Mesh",True):continue
-                mesh=details.get("component_data",{}).get("Mesh",{})
-                material=mesh.get("Material Asset",ZERO)
-                if mesh.get("Mesh Asset",ZERO)!=ZERO and material!=ZERO:used.add(material)
-                if mesh.get("Mesh Asset",ZERO)!=ZERO:used.update(v for v in mesh.get("Material Slots",[]) if v!=ZERO)
+            references=getattr(self.Runtime,'UsedMaterialAssets',lambda:None)()
+            if references is not None:used.update(references)
+            else:
+                if self._material_scenes is None or self.Runtime.IsPlaying():self._material_scenes=self.Runtime.LoadedScenes()
+                scenes=self._material_scenes
+                for scene in scenes:
+                    environment=self.Runtime.SceneEnvironment(str(scene.get("uuid","")));material=environment.get("material",ZERO)
+                    if environment.get("mode",0)==1 and material!=ZERO:used.add(material)
+                entities=[entity for scene in scenes for entity in scene.get("entities",[])] if scenes else self.Runtime.Entities()
+                for entity in entities:
+                    details=entity
+                    for component,field in (("GuiElement","MaterialAsset"),("Camera","Post Process Material")):
+                        material=details.get("component_data",{}).get(component,{}).get(field,ZERO)
+                        if details.get("component_enabled",{}).get(component,True) and material not in (ZERO,"0","",None):used.add(material)
+                    if details.get("component_enabled",{}).get("Camera",True):
+                        for effect in details.get("component_data",{}).get("Camera",{}).get("Post Process Materials",[]):
+                            if effect.get("enabled",True) and effect.get("asset",ZERO) not in (ZERO,"0","",None):used.add(effect["asset"])
+                    if details.get("component_enabled",{}).get("Terrain",True):
+                        terrain=details.get("component_data",{}).get("Terrain",{})
+                        for group in ('Layers','Vegetation','Splines'):
+                            for row in terrain.get(group,[]):
+                                material=row.get('Material',ZERO)
+                                if row.get('Enabled',True) and material not in (ZERO,'0','',None):used.add(material)
+                    primitive=details.get("component_data",{}).get("Primitive Object",{})
+                    if details.get("component_enabled",{}).get("Primitive Object",True) and primitive.get("Material Asset",ZERO)!=ZERO:used.add(primitive["Material Asset"])
+                    if not details.get("component_enabled",{}).get("Mesh",True):continue
+                    mesh=details.get("component_data",{}).get("Mesh",{})
+                    material=mesh.get("Material Asset",ZERO)
+                    if mesh.get("Mesh Asset",ZERO)!=ZERO and material!=ZERO:used.add(material)
+                    if mesh.get("Mesh Asset",ZERO)!=ZERO:used.update(v for v in mesh.get("Material Slots",[]) if v!=ZERO)
             if self.ScriptAttachments:
                 for entries in self.ScriptAttachments.values.get("entities",{}).values():
                     for script in entries:
@@ -840,7 +873,7 @@ class EditorController(QObject):
         if not self.SelectedEntity:return
         details=self.Runtime.EntityDetails(self.SelectedEntity)
         if not details:return
-        values={"identity":{"Name":details.get("name","")},
+        values={"identity":{"Name":details.get("name",""),self.Window.Localization.Translate("field.Tags"):details.get("tags",[])},
                 "transform":{"Position":details.get("position",(0,0,0)),
                              "Rotation":details.get("rotation",(0,0,0,1)),
                              "Scale":details.get("scale",(1,1,1))}}
@@ -1078,6 +1111,9 @@ class EditorController(QObject):
         commit=lambda v:self._SetScriptProperty(script,name,v)
         descriptor=self._ScriptDescriptor(script)
         prop=next((p for p in descriptor.properties if p.name==name),None) if descriptor else None
+        if prop and prop.type.replace("Bazzalt::","").strip()=="TagSet":
+            from .widgets.tags import TagInput
+            return TagInput(self,value.split(',') if isinstance(value,str) and value else [],lambda values:commit(','.join(values)))
         if prop and prop.type.replace("Bazzalt::","").strip() in ("FloatList","IntList"):
             from .widgets.collections import ListInput
             integer=prop.type.replace("Bazzalt::","").strip()=="IntList"
@@ -1087,7 +1123,7 @@ class EditorController(QObject):
                 if 'Step' in rules:field.setSingleStep(int(rules['Step']) if integer else rules['Step'])
                 field.valueChanged.connect(changed);return field
             default=min(max(0,prop.rules.get('Min',float('-inf'))),prop.rules.get('Max',float('inf')));default=int(default) if integer else float(default)
-            editor=ListInput(value if isinstance(value,list) else [],factory=make_item,default=default,maximum=1024,translate=self.Window.Localization.Translate);editor.ValueChanged.connect(commit);return editor
+            editor=ListInput(value if isinstance(value,list) else [],factory=make_item,default=default,maximum=1024,translate=self.Window.Localization.Translate,title=name);editor.ValueChanged.connect(commit);return editor
         if prop and prop.type.replace("Bazzalt::","").strip() in ("EntityReference","Entity"):
             entities={str(item["uuid"]):item for item in self.Runtime.Entities()}
             editor=ObjectPickerInput(validator=lambda v:v in entities)
@@ -1161,6 +1197,9 @@ class EditorController(QObject):
             self._RefreshInspectorValues();return
         self.SetDirty(True)
         if component=="Light" and name!="Type":self._RefreshInspectorValues()
+        if component=="Terrain" and name=="Splines" and self.TerrainEditor.SplineEditor is not None:
+            self.TerrainEditor.SplineEditor.Refresh()
+            self._UpdateGizmo()
         if component=="GuiElement" and name=="Stylesheet":self.SelectEntity(entity_id,force=True)
         if component in {"Rigidbody","Shape Collider","Mesh Collider","Joint","Distance Joint","Hinge Joint","Slider Joint","Ball And Socket Joint","Fixed Joint","Cloth","Vehicle","Vehicle Transmission","Wheel Suspension"} and name in {"Use Scene Gravity","Shape","Convex","Type","Motor","Bend Mode","Collision Test","Gear Count","Automatic","Use Force Point"}:self.SelectEntity(entity_id,force=True)
 
@@ -1202,25 +1241,35 @@ class EditorController(QObject):
 
     def _GizmoModeChanged(self, mode) -> None: self.Window.Scene.Surface.SetGizmoMode(mode);self._UpdateGizmo()
     def _UpdateGizmo(self) -> None:
-        self.Window.RefreshEditActions()
-        self.Window.Scene.Surface._selected_entity_ids=set(self.SelectedEntities)
-        self.Runtime.SetSelectionOutline(self.SelectedEntities)
+        tool=getattr(self.TerrainEditor,'SplineEditor',None)
+        if tool is not None and tool.UpdateGizmo():return
+        mode=self.Window.Scene.Surface._mode
+        poses={value:self.Runtime.EntityPose(value) for value in self.SelectedEntities}
+        signature=(tuple(self.SelectedEntities),self.SelectedEntity,mode,self._gizmos_visible,self._pivot_center,self._local_space,repr(poses),self.Runtime.IsEditorHidden(self.SelectedEntity) if self.SelectedEntity else False)
+        if signature==getattr(self,'_gizmo_signature',None):return
+        self._gizmo_signature=signature
+        selection=tuple(self.SelectedEntities)
+        if selection!=getattr(self,'_gizmo_selection',None):
+            self._gizmo_selection=selection
+            self.Window.RefreshEditActions()
+            self.Window.Scene.Surface._selected_entity_ids=set(selection)
+            self.Runtime.SetSelectionOutline(selection)
         modes={GizmoMode.Select:0,GizmoMode.Translate:1,GizmoMode.Rotate:2,GizmoMode.Scale:3}
         if self.SelectedEntity and self.Runtime.IsEditorHidden(self.SelectedEntity):self.Window.Scene.Surface.SetSelection(None);self.Runtime.SetGizmo("",0);return
         if not self._gizmos_visible:modes={mode:0 for mode in modes}
         if len(self.SelectedEntities)>1:
             positions=[]
             for value in self.SelectedEntities:
-                details=self.Runtime.EntityPose(value)
+                details=poses[value]
                 if details.get("scene_active",True):positions.append(details.get("world_position",details.get("position")))
             positions=[value for value in positions if value]
             if positions:
-                center=tuple(sum(value[axis] for value in positions)/len(positions) for axis in range(3)) if self._pivot_center else tuple(positions[0]);self.Window.Scene.Surface.SetSelection(center);self.Runtime.SetGizmoPosition(center,modes[self.Window.Toolbar.GetGizmoMode()]);return
+                center=tuple(sum(value[axis] for value in positions)/len(positions) for axis in range(3)) if self._pivot_center else tuple(positions[0]);self.Window.Scene.Surface.SetSelection(center);self.Runtime.SetGizmoPosition(center,modes[mode]);return
         if self.SelectedEntity:
-            details=self.Runtime.EntityPose(self.SelectedEntity)
-            if details and not details.get("scene_active",True):self.Window.Scene.Surface.SetSelection(None);self.Runtime.SetGizmo("",modes[self.Window.Toolbar.GetGizmoMode()]);return
+            details=poses.get(self.SelectedEntity,{})
+            if details and not details.get("scene_active",True):self.Window.Scene.Surface.SetSelection(None);self.Runtime.SetGizmo("",modes[mode]);return
             if details:self.Window.Scene.Surface.SetSelection(details.get("world_position",details["position"]))
-        self.Runtime.SetGizmo(self.SelectedEntity, modes[self.Window.Toolbar.GetGizmoMode()])
+        self.Runtime.SetGizmo(self.SelectedEntity, modes[mode])
 
     def SetGizmosVisible(self,visible:bool)->None:
         self._gizmos_visible=bool(visible)
@@ -1340,7 +1389,34 @@ class EditorController(QObject):
         if result:self.ScenePath=str(self.Runtime.SceneInfo().get("path",self.ScenePath));self.RefreshHierarchy()
         return result
 
+    def _PointEditor(self):
+        tool=getattr(self.TerrainEditor,'SplineEditor',None)
+        return tool if tool is not None and tool.HasSelection() else None
+
+    def _BeginGizmoDrag(self):
+        self._drag_dirty_before=set(self._dirty_scenes)
+        point_editor=self._PointEditor()
+        if point_editor is not None:
+            point_editor.BeginMove()
+            return
+        self._drag_transforms_before=self.Runtime.CaptureTransforms(self.SelectedEntities)
+        self.History.BeginTransforms("Transform selection",self.SelectedEntities)
+
+    def _CancelGizmoDrag(self):
+        point_editor=self._PointEditor()
+        if point_editor is not None:
+            point_editor.CancelMove()
+        elif getattr(self,'_drag_transforms_before',None):
+            self.Runtime.RestoreTransforms(self._drag_transforms_before)
+        self.History.Cancel()
+        self._dirty_scenes=set(getattr(self,'_drag_dirty_before',self._dirty_scenes))
+        self._SyncDirtyPresentation()
+        self._RefreshInspectorValues()
+        self._UpdateGizmo()
+
     def _FinishGizmoDrag(self) -> None:
+        point_editor=self._PointEditor()
+        if point_editor is not None:point_editor.FinishMove()
         self.History.Commit()
         if self.SelectedEntity:self._RefreshInspectorValues();self._UpdateGizmo()
 
@@ -1707,6 +1783,9 @@ class EditorController(QObject):
         return str(active.get("uuid",""))
 
     def ApplyGizmoTranslation(self, delta) -> bool:  # type: ignore[no-untyped-def]
+        point_editor=self._PointEditor()
+        if point_editor is not None:
+            return point_editor.Translate(delta)
         targets=self.SelectedEntities or ([self.SelectedEntity] if self.SelectedEntity else [])
         selected=set(targets);roots=[]
         for entity in targets:

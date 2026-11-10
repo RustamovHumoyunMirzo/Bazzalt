@@ -97,7 +97,7 @@ void TerrainSystem::OnUpdate(Scene& scene,float){auto& assets=m_backend.GetAsset
                 if(surface.Indices.empty())continue;
                 auto settings=options;
                 settings.MaterialAsset=t.Splines[index].Material;
-                resource.Surfaces.push_back(assets.CreateGeometry(Convert(surface),settings,false,true));
+                resource.Surfaces.push_back(assets.CreateGeometry(Convert(surface),settings,false,true,true));
             }
         }
         for(auto surface:resource.Surfaces){assets.UpdatePrimitive(surface,world,options);assets.SetEditorOwner(surface,id);}

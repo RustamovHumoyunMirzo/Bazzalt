@@ -1,8 +1,8 @@
 """Terrain metadata uses the editor's normal pickers and typed fields."""
 from copy import deepcopy
 from ..materials import ZERO
-from PySide6.QtWidgets import QWidget,QFormLayout
 from .widgets.collections import ListInput
+from .panels.properties import ComponentSection
 from .widgets.fields import BoolInput,FloatInput,IntInput,StringInput,Vec2Input,Vec3Input,ColorInput,EnumInput,UIntInput
 
 def TerrainList(controller,entity,name,values):
@@ -14,17 +14,23 @@ def TerrainList(controller,entity,name,values):
         'Splines':lambda:{'Name':tr('terrain.spline'),'Width':1.,'Shoulder':1.,'Depth':0.,'Strength':1.,'Closed':False,'GenerateSurface':False,'SurfaceCollision':True,'SurfaceOffset':.02,'TextureScale':1.,'Material':ZERO,'Color':(1.,1.,1.,1.),'Points':[]},
     }
     def factory(value,changed):
-        body=QWidget();form=QFormLayout(body);form.setContentsMargins(8,0,0,2);form.setSpacing(6)
+        body=ComponentSection('',removable=False,localization=controller.Window.Localization,subsection=True)
+        body.Toggle.parentWidget().hide();body.setObjectName('CollectionBody')
+        groups={
+            'Vegetation':{'Assets':('Model','Material'), 'Placement':('Density','Spacing','Seed','MaxInstances','AlignToNormal'), 'Height and Slope':('MinHeight','MaxHeight','MinSlope','MaxSlope'), 'Scale':('MinScale','MaxScale')},
+            'Layers':{'Composition':('Opacity','Blend'), 'Surface':('Material','Color','Tiling'), 'Maps':('Heightmap','Splatmap')},
+            'Splines':{'Profile':('Width','Shoulder','Depth','Strength'), 'Surface':('GenerateSurface','SurfaceCollision','SurfaceOffset','TextureScale','Material','Color')},
+        }
         def assign(key,v):value[key]=v;changed(deepcopy(value))
         for key,v in value.items():
-            if key.startswith('_'):continue
+            if key.startswith('_') or key in {'InTangents','OutTangents'}:continue
             if key in {'Heightmap','Splatmap','Material','Model'}:
                 extensions={'.matinst'} if key=='Material' else {'.gltf','.glb','.obj','.fbx','.filamesh'} if key=='Model' else {'.png','.jpg','.jpeg','.bmp','.tga','.hdr'}
                 field=controller._AssetPicker(v,extensions,lambda a,k=key:assign(k,a or ZERO))
             elif key=='Points':
                 def point_factory(point,notify):
                     field=Vec3Input(point);field.ValueChanged.connect(notify);return field
-                field=ListInput(v,factory=point_factory,default=(0.,0.,0.),maximum=1024,translate=tr);field.ValueChanged.connect(lambda data,k=key:assign(k,data))
+                field=ListInput(v,factory=point_factory,default=(0.,0.,0.),maximum=1024,translate=tr,title=tr('terrain.field.Points'),item_name=tr('terrain.point'),add_text=tr('terrain.add_point'));field.ValueChanged.connect(lambda data,k=key:assign(k,data))
             elif key=='Operation':
                 field=EnumInput();field.SetOptions([(tr('terrain.volume_add'),0),(tr('terrain.volume_subtract'),1)]);field.SetValue(v);field.currentIndexChanged.connect(lambda _,f=field,k=key:assign(k,f.GetValue()))
             elif key in {'Center','Radius'}:
@@ -43,9 +49,15 @@ def TerrainList(controller,entity,name,values):
                 bounds={'Opacity':(0,1),'Tiling':(.001,100000),'Density':(0,1000),'MinHeight':(-100000,100000),'MaxHeight':(-100000,100000),'MinSlope':(0,90),'MaxSlope':(0,90),'MinScale':(.001,1000),'MaxScale':(.001,1000),'Spacing':(.01,100000),'Width':(.001,100000),'Shoulder':(0,100000),'Depth':(-100000,100000),'Strength':(0,1)}
                 lo,hi=bounds.get(key,(-100000,100000));field=FloatInput(lo,hi,v);field.valueChanged.connect(lambda data,k=key:assign(k,data))
             else:field=StringInput();field.SetValue(v);field.editingFinished.connect(lambda f=field,k=key:assign(k,f.GetValue()))
-            field.setMinimumWidth(0);form.addRow(tr('terrain.field.'+key),field)
+            field.setMinimumWidth(0)
+            if key=='Points':body.AddWideWidget(field)
+            else:
+                group=next((group for group,keys in groups.get(name,{}).items() if key in keys),'')
+                body.AddField(key,field,group)
+                body.SetFieldTitle(key,tr('terrain.field.'+key))
         return body
-    field=ListInput(values,factory=factory,default=defaults[name],minimum=1 if name=='Layers' else 0,maximum={'Layers':32,'Vegetation':64,'Splines':128,'Volumes':64}[name],translate=tr)
+    kind={'Layers':'layer','Vegetation':'vegetation','Splines':'spline','Volumes':'volume'}[name]
+    field=ListInput(values,factory=factory,default=defaults[name],minimum=1 if name=='Layers' else 0,maximum={'Layers':32,'Vegetation':64,'Splines':128,'Volumes':64}[name],translate=tr,title=tr('terrain.field.'+name),item_name=tr('terrain.'+kind),add_text=tr('terrain.add_'+kind))
     def commit(data):
         controller._CommitComponent(entity,'Terrain',name,data)
         if name in {'Layers','Vegetation'}:field.Reindex()

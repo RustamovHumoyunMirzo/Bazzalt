@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Independent gameplay Bézier path. Each SplinePoint supplies a position, relative incoming/outgoing handles, up vector, scale and roll in radians. Zero handles form a linear segment. Parameters span 0–1, open paths clamp and closed paths wrap outside the interval. Distances and cached arc lengths use path-local units, approximated with 32 samples per span. Optional world matrices transform sampled poses and query positions. FindClosestPoint uses the sampled polyline. PlaceEntities applies full world poses in array order, handles parent/child arrays in hierarchy order, rejects duplicate/invalid/root entities and restores poses on failure. Mutations require caller synchronization with readers. Lua point indices are zero-based.">
+  <title>Spline | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../../assets/docs.css">
+  <script src="../../../../assets/theme.js"></script>
+  <script defer src="../../../../assets/catalog.js"></script>
+  <script defer src="../../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../index.html">Docs</a> / C++ / C++ API reference / Spline</nav>
+      <article class="doc"><h1>Spline</h1><p>Independent gameplay Bézier path. Each SplinePoint supplies a position, relative incoming/outgoing handles, up vector, scale and roll in radians. Zero handles form a linear segment. Parameters span 0–1, open paths clamp and closed paths wrap outside the interval. Distances and cached arc lengths use path-local units, approximated with 32 samples per span. Optional world matrices transform sampled poses and query positions. FindClosestPoint uses the sampled polyline. PlaceEntities applies full world poses in array order, handles parent/child arrays in hierarchy order, rejects duplicate/invalid/root entities and restores poses on failure. Mutations require caller synchronization with readers. Lua point indices are zero-based.</p><!-- API-SOURCE-BEGIN -->
+<h2 id="source-contract">Public declarations</h2>
+<p>Header: <code>Bazzalt/Spline.h</code>. Namespace: <code>Bazzalt</code>. Declarations below list public members, overloads, field types and default values. Inline implementation bodies and private storage are omitted. Inherited members are declared on the base type. A reference (<code>&amp;</code>) is not a value copy; check lifetime notes before retaining it.</p>
+<pre><code class="language-cpp">class Spline {
+Spline();
+explicit Spline(std::vector&lt;SplinePoint&gt; points,bool closed=false);
+const std::vector&lt;SplinePoint&gt;&amp; GetPoints() const;
+std::size_t GetPointCount() const;
+void SetPoints(std::vector&lt;SplinePoint&gt; points);
+void AddPoint(const SplinePoint&amp; point);
+void SetPoint(std::size_t index,const SplinePoint&amp; point);
+void RemovePoint(std::size_t index);
+void Clear();
+void SetClosed(bool closed);
+bool IsClosed() const;
+Vec3 Evaluate(float parameter) const;
+Vec3 EvaluateTangent(float parameter) const;
+Transform EvaluateTransform(float parameter,const Mat4&amp; world=Mat4{}) const;
+float GetLength() const;
+float GetParameterAtDistance(float distance) const;
+Transform EvaluateDistance(float distance,const Mat4&amp; world=Mat4{}) const;
+SplineQuery FindClosestPoint(Vec3 position,const Mat4&amp; world=Mat4{}) const;
+std::vector&lt;Vec3&gt; Sample(unsigned subdivisions=16) const;
+std::vector&lt;Transform&gt; SampleTransforms(unsigned count,bool evenlySpaced=true,const Mat4&amp; world=Mat4{}) const;
+bool PlaceEntities(const std::vector&lt;Entity&gt;&amp; entities,float spacing=1,float startDistance=0,const Mat4&amp; world=Mat4{}) const;
+};</code></pre>
+<!-- API-SOURCE-END --></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../SliderJoint/en.html"><small>Previous</small>SliderJoint</a>
+<a class="next" href="../SplinePoint/en.html"><small>Next</small>SplinePoint</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#source-contract">Public declarations</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

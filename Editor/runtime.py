@@ -315,6 +315,9 @@ class RuntimeService(QObject):
     def SaveTextureAsset(self,path,values:dict)->bool:
         return bool(self._host and hasattr(self._host,"save_texture_asset") and self._host.save_texture_asset(str(path),values))
 
+    def UsedMaterialAssets(self):
+        return list(self._host.used_material_assets()) if self._host and hasattr(self._host,"used_material_assets") else None
+
     def UsedShaderAssets(self) -> list[str]:
         return list(self._host.used_shader_assets()) if self._host and hasattr(self._host,"used_shader_assets") else []
 
@@ -478,6 +481,12 @@ class RuntimeService(QObject):
 
     def PickPrimitive(self,origin,direction)->str:
         return self._host.pick_primitive(origin,direction) if self._host is not None and hasattr(self._host,"pick_primitive") else ""
+
+    def TagNames(self):
+        return list(self._host.tag_names()) if self._host and hasattr(self._host,"tag_names") else []
+
+    def SetEntityTags(self,entity_id,values):
+        return bool(self._host and self._host.set_entity_tags(entity_id,list(values)))
 
     def SetObjectHover(self,entity_id:str,eye)->None:
         if self._host is not None and hasattr(self._host,"set_object_hover"):self._host.set_object_hover(entity_id,eye)

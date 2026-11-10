@@ -118,3 +118,79 @@ bounded when adding new editing methods or codec fields.
 
 Source-authored custom surface programs blend through stochastic coverage.
 Binary-only packages require a matching terrain coverage variant.
+
+## Selection and collection presentation
+
+`Engine::PickEditorPrimitive` raycasts terrain against the authoritative sculpted
+surface. Do not replace this with an origin-plane or bounds-only hit test.
+Terrain owners must also pass the geometry classification in
+`Engine::UpdateEditorOverlays` so terrain chunk renderables enter the shared
+selection mask. The mask unions chunks instead of outlining each chunk.
+
+Terrain coverage variants set `doubleSided` on their material configuration.
+The default terrain material does the same, preventing the heightfield from
+disappearing underneath and leaving only LOD skirts. Spline surfaces use the
+terrain variant too. When changing variant generation, bump the material cache
+key so existing project artifacts are regenerated.
+
+`ListInput` owns bounded values independently of widgets. Callers supply a
+localized collection title, item name and Add caption. Expansion state follows
+items through reordering and removal. Terrain item fields reuse ComponentSection
+for alignment, grouping, clipboard behavior and theme styling. Keep collection
+styles in `Editor/theme.py`, not inline stylesheets. The offscreen GUI regression
+tests cover edits and expansion, while TerrainTests --gpu verifies actual
+underside pixels and hover/selection outlines on a real graphics backend.
+
+## Solid terrain exterior and overlay ownership
+
+The terrain base is the lower VerticalRange value, clamped below each local
+height to retain positive thickness after deep sculpting. BuildTerrainChunk
+shares underside vertices on an LOD grid. CellShell emits only true exterior
+and hole walls, not internal chunk boundaries. Raycast reuses CellShell at
+full detail. Physics disables LOD skirts but retains the real exterior.
+Volume density is intersected with the base plane; the extractor includes a
+slab below that plane to generate bottom faces. Boundary walls clip against
+the same density so caves reaching an edge stay open. LOD skirts cannot
+extend below the base.
+
+TerrainAction belongs to ViewportPanel.ControlsMenu. TerrainEditor owns one
+movable native-capable Overlay, with icon tools and the settings button as
+ordinary children. Do not give the settings button another native window or
+move it independently. Place changes only the parent position while dragging
+and resizes only when viewport constraints change. SVG glyphs live in
+Editor/assets/icons/terrain and are tinted for the active theme and tool state.
+
+## Spline editing and modal movement
+
+TerrainSpline keeps Points and optional InTangents/OutTangents arrays. Tangents
+are offsets in terrain-local coordinates. Empty or zero tangent arrays describe
+linear spans. TerrainGeometry::SampleSpline is shared by ribbon generation,
+heightfield shaping and the editor bridge. Optional per-point tangent fields
+retain compatibility with older version-one scenes.
+
+Editor/gui/terrain_spline.py owns point selection, live preview, handle hit
+testing and the companion overlay. TerrainEditor delegates spline-mode input
+to it. Point markers take priority over overlapping gizmo arrows. The bridge
+converts world-space edits to local coordinates, validates the candidate spline
+and publishes it atomically. The editor chooses the point target before
+controller transform routing, so moving points never translates their entity.
+
+NativeRenderSurface owns the modal G gesture and reuses GizmoDrag. Axis changes
+recompute cumulative movement from the original ray and origin. The controller
+captures transforms or spline data at gesture start. Cancel restores those
+values and the previous dirty-scene set before dropping the pending history
+command. Applying commits exactly one command. Scene focus loss cancels a G
+gesture. Keyboard handling belongs to the scene surface so text fields retain
+normal typing.
+
+## Gameplay paths and atmosphere
+
+`Bazzalt/Spline.h` owns the shared Bézier sampler. Terrain converts its authoring anchors and tangent offsets to this representation. Gameplay code can use the same math without a Terrain component. Arc caches are shared across immutable copies and replaced on edits. Entity array placement sorts application by hierarchy depth while retaining requested array positions.
+
+Scene fog lives in `SceneEnvironment.Fog`. Serialization environment version 3 adds validated fields while reading versions 1 and 2 with defaults. `FogRenderer` privately composites depth-aware volumetric integration. Prepare its per-view targets before beginning a Filament frame. Restore caller render targets and viewports after drawing and detach external targets from the composite view before resources can be destroyed. Keep viewport-space GUI rendering after scene atmosphere.
+
+Spline overlay visibility is independent of authoring state. Tab and the controls button toggle it. The gizmo controller compares current authoritative poses before uploading changes, so play-mode physics still moves handles without rebuilding unchanged UI every tick. G axis guides use three clipped parallel lines offset by a screen pixel at the object depth.
+
+Material polling uses `CollectMaterialUsage` in the native bridge to walk references without building full hierarchy snapshots or expanding unrelated component and spline metadata. Play-mode inspector snapshots refresh at 10 Hz, independent of the rendering and physics cadence. Direct edits and gizmo commits still refresh immediately.
+
+Post-processed Filament views ignore exported depth attachments. Volumetric fog therefore renders a separate unprocessed depth view when needed, then composites over the processed color. Its scene, camera and target references are detached after each draw. This extra geometry pass applies only to volumetric mode. Analytic height/distance fog stays on the native path.

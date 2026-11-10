@@ -11,6 +11,8 @@ class BAZZALT_API TerrainGeometry final {
 public:
     static TerrainMesh BuildChunk(const Terrain& terrain,std::uint32_t x,std::uint32_t z,std::uint32_t lod=0);
     static TerrainMesh BuildSpline(const Terrain& terrain,std::uint32_t spline);
+    // Samples cubic Bézier spans. Zero tangent offsets retain straight spans.
+    static std::vector<Vec3> SampleSpline(const TerrainSpline& spline,std::uint32_t subdivisions=16);
     static std::optional<TerrainHit> Raycast(const Terrain& terrain,Vec3 origin,Vec3 direction,float maxDistance=100000);
 };
 }

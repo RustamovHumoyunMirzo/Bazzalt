@@ -1,4 +1,5 @@
 #include <cassert>
+#include "Bazzalt/Spline.h"
 
 #include "Bazzalt/Component.h"
 #include "Bazzalt/Scene.h"
@@ -145,5 +146,33 @@ int main() {
     assert(!scene.GetEntity(parentUuid));
     assert(!scene.GetEntity(childUuid));
     assert(!scene.GetEntity(grandchildUuid));
+    auto tagged=scene.CreateEntity("Tagged");
+    assert(tagged.HasComponent<Bazzalt::Tags>()&&tagged.GetTags().IsEmpty());
+    assert(tagged.AddTag("Enemy")&&tagged.AddTag("Flying")&&!tagged.AddTag("Enemy"));
+    assert(tagged.HasAllTags({"Enemy","Flying"})&&!tagged.HasAnyTag({"Player"}));
+    assert(scene.FindEntitiesWithTag("Enemy")==std::vector<Bazzalt::Entity>{tagged});
+    assert(scene.FindEntitiesWithAnyTag({"Flying","Enemy"}).size()==1);
+    Bazzalt::TagSet parsed{"Preserved"};
+    assert(!Bazzalt::TagSet::TryParse("Bad,",parsed)&&parsed.Has("Preserved"));
+    assert(Bazzalt::TagSet::TryParse("Enemy,Flying,Enemy",parsed)&&parsed.GetCount()==2);
+    tagged.SetTags(parsed);assert(tagged.RemoveTag("Enemy"));tagged.ClearTags();
+    assert(scene.FindEntitiesWithTag("Enemy").empty());
+
+    Bazzalt::Spline path({{{0,0,0}},{{10,0,0}}});
+    assert(Bazzalt::IsNearlyEqual(path.GetLength(),10.f));
+    assert(Bazzalt::IsNearlyEqual(path.Evaluate(.25f).X,2.5f));
+    assert(Bazzalt::IsNearlyEqual(path.EvaluateDistance(3).Position.X,3.f));
+    auto closest=path.FindClosestPoint({4,2,0});
+    assert(Bazzalt::IsNearlyEqual(closest.Parameter,.4f)&&Bazzalt::IsNearlyEqual(closest.Distance,2.f));
+    auto transforms=path.SampleTransforms(3);assert(transforms.size()==3&&Bazzalt::IsNearlyEqual(transforms[1].Position.X,5.f));
+    auto splineParent=scene.CreateEntity("Path parent"),splineChild=scene.CreateEntity("Path child");
+    assert(splineChild.SetParent(splineParent));
+    assert(path.PlaceEntities({splineChild,splineParent},2,1));
+    assert(Bazzalt::IsNearlyEqual(splineChild.GetWorldTransform().Position.X,1.f));
+    assert(Bazzalt::IsNearlyEqual(splineParent.GetWorldTransform().Position.X,3.f));
+    assert(!path.PlaceEntities({splineChild,splineChild}));
+    auto curved=path.GetPoints();curved[0].OutTangent={0,4,0};curved[1].InTangent={0,4,0};path.SetPoints(curved);
+    assert(path.GetLength()>10&&path.Evaluate(.5f).Y>2.9f);
+    auto copy=path;path.SetPoint(0,{{-10,0,0}});assert(copy.Evaluate(0).X==0&&path.Evaluate(0).X==-10);
     return 0;
 }

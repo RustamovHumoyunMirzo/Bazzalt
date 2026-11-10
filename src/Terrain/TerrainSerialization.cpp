@@ -82,7 +82,13 @@ template<class A,class T> void Archive(A& a,T& t){
         a.OptionalField(p+"Material",row.Material);
         a.OptionalField(p+"Color",row.Color);
 #undef F
-        unsigned count=unsigned(row.Points.size());a.Field(p+"Points.Count",count);if(count>1024)throw std::invalid_argument("Terrain spline point limit");if constexpr(!std::is_const_v<T>)row.Points.resize(count);for(unsigned i=0;i<count;++i)a.Field(p+"Points."+std::to_string(i),row.Points[i]);
+        unsigned count=unsigned(row.Points.size());a.Field(p+"Points.Count",count);if(count>1024)throw std::invalid_argument("Terrain spline point limit");if constexpr(!std::is_const_v<T>)row.Points.resize(count);if constexpr(!std::is_const_v<T>){row.InTangents.resize(count);row.OutTangents.resize(count);}
+        for(unsigned i=0;i<count;++i){
+            auto key=p+"Points."+std::to_string(i);a.Field(key,row.Points[i]);
+            Vec3 incoming=row.InTangents.empty()?Vec3{}:row.InTangents[i],outgoing=row.OutTangents.empty()?Vec3{}:row.OutTangents[i];
+            a.OptionalField(key+".In",incoming);a.OptionalField(key+".Out",outgoing);
+            if constexpr(!std::is_const_v<T>){row.InTangents[i]=incoming;row.OutTangents[i]=outgoing;}
+        }
     });
 }
 }

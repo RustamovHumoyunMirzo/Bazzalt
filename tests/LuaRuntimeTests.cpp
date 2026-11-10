@@ -9,6 +9,7 @@
 #include "Bazzalt/Serialization.h"
 #include <cassert>
 #include <fstream>
+#include <iostream>
 using namespace Bazzalt;
 int main(){
     const auto directory=std::filesystem::temp_directory_path()/std::filesystem::u8path("bazzalt-lua-"+UUID::Generate().ToString());
@@ -19,6 +20,23 @@ int main(){
     write(R"lua(
 local B = Bazzalt
 local Behavior = { Speed = 1.0 }
+local tags=B.TagSet.new({"Enemy","Flying"})
+assert(tags:Has("Enemy") and tags:GetCount()==2)
+assert(B.TagSet.IsValidName("Enemy"))
+local valid,parsed=B.TagSet.TryParse("Player,Enemy")
+assert(valid and parsed:GetCount()==2)
+local points={B.SplinePoint.new(),B.SplinePoint.new()}
+points[2].Position=B.Vec3.new(10,0,0)
+local path=B.Spline.new(points,false)
+assert(math.abs(path:GetLength()-10)<0.001)
+path:SetPoints(path:GetPoints())
+assert(path:PlaceEntities({}) and #path:SampleTransforms(3)==3)
+assert(math.abs(path:EvaluateDistance(3).Position.X-3)<0.001)
+local fog=B.FogSettings.new()
+assert(fog.Enabled and fog:IsValid())
+fog.Mode=B.FogMode.Volumetric
+assert(fog:IsValid())
+
 local progress = B.SaveDocument.new()
 progress:Set("coins", 25)
 progress:Set("inventory", {"key", "map"})
@@ -239,7 +257,7 @@ return Behavior
     std::ifstream bytecode(output,std::ios::binary);assert(bytecode.get()==0x1b);
     Runtime::Engine engine;auto entity=engine.GetScene().CreateEntity("Cube");
     Runtime::LuaRuntime runtime;Runtime::ScriptBinding binding;binding.Module=output;binding.Entity=entity.GetUUID().ToString();binding.TypeName="Walk";binding.Properties["Speed"]="4";
-    assert(runtime.Configure({binding},error));assert(runtime.Start(error));assert(entity.GetComponent<Light>().Intensity==200);
+    assert(runtime.Configure({binding},error));if(!runtime.Start(error)){std::cerr<<error<<std::endl;assert(false);}assert(entity.GetComponent<Light>().Intensity==200);
     assert(entity.GetComponent<Name>().Value=="SystemCreated");
     runtime.Update(.5f);assert(std::fabs(entity.GetWorldTransform().Position.X-2)<.001f);
     runtime.FixedUpdate(.1f);assert(entity.GetComponent<Light>().Range>10);
