@@ -276,7 +276,7 @@ add_library(BazzaltLuaBindings STATIC ${BAZZALT_LUA_BINDING_SOURCES} src/Runtime
 set_target_properties(BazzaltLuaBindings PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(BazzaltLuaBindings PRIVATE include src "${BAZZALT_SOL2_DIR}/include")
 target_link_libraries(BazzaltLuaBindings PRIVATE BazzaltLua EnTT::EnTT)
-target_compile_definitions(BazzaltLuaBindings PRIVATE BAZZALT_BUILDING_LIBRARY SOL_ALL_SAFETIES_ON=1)
+target_compile_definitions(BazzaltLuaBindings PRIVATE BAZZALT_BUILDING_LIBRARY SOL_ALL_SAFETIES_ON=1 SOL_NO_NIL=1)
 if(MSVC)
     target_compile_options(BazzaltLuaBindings PRIVATE /utf-8 /bigobj)
 endif()
