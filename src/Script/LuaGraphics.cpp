@@ -6,7 +6,7 @@ namespace {
 std::vector<GraphicsVertex> Vertices(sol::table table){if(table.size()>Graphics::MaxVertices)throw std::length_error("Graphics vertex limit exceeded");std::vector<GraphicsVertex> values;for(std::size_t i=1;i<=table.size();++i)values.push_back(table.get<GraphicsVertex>(i));return values;}
 std::vector<std::uint32_t> Indices(sol::optional<sol::table> table){std::vector<std::uint32_t> values;if(table){if(table->size()>Graphics::MaxIndices)throw std::length_error("Graphics index limit exceeded");for(std::size_t i=1;i<=table->size();++i)values.push_back(table->get<std::uint32_t>(i));}return values;}
 template<class T> T Required(sol::variadic_args args,std::size_t index){if(index>=args.size())throw std::invalid_argument("Missing Graphics argument");return args[index].get<T>();}
-template<class T> sol::optional<T> Optional(sol::variadic_args args,std::size_t index){if(index>=args.size()||args[index].get_type()==sol::type::nil)return {};return args[index].get<T>();}
+template<class T> sol::optional<T> Optional(sol::variadic_args args,std::size_t index){if(index>=args.size()||args[index].get_type()==sol::type::lua_nil)return {};return args[index].get<T>();}
 void Budget(lua_State* state,lua_Debug*){luaL_error(state,"Graphics callback exceeded its Lua instruction budget");}
 }
 void BindLuaGraphics(sol::table api,Entity owner){

@@ -9,7 +9,7 @@ std::string String(const ByteBuffer& value){return {value.begin(),value.end()};}
 SaveValue FromLua(sol::object value,std::set<const void*>& visiting,std::size_t& nodes,unsigned depth=0){
  if(++nodes>100000||depth>32)throw std::length_error("Save value nesting/count limit exceeded");
  switch(value.get_type()){
- case sol::type::nil:return {};
+ case sol::type::lua_nil:return {};
  case sol::type::boolean:return SaveValue(value.as<bool>());
  case sol::type::number:{value.push();bool integer=lua_isinteger(value.lua_state(),-1);lua_pop(value.lua_state(),1);if(integer)return SaveValue(value.as<std::int64_t>());return SaveValue(value.as<double>());}
  case sol::type::string:{auto s=value.as<std::string>();if(s.size()>1048576)throw std::length_error("Save string exceeds limit");return SaveValue(std::move(s));}
