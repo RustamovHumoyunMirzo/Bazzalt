@@ -1,3 +1,6 @@
+#include <filament/Skybox.h>
+#include "Bazzalt/Components/LocalFog.h"
+#include "Rendering/RenderBackend.h"
 #include <cassert>
 #include <filament/Renderer.h>
 #include "Runtime/TimeAccess.h"
@@ -13,6 +16,22 @@
 #include "Rendering/LightGuides.h"
 
 namespace Bazzalt::Runtime {
+struct RenderFailureTestAccess {
+    static void Check(){
+        RenderBackend backend;assert(backend.Initialize(true));
+        assert(backend.CreateViewport(900,0,RenderBackend::ViewportKind::Scene,64,64,1,true));
+        backend.m_gpuWaitFailed=true;
+        assert(!backend.WaitForIdle());
+        assert(!backend.CreateViewport(901,0,RenderBackend::ViewportKind::Game,64,64,1,true));
+        backend.DestroyViewport(900);
+        assert(backend.GetStatistics().at("viewports")==1);
+        bool rejected=false;try{backend.Render();}catch(const std::runtime_error&){rejected=true;}
+        assert(rejected);
+        // This test injects a failure state, not an actual device failure.
+        backend.m_gpuWaitFailed=false;backend.DestroyViewport(900);
+        assert(backend.GetStatistics().at("viewports")==0);backend.Shutdown();
+    }
+};
 struct EditorOutlineTestAccess {
     static void Check(Engine& engine,const std::unordered_set<UUID>& selected,const std::unordered_set<UUID>& hovered){
         engine.UpdateEditorOverlays();
@@ -129,11 +148,135 @@ int CheckFogPixels(){
         assert(gradedFog[center]>graded[center]+40);
         std::cout<<"Post-processed sky baseline="<<int(graded[corner])<<" fog="<<int(gradedFog[corner])<<std::endl;
         assert(std::abs(int(gradedFog[corner])-int(graded[corner]))<4);
+        // Post-tonemap fog must not add raw sun radiance and clip a whole frame.
+        auto sunEntity=scene.CreateEntity("Fog bright sun");
+        auto& sun=sunEntity.AddComponent<Light>();sun.Type=LightType::Directional;sun.Intensity=100000;
+        fog.Color={.55f,.62f,.7f};fog.Anisotropy=0;fog.AffectSky=true;
+        const auto sunFog=capture(true);
+        for(auto pixel:{center,corner})for(int channel=0;channel<3;++channel)
+            assert(sunFog[pixel+channel]<250);
+        sun.Enabled=false;
+        const auto noSunFog=capture(true);
+        assert(sunFog[corner]>=noSunFog[corner]);
+        // Zero maximum opacity is an exact bypass even with an intense sun.
+        sun.Enabled=true;fog.MaximumOpacity=0;
+        const auto bypass=capture(true),unfogged=capture(false);
+        for(int channel=0;channel<3;++channel)
+            assert(std::abs(int(bypass[center+channel])-int(unfogged[center+channel]))<4);
+        fog.MaximumOpacity=1;fog.Color={1,0,0};fog.AffectSky=false;sun.Enabled=false;
+        // Distance must increase fog, while height falloff is explicitly ground-biased.
+        fog.Density=.02f;fog.MaxDistance=200;fog.HeightFalloff=0;
+        const auto nearFog=capture(true);
+        backend.GetAssets().UpdatePrimitive(handle,Mat4::Translation({0,0,-50})*Mat4::Scaling({30,30,1}),object);
+        const auto farFog=capture(true);
+        std::cout<<"Fog near="<<int(nearFog[center])<<" far="<<int(farFog[center])<<std::endl;
+        assert(farFog[center]>nearFog[center]+80);
+        assert(std::abs(int(farFog[center])-int(255*(1-std::exp(-.02f*49.5f))))<3);
+        auto* renderCamera=const_cast<filament::Camera*>(&view->getCamera());
+        const auto savedProjection=renderCamera->getProjectionMatrix(),savedCulling=renderCamera->getCullingProjectionMatrix();
+        const auto savedNear=renderCamera->getNear(),savedFar=renderCamera->getCullingFar();
+        renderCamera->setProjection(filament::Camera::Projection::ORTHO,-20,20,-15,15,.1,1000);
+        const auto orthoFog=capture(true);
+        assert(std::abs(int(orthoFog[center])-int(255*(1-std::exp(-.02f*49.4f))))<3);
+        renderCamera->setCustomProjection(savedProjection,savedCulling,savedNear,savedFar);
+        fog.AffectSky=true;
+        const auto uniformFog=capture(true);
+        const auto top=(20*320+10)*4,bottom=(220*320+10)*4;
+        assert(std::abs(int(uniformFog[top])-int(uniformFog[bottom]))<4);
+        fog.HeightFalloff=.2f;
+        const auto heightFog=capture(true);
+        std::cout<<"Height fog top="<<int(heightFog[top])<<" bottom="<<int(heightFog[bottom])<<std::endl;
+        assert(heightFog[bottom]>heightFog[top]+80);
+        const auto savedModel=renderCamera->getModelMatrix();
+        renderCamera->lookAt({0,0,0},{0,0,-1},{0,-1,0});
+        const auto rolledHeightFog=capture(true);
+        assert(rolledHeightFog[top]>rolledHeightFog[bottom]+80);
+        renderCamera->setModelMatrix(savedModel);
+        fog.Density=.5f;fog.HeightFalloff=0;fog.AffectSky=false;
+        backend.GetAssets().UpdatePrimitive(handle,Mat4::Translation({0,0,-5})*Mat4::Scaling({3,3,1}),object);
+        // Start distance fades the medium, not the light, and partial slices
+        // must remain exact even when the surface crosses the first fog boundary.
+        fog.StartDistance=10;fog.Density=.1f;fog.MaxDistance=100;fog.Steps=64;
+        int previous=-1;
+        for(float distance : {9.f,10.f,10.25f,11.f,12.5f,15.f,20.f}) {
+            backend.GetAssets().UpdatePrimitive(handle,Mat4::Translation({0,0,-distance-.5f})*Mat4::Scaling({30,30,1}),object);
+            const auto pixels=capture(true);
+            const float t=std::clamp((distance-10.f)/5.f,0.f,1.f);
+            const float path=5.f*(t*t*t-.5f*t*t*t*t)+std::max(0.f,distance-15.f);
+            const int expected=int(255*(1-std::exp(-.1f*path)));
+            assert(std::abs(int(pixels[center])-expected)<4);
+            assert(int(pixels[center])>=previous);previous=pixels[center];
+        }
+        // An isotropic ambient medium has the same extinction through the
+        // same world distance when the camera turns away from the sun.
+        fog.StartDistance=0;fog.Density=.02f;fog.Anisotropy=0;
+        backend.GetAssets().UpdatePrimitive(handle,Mat4::Translation({0,0,-50})*Mat4::Scaling({30,30,1}),object);
+        const auto forwardFog=capture(true);
+        renderCamera->lookAt({0,0,0},{0,0,1},{0,1,0});
+        backend.GetAssets().UpdatePrimitive(handle,Mat4::Translation({0,0,50})*Mat4::Scaling({30,30,1}),object);
+        const auto backwardFog=capture(true);
+        assert(std::abs(int(forwardFog[center])-int(backwardFog[center]))<4);
+        renderCamera->setModelMatrix(savedModel);
+        fog.StartDistance=0;fog.Density=.5f;fog.Steps=32;
+        backend.GetAssets().UpdatePrimitive(handle,Mat4::Translation({0,0,-5})*Mat4::Scaling({3,3,1}),object);
         // Vulkan readback is top-down while viewport coordinates start at bottom-left.
         view->setViewport({0,0,160,120});fogRenderer.Prepare({view});
         const auto resized=capture(true);assert(resized[(180*320+80)*4]>40);
         fogRenderer.Prepare({});fogRenderer.Prepare({view});
         const auto recreated=capture(true);assert(recreated[(180*320+80)*4]>40);
+        // A local fog box stays at a fixed world position as the camera moves.
+        view->setViewport({0,0,320,240});view->setPostProcessingEnabled(false);
+        fog.Enabled=false;
+        // Use an explicit black surround so the direct and offscreen captures
+        // have the same background, as in the engine presentation path.
+        auto* localSky=filament::Skybox::Builder().color({0,0,0,1}).build(engine);
+        view->getScene()->setSkybox(localSky);
+        auto localEntity=scene.CreateEntity("Local fog regression");auto& local=localEntity.AddComponent<LocalFog>();
+        local.Size={8,8,4};local.BlendDistance=0;local.Fog.Color={1,0,0};local.Fog.Density=.2f;local.Fog.Steps=128;
+        localEntity.GetComponent<Transform>().Position={0,0,-10};
+        backend.GetAssets().UpdatePrimitive(handle,Mat4::Translation({0,0,-50})*Mat4::Scaling({100,100,1}),object);
+        fogRenderer.Prepare({view},0,{},&scene);
+        const auto localBaseline=capture(false);
+        const auto localFront=capture(true);
+        std::cout<<"Local fog front="<<int(localFront[center])<<" baseline="<<int(localBaseline[center])<<std::endl;
+        assert(std::abs(int(localFront[center])-int(localBaseline[center]*std::exp(-.2f*4)+255*(1-std::exp(-.2f*4))))<5);
+        local.Fog.MaximumOpacity=.25f;
+        const auto cappedLocal=capture(true);assert(std::abs(int(cappedLocal[center])-int(255*.25f+localBaseline[center]*.75f))<5);
+        local.Fog.MaximumOpacity=1;local.BlendDistance=1;
+        const auto softLocal=capture(true);assert(softLocal[center]<localFront[center]-10);
+        local.BlendDistance=0;
+        backend.GetAssets().UpdatePrimitive(handle,Mat4::Translation({0,0,-5})*Mat4::Scaling({100,100,1}),object);
+        const auto foregroundBaseline=capture(false),foregroundLocal=capture(true);assert(std::abs(int(foregroundLocal[center])-int(foregroundBaseline[center]))<4);
+        backend.GetAssets().UpdatePrimitive(handle,Mat4::Translation({0,0,-50})*Mat4::Scaling({100,100,1}),object);
+        renderCamera->lookAt({0,0,-10},{0,0,-11},{0,1,0});
+        const auto localInside=capture(true);
+        assert(localInside[center]<localFront[center]-20);
+        renderCamera->lookAt({0,0,-20},{0,0,-21},{0,1,0});
+        const auto behindBaseline=capture(false),localBehind=capture(true);assert(std::abs(int(localBehind[center])-int(behindBaseline[center]))<4);
+        renderCamera->setModelMatrix(savedModel);
+        localEntity.GetComponent<Transform>().Position={30,0,-10};
+        const auto shifted=capture(true);assert(std::abs(int(shifted[center])-int(localBaseline[center]))<4);
+        localEntity.GetComponent<Transform>().Position={0,0,-10};
+        localEntity.GetComponent<Transform>().Rotation=Quaternion::FromAxisAngle({0,1,0},Pi*.5f);
+        const auto rotatedLocal=capture(true);assert(rotatedLocal[center]>localFront[center]+30);
+        localEntity.GetComponent<Transform>().Rotation={};localEntity.GetComponent<Transform>().Scale={1,1,2};
+        const auto scaledLocal=capture(true);assert(std::abs(int(scaledLocal[center])-int(rotatedLocal[center]))<5);
+        local.Enabled=false;fogRenderer.Prepare({view},0,{},&scene);
+        const auto disabledLocal=capture(true);assert(std::abs(int(disabledLocal[center])-int(localBaseline[center]))<4);
+        local.Enabled=true;localEntity.GetComponent<Transform>().Scale={1,1,1};
+        auto overlapEntity=scene.CreateEntity("Overlap fog");overlapEntity.AddComponent<LocalFog>()=local;
+        overlapEntity.GetComponent<Transform>().Position={0,0,-10};
+        fogRenderer.Prepare({view},0,{},&scene);const auto overlap=capture(true);
+        assert(overlap[center]>localFront[center]+30);
+        // Adding an unrelated local region must preserve scene-wide extinction.
+        localEntity.GetComponent<Transform>().Position={30,0,-10};
+        overlapEntity.GetComponent<Transform>().Position={30,0,-10};
+        fog.Enabled=true;fog.Density=.02f;fog.MaxDistance=100;fog.Steps=128;
+        fogRenderer.Prepare({view},0,{},&scene);const auto mixedGlobal=capture(true);
+        local.Enabled=false;overlapEntity.GetComponent<LocalFog>().Enabled=false;
+        fogRenderer.Prepare({view},0,{},&scene);const auto onlyGlobal=capture(true);
+        assert(std::abs(int(mixedGlobal[center])-int(onlyGlobal[center]))<4);
+        view->getScene()->setSkybox(nullptr);engine.destroy(localSky);
         view->setRenderTarget(nullptr);engine.destroy(target);engine.destroy(color);engine.destroy(swap);backend.GetAssets().DestroyPrimitive(handle);
     }
     backend.Shutdown();return 0;
@@ -142,6 +285,7 @@ int CheckFogPixels(){
 int main(int argc,char** argv) {
     if(argc>1&&std::string_view(argv[1])=="--gpu-fog")return CheckFogPixels();
     if(argc>1&&std::string_view(argv[1])=="--gpu-dof")return CheckDofPixels();
+    Bazzalt::Runtime::RenderFailureTestAccess::Check();
     {
         using namespace Bazzalt;
         Light light;light.Range=7;

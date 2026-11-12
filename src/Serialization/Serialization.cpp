@@ -1,3 +1,4 @@
+#include "Bazzalt/Components/LocalFog.h"
 #include "Terrain/TerrainSerialization.h"
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -328,6 +329,27 @@ o["Post.Material"]=v.PostProcessing.MaterialAsset.ToString();o["Post.Materials.C
                                                 {o["Shape"]=std::to_string(static_cast<int>(v.Shape));o["Center.X"]=Float(v.Center.X);o["Center.Y"]=Float(v.Center.Y);o["Center.Z"]=Float(v.Center.Z);o["Extents.X"]=Float(v.Extents.X);o["Extents.Y"]=Float(v.Extents.Y);o["Extents.Z"]=Float(v.Extents.Z);o["Radius"]=Float(v.Radius);o["LayerMask"]=std::to_string(v.LayerMask);o["Enabled"]=v.Enabled?"true":"false"; }, [](SceneQueryBounds &v, const PropertyMap &i, std::uint32_t n)
                                                 { return n == 1 && EnumRange(i, "Shape", v.Shape, 0, 1) && Float(i, "Center.X", v.Center.X) && Float(i, "Center.Y", v.Center.Y) && Float(i, "Center.Z", v.Center.Z) && Float(i, "Extents.X", v.Extents.X) && Float(i, "Extents.Y", v.Extents.Y) && Float(i, "Extents.Z", v.Extents.Z) && Float(i, "Radius", v.Radius) && Enum(i, "LayerMask", v.LayerMask) && Bool(i, "Enabled", v.Enabled) && v.Radius >= 0.0f; });
 
+        m_components.Register<LocalFog>("Bazzalt.LocalFog",1,[](const LocalFog& v,PropertyMap& o){
+            o["Enabled"]=v.Enabled?"true":"false";o["MediumEnabled"]=v.Fog.Enabled?"true":"false";o["Mode"]=std::to_string(int(v.Fog.Mode));
+            o["AffectSky"]=v.Fog.AffectSky?"true":"false";o["Steps"]=std::to_string(v.Fog.Steps);
+            o["BlendDistance"]=Float(v.BlendDistance);
+#define LF_VALUE(Name) o[#Name]=Float(v.Fog.Name);
+            LF_VALUE(Density) LF_VALUE(StartDistance) LF_VALUE(MaxDistance) LF_VALUE(MaximumOpacity) LF_VALUE(Height) LF_VALUE(HeightFalloff) LF_VALUE(NoiseAmount) LF_VALUE(NoiseScale) LF_VALUE(Anisotropy)
+#undef LF_VALUE
+#define LF_VEC(Name,Value) o[Name "X"]=Float(Value.X);o[Name "Y"]=Float(Value.Y);o[Name "Z"]=Float(Value.Z);
+            LF_VEC("Size",v.Size) LF_VEC("Color",v.Fog.Color) LF_VEC("Wind",v.Fog.Wind)
+#undef LF_VEC
+        },[](LocalFog& v,const PropertyMap& i,std::uint32_t n){
+            int steps=32;if(n!=1||!Bool(i,"Enabled",v.Enabled)||(i.find("MediumEnabled")!=i.end()&&!Bool(i,"MediumEnabled",v.Fog.Enabled))||!EnumRange(i,"Mode",v.Fog.Mode,0,2)||!Bool(i,"AffectSky",v.Fog.AffectSky)||!Enum(i,"Steps",steps)||steps<4||steps>128||!Float(i,"BlendDistance",v.BlendDistance))return false;
+            v.Fog.Steps=unsigned(steps);
+#define LF_VALUE(Name) if(!Float(i,#Name,v.Fog.Name))return false;
+            LF_VALUE(Density) LF_VALUE(StartDistance) LF_VALUE(MaxDistance) LF_VALUE(MaximumOpacity) LF_VALUE(Height) LF_VALUE(HeightFalloff) LF_VALUE(NoiseAmount) LF_VALUE(NoiseScale) LF_VALUE(Anisotropy)
+#undef LF_VALUE
+#define LF_VEC(Name,Value) if(!Float(i,Name "X",Value.X)||!Float(i,Name "Y",Value.Y)||!Float(i,Name "Z",Value.Z))return false;
+            LF_VEC("Size",v.Size) LF_VEC("Color",v.Fog.Color) LF_VEC("Wind",v.Fog.Wind)
+#undef LF_VEC
+            return v.IsValid();
+        });
         m_components.Register<GaussianBlur>("Bazzalt.GaussianBlur", 1, [](const GaussianBlur &v, PropertyMap &o)
                                             {o["Enabled"]=v.Enabled?"true":"false";o["Size"]=Float(v.Size); }, [](GaussianBlur &v, const PropertyMap &i, std::uint32_t n)
                                             { return n == 1 && Bool(i, "Enabled", v.Enabled) && Float(i, "Size", v.Size) && v.Size >= 0.0f; });

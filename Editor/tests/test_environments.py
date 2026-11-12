@@ -20,6 +20,31 @@ ROOT=Path(__file__).resolve().parents[2]
 class EnvironmentTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.App=QApplication.instance() or QApplication([])
+    def test_local_fog_component_inspector_validation_and_enable(self):
+        from Editor.runtime import RuntimeService
+        runtime=RuntimeService()
+        if not runtime.IsAvailable():self.skipTest(runtime.LastError())
+        window=Editor(runtime=runtime,settings={},settings_saver=lambda _:None)
+        try:
+            entity=runtime.CreateEntity("Fog bank")
+            self.assertTrue(runtime.AddComponent(entity,"Local Fog"))
+            self.assertTrue(runtime.SetComponentProperty(entity,"Local Fog","Size",(12,4,8)))
+            self.assertTrue(runtime.SetComponentProperty(entity,"Local Fog","Mode",1))
+            self.assertFalse(runtime.SetComponentProperty(entity,"Local Fog","Size",(-1,4,8)))
+            details=runtime.EntityDetails(entity)
+            self.assertEqual(tuple(details['component_data']['Local Fog']['Size']),(12,4,8))
+            window.Controller.SelectEntity(entity,force=True)
+            section=window.Properties._sections['runtime.Local Fog']
+            self.assertIn('Mode',section._fields);self.assertIn('Size',section._fields)
+            self.assertEqual(section._fields['Mode'].GetValue(),1)
+            self.assertTrue(runtime.SetComponentEnabled(entity,"Local Fog",False))
+            self.assertFalse(runtime.EntityDetails(entity)['component_enabled']['Local Fog'])
+            self.assertTrue(runtime.RemoveComponent(entity,"Local Fog"))
+            self.assertNotIn('Local Fog',runtime.EntityDetails(entity)['components'])
+        finally:
+            window.Controller.SetDirty(False);window.close();window.deleteLater()
+            self.App.sendPostedEvents(None,QEvent.Type.DeferredDelete);runtime.Release()
+
     def test_shared_preview_resets_and_handles_missing_images_without_native_surface(self):
         widget=InspectorViewport(empty_text="No preview")
         image=QImage(64,32,QImage.Format.Format_RGB32);image.fill(QColor("blue"));widget.SetImage(image)
@@ -55,6 +80,74 @@ class EnvironmentTests(unittest.TestCase):
             self.assertFalse(window.Runtime.SetSceneEnvironment(scene,{"intensity":float("nan")}))
             window.Runtime.Tick();self.assertFalse(window.Runtime.SceneEnvironment(scene)["lighting_ready"])
         finally:window.close();window.deleteLater();self.App.sendPostedEvents(None,QEvent.Type.DeferredDelete)
+    def test_volumetric_mode_initializes_visible_defaults_and_keeps_authored_ranges(self):
+        window=Editor()
+        try:
+            window.Controller.Timer.stop()
+            scene=window.Runtime.SceneInfo()["uuid"]
+            # Older scenes can already have Volumetric selected with analytic defaults.
+            self.assertTrue(window.Runtime.SetSceneEnvironment(scene,{"fog_mode":2}))
+            window.Controller.SelectEntity(scene,force=True)
+            mode=window.Properties._sections["scene.fog"]._fields[window.Localization.Translate("fog.mode")]
+            mode.activated.emit(mode.currentIndex())
+            self.App.processEvents()
+            settings=window.Runtime.SceneEnvironment(scene)
+            self.assertEqual(settings['fog_mode'],2)
+            self.assertAlmostEqual(settings['fog_Density'],.002)
+            self.assertEqual(settings['fog_StartDistance'],0)
+            self.assertEqual(settings['fog_MaxDistance'],1000)
+            self.assertTrue(settings['fog_sky'])
+            self.assertEqual(settings['fog_HeightFalloff'],0)
+            window.Controller.Undo()
+            settings=window.Runtime.SceneEnvironment(scene)
+            self.assertEqual(settings['fog_mode'],2)
+            self.assertAlmostEqual(settings['fog_Density'],.002)
+            self.assertEqual(settings['fog_StartDistance'],10)
+            self.assertFalse(settings['fog_sky'])
+            self.assertAlmostEqual(settings['fog_HeightFalloff'],.05)
+            # Upgrade the previous editor profile on re-select, in one undo step.
+            self.assertTrue(window.Runtime.SetSceneEnvironment(scene,{'fog_Density':.02,'fog_StartDistance':0,'fog_MaxDistance':200,'fog_sky':True}))
+            window.Controller.SelectEntity(scene,force=True)
+            mode=window.Properties._sections['scene.fog']._fields[window.Localization.Translate('fog.mode')]
+            mode.activated.emit(mode.currentIndex());self.App.processEvents()
+            self.assertEqual(window.Runtime.SceneEnvironment(scene)['fog_HeightFalloff'],0)
+            window.Controller.Undo()
+            self.assertAlmostEqual(window.Runtime.SceneEnvironment(scene)['fog_HeightFalloff'],.05)
+            self.assertTrue(window.Runtime.SetSceneEnvironment(scene,{'fog_mode':1,'fog_Density':.035,'fog_StartDistance':3,'fog_MaxDistance':350,'fog_sky':False,'fog_HeightFalloff':.3}))
+            window.Controller.SelectEntity(scene,force=True)
+            mode=window.Properties._sections['scene.fog']._fields[window.Localization.Translate('fog.mode')]
+            mode.SetValue(2)
+            self.App.processEvents()
+            settings=window.Runtime.SceneEnvironment(scene)
+            self.assertAlmostEqual(settings['fog_Density'],.035)
+            self.assertEqual(settings['fog_StartDistance'],3)
+            self.assertEqual(settings['fog_MaxDistance'],350)
+            self.assertAlmostEqual(settings['fog_HeightFalloff'],.3)
+            self.assertFalse(settings['fog_sky'])
+        finally:
+            window.Controller.SetDirty(False);window.close();window.deleteLater();self.App.sendPostedEvents(None,QEvent.Type.DeferredDelete)
+
+    def test_missing_environment_reference_allows_fog_edits(self):
+        window=Editor()
+        try:
+            window.Controller.Timer.stop()
+            missing=str(uuid.uuid4())
+            snapshot=window.Runtime.CaptureScene().replace(b'Source: "00000000-0000-0000-0000-000000000000"',('Source: "'+missing+'"').encode())
+            self.assertTrue(window.Runtime.RestoreScene(snapshot))
+            scene=window.Runtime.SceneInfo()['uuid']
+            self.assertEqual(window.Runtime.SceneEnvironment(scene)['source'],missing)
+            self.assertTrue(window.Runtime.SetSceneEnvironment(scene,{'fog_mode':2,'fog_Density':.04,'fog_StartDistance':0,'fog_sky':True}))
+            settings=window.Runtime.SceneEnvironment(scene)
+            self.assertEqual(settings['source'],missing)
+            self.assertEqual(settings['fog_mode'],2)
+            self.assertAlmostEqual(settings['fog_Density'],.04)
+            settings['fog_Density']=.06
+            self.assertTrue(window.Runtime.SetSceneEnvironment(scene,settings))
+            self.assertAlmostEqual(window.Runtime.SceneEnvironment(scene)['fog_Density'],.06)
+            self.assertFalse(window.Runtime.SetSceneEnvironment(scene,{'source':str(uuid.uuid4())}))
+        finally:
+            window.Controller.SetDirty(False);window.close();window.deleteLater();self.App.sendPostedEvents(None,QEvent.Type.DeferredDelete)
+
     def test_environment_mode_shows_only_its_picker_and_preserves_legacy_material_mode(self):
         window=Editor()
         try:

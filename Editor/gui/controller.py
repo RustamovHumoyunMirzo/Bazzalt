@@ -8,7 +8,7 @@ from math import cos, sin
 from time import monotonic
 
 from PySide6.QtCore import QObject, QSignalBlocker, QTimer, Qt, Signal
-from PySide6.QtWidgets import QApplication, QFileDialog, QLabel, QMenu, QProgressDialog, QLineEdit, QWidgetAction, QDialog, QVBoxLayout, QListWidget, QListWidgetItem, QPushButton
+from PySide6.QtWidgets import QApplication, QFileDialog, QLabel, QMenu, QProgressDialog, QLineEdit, QWidgetAction, QDialog, QVBoxLayout, QListWidget, QListWidgetItem, QPushButton, QListView, QWidget
 from shiboken6 import isValid
 
 from ..runtime import RuntimeService
@@ -31,6 +31,19 @@ from .gizmos import GizmoMode, Vec3
 from .display_names import DisplayName
 from .preferences import STATISTIC_FIELDS
 from .widgets import AssetPickerInput, ObjectPickerInput, BoolInput, ColorInput, EnumInput, FloatInput, IntInput, PlayState, StringInput, UIntInput, Vec2Input, Vec3Input, Vec4Input
+
+
+def _InitialVolumetricSettings(data):
+    original={"fog_Density":.002,"fog_StartDistance":10.,"fog_MaxDistance":1000.}
+    dense={"fog_Density":.02,"fog_StartDistance":0.,"fog_MaxDistance":200.}
+    profile={"fog_Density":.002,"fog_StartDistance":0.,"fog_MaxDistance":1000.}
+    matches=lambda values:all(abs(data.get(key,value)-value)<=1e-6 for key,value in values.items())
+    untouched=not data.get("fog_sky",False) and matches(original)
+    previous=data.get("fog_sky",False) and matches(dense)
+    changes={**profile,"fog_sky":True} if untouched or previous else {}
+    if (untouched or previous) and matches({"fog_Height":0.,"fog_HeightFalloff":.05}):
+        changes["fog_HeightFalloff"]=0.
+    return changes
 
 
 class EditorController(QObject):
@@ -360,6 +373,10 @@ class EditorController(QObject):
                     if editor is not None:
                         if (component=="Terrain" and property_name in {"Layers","Vegetation","Splines","Volumes"}) or (component=="Camera" and property_name=="Post Process Materials") or (component=="LOD" and property_name=="Levels") or (component=="HLOD" and property_name in ("Sources","Proxies")):section.FieldSection(FieldGroup(str(component),property_name)).AddWideWidget(editor);section._fields[property_name]=editor
                         else:section.AddField(property_name,editor,FieldGroup(str(component),property_name))
+                        if component=="Local Fog":
+                            key={"Size":"fog.local_size","Blend Distance":"fog.local_blend","Mode":"fog.mode","Color":"fog.color","Wind":"fog.wind","Steps":"fog.steps","Affect Sky":"fog.sky"}.get(property_name,"fog."+property_name)
+                            section.SetFieldTitle(property_name,self.Window.Localization.Translate(key))
+                            if property_name=="Size":editor.setToolTip(self.Window.Localization.Translate("fog.local_size_hint"))
                 if component=="NavMesh Surface":
                     bake=QPushButton(self.Window.Localization.Translate("navigation.bake"))
                     bake.clicked.connect(lambda _checked=False,entity=inspected_entity:self._BakeNavigation(entity))
@@ -655,6 +672,8 @@ class EditorController(QObject):
         fog=self.Window.Properties.AddComponentSection("scene.fog",tr("fog.section"),removable=False,enabled=data.get("fog_enabled",True))
         fog.EnabledChanged.connect(lambda value:commit("fog_enabled",value))
         fog_mode=EnumInput();fog_mode.SetOptions([(tr("fog."+name),index) for index,name in enumerate(("exponential","height","volumetric"))]);fog_mode.SetValue(data.get("fog_mode",1));fog_mode.currentIndexChanged.connect(lambda _:commit("fog_mode",fog_mode.GetValue()));fog.AddField(tr("fog.mode"),fog_mode)
+        # Re-selecting a legacy default Volumetric entry also initializes its range.
+        fog_mode.activated.connect(lambda _:commit("fog_mode",2) if fog_mode.GetValue()==2 and _InitialVolumetricSettings(self.Runtime.SceneEnvironment(scene_id)) else None)
         color=ColorInput(QColor.fromRgbF(*data.get("fog_color",(.55,.62,.7))))
         color.ValueChanged.connect(lambda c:commit("fog_color",[c.redF(),c.greenF(),c.blueF()]));fog.AddField(tr("fog.color"),color)
         settings=(("Density",0,10),("StartDistance",0,1000000),("MaxDistance",.001,1000000),("MaximumOpacity",0,1),("Height",-100000,100000),("HeightFalloff",0,10),("NoiseAmount",0,1),("NoiseScale",.0001,1000),("Anisotropy",-.98,.98))
@@ -688,12 +707,18 @@ class EditorController(QObject):
     def _SetSceneEnvironment(self,scene_id,key,value):
         active=scene_id==str(self.Runtime.SceneInfo().get("uuid"));
         if active:self.History.Begin(self.Window.Localization.Translate("environment.history"))
-        if self.Runtime.SetSceneEnvironment(scene_id,{key:value}):
+        changes={key:value}
+        if key=="fog_mode" and value==2:changes.update(_InitialVolumetricSettings(self.Runtime.SceneEnvironment(scene_id)))
+        if self.Runtime.SetSceneEnvironment(scene_id,changes):
             if active:self.History.Commit()
             self.SetDirty(True,[scene_id])
             if key in {"mode","source","material"}:self._PrepareUsedMaterials()
             if key in {"mode","source","material","fog_mode"}:QTimer.singleShot(0,self,lambda:self.SelectEntity(scene_id,force=True) if self.InspectedScene==scene_id else None)
-        elif active:self.History.Cancel()
+        else:
+            if active:self.History.Cancel()
+            if key.startswith("fog_"):
+                self.Window.Console.AddMessage(self.Window.Localization.Translate("fog.apply_failed"),ConsoleLevel.Warning)
+                QTimer.singleShot(0,self,lambda:self.SelectEntity(scene_id,force=True) if self.InspectedScene==scene_id else None)
 
     def _InspectEnvironment(self,path):
         tr=self.Window.Localization.Translate;info=self.Runtime.AssetInfo(str(path))
@@ -919,6 +944,9 @@ class EditorController(QObject):
         return self.Window.Resources.Icon(f"icons/{filename}") if filename else None
 
     def _ComponentEditor(self, entity_id: str, component: str, name: str, value):  # type: ignore[no-untyped-def]
+        if component=="Local Fog" and name=="Mode":
+            editor=EnumInput();editor.SetOptions([(self.Window.Localization.Translate("fog."+key),i) for i,key in enumerate(("exponential","height","volumetric"))]);editor.SetValue(value)
+            editor.currentIndexChanged.connect(lambda _:self._CommitComponent(entity_id,component,name,editor.GetValue()));return editor
         if component=='Terrain':
             from .terrain_fields import TerrainField
             field=TerrainField(self,entity_id,name,value)
@@ -1477,14 +1505,29 @@ class EditorController(QObject):
     def ShowAddComponentMenu(self) -> None:
         if not self.SelectedEntity: return
         menu = QMenu(self.Window.Properties)
-        search=QLineEdit(menu);search.setPlaceholderText(self.Window.Localization.Translate("properties.search_components"));search.setClearButtonEnabled(True)
-        search_action=QWidgetAction(menu);search_action.setDefaultWidget(search);menu.addAction(search_action)
+        from PySide6.QtCore import QSize
+        container=QWidget(menu);layout=QVBoxLayout(container);layout.setContentsMargins(6,6,6,6)
+        search=QLineEdit(container);search.setPlaceholderText(self.Window.Localization.Translate("properties.search_components"));search.setClearButtonEnabled(True);layout.addWidget(search)
+        choices=QListWidget(container);choices.setObjectName("ComponentPicker");choices.setViewMode(QListView.ViewMode.ListMode)
+        choices.setFlow(QListView.Flow.LeftToRight);choices.setWrapping(True);choices.setResizeMode(QListView.ResizeMode.Adjust)
+        choices.setMovement(QListView.Movement.Static);choices.setUniformItemSizes(True);choices.setGridSize(QSize(174,38));choices.setIconSize(QSize(18,18))
+        choices.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff);choices.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        choices.setFixedSize(368,306);layout.addWidget(choices)
+        callbacks=[]
+        def add(name,callback,enabled=True,icon=None,tooltip=""):
+            item=QListWidgetItem(name,choices);item.setSizeHint(QSize(174,38));item.setToolTip(tooltip)
+            if icon:item.setIcon(icon)
+            if not enabled:item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
+            item.setData(Qt.ItemDataRole.UserRole,len(callbacks));callbacks.append(callback)
+        def activate(item):
+            if item.flags() & Qt.ItemFlag.ItemIsEnabled:
+                menu.close();callbacks[item.data(Qt.ItemDataRole.UserRole)]()
+        choices.itemClicked.connect(activate);choices.itemActivated.connect(activate)
+        action=QWidgetAction(menu);action.setDefaultWidget(container);menu.addAction(action)
         targets=self.SelectedEntities or [self.SelectedEntity];existing=set.intersection(*(set(self.Runtime.EntityDetails(target).get("components",())) for target in targets))
         for component_type in self.Runtime.ComponentTypes():
             if component_type=="CameraRenderTarget":continue # Legacy scenes keep this component; new cameras use Texture assets.
-            action = menu.addAction(DisplayName(self.Window.Localization,component_type)); action.setEnabled(component_type not in existing)
-            action.setData(component_type)
-            action.triggered.connect(lambda _=False, name=component_type: self._AddComponent(name))
+            add(DisplayName(self.Window.Localization,component_type),lambda name=component_type:self._AddComponent(name),component_type not in existing,self._ComponentIcon(component_type))
         scripts=self.ScriptCompiler.Discover() if self.ScriptCompiler else []
         from ..subsystems import Registrations
         try:
@@ -1493,12 +1536,18 @@ class EditorController(QObject):
         if self.ScriptCompiler and self.ScriptCompiler.Diagnostics:
             for diagnostic in self.ScriptCompiler.Diagnostics:self._ScriptValidationFailed(diagnostic.message)
         if scripts:
-            menu.addSeparator();script_menu=menu
             for descriptor in scripts:
                 if getattr(descriptor,'is_application',False) or getattr(descriptor,'is_subsystem',False) or descriptor.path.resolve() in registered_paths:continue
-                action=script_menu.addAction(descriptor.name);icon=self._ComponentIcon(descriptor.name);action.setIcon(icon) if icon else None;action.setToolTip(str(descriptor.path));action.setEnabled(not self.ScriptAttachments or not any(value.get("type")==descriptor.name for value in self.ScriptAttachments.For(self.SelectedEntity)));action.triggered.connect(lambda _=False,d=descriptor:self._AttachScript(d))
+                icon=self.Window.Resources.Icon("icons/abrowser/lua.svg" if descriptor.path.suffix.casefold()==".lua" else "icons/abrowser/nativecpp.svg")
+                enabled=not self.ScriptAttachments or not any(value.get("type")==descriptor.name for value in self.ScriptAttachments.For(self.SelectedEntity))
+                add(descriptor.name,lambda d=descriptor:self._AttachScript(d),enabled,icon,str(descriptor.path))
         button = self.Window.Properties.AddComponentButton
-        search.textChanged.connect(lambda text:[action.setVisible(all(word in action.text().casefold() for word in text.casefold().split())) for action in menu.actions() if action is not search_action and not action.isSeparator()])
+        def filter_items(text):
+            words=text.casefold().split()
+            for index in range(choices.count()):
+                item=choices.item(index);item.setHidden(not all(word in item.text().casefold() for word in words))
+            choices.doItemsLayout()
+        search.textChanged.connect(filter_items)
         QTimer.singleShot(0,search,search.setFocus)
         menu.exec(button.mapToGlobal(button.rect().topLeft()))
 

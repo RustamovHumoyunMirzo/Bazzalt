@@ -68,6 +68,8 @@ public:
                         float pixelRatio = 1.0f);
     void DestroyViewport(std::uint64_t id);
     bool WaitForViewportFrame(std::uint64_t id);
+    bool WaitForIdle();
+    bool HasGpuFailure() const { return m_gpuWaitFailed; }
     void SetGamePreview(int mode,UUID camera){m_gamePreviewMode=mode;m_gamePreviewCamera=camera;}
     void SetSceneCamera(std::uint64_t id, float eyeX, float eyeY, float eyeZ,
                         float targetX, float targetY, float targetZ);
@@ -135,6 +137,7 @@ public:
 
 private:
     friend struct EditorOutlineTestAccess;
+    friend struct RenderFailureTestAccess;
     struct ViewportResource;
     std::unique_ptr<class FogRenderer> m_fogRenderer;
     FogSettings m_fogSettings;
@@ -144,6 +147,7 @@ private:
     Vec4 m_clearColor{0.055f,0.065f,0.085f,1};
     filament::Engine* m_engine = nullptr;
     std::string m_backend = "automatic";
+    bool m_gpuWaitFailed = false;
     filament::Renderer* m_renderer = nullptr;
     filament::Scene* m_scene = nullptr;
     filament::Skybox* m_targetClearSky=nullptr;

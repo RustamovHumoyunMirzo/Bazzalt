@@ -6,63 +6,54 @@ material {
     depthWrite: false,
     depthCulling: false,
     doubleSided: true,
-    parameters: [
-        {type:sampler2d, name:sceneColor, precision:high}, {type:sampler2d, name:sceneDepth, precision:high},
-        {type:float4x4, name:cameraWorld, precision:high}, {type:float4x4, name:inverseProjection, precision:high},
-        {type:float4, name:cameraInfo, precision:high}, {type:float4, name:fogInfo, precision:high},
-        {type:float4, name:heightInfo, precision:high}, {type:float4, name:noiseInfo, precision:high},
-        {type:float3, name:fogColor, precision:high}, {type:float3, name:wind, precision:high},
-        {type:float3, name:sunDirection, precision:high}, {type:float3, name:sunColor, precision:high}
-    ]
+    parameters: [{type:float4,name:atlasInfo,precision:high},{type:float4,name:gridInfo,precision:high},{type:float4,name:fogInfo,precision:high},
+        {type:float4x4,name:inverseProjection,precision:high},{type:float4,name:cameraInfo,precision:high},
+        {type:sampler2d,name:sceneColor,precision:high},{type:sampler2d,name:sceneDepth,precision:high},
+        {type:sampler2d,name:medium,precision:high},{type:sampler2d,name:integrated,precision:high}]
 }
 fragment {
-    highp float fogHash(highp vec3 point) { return fract(sin(dot(point, vec3(12.9898,78.233,37.719)))*43758.5453); }
-    highp float fogNoise(highp vec3 point) {
-        highp vec3 cell=floor(point), weight=fract(point);
-        weight=weight*weight*(3.0-2.0*weight);
-        return mix(mix(mix(fogHash(cell),fogHash(cell+vec3(1,0,0)),weight.x),mix(fogHash(cell+vec3(0,1,0)),fogHash(cell+vec3(1,1,0)),weight.x),weight.y),
-                   mix(mix(fogHash(cell+vec3(0,0,1)),fogHash(cell+vec3(1,0,1)),weight.x),mix(fogHash(cell+vec3(0,1,1)),fogHash(cell+vec3(1,1,1)),weight.x),weight.y),weight.z);
+    highp vec2 volumeUV(highp vec2 uv, int slice) {
+        highp vec2 size=materialParams.gridInfo.xy;
+        highp vec2 cell=clamp(uv*size,vec2(0.5),size-vec2(0.5));
+        highp vec2 tile=vec2(float(slice%8),float(slice/8));
+        return uvToRenderTargetUV((tile*size+cell)/(size*materialParams.atlasInfo.xy));
+    }
+    highp float boundary(int index) {
+        highp float t=float(index)/materialParams.gridInfo.z;
+        return materialParams.gridInfo.w*t*t;
+    }
+    // Antiderivative of smoothstep(start,start+width,z). Integrating the
+    // fade analytically prevents pre-start leakage and slice-boundary popping.
+    highp float mediumDistance(highp float z) {
+        highp float start=materialParams.fogInfo.y;
+        if(start<=0.0)return z;
+        highp float width=max(1.0,min(5.0,start*0.5));
+        highp float t=clamp((z-start)/width,0.0,1.0);
+        return width*(t*t*t-0.5*t*t*t*t)+max(0.0,z-start-width);
     }
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
-        highp vec2 normalized=getNormalizedViewportCoord().xy;
-        highp vec2 uv=uvToRenderTargetUV(normalized);
-        highp vec4 source=texture(materialParams_sceneColor,uv);
-        if(materialParams.fogInfo.x<=0.0 || materialParams.fogInfo.w<=0.0){ material.baseColor=source; return; }
-        highp float depth=texture(materialParams_sceneDepth,uv).r;
-        if(depth<=0.0000001 && materialParams.cameraInfo.w<0.5){ material.baseColor=source; return; }
-        highp float nearPlane=materialParams.cameraInfo.x, farPlane=materialParams.cameraInfo.y;
-        highp float viewDepth=materialParams.cameraInfo.z>0.5 ? mix(farPlane,nearPlane,depth) : nearPlane*farPlane/(nearPlane+depth*(farPlane-nearPlane));
-        highp vec4 nearPoint=materialParams.inverseProjection*vec4(normalized*2.0-1.0,-1.0,1.0);
-        highp vec3 viewDirection=normalize(nearPoint.xyz/nearPoint.w);
-        highp vec3 direction=normalize((materialParams.cameraWorld*vec4(viewDirection,0.0)).xyz);
-        highp vec3 eye=materialParams.cameraWorld[3].xyz;
-        if(materialParams.cameraInfo.z>0.5){
-            eye=(materialParams.cameraWorld*vec4(nearPoint.xyz/nearPoint.w,1.0)).xyz;
-            direction=normalize((materialParams.cameraWorld*vec4(0.0,0.0,-1.0,0.0)).xyz);
-            viewDepth=max(0.0,viewDepth-nearPlane);
-        }else viewDepth/=max(0.0001,-viewDirection.z);
-        highp float end=min(viewDepth,materialParams.fogInfo.z), start=materialParams.fogInfo.y;
-        if(end<=start){ material.baseColor=source; return; }
-        int steps=int(materialParams.heightInfo.w);
-        highp float stepLength=max(0.0,end-start)/float(steps), transmittance=1.0;
-        highp vec3 scattered=vec3(0.0);
-        highp float g=materialParams.noiseInfo.z, cosine=dot(direction,-materialParams.sunDirection);
-        highp float phase=(1.0-g*g)/max(0.01,pow(1.0+g*g-2.0*g*cosine,1.5));
-        highp vec3 lighting=materialParams.fogColor+materialParams.sunColor*phase;
-        for(int stepIndex=0;stepIndex<128;++stepIndex){
-            if(stepIndex>=steps || transmittance<0.005)break;
-            highp vec3 position=eye+direction*(start+(float(stepIndex)+0.5)*stepLength);
-            highp float heightDensity=exp(clamp(-(position.y-materialParams.heightInfo.x)*materialParams.heightInfo.y,-12.0,12.0));
-            highp float noise=1.0;
-            if(materialParams.noiseInfo.x>0.0)noise=fogNoise(position*materialParams.noiseInfo.y+materialParams.wind*materialParams.noiseInfo.w);
-            highp float density=materialParams.fogInfo.x*heightDensity*mix(1.0,noise*2.0,materialParams.noiseInfo.x);
-            highp float opacity=1.0-exp(-density*stepLength);
-            scattered+=transmittance*opacity*lighting;
-            transmittance*=1.0-opacity;
+        highp vec2 uv=getNormalizedViewportCoord().xy;
+        highp vec4 source=texture(materialParams_sceneColor,uvToRenderTargetUV(uv));
+        highp float depth=texture(materialParams_sceneDepth,uvToRenderTargetUV(uv)).r;
+        if(materialParams.fogInfo.x<=0.0||materialParams.fogInfo.w<=0.0||(depth<=0.0000001&&materialParams.cameraInfo.w<0.5)){material.baseColor=source;return;}
+        highp vec4 nearPoint=materialParams.inverseProjection*vec4(uv*2.0-1.0,-1.0,1.0);
+        highp float forward=materialParams.cameraInfo.z>0.5 ? 1.0 : max(-normalize(nearPoint.xyz/nearPoint.w).z,0.00001);
+        highp float z=materialParams.fogInfo.z;
+        if(depth>0.0000001){
+            highp vec4 p=materialParams.inverseProjection*vec4(uv*2.0-1.0,1.0-2.0*depth,1.0);
+            z=materialParams.cameraInfo.z>0.5 ? nearPoint.z/nearPoint.w-p.z/p.w : -p.z/p.w;
         }
-        highp float opacity=min(1.0-transmittance,materialParams.fogInfo.w);
-        highp vec3 color=source.rgb*(1.0-opacity)+scattered*(source.a*opacity/max(0.00001,1.0-transmittance));
-        material.baseColor=vec4(color,source.a);
+        z=clamp(z,0.0,materialParams.fogInfo.z);
+        int slice=min(int(materialParams.gridInfo.z)-1,int(sqrt(z/materialParams.fogInfo.z)*materialParams.gridInfo.z));
+        highp vec4 fog=vec4(0,0,0,1);
+        if(slice>0)fog=texture(materialParams_integrated,volumeUV(uv,slice-1));
+        highp vec4 medium=texture(materialParams_medium,volumeUV(uv,slice));
+        highp float ds=max(0.0,mediumDistance(z)-mediumDistance(boundary(slice)))/forward;
+        highp float segmentT=exp(-max(medium.a,0.0)*ds);
+        highp float integral=medium.a>0.000001 ? (1.0-segmentT)/medium.a : ds;
+        fog.rgb+=fog.a*medium.rgb*integral;fog.a*=segmentT;
+        highp float weight=min(1.0,(materialParams.fogInfo.w/max(0.000001,1.0-fog.a)));
+        material.baseColor=vec4(source.rgb*(1.0-weight*(1.0-fog.a))+source.a*fog.rgb*weight,source.a);
     }
 }

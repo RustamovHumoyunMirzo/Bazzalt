@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from PySide6.QtWidgets import QApplication,QLabel
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QWidget,QScrollArea,QFrame
 from PySide6.QtCore import QObject,Signal,QPoint
 from PySide6.QtGui import QAction
 from types import SimpleNamespace
@@ -60,6 +60,8 @@ class TerrainAuthoringTests(unittest.TestCase):
         editor=TerrainEditor(controller);self.assertFalse(editor.Active);self.assertIsNone(editor.Target);self.assertEqual(surface.findChildren(QWidget),[])
         action.setChecked(True);self.assertTrue(editor.Active);self.assertFalse(editor.Overlay.isWindow());self.assertIs(editor.Overlay.parentWidget(),surface);self.assertEqual(editor.Target.currentData(),'terrain')
         self.assertIs(editor.Island.parentWidget(),editor.Overlay)
+        self.assertEqual(editor.Overlay.findChildren(QScrollArea),[])
+        self.assertEqual(editor.Overlay.findChild(QFrame,"TerrainToolsDivider").height(),1)
         self.App.processEvents();settings_position=editor.Island.pos()
         for button,_,_ in editor.Buttons:
             self.assertEqual(button.text(),'');self.assertFalse(button.icon().isNull());self.assertTrue(button.toolTip())

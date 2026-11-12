@@ -62,6 +62,7 @@ public:
     void EndLODView();
     void ResetLODMaterials();
     std::array<std::uint64_t,3> GetUploadCounts() const;
+    std::uint64_t GetMaterialBindingRevision() const;
     std::array<std::uint64_t,3> GetInstancingResourceCounts() const;
     void BeginEditorView(const std::unordered_set<UUID>& hidden);
     void EndEditorView();

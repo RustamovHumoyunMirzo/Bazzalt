@@ -1,3 +1,4 @@
+#include "Bazzalt/Components/LocalFog.h"
 #ifdef __APPLE__
 #include "Rendering/MacSurface.h"
 #endif
@@ -44,6 +45,7 @@
 #include <filament/Engine.h>
 #include <filament/Camera.h>
 #include <filament/Renderer.h>
+#include <filament/Fence.h>
 #include <filament/Scene.h>
 #include <filament/Texture.h>
 #include <filament/TextureSampler.h>
@@ -88,6 +90,9 @@ struct RenderBackend::ViewportResource {
 #endif
     ViewportKind Kind = ViewportKind::Game;
     filament::SwapChain* SwapChain = nullptr;
+    filament::Fence* Completion = nullptr;
+    std::uint64_t PendingCompletion = 0, CompletedFrames = 0;
+    std::uint64_t PresentedFrames = 0;
     filament::View* View = nullptr;
     filament::Scene* ClearScene = nullptr;
     filament::Skybox* ClearBackground = nullptr;
@@ -155,6 +160,16 @@ struct RenderBackend::GizmoResource {
 };
 
 namespace {
+bool HasLocalFog(Bazzalt::Scene* scene,const std::unordered_set<UUID>* hidden=nullptr) {
+    if(!scene)return false;
+    for(auto handle:scene->GetRegistry().view<LocalFog>()){
+        const auto& value=scene->GetRegistry().get<LocalFog>(handle);
+        if(!value.Enabled||!value.Fog.Enabled||!value.IsValid()||value.Fog.Density<=0||value.Fog.MaximumOpacity<=0)continue;
+        const auto entity=scene->GetEntity(static_cast<Entity::Id>(handle));
+        if(!hidden||!hidden->contains(entity.GetUUID()))return true;
+    }
+    return false;
+}
 std::uint32_t ReadU32(const std::uint8_t* bytes) {
     return std::uint32_t(bytes[0]) | (std::uint32_t(bytes[1]) << 8) |
            (std::uint32_t(bytes[2]) << 16) | (std::uint32_t(bytes[3]) << 24);
@@ -339,7 +354,7 @@ bool RenderBackend::Initialize(bool headless) {
 bool RenderBackend::CreateViewport(std::uint64_t id, std::uintptr_t nativeWindow,
                                    ViewportKind kind, std::uint32_t width,
                                    std::uint32_t height, float pixelRatio, bool captured) {
-    if (!m_engine || (!captured && nativeWindow == 0)) return false;
+    if (m_gpuWaitFailed || !m_engine || (!captured && nativeWindow == 0)) return false;
 #ifdef _WIN32
     // Reject synthetic Qt IDs and stale/destroyed HWNDs before entering Filament.
     if(!captured&&!IsWindow(reinterpret_cast<HWND>(nativeWindow)))return false;
@@ -379,7 +394,7 @@ bool RenderBackend::CreateViewport(std::uint64_t id, std::uintptr_t nativeWindow
     if (kind == ViewportKind::Scene) {
         viewport->GizmoView=m_engine->createView();viewport->GizmoView->setScene(m_gizmo->OverlayScene);viewport->GizmoView->setCamera(viewport->Camera);
         viewport->GizmoView->setVisibleLayers(0xff,0x80);
-        viewport->GizmoView->setPostProcessingEnabled(false);viewport->GizmoView->setBlendMode(filament::View::BlendMode::TRANSLUCENT);viewport->GizmoView->setChannelDepthClearEnabled(0,true);
+        viewport->GizmoView->setPostProcessingEnabled(false);viewport->GizmoView->setBlendMode(filament::View::BlendMode::TRANSLUCENT);
         viewport->MaskScene=m_engine->createScene();viewport->MaskBackground=filament::Skybox::Builder().color({0,0,0,1}).showSun(false).build(*m_engine);viewport->MaskScene->setSkybox(viewport->MaskBackground);
         viewport->MaskView=m_engine->createView();viewport->MaskView->setScene(viewport->MaskScene);viewport->MaskView->setCamera(viewport->Camera);viewport->MaskView->setPostProcessingEnabled(false);viewport->MaskView->setShadowingEnabled(false);viewport->MaskView->setScreenSpaceRefractionEnabled(false);
         viewport->MaskView->setVisibleLayers(0xff,0x7f);
@@ -390,7 +405,7 @@ bool RenderBackend::CreateViewport(std::uint64_t id, std::uintptr_t nativeWindow
         viewport->OutlineScene->addEntity(viewport->OutlineEntity);
         ConfigureEditorFog(*viewport->View, m_gridScale);
         viewport->Camera->lookAt({6.0, 4.0, 8.0}, {0.0, 0.0, 0.0}, {0.0, 1.0, 0.0});
-        viewport->HelperCameraEntity=m_engine->getEntityManager().create();viewport->HelperCamera=m_engine->createCamera(viewport->HelperCameraEntity);viewport->HelperView=m_engine->createView();viewport->HelperView->setScene(m_gizmo->HelperScene);viewport->HelperView->setCamera(viewport->HelperCamera);viewport->HelperView->setPostProcessingEnabled(false);viewport->HelperView->setBlendMode(filament::View::BlendMode::TRANSLUCENT);viewport->HelperView->setChannelDepthClearEnabled(0,true);viewport->HelperCamera->lookAt({2.1,1.4,2.8},{0,0,0},{0,1,0});viewport->HelperCamera->setProjection(38.0,1.0,0.1,10.0,filament::Camera::Fov::VERTICAL);
+        viewport->HelperCameraEntity=m_engine->getEntityManager().create();viewport->HelperCamera=m_engine->createCamera(viewport->HelperCameraEntity);viewport->HelperView=m_engine->createView();viewport->HelperView->setScene(m_gizmo->HelperScene);viewport->HelperView->setCamera(viewport->HelperCamera);viewport->HelperView->setPostProcessingEnabled(false);viewport->HelperView->setShadowingEnabled(false);viewport->HelperView->setBlendMode(filament::View::BlendMode::TRANSLUCENT);viewport->HelperCamera->lookAt({2.1,1.4,2.8},{0,0,0},{0,1,0});viewport->HelperCamera->setProjection(38.0,1.0,0.1,10.0,filament::Camera::Fov::VERTICAL);
     } else {
         viewport->Camera->lookAt({0.0, 2.0, 6.0}, {0.0, 1.0, 0.0}, {0.0, 1.0, 0.0});
     }
@@ -404,9 +419,17 @@ void RenderBackend::ResizeViewport(std::uint64_t id, std::uint32_t width,
                                    std::uint32_t height, float pixelRatio) {
     const auto found = m_viewports.find(id);
     if (found == m_viewports.end()) return;
+    if(m_gpuWaitFailed)throw std::runtime_error("GPU is unavailable; restart the editor");
     auto& viewport = *found->second;
     if(viewport.Width!=std::max(1u,width)||viewport.Height!=std::max(1u,height))m_presentedViewports.erase(id);
-    if(viewport.Capture&&(viewport.Width!=std::max(1u,width)||viewport.Height!=std::max(1u,height))){m_engine->destroy(viewport.SwapChain);m_engine->flushAndWait();viewport.SwapChain=m_engine->createSwapChain(std::max(1u,width),std::max(1u,height));}
+    const bool resized=viewport.Width!=std::max(1u,width)||viewport.Height!=std::max(1u,height);
+    if(viewport.Capture&&resized){
+        if(!WaitForIdle())throw std::runtime_error("GPU did not finish viewport resize; restart the editor");
+        m_engine->pumpMessageQueues();
+        m_engine->destroy(viewport.SwapChain);
+        if(!WaitForIdle())throw std::runtime_error("GPU did not release viewport surface; restart the editor");
+        viewport.SwapChain=m_engine->createSwapChain(std::max(1u,width),std::max(1u,height));
+    }
     viewport.Width = std::max(1u, width);
     viewport.Height = std::max(1u, height);
     viewport.PixelRatio = std::max(1.0f,pixelRatio);
@@ -449,6 +472,12 @@ void RenderBackend::DestroyViewport(std::uint64_t id) {
     const auto found = m_viewports.find(id);
     if (found == m_viewports.end()) return;
     auto& viewport = *found->second;
+    // Renderer/view descriptor sets can still be referenced by the last frame.
+    // Drain it before deleting front-end objects, not only after the swapchain.
+    if(!WaitForIdle())return;
+    m_engine->pumpMessageQueues();
+    // Release the renderer's frame state before the views it last rendered.
+    if(viewport.Completion){m_engine->destroy(viewport.Completion);viewport.Completion=nullptr;}
     m_lodViews.erase(viewport.View);
     if(viewport.GizmoView)m_engine->destroy(viewport.GizmoView);
     if(viewport.MaskView)m_engine->destroy(viewport.MaskView);
@@ -473,7 +502,7 @@ void RenderBackend::DestroyViewport(std::uint64_t id) {
         m_engine->destroy(viewport.SwapChain);
         // Qt may destroy/reparent the native surface as soon as Detach returns.
         // Complete the driver-side swapchain destruction while its HWND is alive.
-        m_engine->flushAndWait();
+        WaitForIdle();
     }
 #ifdef __APPLE__
     DestroyMacSurface(viewport.MacSurface);
@@ -648,21 +677,31 @@ bool RenderBackend::HasEnvironmentLighting() const{return m_scene&&m_scene->getI
 bool RenderBackend::HasEnvironmentSkybox() const{return m_scene&&m_scene->getSkybox()!=nullptr;}
 std::unordered_map<std::string,double> RenderBackend::GetStatistics() const{
     std::unordered_map<std::string,double> result{{"material_time",m_materialTime},{"guide_uploads",double(m_guideUploads)},{"light_uploads",double(m_lightUploads)},{"renderables",0},{"render_primitives",0},{"viewports",double(m_viewports.size())},{"captures",double(m_cameraOutputs.size())},{"gui_batches",m_guiRenderer?double(m_guiRenderer->GetBatchCount()):0}};
+    if(m_gpuWaitFailed){result["gpu_failed"]=1;return result;}
     // Timings arrive asynchronously. Never wait for the GPU in a diagnostics query.
     result["gpu_frame_ms"]=-1;result["backend_frame_ms"]=-1;
-    if(m_renderer){auto history=m_renderer->getFrameInfoHistory(8);for(const auto& frame:history){
+    const auto readTimings=[&](filament::Renderer* renderer){std::int64_t latest=-1;if(!renderer)return latest;auto history=renderer->getFrameInfoHistory(8);for(const auto& frame:history){
+        if(frame.gpuFrameDuration>=0)latest=std::max(latest,std::int64_t(frame.frameId));
         if(frame.gpuFrameDuration>=0&&(!result.contains("gpu_frame_id")||frame.frameId>result["gpu_frame_id"])){
             result["gpu_frame_id"]=frame.frameId;result["gpu_frame_ms"]=double(frame.gpuFrameDuration)/1000000.;
             result["backend_frame_ms"]=frame.backendBeginFrame>=0&&frame.backendEndFrame>=frame.backendBeginFrame?double(frame.backendEndFrame-frame.backendBeginFrame)/1000000.:-1;
         }
-    }}
+    }return latest;};
+    readTimings(m_renderer);for(const auto& [id,viewport]:m_viewports){const auto key="viewport_"+std::to_string(id);result[key+"_gpu_frame"]=double(viewport->CompletedFrames);result[key+"_frames"]=double(viewport->PresentedFrames);}
     if(m_scene&&m_engine)m_scene->forEach([&](utils::Entity entity){auto& manager=m_engine->getRenderableManager();auto instance=manager.getInstance(entity);if(instance&&(manager.getLayerMask(instance)&0x7f)){++result["renderables"];result["render_primitives"]+=manager.getPrimitiveCount(instance);}});
     if(m_assets){auto instancing=m_assets->GetInstancingResourceCounts();result["instancing_enabled"]=m_engine->isAutomaticInstancingEnabled()?1:0;result["primitive_gpu_geometries"]=double(instancing[0]);result["primitive_gpu_materials"]=double(instancing[1]);result["shared_surface_materials"]=double(instancing[2]);auto counts=m_assets->GetUploadCounts();result["transform_uploads"]=double(counts[0]);result["render_state_uploads"]=double(counts[1]);result["primitive_color_uploads"]=double(counts[2]);auto geometry=GetPrimitiveCacheStatistics();result["primitive_cache_hits"]=double(geometry[0]);result["primitive_cache_builds"]=double(geometry[1]);result["primitive_cache_bytes"]=double(geometry[2]);}
+    if(m_fogRenderer){auto counts=m_fogRenderer->GetResourceCounts();result["fog_material_creations"]=double(counts[0]);result["fog_cached_materials"]=double(counts[1]);result["fog_target_creations"]=double(counts[2]);result["fog_texture_bytes"]=double(counts[3]);result["fog_peak_texture_bytes"]=double(counts[4]);}
     return result;
 }
 void RenderBackend::SetGuiScene(Bazzalt::Scene* scene){if(m_guiScene&&m_guiScene!=scene)VFXAccess::SetGPUAvailable(*m_guiScene,false);if(scene&&m_engine)VFXAccess::SetGPUAvailable(*scene,m_engine->getBackend()!=filament::Engine::Backend::NOOP);GraphicsAccess::BindScene(scene);if(m_guiScene!=scene){ClearGuiResources();m_lodViews.clear();m_impostors.reset();}m_guiScene=scene;}
 void RenderBackend::ClearGuiResources(){if(m_guiRenderer)m_guiRenderer->Clear();if(m_impostors)m_impostors->InvalidateTextures();}
 namespace {
+struct SubmittedFrame {
+    filament::Renderer* Renderer;
+    explicit SubmittedFrame(filament::Renderer& renderer):Renderer(&renderer){}
+    void End(){auto* renderer=Renderer;Renderer=nullptr;if(renderer)renderer->endFrame();}
+    ~SubmittedFrame(){if(Renderer)try{End();}catch(...){}}
+};
 struct LODScope {RenderAssets& Assets;const std::unordered_set<UUID>*& Current;LODViewState*& State;bool Owns;~LODScope(){if(Owns){Assets.EndLODView();Current=nullptr;State=nullptr;}}};
 struct ImpostorScope {ImpostorRenderer* Renderer;bool Owns;~ImpostorScope(){if(Renderer&&Owns)Renderer->EndView();}};
 }
@@ -714,10 +753,10 @@ void RenderBackend::RenderCameraView(filament::View* view,std::uint64_t viewport
     nativeFog.color={m_fogSettings.Color.X,m_fogSettings.Color.Y,m_fogSettings.Color.Z};
     view->setFogOptions(nativeFog);
     try{
-        if(m_fogSettings.Enabled&&m_fogSettings.Mode==FogMode::Volumetric){
+        if((m_fogSettings.Enabled&&m_fogSettings.Mode==FogMode::Volumetric)||HasLocalFog(m_guiScene,applyLOD?nullptr:&m_editorHidden)){
             if(!m_fogRenderer)m_fogRenderer=std::make_unique<FogRenderer>(*m_engine,*m_renderer);
             float time=m_materialTime>=0?float(m_materialTime):float(std::chrono::duration<double>(std::chrono::steady_clock::now()-m_previewEpoch).count());
-            m_fogRenderer->Render(*view,m_fogSettings,m_guiScene,time);
+            m_fogRenderer->Render(*view,m_fogSettings,m_guiScene,time,m_renderer,applyLOD?nullptr:&m_editorHidden);
         }else m_renderer->render(view);
     }catch(...){if(clearTarget)scene->setSkybox(sky);throw;}
     if(clearTarget)scene->setSkybox(sky);
@@ -746,7 +785,17 @@ void RenderBackend::RegisterCameraOutput(UUID id,filament::Texture* color,filame
 }
 
 void RenderBackend::Render(double materialTime) {
+    if(m_gpuWaitFailed)throw std::runtime_error("GPU stopped responding; save your work and restart the editor");
     if (!m_renderer) return;
+    for(auto& [_,resource]:m_viewports)if(resource->Completion){
+        const auto status=resource->Completion->wait(filament::Fence::Mode::FLUSH,0);
+        if(status==filament::Fence::FenceStatus::CONDITION_SATISFIED){
+            resource->CompletedFrames=resource->PendingCompletion;
+            m_engine->destroy(resource->Completion);resource->Completion=nullptr;
+        }else if(status==filament::Fence::FenceStatus::ERROR){
+            m_gpuWaitFailed=true;throw std::runtime_error("GPU completion fence failed; save your work and restart the editor");
+        }
+    }
     m_engine->setAutomaticInstancingEnabled(Graphics::IsInstancingEnabled());
     ++m_lodFrame;
     const auto frameTime=std::chrono::steady_clock::now();
@@ -783,11 +832,33 @@ void RenderBackend::Render(double materialTime) {
     for(const auto& [_,resource]:m_viewports)if(resource->Kind==ViewportKind::Scene)prepareLOD(resource->View);
     // Capture once per tick, independent of visible Qt / game windows. Prepare
     // all mutable resources before beginFrame, as required by Filament.
-    if(m_fogSettings.Enabled&&m_fogSettings.Mode==FogMode::Volumetric){
+    if((m_fogSettings.Enabled&&m_fogSettings.Mode==FogMode::Volumetric)||HasLocalFog(m_guiScene)){
         if(!m_fogRenderer)m_fogRenderer=std::make_unique<FogRenderer>(*m_engine,*m_renderer);
-        auto fogViews=m_activeViews;
-        for(const auto& [_,viewport]:m_viewports)if(viewport->View)fogViews.push_back(viewport->View);
-        m_fogRenderer->Prepare(fogViews);
+        // Only prepare camera textures actually rendered offscreen. Window
+        // cameras get their exact sizes from presentations below. Preparing all
+        // active cameras here churns unused targets as Game window sizes rotate.
+        std::vector<filament::View*> fogViews;
+        for(auto* view:m_activeViews)if(view&&view->getRenderTarget())fogViews.push_back(view);
+        for(const auto& [_,viewport]:m_viewports)if(viewport->Kind==ViewportKind::Scene&&viewport->View)fogViews.push_back(viewport->View);
+        std::vector<FogRenderer::Viewport> presentations;
+        // Game preview can use a different size from the camera's capture or
+        // presentation viewport. Allocate every required variant before beginFrame.
+        if(m_gamePreviewMode>=0&&m_guiScene)for(const auto& [_,viewport]:m_viewports){
+            if(viewport->Kind!=ViewportKind::Game)continue;
+            for(const auto& [id,view]:m_cameraViews){
+                const auto entity=m_guiScene->GetEntity(id);const auto* camera=entity.TryGetComponent<Camera>();
+                if(!view||!camera||!camera->Enabled||!camera->Active)continue;
+                if(m_gamePreviewMode>0){if(id==m_gamePreviewCamera)presentations.push_back({view,viewport->Width,viewport->Height});}
+                else if(!view->getRenderTarget()){
+                    const float x=std::clamp(camera->Viewport.X,0.f,1.f),y=std::clamp(camera->Viewport.Y,0.f,1.f);
+                    const float w=std::clamp(camera->Viewport.Width,0.f,1.f-x),h=std::clamp(camera->Viewport.Height,0.f,1.f-y);
+                    const auto width=unsigned(std::max(0l,std::lround((x+w)*viewport->Width)-std::lround(x*viewport->Width)));
+                    const auto height=unsigned(std::max(0l,std::lround((y+h)*viewport->Height)-std::lround(y*viewport->Height)));
+                    presentations.push_back({view,width,height});
+                }
+            }
+        }
+        m_fogRenderer->Prepare(fogViews,m_assets->GetMaterialBindingRevision(),presentations,m_guiScene,&m_fogSettings);
     }
     const bool captures=std::any_of(m_activeViews.begin(),m_activeViews.end(),[](auto* view){return view&&view->getRenderTarget();});
     if(captures){
@@ -832,10 +903,10 @@ void RenderBackend::Render(double materialTime) {
         }
         m_captureReads.clear();
         if(m_captureSwapChain&&m_renderer->beginFrame(m_captureSwapChain,frameNanoseconds)){
+            SubmittedFrame submittedFrame{*m_renderer};
             if(m_guiRenderer){m_guiRenderer->RenderSpatialEffects();m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});}
-            try{for(auto id:ordered){auto* view=m_cameraViews.at(id);auto* target=const_cast<filament::RenderTarget*>(view->getRenderTarget());const auto* color=target->getTexture(filament::RenderTarget::AttachmentPoint::COLOR);RenderCameraView(view);if(m_guiScene&&m_guiRenderer)m_guiRenderer->RenderCameraOverlay(*m_guiScene,id,{float(color->getWidth()),float(color->getHeight())},target);if(m_guiScene){const auto entity=m_guiScene->GetEntity(id);if(const auto* camera=entity.TryGetComponent<Camera>();camera&&camera->RenderTarget)m_assets->GenerateTextureMipmaps(camera->RenderTarget,const_cast<filament::Texture*>(color));}}}
-            catch(...){m_renderer->endFrame();throw;}
-            m_renderer->endFrame();
+            for(auto id:ordered){auto* view=m_cameraViews.at(id);auto* target=const_cast<filament::RenderTarget*>(view->getRenderTarget());const auto* color=target->getTexture(filament::RenderTarget::AttachmentPoint::COLOR);RenderCameraView(view);if(m_guiScene&&m_guiRenderer)m_guiRenderer->RenderCameraOverlay(*m_guiScene,id,{float(color->getWidth()),float(color->getHeight())},target);if(m_guiScene){const auto entity=m_guiScene->GetEntity(id);if(const auto* camera=entity.TryGetComponent<Camera>();camera&&camera->RenderTarget)m_assets->GenerateTextureMipmaps(camera->RenderTarget,const_cast<filament::Texture*>(color));}}
+            submittedFrame.End();
             for(auto id:ordered){
                 auto& output=m_cameraOutputs.at(id);output.HistoryFront=output.Ready?!output.HistoryFront:false;output.Ready=true;
                 m_assets->SetCameraTexture(id,output.HistoryFront?output.History:output.Color);
@@ -847,7 +918,15 @@ void RenderBackend::Render(double materialTime) {
         // bounds before spatial GUI and screen-space input/presentation.
         if(m_guiScene&&m_guiRenderer){m_guiScene->GetSystem<GuiSystem>().Layout(*m_guiScene,{float(m_presentationWidth),float(m_presentationHeight)});m_guiRenderer->PrepareSpatial(*m_guiScene);}
     }
-    for (const auto& [id, resource] : m_viewports) {
+    std::vector<std::pair<std::uint64_t,ViewportResource*>> presentations;
+    for(auto& [id,resource]:m_viewports)presentations.emplace_back(id,resource.get());
+    std::sort(presentations.begin(),presentations.end(),[](const auto& a,const auto& b){return a.first<b.first;});
+    if(!presentations.empty())std::rotate(presentations.begin(),presentations.begin()+m_lodFrame%presentations.size(),presentations.end());
+    for (auto& [id, resource] : presentations) {
+        // Keep a bounded submission window. Calling beginFrame repeatedly while
+        // its preceding work is busy advances backend frame ages without GPU
+        // progress and can prematurely retire shared cached pipelines.
+        if(resource->Completion)continue;
         (void)id;
         if(resource->Kind==ViewportKind::Game&&m_guiScene&&(m_presentationWidth!=resource->Width||m_presentationHeight!=resource->Height)){
             SetPresentationSize(resource->Width,resource->Height);m_guiScene->GetSystem<CameraSystem>().Synchronize(*m_guiScene);
@@ -872,7 +951,15 @@ void RenderBackend::Render(double materialTime) {
             m_statisticsRenderer->PrepareOverlay(*m_statisticsScene,{float(resource->Width),float(resource->Height)});
         }
         if(resource->Kind==ViewportKind::Game&&m_developerConsole&&DeveloperConsole::IsVisible())m_developerConsole->Prepare({float(resource->Width),float(resource->Height)});
-        if (!resource->SwapChain || !m_renderer->beginFrame(resource->SwapChain,frameNanoseconds)) continue;
+        // Keep one monotonic submission sequence for resources shared by
+        // every surface. Independent renderer counters can retire live pipelines.
+        const auto presentationTime=std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        if(!resource->SwapChain)continue;
+        if(!m_renderer->beginFrame(resource->SwapChain,presentationTime)){
+            resource->Completion=m_engine->createFence();resource->PendingCompletion=resource->PresentedFrames;
+            continue;
+        }
+        SubmittedFrame submittedFrame{*m_renderer};
         if(m_guiRenderer){m_guiRenderer->RenderSpatialEffects();m_renderer->setClearOptions({.clearColor={m_clearColor.X,m_clearColor.Y,m_clearColor.Z,m_clearColor.W},.clear=true});}
         if (resource->Kind == ViewportKind::Scene) {
             m_currentLODHidden=&GetLODHidden(resource->View);auto lodState=m_lodViews.find(resource->View);m_currentLODState=lodState==m_lodViews.end()?nullptr:&lodState->second;m_assets->BeginLODView(*m_currentLODHidden,GetLODMasks());
@@ -929,7 +1016,8 @@ void RenderBackend::Render(double materialTime) {
                     [](void*,std::size_t,void* data){std::unique_ptr<CaptureRequest> request(static_cast<CaptureRequest*>(data));std::lock_guard guard(request->State->Mutex);request->Frame.Sequence=request->State->Frame.Sequence+1;request->State->Frame=std::move(request->Frame);request->State->Pending=false;request->State->Consumed=false;},request));
             }
         }
-        m_renderer->endFrame();m_presentedViewports.insert(id);
+        submittedFrame.End();++resource->PresentedFrames;m_presentedViewports.insert(id);
+        if(!resource->Completion){resource->Completion=m_engine->createFence();resource->PendingCompletion=resource->PresentedFrames;}
     }
 }
 
@@ -940,12 +1028,24 @@ std::optional<ViewportFrame> RenderBackend::CapturedFrame(std::uint64_t id,std::
     const auto found=m_viewports.find(id);if(found==m_viewports.end()||!found->second->Capture)return std::nullopt;auto state=found->second->Capture;std::lock_guard lock(state->Mutex);if(state->Frame.Sequence<=after)return std::nullopt;state->Consumed=true;return state->Frame;
 }
 
+bool RenderBackend::WaitForIdle() {
+    if(m_gpuWaitFailed)return false;
+    if(!m_engine)return true;
+    // Never hold the editor's UI indefinitely while a failed driver owns a fence.
+    if(m_engine->flushAndWait(2000000000ull))return true;
+    m_gpuWaitFailed=true;
+    Console::Error("GPU did not respond within two seconds. Rendering has stopped; save your work and restart the editor.","Rendering");
+    return false;
+}
+
 bool RenderBackend::WaitForViewportFrame(std::uint64_t id){
     if(!m_engine||!m_presentedViewports.contains(id))return false;
     return m_engine->flushAndWait(1000000000ull);
 }
 
 void RenderBackend::Shutdown() {
+    // Retire the final submitted frame before destroying fog/GUI/view resources.
+    if(m_engine){m_engine->flushAndWait();m_engine->pumpMessageQueues();}
     m_lodViews.clear();m_currentLODHidden=nullptr;m_currentLODState=nullptr;
     m_impostors.reset();
     m_fogRenderer.reset();

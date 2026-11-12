@@ -65,6 +65,16 @@ assert(#B.Network.CreateKey() == 32 and #B.SaveGame.CreateEncryptionKey() == 32)
 assert(B.AntiAliasing.MSAA2x==3 and B.AntiAliasing.MSAA4x==4)
 assert(B.AntiAliasing.TAAFXAA==5 and B.AntiAliasing.MSAA2xFXAA==6 and B.AntiAliasing.MSAA4xFXAA==7)
 function Behavior:OnCreate()
+    self.Entity:AddComponent("LocalFog")
+    local localFog=self.Entity:GetComponent("LocalFog")
+    assert(localFog:IsValid() and localFog.Fog.Mode==B.FogMode.Volumetric)
+    local settings=localFog.Fog;settings.Density=.25;settings.Mode=B.FogMode.Height
+    localFog.Fog=settings;localFog.Size=B.Vec3.new(12,4,8)
+    self.Entity:SetComponent("LocalFog",localFog)
+    assert(self.Entity:GetComponent("LocalFog").Fog.Density==.25)
+    self.Entity:SetComponentEnabled("LocalFog",false)
+    assert(not self.Entity:IsComponentEnabled("LocalFog"))
+    self.Entity:RemoveComponent("LocalFog")
     B.DeveloperConsole.SetEnabled(true)
     local definition=B.CVarDefinition.new();definition.Name="script.test_speed";definition.DefaultValue=2.5;definition.Minimum=0;definition.Maximum=10;definition.Flags=B.CVarFlags.Archive
     local changed=false

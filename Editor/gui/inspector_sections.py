@@ -1,5 +1,11 @@
 """Presentation-only grouping. Property identifiers and serialization stay stable."""
 GROUPS = {
+    "LocalFog": {
+        "Bounds": ("Size","Blend Distance"),
+        "Medium": ("Mode","Color","Density","StartDistance","MaxDistance","MaximumOpacity","Affect Sky"),
+        "Height": ("Height","HeightFalloff"),
+        "Volumetric": ("NoiseAmount","NoiseScale","Anisotropy","Wind","Steps"),
+    },
     "Terrain": {"Geometry": ("Size","Resolution","ChunkSize"), "Volumes": ("VerticalRange","VerticalSamples"), "Rendering": ("Visible","ShowGrid","CastShadows","ReceiveShadows","MaxLOD","LODDistance","SkirtDepth")},
     "NavMeshSurface": {
         "Bounds": ("Center", "Size"),

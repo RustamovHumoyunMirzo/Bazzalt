@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Local Fog places a fog bank inside a box attached to an entity. Scene fog fills the environment; local fog affects only the part of a viewing ray that passes through its box. Both may be enabled together.">
+  <title>Local fog | BAZZALT Docs</title>
+  <link rel="stylesheet" href="../../../assets/docs.css">
+  <script src="../../../assets/theme.js"></script>
+  <script defer src="../../../assets/catalog.js"></script>
+  <script defer src="../../../assets/docs.js"></script>
+</head>
+<body data-root="../../../">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="../../../index.html">BAZZALT Docs</a>
+    <button class="nav-toggle" aria-controls="sidebar" aria-expanded="false">Navigation</button>
+    <div class="header-tools">
+      <label>Version <select id="version" aria-label="Documentation version"></select></label>
+      <label>Language <select id="language" aria-label="Documentation language"></select></label>
+      <button data-search-open>Search <kbd>Ctrl K</kbd></button>
+      <button class="theme-btn" aria-label="Switch color theme">Theme</button>
+    </div>
+  </header>
+  <div class="docs-layout">
+    <aside id="sidebar" aria-label="Documentation navigation"><noscript>Enable JavaScript for navigation, versions and languages. Page content and ordinary links remain available.</noscript></aside>
+    <main id="content" tabindex="-1">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../index.html">Docs</a> / Editor manual / Local fog</nav>
+      <article class="doc"><h1>Local fog</h1><p>Local Fog places a fog bank inside a box attached to an entity. Scene fog fills the environment; local fog affects only the part of a viewing ray that passes through its box. Both may be enabled together.</p><h2 id="create">Create a fog bank</h2><ol><li>Create an empty entity in Hierarchy and select it.</li><li>Choose Add Component, search for Local Fog, and add it.</li><li>Move the entity where the fog should be. Set Size to its full width, height and depth.</li><li>Use Transform rotation and scale to orient and resize the region. Parent transforms also apply.</li><li>Keep StartDistance at zero initially. Walk the Scene camera into and out of the selected box to inspect the result.</li></ol><p>The selected entity shows its bounds as guide lines in Scene. These guides are excluded from Game output. The component checkbox turns the fog bank off without removing its settings.</p><h2 id="medium">Choose the medium</h2><p>Exponential creates uniform density inside the box. Height changes density along the box’s local Y axis, using Height and HeightFalloff. Volumetric also supports animated noise and directional light scattering. Density controls extinction per world unit. Color supplies ambient scattered light, so the medium can remain visible while looking away from a sun.</p><p>Blend Distance softens the region’s edges in local units. A zero value gives a hard box boundary. MaximumOpacity limits the bank’s coverage; overlapping banks can accumulate more coverage together. Affect Sky permits fog on background rays that cross the box.</p><h2 id="quality">Distance and quality</h2><p>StartDistance is a camera-relative clear gap; leave it at zero for a region that begins at its world-space box. MaxDistance limits camera-forward integration range. Steps controls depth resolution. A very thin fog bank or rapidly varying noise needs more slices. The low-resolution volume approximates density near boundaries, so soft edges are usually preferable.</p><p>Scene fog can be disabled while local fog remains visible. Hiding the owning entity in the editor hides its fog in Scene only. Disable the component to remove it from Game output too. A zero-scale transform has no volume and produces no fog.</p><p>See the <a href="../../native/reference/LocalFog/en.html">C++ LocalFog reference</a> and <a href="../../lua/reference/LocalFog/en.html">Lua LocalFog reference</a> for gameplay controls.</p></article>
+      <nav class="pager" aria-label="Previous and next guide"><a class="previous" href="../linux/en.html"><small>Previous</small>Linux</a>
+<a class="next" href="../macos/en.html"><small>Next</small>macOS</a></nav>
+    </main>
+    <aside class="contents" aria-label="On this page"><strong>On this page</strong><nav><a class="toc-link" href="#create">Create a fog bank</a><a class="toc-link" href="#medium">Choose the medium</a><a class="toc-link" href="#quality">Distance and quality</a></nav></aside>
+  </div>
+  <footer data-doc-footer>BAZZALT documentation</footer>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">Search documentation</h2><button data-search-close aria-label="Close search">Close</button></div>
+    <label for="search-input">Search pages and topics</label>
+    <input id="search-input" type="search" autocomplete="off" placeholder="Try: transform, Lua, material">
+    <p id="search-status" role="status" aria-live="polite"></p>
+    <ul id="search-results"></ul>
+  </dialog>
+</body>
+</html>

@@ -1,0 +1,52 @@
+material {
+    name: BazzaltFogIntegrate,
+    shadingModel: unlit,
+    blending: transparent,
+    vertexDomain: device,
+    depthWrite: false,
+    depthCulling: false,
+    doubleSided: true,
+    parameters: [{type:float4,name:atlasInfo,precision:high},{type:float4,name:gridInfo,precision:high},{type:float4,name:fogInfo,precision:high},
+        {type:float4x4,name:inverseProjection,precision:high},{type:float4,name:cameraInfo,precision:high},{type:sampler2d,name:medium,precision:high}]
+}
+fragment {
+    highp vec2 volumeUV(highp vec2 uv, int slice) {
+        highp vec2 size=materialParams.gridInfo.xy;
+        highp vec2 cell=clamp(uv*size,vec2(0.5),size-vec2(0.5));
+        highp vec2 tile=vec2(float(slice%8),float(slice/8));
+        return uvToRenderTargetUV((tile*size+cell)/(size*materialParams.atlasInfo.xy));
+    }
+    highp float boundary(int index) {
+        highp float t=float(index)/materialParams.gridInfo.z;
+        return materialParams.gridInfo.w*t*t;
+    }
+    // Antiderivative of smoothstep(start,start+width,z). Integrating the
+    // fade analytically prevents pre-start leakage and slice-boundary popping.
+    highp float mediumDistance(highp float z) {
+        highp float start=materialParams.fogInfo.y;
+        if(start<=0.0)return z;
+        highp float width=max(1.0,min(5.0,start*0.5));
+        highp float t=clamp((z-start)/width,0.0,1.0);
+        return width*(t*t*t-0.5*t*t*t*t)+max(0.0,z-start-width);
+    }
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        highp vec2 pixel=getNormalizedViewportCoord().xy*materialParams.gridInfo.xy*materialParams.atlasInfo.xy;
+        ivec2 tile=ivec2(floor(pixel/materialParams.gridInfo.xy));
+        int last=tile.y*8+tile.x;
+        if(last>=int(materialParams.gridInfo.z)){material.baseColor=vec4(0,0,0,1);return;}
+        highp vec2 uv=mod(pixel,materialParams.gridInfo.xy)/materialParams.gridInfo.xy;
+        highp vec4 p=materialParams.inverseProjection*vec4(uv*2.0-1.0,-1.0,1.0);
+        highp float forward=materialParams.cameraInfo.z>0.5 ? 1.0 : max(-normalize(p.xyz/p.w).z,0.00001);
+        highp vec3 L=vec3(0);highp float T=1.0;
+        for(int slice=0;slice<128;++slice){
+            if(slice>last)break;
+            highp vec4 medium=texture(materialParams_medium,volumeUV(uv,slice));
+            highp float ds=(mediumDistance(boundary(slice+1))-mediumDistance(boundary(slice)))/forward;
+            highp float segmentT=exp(-max(medium.a,0.0)*ds);
+            highp float integral=medium.a>0.000001 ? (1.0-segmentT)/medium.a : ds;
+            L+=T*medium.rgb*integral;T*=segmentT;
+        }
+        material.baseColor=vec4(L,T);
+    }
+}

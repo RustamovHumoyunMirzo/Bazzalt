@@ -1,3 +1,4 @@
+#include "Bazzalt/Components/LocalFog.h"
 #include <cassert>
 #include <cstdio>
 #include <filesystem>
@@ -75,6 +76,8 @@ int main() {
     queryBounds.LayerMask = 0x10;
     child.AddComponent<GaussianBlur>().Size = 3.0f;
     child.AddComponent<Vignette>().Roundness = 0.6f;
+    auto& localFog=child.AddComponent<LocalFog>();localFog.Size={12,5,8};localFog.BlendDistance=.75f;
+    localFog.Fog.Mode=FogMode::Height;localFog.Fog.Density=.3f;localFog.Enabled=false;localFog.Fog.Enabled=false;
     child.AddComponent<Light>().Type = LightType::Spot;
     child.AddComponent<Mesh>().MeshAsset = UUID{9, 9};
     child.GetComponent<Mesh>().MaterialAsset=UUID{7,8};
@@ -125,6 +128,9 @@ int main() {
     assert(restoredChild.GetComponent<SceneQueryBounds>().LayerMask == 0x10);
     assert(restoredChild.GetComponent<GaussianBlur>().Size == 3.0f);
     assert(restoredChild.GetComponent<Vignette>().Roundness == 0.6f);
+    const auto& localFogCopy=restoredChild.GetComponent<LocalFog>();
+    assert(!localFogCopy.Enabled&&!localFogCopy.Fog.Enabled&&localFogCopy.IsValid()&&localFogCopy.Size.X==12&&localFogCopy.Size.Y==5&&localFogCopy.BlendDistance==.75f);
+    assert(localFogCopy.Fog.Mode==FogMode::Height&&localFogCopy.Fog.Density==.3f);
     assert(restoredChild.GetComponent<Light>().Type == LightType::Spot);
     assert(restoredChild.GetComponent<Mesh>().MeshAsset == UUID(9, 9));
     assert(restoredChild.GetComponent<Mesh>().MaterialAsset == UUID(7,8));

@@ -139,6 +139,10 @@ void BindLuaComponents(sol::table api){
      type["Smoothness"]=&Vignette::Smoothness;
     }
     ComponentOperations<Vignette>(operations,"Vignette");
+    {auto type=api.new_usertype<LocalFog>("LocalFog",sol::constructors<LocalFog()>(),sol::base_classes,sol::bases<Component>());
+     type["Size"]=&LocalFog::Size;type["BlendDistance"]=&LocalFog::BlendDistance;
+     type["Fog"]=&LocalFog::Fog;type["IsValid"]=&LocalFog::IsValid;}
+    ComponentOperations<LocalFog>(operations,"LocalFog");
     {auto type=api.new_usertype<SceneQueryBounds>("SceneQueryBounds",sol::constructors<SceneQueryBounds()>(),sol::base_classes,sol::bases<Component>());
      type["Shape"]=&SceneQueryBounds::Shape;
      type["Center"]=&SceneQueryBounds::Center;

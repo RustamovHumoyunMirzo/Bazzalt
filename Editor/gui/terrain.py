@@ -45,12 +45,13 @@ class TerrainEditor(QObject):
         self.Overlay=QFrame(self.Surface);self.Overlay.setObjectName('TerrainOverlay');self.Overlay.setMaximumWidth(152)
         outer=QVBoxLayout(self.Overlay);outer.setContentsMargins(6,3,6,6);outer.setSpacing(3);outer.addWidget(TerrainHandle(self))
         body=QWidget();layout=QVBoxLayout(body);layout.setContentsMargins(0,0,0,0);layout.setSpacing(3)
-        self.ToolScroll=QScrollArea();self.ToolScroll.setFrameShape(QFrame.Shape.NoFrame);self.ToolScroll.setWidgetResizable(True);self.ToolScroll.setWidget(body);outer.addWidget(self.ToolScroll)
+        outer.addWidget(body)
         self.Target=QComboBox();self.Target.currentIndexChanged.connect(self._SplineTargetChanged);layout.addWidget(self.Target)
         tools=QWidget(body);grid=QGridLayout(tools);grid.setContentsMargins(0,0,0,0);grid.setSpacing(3);layout.addWidget(tools)
         self.Buttons=[]
         for key,tool in (('raise',0),('lower',1),('smooth',2),('flatten',3),('paint',4),('hole',6),('vegetation',8),('spline',9)):
             button=QToolButton(tools);button.setObjectName('TerrainTool');button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly);button.setToolTip(self.Tr('terrain.'+key));button.setAccessibleName(self.Tr('terrain.'+key));button.setCheckable(True);button.setChecked(tool==self.Tool);button.setIconSize(QSize(20,20));button.setFixedSize(32,32);button.clicked.connect(lambda _,t=tool:self.SetTool(t));grid.addWidget(button,len(self.Buttons)//4,len(self.Buttons)%4);self.Buttons.append((button,key,tool))
+        divider=QFrame(self.Overlay);divider.setObjectName('TerrainToolsDivider');divider.setFixedHeight(1);outer.addWidget(divider)
         self.Island=QToolButton(self.Overlay);self.Island.setObjectName('TerrainSettings');self.Island.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly);self.Island.setIconSize(QSize(20,20));self.Island.setToolTip(self.Tr('terrain.settings'));self.Island.setAccessibleName(self.Tr('terrain.settings'));self.Island.clicked.connect(self.OpenSettings);self.Island.setFixedSize(32,28);footer=QHBoxLayout();footer.setContentsMargins(0,0,0,0)
         self.SplineControls=QToolButton(self.Overlay);self.SplineControls.setObjectName('TerrainSettings');self.SplineControls.setFixedSize(32,28);self.SplineControls.setIconSize(QSize(20,20));self.SplineControls.setToolTip(self.Tr('terrain.toggle_spline_controls'));self.SplineControls.clicked.connect(lambda:self.SplineEditor.ToggleControls() if self.SplineEditor else None);self.SplineControls.setVisible(self.Tool==9)
         footer.addWidget(self.SplineControls);footer.addStretch();footer.addWidget(self.Island);outer.addLayout(footer)
@@ -130,7 +131,7 @@ class TerrainEditor(QObject):
             saved=self.Window._settings.get('terrain_overlay',{})
             try:position=QPoint(int(saved.get('x',self.Surface.width()-self.Overlay.width()-14)),int(saved.get('y',86)))
             except (TypeError,ValueError,OverflowError):position=QPoint(self.Surface.width()-self.Overlay.width()-14,86)
-        size=QSize(min(152,max(80,self.Surface.width()-8)),min(156,max(60,self.Surface.height()-16)))
+        size=QSize(min(152,max(80,self.Surface.width()-8)),min(max(156,self.Overlay.sizeHint().height()),max(60,self.Surface.height()-16)))
         if self.Overlay.size()!=size:self.Overlay.resize(size)
         max_x=max(0,self.Surface.width()-self.Overlay.width()-8);max_y=max(0,self.Surface.height()-self.Overlay.height()-8)
         self.Overlay.move(max(0,min(max_x,position.x())),max(0,min(max_y,position.y())))

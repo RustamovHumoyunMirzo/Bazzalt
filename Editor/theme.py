@@ -225,6 +225,7 @@ QWidget#MixerSidebar {{ background: {t.surface}; }}
     QFrame#TerrainOverlay, QFrame#TerrainSplineOverlay {{ background: {t.surface}; border: 1px solid {t.border}; border-radius: 5px; }}
     #TerrainOverlay QScrollArea, #TerrainOverlay QScrollArea > QWidget > QWidget,
     #TerrainSplineOverlay QScrollArea, #TerrainSplineOverlay QScrollArea > QWidget > QWidget {{ background: transparent; border: 0; }}
+    QFrame#TerrainToolsDivider {{ background: {t.border}; border: 0; border-radius: 0; min-height: 1px; max-height: 1px; }}
     #TerrainOverlay QToolButton#TerrainTool, #TerrainOverlay QToolButton#TerrainSettings {{ background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 0; }}
     #TerrainOverlay QToolButton#TerrainTool:hover, #TerrainOverlay QToolButton#TerrainSettings:hover {{ background: {t.surface_hover}; border-color: {t.border}; }}
     #TerrainOverlay QToolButton#TerrainTool:checked {{ background: {t.surface_pressed}; border-color: {t.accent}; }}

@@ -53,10 +53,14 @@ class EntityEditorStateTests(unittest.TestCase):
         def inspect(menu,_position):
             search=menu.findChild(QLineEdit);self.assertIsNotNone(search)
             search.setText("camera")
-            visible=[action.text() for action in menu.actions() if action.isVisible() and not action.isSeparator() and action.text()]
+            from PySide6.QtWidgets import QListWidget
+            choices=menu.findChild(QListWidget)
+            visible=[choices.item(i).text() for i in range(choices.count()) if not choices.item(i).isHidden()]
             self.assertEqual(visible,["Camera"])
-            self.assertTrue(all(action.data()!="CameraRenderTarget" for action in menu.actions()))
-            search.setText("");self.assertGreater(sum(action.isVisible() for action in menu.actions()),1)
+            self.assertEqual(choices.gridSize().width(),174)
+            self.assertEqual(choices.height(),306)
+            self.assertTrue(all(choices.item(i).text()!="Camera Render Target" for i in range(choices.count())))
+            search.setText("");self.assertGreater(sum(not choices.item(i).isHidden() for i in range(choices.count())),4)
         class InspectMenu(QMenu):
             def exec(self,position):return inspect(self,position)
         with patch("Editor.gui.controller.QMenu",InspectMenu):w.Controller.ShowAddComponentMenu()

@@ -1,0 +1,102 @@
+material {
+    name: BazzaltFogMedium,
+    shadingModel: unlit,
+    blending: add,
+    vertexDomain: device,
+    depthWrite: false,
+    depthCulling: false,
+    doubleSided: true,
+    parameters: [{type:float4,name:atlasInfo,precision:high},{type:float4,name:gridInfo,precision:high},{type:float4,name:fogInfo,precision:high},
+        {type:float4x4,name:inverseProjection,precision:high},{type:float4,name:cameraInfo,precision:high},
+        {type:float4x4,name:cameraWorld,precision:high},{type:float4,name:heightInfo,precision:high},
+        {type:float4,name:noiseInfo,precision:high},{type:float3,name:wind,precision:high},
+        {type:float4x4,name:worldToVolume,precision:high},{type:float4,name:volumeInfo,precision:high},
+        {type:sampler2d,name:sceneDepth,precision:high},
+        {type:float3,name:fogColor,precision:high},{type:float3,name:sunDirection,precision:high},{type:float3,name:sunColor,precision:high}]
+}
+fragment {
+    highp vec2 volumeUV(highp vec2 uv, int slice) {
+        highp vec2 size=materialParams.gridInfo.xy;
+        highp vec2 cell=clamp(uv*size,vec2(0.5),size-vec2(0.5));
+        highp vec2 tile=vec2(float(slice%8),float(slice/8));
+        return uvToRenderTargetUV((tile*size+cell)/(size*materialParams.atlasInfo.xy));
+    }
+    highp float boundary(int index) {
+        highp float t=float(index)/materialParams.gridInfo.z;
+        return materialParams.gridInfo.w*t*t;
+    }
+    highp float fogHash(highp vec3 point) { return fract(sin(dot(point, vec3(12.9898,78.233,37.719)))*43758.5453); }
+    highp float fogNoise(highp vec3 point) {
+        highp vec3 cell=floor(point), weight=fract(point);
+        weight=weight*weight*(3.0-2.0*weight);
+        return mix(mix(mix(fogHash(cell),fogHash(cell+vec3(1,0,0)),weight.x),mix(fogHash(cell+vec3(0,1,0)),fogHash(cell+vec3(1,1,0)),weight.x),weight.y),
+                   mix(mix(fogHash(cell+vec3(0,0,1)),fogHash(cell+vec3(1,0,1)),weight.x),mix(fogHash(cell+vec3(0,1,1)),fogHash(cell+vec3(1,1,1)),weight.x),weight.y),weight.z);
+    }
+    highp float fadedDistance(highp float z) {
+        highp float start=materialParams.fogInfo.y;
+        if(start<=0.0)return z;
+        highp float width=max(1.0,min(5.0,start*0.5));
+        highp float t=clamp((z-start)/width,0.0,1.0);
+        return width*(t*t*t-0.5*t*t*t*t)+max(0.0,z-start-width);
+    }
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        highp vec2 pixel=getNormalizedViewportCoord().xy*materialParams.gridInfo.xy*materialParams.atlasInfo.xy;
+        ivec2 tile=ivec2(floor(pixel/materialParams.gridInfo.xy));
+        int slice=tile.y*8+tile.x;
+        if(slice>=int(materialParams.gridInfo.z)){material.baseColor=vec4(0.0);return;}
+        highp vec2 uv=(mod(pixel,materialParams.gridInfo.xy))/materialParams.gridInfo.xy;
+        highp vec4 nearPoint=materialParams.inverseProjection*vec4(uv*2.0-1.0,-1.0,1.0);
+        highp vec3 viewRay=normalize(nearPoint.xyz/nearPoint.w);
+        highp vec3 eye=materialParams.cameraWorld[3].xyz;
+        if(materialParams.cameraInfo.z>0.5){eye=(materialParams.cameraWorld*vec4(nearPoint.xyz/nearPoint.w,1.0)).xyz;viewRay=vec3(0,0,-1);}
+        highp vec3 ray=normalize((materialParams.cameraWorld*vec4(viewRay,0.0)).xyz);
+        if(materialParams.cameraInfo.w<0.5 && texture(materialParams_sceneDepth,uvToRenderTargetUV(uv)).r<=0.0000001){material.baseColor=vec4(0);return;}
+        highp float forward=max(-viewRay.z,0.00001);
+        highp float z0=boundary(slice),z1=min(boundary(slice+1),materialParams.fogInfo.z);
+        highp float volumeNear=0.0,volumeFar=materialParams.fogInfo.z;
+        highp float segmentStart=z0,segmentEnd=z1;
+        highp vec3 localEye=(materialParams.worldToVolume*vec4(eye,1)).xyz;
+        highp vec3 localRay=(materialParams.worldToVolume*vec4(ray,0)).xyz/forward;
+        if(materialParams.volumeInfo.w>0.5){
+            for(int axis=0;axis<3;++axis){
+                highp float halfSize=materialParams.volumeInfo[axis]*0.5;
+                if(abs(localRay[axis])<0.0000001){
+                    if(abs(localEye[axis])>halfSize){material.baseColor=vec4(0);return;}
+                }else{
+                    highp float a=(-halfSize-localEye[axis])/localRay[axis],b=(halfSize-localEye[axis])/localRay[axis];
+                    volumeNear=max(volumeNear,min(a,b));volumeFar=min(volumeFar,max(a,b));
+                }
+            }
+        }
+        segmentStart=max(segmentStart,volumeNear);segmentEnd=min(segmentEnd,volumeFar);
+        if(segmentEnd<=segmentStart){material.baseColor=vec4(0);return;}
+        highp float z=(segmentStart+segmentEnd)*0.5;
+        highp vec3 position=eye+ray*(z/max(-viewRay.z,0.00001));
+        highp vec3 localPosition=localEye+localRay*z;
+        highp float height=materialParams.volumeInfo.w>0.5 ? localPosition.y : position.y;
+        highp float heightDensity=exp(clamp(-(height-materialParams.heightInfo.x)*materialParams.heightInfo.y,-12.0,12.0));
+        highp float noise=1.0;
+        if(materialParams.noiseInfo.x>0.0)noise=fogNoise(position*materialParams.noiseInfo.y+materialParams.wind*materialParams.noiseInfo.w);
+        highp float sigmaT=min(60000.0,materialParams.fogInfo.x*heightDensity*mix(1.0,noise*2.0,materialParams.noiseInfo.x));
+        highp float fraction=(segmentEnd-segmentStart)/max(0.000001,boundary(slice+1)-z0);
+        if(materialParams.heightInfo.z>0.5)fraction=(fadedDistance(segmentEnd)-fadedDistance(segmentStart))/max(0.000001,boundary(slice+1)-z0);
+        if(materialParams.volumeInfo.w>0.5){
+            highp float edge=min(min(materialParams.volumeInfo.x*.5-abs(localPosition.x),materialParams.volumeInfo.y*.5-abs(localPosition.y)),materialParams.volumeInfo.z*.5-abs(localPosition.z));
+            if(materialParams.cameraInfo.x>0.0)fraction*=smoothstep(0.0,materialParams.cameraInfo.x,edge);
+        }
+        if((materialParams.volumeInfo.w>0.5 || materialParams.heightInfo.z>0.5) && materialParams.fogInfo.w<1.0){
+            highp float maxTau=-log(max(0.000001,1.0-materialParams.fogInfo.w));
+            sigmaT=min(sigmaT,maxTau*forward/max(0.000001,volumeFar-volumeNear));
+        }
+        sigmaT*=fraction;
+        highp float g=clamp(materialParams.noiseInfo.z,-0.95,0.95);
+        highp float cosine=dot(ray,-materialParams.sunDirection);
+        highp float phase=(1.0-g*g)/(12.5663706144*pow(max(0.0001,1.0+g*g-2.0*g*cosine),1.5));
+        highp vec3 tint=min(materialParams.fogColor,vec3(60000.0));
+        highp vec3 direct=tint*min(materialParams.sunColor,vec3(60000.0))*phase;
+        highp vec3 lighting=(tint+direct)/(vec3(1.0)+direct);
+        // RGB = source per world unit, A = extinction per world unit.
+        material.baseColor=vec4(min(vec3(60000.0),sigmaT*lighting),sigmaT);
+    }
+}

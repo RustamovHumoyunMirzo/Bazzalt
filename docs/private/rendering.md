@@ -238,3 +238,30 @@ This foundation covers resource ownership and ECS synchronization. Window and
 swap-chain creation, editor viewport presentation, game presentation, material
 instance authoring, environment lighting, and a complete frame graph are later
 layers. Public components remain backend-neutral for that evolution.
+
+
+## Surface scheduling and frame completion
+
+One Filament renderer owns the engine's monotonically increasing submission sequence across swapchains. Separate renderer frame counters and unbounded skipped-frame attempts exposed premature shared Vulkan pipeline retirement (VUID-vkDestroyPipeline-pipeline-00765) under live model/fog editing. Each swapchain submission uses a fresh presentation timestamp. Surface order rotates deterministically so the first window cannot monopolize the shared scheduler.
+
+Each viewport keeps at most one outstanding completion fence. Fence polling is nonblocking and flushes pending command creation; a busy surface is skipped before calling beginFrame again. A skipped beginFrame also gets a completion fence covering preceding work, preventing repeated failed attempts from advancing backend cache ages without GPU progress. Private viewport_<id>_frames counts submitted frames, and viewport_<id>_gpu_frame records genuinely completed presentation sequences. Filament timing history may be unavailable across swapchain changes; report unknown timings instead of estimating GPU time from CPU latency.
+
+Every successful `beginFrame` is immediately protected by `SubmittedFrame`. Normal completion explicitly ends it; exception unwinding also attempts to end it before leaving the surface submission. Restoring only camera/target state does not close a frame. Leaving a frame open can stop further presentation and make swapchain destruction or shutdown wait on work that was never submitted.
+
+Resource creation belongs before frame submission. Fog prepares destination-size variants in advance and keeps its per-target views independent. See [environments.md](environments.md) for the coverage cache and invalidation contract. Regression checks must include actual Windows HWND rendering and a sustained multi-surface resize/shutdown run; a few frames in one tiny offscreen view do not establish runtime stability.
+
+
+## GPU failure and editor teardown
+
+A timed GPU fence failure is terminal for the current renderer. WaitForIdle uses a two-second deadline, records failure once, and rejects further rendering and viewport allocation. Viewport detach retains its resource graph when the initial wait fails. Never free view/material state while queued driver work may still reference it. GPU timing queries are skipped after a recorded failure.
+
+The editor host probes GPU retirement before native shutdown callbacks. On failure it quarantines its entire Engine and loaded scene graphs until process exit, releasing scene file locks but preserving object/callback lifetimes and play snapshots. This deliberately retains memory on a terminal device-fault path. Healthy shutdown continues to release everything normally. This is not in-process device recovery and it cannot interrupt a call already blocked inside a graphics driver. CPU authoring saves and normal close confirmation remain the editor’s responsibility.
+
+The forest flight reproduction must test native Height fog as well as the volumetric pass. The original short volume-only tests did not cover the glTF/native-fog shader variant that failed on the developer GPU. Use forward motion, large yaw/pitch changes, close-up foliage, normal viewport sizes and multiple surfaces; inspect GPU completion and Windows device-fault events, not only CPU frame submissions.
+
+
+## Live fog lifecycle regression
+
+Run `python -m Editor.tests.native_fog_lifecycle_smoke model.glb --native --seconds 60` on a real driver. The test uses a temporary project, three hidden native surfaces, camera movement, and repeated component addition/removal, enable/disable and quality changes. It checks actual presentation/completion progress, allocation stability between edits and shutdown duration. Enable the Khronos Vulkan validation layer using VK_LAYER_PATH and VK_INSTANCE_LAYERS. The supervising process fails on validation errors, native crashes and timeouts. The layer is a development diagnostic, not a shipped runtime dependency.
+
+Fog target preparation includes offscreen cameras only when they actually render to a texture. Window camera sizes come from their presentation destinations. Preparing every active camera creates unused targets whose dimensions oscillate with differently sized Game windows. The original reproduction allocated 646 bundles in thirty seconds; the corrected schedule prepared three and reused them. Resource changes must be measured with allocation counters while rendering, not only tested on an empty scene.

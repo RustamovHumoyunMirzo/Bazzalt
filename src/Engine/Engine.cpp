@@ -1,3 +1,4 @@
+#include "Bazzalt/Components/LocalFog.h"
 #include "Bazzalt/Terrain.h"
 #include "Terrain/TerrainRenderer.h"
 #include "Bazzalt/Systems/TimelineSystem.h"
@@ -258,6 +259,13 @@ void Engine::UpdateEditorOverlays()
     const auto line=[&](Vec3 a,Vec3 b,Vec4 color){guides.push_back({a.X,a.Y,a.Z,b.X,b.Y,b.Z,color.X,color.Y,color.Z,color.W});};
     auto cameras=m_scene->GetRegistry().view<Camera>();
 for(auto handle:cameras){Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));const auto& camera=cameras.get<Camera>(handle);if(!camera.IsEnabled()||m_editorHidden.contains(entity.GetUUID()))continue;const Mat4 world=entity.GetWorldMatrix();const Vec3 p=world.TransformPoint({}),forward=world.TransformDirection({0,0,-1}).Normalized(),right=world.TransformDirection({1,0,0}).Normalized(),up=world.TransformDirection({0,1,0}).Normalized();icons.push_back({p.X,p.Y,p.Z,true});if(std::find(m_selectedObjects.begin(),m_selectedObjects.end(),entity.GetUUID())==m_selectedObjects.end())continue;float aspect=camera.AspectRatio;if(camera.AspectMode==CameraAspectMode::Automatic){const float width=std::max(1.0f,float(m_renderBackend->GetPresentationWidth())*camera.Viewport.Width),height=std::max(1.0f,float(m_renderBackend->GetPresentationHeight())*camera.Viewport.Height);aspect=width/height;}const float nearPlane=std::max(.001f,camera.NearPlane),farPlane=std::max(nearPlane+.001f,camera.FarPlane);float nearHeight,farHeight;if(camera.Projection==CameraProjection::Perspective){nearHeight=std::tan(camera.VerticalFieldOfView*.5f)*nearPlane;farHeight=std::tan(camera.VerticalFieldOfView*.5f)*farPlane;}else nearHeight=farHeight=std::max(.001f,camera.OrthographicSize*.5f);const float nearWidth=nearHeight*aspect,farWidth=farHeight*aspect;std::array<Vec3,4> nearCorners,farCorners;for(int i=0;i<4;++i){const float x=(i==0||i==3)?-1.0f:1.0f,y=i<2?-1.0f:1.0f;nearCorners[i]=p+forward*nearPlane+right*(x*nearWidth)+up*(y*nearHeight);farCorners[i]=p+forward*farPlane+right*(x*farWidth)+up*(y*farHeight);}const Vec4 color{.35f,.72f,1,.82f};for(int i=0;i<4;++i){line(nearCorners[i],nearCorners[(i+1)%4],color);line(farCorners[i],farCorners[(i+1)%4],color);line(camera.Projection==CameraProjection::Perspective?p:nearCorners[i],farCorners[i],color);}}
+    for(auto handle:m_scene->GetRegistry().view<LocalFog>()){
+        auto entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));const auto& fog=entity.GetComponent<LocalFog>();
+        if(!fog.Enabled||!fog.IsValid()||m_editorHidden.contains(entity.GetUUID())||std::find(m_selectedObjects.begin(),m_selectedObjects.end(),entity.GetUUID())==m_selectedObjects.end())continue;
+        const auto world=entity.GetWorldMatrix();
+        const auto corner=[&](unsigned bits){return world.TransformPoint({(bits&1?.5f:-.5f)*fog.Size.X,(bits&2?.5f:-.5f)*fog.Size.Y,(bits&4?.5f:-.5f)*fog.Size.Z});};
+        for(unsigned bits=0;bits<8;++bits)for(unsigned axis=0;axis<3;++axis)if(!(bits&(1u<<axis)))line(corner(bits),corner(bits|(1u<<axis)),{.6f,.8f,1,.8f});
+    }
     auto lights=m_scene->GetRegistry().view<Light>();
     for(auto handle:lights){
         Entity entity=m_scene->GetEntity(static_cast<Entity::Id>(handle));const auto& light=lights.get<Light>(handle);
@@ -406,6 +414,8 @@ void Engine::DestroyEditorViewport(std::uint64_t id) {
     if (m_isInitialized) m_renderBackend->DestroyViewport(id);
 }
 bool Engine::WaitForViewportFrame(std::uint64_t id){return m_renderBackend->WaitForViewportFrame(id);}
+bool Engine::WaitForRenderIdle(){return m_renderBackend->WaitForIdle();}
+bool Engine::HasRenderingFailure() const{return m_renderBackend->HasGpuFailure();}
 
 void Engine::SetEditorCamera(std::uint64_t id, float eyeX, float eyeY, float eyeZ,
                              float targetX, float targetY, float targetZ) {

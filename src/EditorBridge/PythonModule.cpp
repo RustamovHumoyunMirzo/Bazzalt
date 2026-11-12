@@ -1,3 +1,4 @@
+#include "Bazzalt/Components/LocalFog.h"
 #include "Bazzalt/Timeline.h"
 #include "Bazzalt/Navigation.h"
 #include "Bazzalt/DeveloperConsole.h"
@@ -111,6 +112,7 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
     if (entity.HasComponent<ModelInstance>()) components.append("Model Instance");
     if (entity.HasComponent<ModelNode>()) components.append("Model Node");
     if (entity.HasComponent<GaussianBlur>()) components.append("Gaussian Blur");
+    if (entity.HasComponent<LocalFog>()) components.append("Local Fog");
     if (entity.HasComponent<Vignette>()) components.append("Vignette");
     if (entity.HasComponent<SceneQueryBounds>()) components.append("Scene Query Bounds");
     py::dict enabled;
@@ -121,6 +123,7 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
     if (const auto* value=entity.TryGetComponent<ModelInstance>()) enabled["Model Instance"]=value->IsEnabled();
     if (const auto* value=entity.TryGetComponent<ModelNode>()) enabled["Model Node"]=value->IsEnabled();
     if (const auto* value=entity.TryGetComponent<GaussianBlur>()) enabled["Gaussian Blur"]=value->IsEnabled();
+    if (const auto* value=entity.TryGetComponent<LocalFog>()) enabled["Local Fog"]=value->IsEnabled();
     if (const auto* value=entity.TryGetComponent<Vignette>()) enabled["Vignette"]=value->IsEnabled();
     if (const auto* value=entity.TryGetComponent<SceneQueryBounds>()) enabled["Scene Query Bounds"]=value->IsEnabled();
     py::dict data;
@@ -142,6 +145,16 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
     if (const auto* model=entity.TryGetComponent<ModelInstance>()){py::dict v;v["Model Asset"]=model->ModelAsset.ToString();data["Model Instance"]=v;}
     if (const auto* node=entity.TryGetComponent<ModelNode>()){py::dict v;v["Model Asset"]=node->ModelAsset.ToString();v["Source Index"]=node->SourceIndex;v["Mesh Index"]=node->MeshIndex;v["Stable Path"]=node->StablePath;v["Has Mesh"]=node->HasMesh;data["Model Node"]=v;}
     if (const auto* blur=entity.TryGetComponent<GaussianBlur>()) { py::dict v;v["Size"]=blur->Size;data["Gaussian Blur"]=v; }
+    if (const auto* local=entity.TryGetComponent<LocalFog>()) {
+        py::dict v;v["Size"]=py::make_tuple(local->Size.X,local->Size.Y,local->Size.Z);v["Blend Distance"]=local->BlendDistance;
+        v["Mode"]=int(local->Fog.Mode);v["Affect Sky"]=local->Fog.AffectSky;v["Steps"]=local->Fog.Steps;
+        v["Color"]=py::make_tuple(local->Fog.Color.X,local->Fog.Color.Y,local->Fog.Color.Z);
+        v["Wind"]=py::make_tuple(local->Fog.Wind.X,local->Fog.Wind.Y,local->Fog.Wind.Z);
+#define LF_VALUE(Name) v[#Name]=local->Fog.Name;
+        LF_VALUE(Density) LF_VALUE(StartDistance) LF_VALUE(MaxDistance) LF_VALUE(MaximumOpacity) LF_VALUE(Height) LF_VALUE(HeightFalloff) LF_VALUE(NoiseAmount) LF_VALUE(NoiseScale) LF_VALUE(Anisotropy)
+#undef LF_VALUE
+        data["Local Fog"]=v;
+    }
     if (const auto* vignette=entity.TryGetComponent<Vignette>()) { py::dict v;v["Color"]=py::make_tuple(vignette->Color.X,vignette->Color.Y,vignette->Color.Z,vignette->Color.W);v["Intensity"]=vignette->Intensity;v["Smoothness"]=vignette->Smoothness;v["Roundness"]=vignette->Roundness;data["Vignette"]=v; }
     if (const auto* bounds=entity.TryGetComponent<SceneQueryBounds>()) { py::dict v;v["Shape"]=static_cast<int>(bounds->Shape);v["Center"]=py::make_tuple(bounds->Center.X,bounds->Center.Y,bounds->Center.Z);v["Extents"]=py::make_tuple(bounds->Extents.X,bounds->Extents.Y,bounds->Extents.Z);v["Radius"]=bounds->Radius;v["Layer Mask"]=bounds->LayerMask;data["Scene Query Bounds"]=v; }
     InspectGUI(entity,components,enabled,data);
@@ -154,7 +167,21 @@ py::dict SnapshotEntity(Scene& scene, Entity entity) {
 class EditorHost final {
 public:
     EditorHost() : m_engine(std::make_unique<Runtime::Engine>()) { m_engine->SetEditorHost(true);Runtime::DeveloperConsoleAccess::Initialize(true);m_loadedScenes.push_back({{},nullptr});Runtime::ConsoleAccess::Acquire(); }
-    ~EditorHost() { EndTimelinePreview();m_lightingBake.Cancel();EndAnimationPreview();Stop(); ClearLoadedScenes(); m_engine->Shutdown(); CleanupSnapshot();Runtime::ConsoleAccess::Release(); }
+    ~EditorHost() {
+        if(!m_engine->WaitForRenderIdle()){
+            // A driver-faulted engine cannot be destroyed safely: its callbacks
+            // and worker thread may still reference scene/view/material storage.
+            // Quarantine the entire graph until process exit, preserving those
+            // lifetimes instead of blocking in native GPU teardown forever.
+            m_lightingBake.Cancel();
+            for(auto& loaded:m_loadedScenes){ReleaseSceneLock(loaded);(void)loaded.Data.release();}
+            (void)m_engine.release();
+            // Retain play snapshots as recovery data on this terminal fault path.
+            Runtime::ConsoleAccess::Release();return;
+        }
+        EndTimelinePreview();m_lightingBake.Cancel();EndAnimationPreview();Stop();
+        ClearLoadedScenes();m_engine->Shutdown();CleanupSnapshot();Runtime::ConsoleAccess::Release();
+    }
     py::object ConsoleSnapshot(std::uint64_t revision){
         auto snapshot=Runtime::ConsoleAccess::Snapshot(revision);if(!snapshot)return py::none();
         py::dict result;result["revision"]=snapshot->Revision;py::list messages;
@@ -568,6 +595,7 @@ public:
         else if (type == "Mesh") { if (!entity.HasComponent<Mesh>()) entity.AddComponent<Mesh>(); }
         else if (type == "Primitive Object") { if (!entity.HasComponent<PrimitiveObject>()) entity.AddComponent<PrimitiveObject>(); }
         else if (type == "Gaussian Blur") { if (!entity.HasComponent<GaussianBlur>()) entity.AddComponent<GaussianBlur>(); }
+        else if (type == "Local Fog") { if (!entity.HasComponent<LocalFog>()) entity.AddComponent<LocalFog>(); }
         else if (type == "Vignette") { if (!entity.HasComponent<Vignette>()) entity.AddComponent<Vignette>(); }
         else if (type == "Scene Query Bounds") { if (!entity.HasComponent<SceneQueryBounds>()) entity.AddComponent<SceneQueryBounds>(); }
         else return GuiDispatch(entity,type,[]<class T>(Entity e){if(!e.HasComponent<T>())e.AddComponent<T>();});
@@ -585,6 +613,7 @@ public:
         else if (type == "Mesh" && entity.HasComponent<Mesh>()) entity.RemoveComponent<Mesh>();
         else if (type == "Primitive Object" && entity.HasComponent<PrimitiveObject>()) entity.RemoveComponent<PrimitiveObject>();
         else if (type == "Gaussian Blur" && entity.HasComponent<GaussianBlur>()) entity.RemoveComponent<GaussianBlur>();
+        else if (type == "Local Fog" && entity.HasComponent<LocalFog>()) entity.RemoveComponent<LocalFog>();
         else if (type == "Vignette" && entity.HasComponent<Vignette>()) entity.RemoveComponent<Vignette>();
         else if (type == "Scene Query Bounds" && entity.HasComponent<SceneQueryBounds>()) entity.RemoveComponent<SceneQueryBounds>();
         else return GuiDispatch(entity,type,[]<class T>(Entity e){e.RemoveComponent<T>();});
@@ -604,6 +633,7 @@ public:
         else if (type == "Model Instance" && entity.HasComponent<ModelInstance>()) entity.SetComponentEnabled<ModelInstance>(enabled);
         else if (type == "Model Node" && entity.HasComponent<ModelNode>()) entity.SetComponentEnabled<ModelNode>(enabled);
         else if (type == "Gaussian Blur" && entity.HasComponent<GaussianBlur>()) entity.SetComponentEnabled<GaussianBlur>(enabled);
+        else if (type == "Local Fog" && entity.HasComponent<LocalFog>()) entity.SetComponentEnabled<LocalFog>(enabled);
         else if (type == "Vignette" && entity.HasComponent<Vignette>()) entity.SetComponentEnabled<Vignette>(enabled);
         else if (type == "Scene Query Bounds" && entity.HasComponent<SceneQueryBounds>()) entity.SetComponentEnabled<SceneQueryBounds>(enabled);
         else return GuiDispatch(entity,type,[enabled]<class T>(Entity e){if(e.HasComponent<T>())e.SetComponentEnabled<T>(enabled);});
@@ -665,7 +695,7 @@ public:
     py::list ComponentTypes() const {
         py::list result;
         result.append("Terrain");result.append("Behavior Tree Agent");result.append("NavMesh Surface");result.append("Navigation Agent");result.append("Navigation Obstacle");result.append("NavMesh Modifier");result.append("Timeline Director");result.append("Lightmap");result.append("Reflection Probe");result.append("Light Probe");result.append("World Cell");result.append("Streaming Source");result.append("IK Constraint");result.append("Animator");result.append("Particle Emitter");result.append("HLOD");result.append("LOD Transition");result.append("Impostor");result.append("LOD");result.append("Rigidbody");result.append("Shape Collider");result.append("Mesh Collider");result.append("Joint");result.append("Distance Joint");result.append("Hinge Joint");result.append("Slider Joint");result.append("Ball And Socket Joint");result.append("Fixed Joint");result.append("Cloth");result.append("Rope");result.append("Vehicle");result.append("Vehicle Wheel");result.append("Wheel Suspension");result.append("Wheel Tire");result.append("Wheel Brake");result.append("Wheel Steering");result.append("Vehicle Engine");result.append("Vehicle Transmission");result.append("Vehicle Differential");result.append("Vehicle Anti Roll Bar");result.append("Vehicle Aerodynamics");result.append("Audio Source");result.append("Audio Listener");
-        for (const char* name : {"Camera", "Light", "Mesh", "Primitive Object", "Scene Query Bounds", "Gaussian Blur", "Vignette"})
+        for (const char* name : {"Camera", "Light", "Mesh", "Primitive Object", "Scene Query Bounds", "Gaussian Blur", "Vignette", "Local Fog"})
             result.append(name);
         for(auto name:GuiNames)result.append(name);
         return result;
@@ -697,12 +727,14 @@ public:
     bool SetSceneExtensionProperty(const std::string& id,const std::string& extension,const std::string& name,const std::string& value){auto index=FindLoadedScene(id);return index&&SceneAt(*index).SetExtensionProperty(extension,name,value);}
     bool SetSceneEnvironment(const std::string& id,const py::dict& data){
         const auto index=FindLoadedScene(id);if(!index)return false;
-        auto value=SceneAt(*index).GetEnvironment();
+        const auto previous=SceneAt(*index).GetEnvironment();
+        auto value=previous;
         if(data.contains("mode")){const auto mode=data["mode"].cast<int>();if(mode<0||mode>1)return false;value.Mode=static_cast<SceneEnvironmentMode>(mode);}
         if(data.contains("source"))value.SourceAsset=ParseUuid(data["source"].cast<std::string>());
         if(data.contains("material"))value.MaterialAsset=ParseUuid(data["material"].cast<std::string>());
         const auto validAsset=[](UUID uuid,bool material){if(!uuid)return true;const auto info=AssetManager::GetAsset(uuid);if(!info)return false;const auto ext=info->SourcePath.extension();return material?ext==".matinst":ext==".hdr"||ext==".exr"||ext==".ktx";};
-        if(value.Mode==SceneEnvironmentMode::Map?!validAsset(value.SourceAsset,false):!validAsset(value.MaterialAsset,true))return false;
+        const bool changingEnvironmentAsset=value.Mode!=previous.Mode||value.SourceAsset!=previous.SourceAsset||value.MaterialAsset!=previous.MaterialAsset;
+        if(changingEnvironmentAsset&&(value.Mode==SceneEnvironmentMode::Map?!validAsset(value.SourceAsset,false):!validAsset(value.MaterialAsset,true)))return false;
         if(data.contains("intensity"))value.Intensity=data["intensity"].cast<float>();
         if(data.contains("rotation")){const auto v=data["rotation"].cast<std::array<float,3>>();value.Rotation={v[0],v[1],v[2]};}
         if(data.contains("clear_color")){const auto v=data["clear_color"].cast<std::array<float,4>>();value.ClearColor={v[0],v[1],v[2],v[3]};}
@@ -787,6 +819,19 @@ public:
         if(type=="Mesh"&&entity.HasComponent<Mesh>()){auto&v=entity.GetComponent<Mesh>();if((property=="Mesh Asset"||property=="Material Asset")){const auto text=value.cast<std::string>();UUID id;if(text!="0"&&!UUID::TryParse(text,id)){const auto asset=AssetManager::GetAsset(std::filesystem::u8path(text));if(!asset)return false;id=asset->Id;}if(property=="Mesh Asset")v.MeshAsset=id;else {if(id){const auto asset=AssetManager::GetAsset(id);if(!asset||asset->SourcePath.extension()!=".matinst")return false;}v.MaterialAsset=id;}}else if(property=="Model Node Index")v.ModelNodeIndex=value.cast<std::uint32_t>();else if(property=="Contribute GI")v.ContributeGI=value.cast<bool>();else if(property=="Visible")v.Visible=value.cast<bool>();else if(property=="Cast Shadows")v.CastShadows=value.cast<bool>();else if(property=="Receive Shadows")v.ReceiveShadows=value.cast<bool>();else if(property=="Layer Mask")v.LayerMask=static_cast<std::uint8_t>(value.cast<int>());else return false;return true;}
         if(type=="Primitive Object"&&entity.HasComponent<PrimitiveObject>()){auto&v=entity.GetComponent<PrimitiveObject>();if(property=="Material Asset"){const auto text=value.cast<std::string>();UUID id;if(text!="0"&&!UUID::TryParse(text,id))return false;if(id){const auto asset=AssetManager::GetAsset(id);if(!asset||asset->SourcePath.extension()!=".matinst")return false;}v.MaterialAsset=id;}else if(property=="Shape")v.Shape=static_cast<PrimitiveShape>(value.cast<int>());else if(property=="Size"){auto a=value.cast<std::array<float,3>>();v.Size={a[0],a[1],a[2]};}else if(property=="Radius")v.Radius=std::max(.001f,value.cast<float>());else if(property=="Height")v.Height=std::max(.001f,value.cast<float>());else if(property=="Width")v.Width=std::max(.001f,value.cast<float>());else if(property=="Depth")v.Depth=std::max(.001f,value.cast<float>());else if(property=="Major Radius")v.MajorRadius=std::max(.001f,value.cast<float>());else if(property=="Minor Radius")v.MinorRadius=std::clamp(value.cast<float>(),.001f,v.MajorRadius);else if(property=="Segments")v.Segments=std::clamp(value.cast<std::uint32_t>(),3u,128u);else if(property=="Rings")v.Rings=std::clamp(value.cast<std::uint32_t>(),2u,128u);else if(property=="Color"){auto a=value.cast<std::array<float,4>>();v.Color={a[0],a[1],a[2],a[3]};}else if(property=="Layer Mask")v.LayerMask=static_cast<std::uint8_t>(value.cast<int>());else if(property=="Contribute GI")v.ContributeGI=value.cast<bool>();else if(property=="Visible")v.Visible=value.cast<bool>();else if(property=="Cast Shadows")v.CastShadows=value.cast<bool>();else if(property=="Receive Shadows")v.ReceiveShadows=value.cast<bool>();else return false;return true;}
         if(type=="Gaussian Blur"&&entity.HasComponent<GaussianBlur>()){auto&v=entity.GetComponent<GaussianBlur>();if(property=="Enabled")v.Enabled=value.cast<bool>();else if(property=="Size")v.Size=value.cast<float>();else return false;return true;}
+        if(type=="Local Fog"&&entity.HasComponent<LocalFog>()){
+            auto candidate=entity.GetComponent<LocalFog>();auto& v=candidate.Fog;
+            if(property=="Mode")v.Mode=FogMode(value.cast<int>());
+            else if(property=="Affect Sky")v.AffectSky=value.cast<bool>();
+            else if(property=="Steps")v.Steps=value.cast<unsigned>();
+            else if(property=="Blend Distance")candidate.BlendDistance=value.cast<float>();
+            else if(property=="Size"||property=="Color"||property=="Wind") {auto a=value.cast<std::array<float,3>>();auto vector=Vec3{a[0],a[1],a[2]};if(property=="Size")candidate.Size=vector;else if(property=="Color")v.Color=vector;else v.Wind=vector;}
+#define LF_VALUE(Name) else if(property==#Name)v.Name=value.cast<float>();
+            LF_VALUE(Density) LF_VALUE(StartDistance) LF_VALUE(MaxDistance) LF_VALUE(MaximumOpacity) LF_VALUE(Height) LF_VALUE(HeightFalloff) LF_VALUE(NoiseAmount) LF_VALUE(NoiseScale) LF_VALUE(Anisotropy)
+#undef LF_VALUE
+            else return false;
+            if(!candidate.IsValid())return false;entity.GetComponent<LocalFog>()=candidate;return true;
+        }
         if(type=="Vignette"&&entity.HasComponent<Vignette>()){auto&v=entity.GetComponent<Vignette>();if(property=="Enabled")v.Enabled=value.cast<bool>();else if(property=="Color"){auto a=value.cast<std::array<float,4>>();v.Color={a[0],a[1],a[2],a[3]};}else if(property=="Intensity")v.Intensity=value.cast<float>();else if(property=="Smoothness")v.Smoothness=value.cast<float>();else if(property=="Roundness")v.Roundness=value.cast<float>();else return false;return true;}
         if(type=="Scene Query Bounds"&&entity.HasComponent<SceneQueryBounds>()){auto&v=entity.GetComponent<SceneQueryBounds>();if(property=="Shape")v.Shape=static_cast<SceneQueryShape>(value.cast<int>());else if(property=="Center"){auto a=value.cast<std::array<float,3>>();v.Center={a[0],a[1],a[2]};}else if(property=="Extents"){auto a=value.cast<std::array<float,3>>();v.Extents={a[0],a[1],a[2]};}else if(property=="Radius")v.Radius=value.cast<float>();else if(property=="Layer Mask")v.LayerMask=value.cast<std::uint32_t>();else if(property=="Enabled")v.Enabled=value.cast<bool>();else return false;return true;}
         return false;
@@ -869,6 +914,7 @@ public:
     int ApplicationTickInterval() const {const int rate=m_playing?Runtime::ApplicationAccess::GetEffectiveFrameRate():60;return rate?std::max(1,(1000+rate-1)/rate):0;}
     void Stop() {
         m_engine->GetAudioRuntime().StopPreview();
+        if(m_engine->HasRenderingFailure()){m_playing=false;m_paused=false;return;}
         if (!m_playing) return;
         m_engine->BeginShutdown();
         m_playing = false; m_paused = false;

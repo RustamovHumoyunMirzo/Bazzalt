@@ -2,8 +2,10 @@
 
 python -m Editor.tests.native_model_viewport_smoke path/to/model.glb [vulkan]
 Uses a temporary project, does not edit the supplied model or user settings.
+Set BAZZALT_SMOKE_SECONDS=75 with --editor for a sustained interaction run.
 """
 import faulthandler
+import os
 import shutil
 import sys
 import tempfile
@@ -40,11 +42,20 @@ def main():
             print("FULL EDITOR DROP",flush=True)
             window.Controller.InstantiateAsset(str(root/"Assets"/"model.glb"),"")
             window.Controller.Timer.stop()
-            for frame in range(10):
+            # Opt in to a sustained run when investigating delayed GPU hangs.
+            # Keep the normal smoke test quick for contributor use.
+            duration=max(0.,float(os.environ.get("BAZZALT_SMOKE_SECONDS","0")))
+            deadline=perf_counter()+duration
+            frame=0
+            while frame<10 or perf_counter()<deadline:
                 if frame==4:
                     mesh=next(entity for entity in runtime.Entities() if "Mesh" in entity.get("components",()))
                     window.Controller.SelectEntity(mesh["uuid"])
-                started=perf_counter();window.Controller._Tick();elapsed=perf_counter()-started;QTest.qWait(10);print("EDITOR FRAME",frame,round(elapsed*1000,2),"ms",flush=True)
+                started=perf_counter();window.Controller._Tick();elapsed=perf_counter()-started;QTest.qWait(16)
+                if frame<10 or frame%120==0:
+                    print("EDITOR FRAME",frame,round(elapsed*1000,2),"ms",flush=True)
+                frame+=1
+            print("EDITOR RENDER STATISTICS",runtime.Statistics(),flush=True)
             window.Controller.IsDirty=False;window.Controller._dirty_scenes.clear()
             if "--interactions" in sys.argv:
                 started=perf_counter();window.Controller.SelectAsset(root/"Assets"/"model.glb");print("ASSET SELECT",round((perf_counter()-started)*1000,2),"ms",flush=True)

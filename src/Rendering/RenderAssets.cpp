@@ -294,7 +294,7 @@ struct RenderAssets::Impl {
         BindProbes(result.get());PrimitiveColorCache[key]=result;return result;
     }
     bool Asynchronous=false;
-    std::uint64_t Tick=0;
+    std::uint64_t Tick=0,MaterialBindingRevision=0;
     struct Preparation {std::shared_ptr<PreparedModel> Data;std::uint64_t LastRequest=0;};
     std::unordered_map<UUID,Preparation> Preparations;
     struct Upload {
@@ -382,7 +382,7 @@ struct RenderAssets::Impl {
         auto* empty=new std::vector<float>(10*64*4,0);
         ProbeTexture->setImage(Engine,0,filament::Texture::PixelBufferDescriptor(empty->data(),empty->size()*sizeof(float),filament::Texture::Format::RGBA,filament::Texture::Type::FLOAT,[](void*,std::size_t,void* p){delete static_cast<std::vector<float>*>(p);},empty));
 
-        GltfMaterials = CreateLightingMaterialProvider(&Engine,[this](filament::MaterialInstance* value){BindProbes(value);});
+        GltfMaterials = CreateLightingMaterialProvider(&Engine,[this](filament::MaterialInstance* value){++MaterialBindingRevision;BindProbes(value);});
         GltfTextures = filament::gltfio::createStbProvider(&Engine);
         StandaloneTextures = filament::gltfio::createStbProvider(&Engine);
         if (GltfMaterials) GltfLoader = filament::gltfio::AssetLoader::create({&Engine, GltfMaterials});
@@ -714,7 +714,7 @@ RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component, UUID modelI
                     auto upload=std::make_shared<Impl::Upload>();upload->Prepared=data;upload->Source=PathUtf8(asset->CachePath);upload->LastRequest=m_impl->Tick;
                     auto* loaded=m_impl->GltfLoader->createAsset(data->Bytes.data(),static_cast<std::uint32_t>(data->Bytes.size()));
                     if(!loaded)return InvalidHandle;
-                    upload->Owner={loaded,[impl=m_impl.get()](auto* value){impl->Scene.removeEntities(value->getEntities(),value->getEntityCount());impl->GltfLoader->destroyAsset(value);}};
+                    upload->Owner={loaded,[impl=m_impl.get()](auto* value){++impl->MaterialBindingRevision;impl->Scene.removeEntities(value->getEntities(),value->getEntityCount());impl->GltfLoader->destroyAsset(value);}};
                     upload->Loader=std::make_unique<filament::gltfio::ResourceLoader>(filament::gltfio::ResourceConfiguration{&m_impl->Engine,upload->Source.c_str(),true});
                     upload->Textures.reset(filament::gltfio::createStbProvider(&m_impl->Engine));
                     if(!upload->Textures)return InvalidHandle;
@@ -740,6 +740,7 @@ RenderAssets::Handle RenderAssets::CreateMesh(const Mesh& component, UUID modelI
             auto* loaded = m_impl->GltfLoader->createAsset(bytes.data(), static_cast<std::uint32_t>(bytes.size()));
             if (!loaded) return InvalidHandle;
             instance.GltfOwner = {loaded, [impl=m_impl.get()](auto* value) {
+                ++impl->MaterialBindingRevision;
                 impl->Scene.removeEntities(value->getEntities(), value->getEntityCount());
                 impl->GltfLoader->destroyAsset(value);
             }};
@@ -1125,7 +1126,7 @@ void RenderAssets::UpdateBakedLighting(Bazzalt::Scene& scene){
     if(!m_impl)return;auto fingerprint=BakedLightingFingerprint(scene);filament::Texture* retired=nullptr;
     if(fingerprint!=m_impl->BakedFingerprint){
         try{const auto limit=unsigned(filament::Texture::getMaxTextureSize(m_impl->Engine,filament::Texture::Sampler::SAMPLER_2D));auto atlas=BuildBakedLightingAtlas(scene,limit);m_impl->ReflectionCount=atlas.ReflectionCount;auto width=std::max(m_impl->ProbeTextureWidth,atlas.Width);auto rows=unsigned((atlas.Pixels.size()/4+width-1)/width);unsigned height=width!=m_impl->ProbeTextureWidth?1:m_impl->ProbeTextureHeight;while(height<rows)height*=2;
-            if(width!=m_impl->ProbeTextureWidth||height!=m_impl->ProbeTextureHeight){auto* texture=filament::Texture::Builder().width(width).height(height).levels(1).format(filament::Texture::InternalFormat::RGBA32F).build(m_impl->Engine);if(!texture)throw std::runtime_error("Cannot allocate baked lighting atlas");retired=m_impl->ProbeTexture;m_impl->ProbeTexture=texture;m_impl->ProbeTextureWidth=width;m_impl->ProbeTextureHeight=height;}
+            if(width!=m_impl->ProbeTextureWidth||height!=m_impl->ProbeTextureHeight){auto* texture=filament::Texture::Builder().width(width).height(height).levels(1).format(filament::Texture::InternalFormat::RGBA32F).build(m_impl->Engine);if(!texture)throw std::runtime_error("Cannot allocate baked lighting atlas");retired=m_impl->ProbeTexture;m_impl->ProbeTexture=texture;++m_impl->MaterialBindingRevision;m_impl->ProbeTextureWidth=width;m_impl->ProbeTextureHeight=height;}
             atlas.Pixels.resize(std::size_t(width)*rows*4,0);m_impl->ProbeCount=(atlas.Pixels[0]+atlas.Pixels[1]+atlas.Pixels[2])>0?1.f:0.f;auto* owned=new std::vector<float>(std::move(atlas.Pixels));m_impl->ProbeTexture->setImage(m_impl->Engine,0,0,0,width,rows,filament::Texture::PixelBufferDescriptor(owned->data(),owned->size()*sizeof(float),filament::Texture::Format::RGBA,filament::Texture::Type::FLOAT,[](void*,std::size_t,void* p){delete static_cast<std::vector<float>*>(p);},owned));m_impl->BakedError.clear();
             if(atlas.SpatialFallback)Console::Warning("Baked lighting cluster-list budget exceeded; using exact global lookup. Reduce influence overlap for better performance.","Lighting");
         }catch(const std::exception& error){m_impl->ProbeCount=0;m_impl->ReflectionCount=0;if(m_impl->BakedError!=error.what()){m_impl->BakedError=error.what();Console::Error(m_impl->BakedError,"Lighting");}}
@@ -1180,3 +1181,7 @@ void RenderAssets::Shutdown() {
 }
 
 } // namespace Bazzalt::Runtime
+
+namespace Bazzalt::Runtime {
+std::uint64_t RenderAssets::GetMaterialBindingRevision() const {return m_impl?m_impl->MaterialBindingRevision:0;}
+}

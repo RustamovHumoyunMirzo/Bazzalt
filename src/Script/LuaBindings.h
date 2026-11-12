@@ -1,3 +1,4 @@
+#include "Bazzalt/Components/LocalFog.h"
 #pragma once
 #include <sol/sol.hpp>
 #include "Bazzalt/Extension.h"

@@ -2107,7 +2107,12 @@
   "fog.NoiseScale": "Noise scale",
   "fog.Anisotropy": "Anisotropy",
   "fog.sky": "Affect sky",
-  "fog.steps": "Ray-march steps",
+  "fog.steps": "Depth slices",
   "fog.wind": "Noise velocity",
-  "tags.edit": "Edit tags"
+  "tags.edit": "Edit tags",
+  "fog.apply_failed": "Could not apply fog settings. Check the density, distances and quality values.",
+  "component.Local Fog": "Local Fog",
+  "fog.local_size": "Size",
+  "fog.local_blend": "Edge blend distance",
+  "fog.local_size_hint": "Local width (X), height (Y), and depth (Z). The entity transform places, rotates, and scales this region."
 }

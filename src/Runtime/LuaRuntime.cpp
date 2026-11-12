@@ -1,3 +1,4 @@
+#include "Bazzalt/Components/LocalFog.h"
 #include "Bazzalt/Spline.h"
 #include <set>
 #include "Bazzalt/GlobalEvent.h"
@@ -211,7 +212,7 @@ void CopyReloadTable(sol::table source,sol::table target,std::size_t& count,int 
   else if(value.get_type()==sol::type::string){auto text=value.as<std::string>();if(text.size()>1024*1024)throw std::runtime_error("Lua reload string exceeds 1 MiB");target.raw_set(targetKey,text);}
 #define BAZZALT_COPY_RELOAD_TYPE(Type) else if(value.is<Type>())target.raw_set(targetKey,value.as<Type>());
   BAZZALT_COPY_RELOAD_TYPE(Vec2) BAZZALT_COPY_RELOAD_TYPE(Vec3) BAZZALT_COPY_RELOAD_TYPE(Vec4) BAZZALT_COPY_RELOAD_TYPE(Quaternion)
-  BAZZALT_COPY_RELOAD_TYPE(TagSet) BAZZALT_COPY_RELOAD_TYPE(Spline) BAZZALT_COPY_RELOAD_TYPE(SplinePoint) BAZZALT_COPY_RELOAD_TYPE(SplineQuery) BAZZALT_COPY_RELOAD_TYPE(FogSettings)
+  BAZZALT_COPY_RELOAD_TYPE(TagSet) BAZZALT_COPY_RELOAD_TYPE(Spline) BAZZALT_COPY_RELOAD_TYPE(SplinePoint) BAZZALT_COPY_RELOAD_TYPE(SplineQuery) BAZZALT_COPY_RELOAD_TYPE(FogSettings) BAZZALT_COPY_RELOAD_TYPE(LocalFog)
   BAZZALT_COPY_RELOAD_TYPE(PhysicsState) BAZZALT_COPY_RELOAD_TYPE(PhysicsReplay)
   BAZZALT_COPY_RELOAD_TYPE(UUID) BAZZALT_COPY_RELOAD_TYPE(Entity) BAZZALT_COPY_RELOAD_TYPE(EntityReference)
   BAZZALT_COPY_RELOAD_TYPE(Material) BAZZALT_COPY_RELOAD_TYPE(Shader) BAZZALT_COPY_RELOAD_TYPE(Texture) BAZZALT_COPY_RELOAD_TYPE(AudioClip) BAZZALT_COPY_RELOAD_TYPE(Font) BAZZALT_COPY_RELOAD_TYPE(GlobalEvent)

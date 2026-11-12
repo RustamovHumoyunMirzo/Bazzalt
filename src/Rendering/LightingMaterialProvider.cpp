@@ -382,6 +382,8 @@ std::string shaderFromKey(const MaterialKey& config) {
         }
     }
 
+    if(config.alphaMode==AlphaMode::BLEND)
+        shader += "if(materialParams.bazzaltFogDepth>0.5){if(material.baseColor.a<0.5)discard;material.baseColor.a=1.0;}\n";
     if(!config.unlit)shader += "bazzaltApplyDiffuse(material);\n";
     shader += "}\n";
     if(!config.unlit){using namespace Bazzalt::Runtime::Embedded;shader=std::string(reinterpret_cast<const char*>(BakedLightingSource),BakedLightingSourceSize)+"\n"+shader+"\n"+std::string(reinterpret_cast<const char*>(BakedReflectionSource),BakedReflectionSourceSize);}
@@ -393,6 +395,12 @@ Material* createMaterial(Engine* engine, const MaterialKey& config, const UvMap&
     std::string shader = shaderFromKey(config);
     processShaderString(&shader, uvmap, config);
     MaterialBuilder builder;
+    if(config.alphaMode==AlphaMode::BLEND){
+        builder.parameter("bazzaltFogDepth",MaterialBuilder::UniformType::FLOAT);
+        // Use Filament's supported alpha-aware depth variants. A synthetic
+        // vertex/depth program changes every normal glTF shader variant too.
+        builder.transparentShadow(true);
+    }
     builder.name(name)
             .flipUV(false)
             .specularAmbientOcclusion(MaterialBuilder::SpecularAmbientOcclusion::SIMPLE)
@@ -658,7 +666,7 @@ Material* JitShaderProvider::getMaterial(MaterialKey* config, UvMap* uvmap, cons
 
 MaterialInstance* JitShaderProvider::createMaterialInstance(MaterialKey* config, UvMap* uvmap,
         const char* label, const char* extras) {
-    auto* material=getMaterial(config, uvmap, label);if(!material)throw std::runtime_error("Could not create glTF lighting material");auto* instance=material->createInstance(label);if(mBind)mBind(instance);return instance;
+    auto* material=getMaterial(config, uvmap, label);if(!material)throw std::runtime_error("Could not create glTF lighting material");auto* instance=material->createInstance(label);if(config->alphaMode==AlphaMode::BLEND)instance->setParameter("bazzaltFogDepth",0.f);if(mBind)mBind(instance);return instance;
 }
 
 } // anonymous namespace
